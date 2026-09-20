@@ -35,6 +35,7 @@ services:
       COOKIE_SECURE: "true"
       VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
       VENUE_TZ: "America/Toronto"
+      PUBLIC_BASE_DOMAIN: "${PUBLIC_BASE_DOMAIN:-lostmindllc.com}"
     depends_on:
       db:
         condition: service_healthy
