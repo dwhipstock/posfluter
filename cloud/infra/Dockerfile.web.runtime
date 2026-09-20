@@ -1,0 +1,19 @@
+# Runtime-only portal image, built by CI and pushed as pos-cloud-web:<git-sha>.
+# COPYs the Next.js standalone output produced on an x64 runner. Build context:
+# a staged dir with standalone/, static/, public/ (see build.yml).
+#
+# NOTE: the portal has no native npm deps, so the x64-built standalone bundle runs
+# unchanged on arm64. If a native dependency is ever added, this image must build
+# under emulation instead (or the dep vendored per-arch).
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --chown=node:node standalone ./
+COPY --chown=node:node static ./.next/static
+COPY --chown=node:node public ./public
+USER node
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+EXPOSE 3000
+CMD ["node", "server.js"]

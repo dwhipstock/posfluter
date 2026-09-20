@@ -1,0 +1,121 @@
+# CI — runs on every PR and on pushes to main. Four tiers, one job each, in
+# parallel: the store server, the cloud API (against a real Postgres service
+# container), the Flutter client, and the Next.js portal. This is the gate rec 6
+# (S5c) exists to add: a commit that breaks any tier fails here instead of
+# shipping silently to the box.
+#
+# Action versions are major-tag pinned and kept current by Dependabot
+# (.github/dependabot.yml, github-actions ecosystem).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# One in-flight run per ref; a new push cancels the previous run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: server (store) tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: gradle test
+        working-directory: server
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon test
+
+  cloud-api:
+    name: cloud/api tests (postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        # Digest-pinned to match the pinning discipline across the Dockerfiles.
+        image: postgres:17@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      # TestSupport reads these (see cloud/api/.../TestSupport.kt). Without the
+      # env override the suite hardcoded a dev-box URL + the OS user, so it could
+      # only ever run on the author's laptop.
+      TEST_DB_URL: jdbc:postgresql://localhost:5432/pos_cloud_test
+      TEST_DB_ADMIN_URL: jdbc:postgresql://localhost:5432/postgres
+      TEST_DB_USER: postgres
+      TEST_DB_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: gradle test
+        working-directory: cloud/api
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon test
+
+  flutter:
+    name: client analyze + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: pub get
+        working-directory: client
+        run: flutter pub get
+      - name: analyze
+        working-directory: client
+        run: flutter analyze
+      - name: test
+        working-directory: client
+        run: flutter test
+
+  portal:
+    name: portal build + typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cloud/web/package-lock.json
+      - name: npm ci
+        working-directory: cloud/web
+        run: npm ci
+      - name: tsc typecheck
+        working-directory: cloud/web
+        run: npx tsc --noEmit
+      - name: next build
+        working-directory: cloud/web
+        run: npm run build

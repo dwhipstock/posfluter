@@ -1,0 +1,1 @@
+-- Reserved migration number. Fictional venue tables are created by CopperLanternSeed.

@@ -1,0 +1,1718 @@
+package dev.dwhipstock.pos.restaurant
+
+import dev.dwhipstock.pos.base.GrantsRepo
+import dev.dwhipstock.pos.base.ItemVariants
+import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.Permissions
+import dev.dwhipstock.pos.base.Tenders
+import dev.dwhipstock.pos.base.Users
+import dev.dwhipstock.pos.sdk.BasketLine
+import dev.dwhipstock.pos.sdk.CustomerConfig
+import dev.dwhipstock.pos.sdk.FeeLine
+import dev.dwhipstock.pos.sdk.Money
+import dev.dwhipstock.pos.sdk.Outbox
+import dev.dwhipstock.pos.sdk.PrintJob
+import dev.dwhipstock.pos.sdk.PrinterAdapter
+import dev.dwhipstock.pos.sdk.Receipt
+import dev.dwhipstock.pos.sdk.ReceiptFee
+import dev.dwhipstock.pos.sdk.ReceiptItem
+import dev.dwhipstock.pos.sdk.ReceiptKind
+import dev.dwhipstock.pos.sdk.ReceiptRenderer
+import dev.dwhipstock.pos.sdk.ReceiptTender
+import dev.dwhipstock.pos.sdk.TaxPolicy
+import dev.dwhipstock.pos.sdk.TenderInstructions
+import dev.dwhipstock.pos.sdk.TenderType
+import dev.dwhipstock.pos.sdk.Totals
+import dev.dwhipstock.pos.sdk.TransactionPipeline
+import dev.dwhipstock.pos.sdk.Align
+import dev.dwhipstock.pos.sdk.PrintLine
+import dev.dwhipstock.pos.sdk.i18n.LocaleCode
+import dev.dwhipstock.pos.sdk.i18n.MessageKey
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_VAT_INCLUDED
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_HEADER
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_NUMBER
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_REF_BILL
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_TOTAL
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_VIA
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.SLIP_REASON
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.SLIP_TIME
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.TENDER_CASH
+import dev.dwhipstock.pos.sdk.i18n.Messages
+import dev.dwhipstock.pos.sdk.i18n.dataText
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.put
+import org.jetbrains.exposed.sql.JoinType
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.insertAndGetId
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
+import org.slf4j.LoggerFactory
+import java.time.LocalDateTime
+
+/**
+ * API errors carry a machine code; the client translates. The message is
+ * developer-facing English for logs/debugging — never shown to staff verbatim.
+ */
+class NotFoundException(message: String, val code: String = "not_found") : RuntimeException(message)
+class ConflictException(message: String, val code: String = "conflict") : RuntimeException(message)
+class BadRequestException(message: String, val code: String = "bad_request") : RuntimeException(message)
+
+@kotlinx.serialization.Serializable
+data class PendingLineRequest(val itemId: String, val variantId: String, val qty: Int = 1, val note: String? = null)
+
+/** One line + qty to refund (by-line refund). */
+@kotlinx.serialization.Serializable
+data class RefundLineRequest(val lineId: Int, val qty: Int = 1)
+
+@kotlinx.serialization.Serializable
+data class RefundView(
+    val id: Int,
+    val checkId: Int,
+    val grossCents: Long,
+    val netCents: Long,
+    val taxCents: Long,
+    val tenderType: String,
+    val reason: String,
+    val refundedBy: String,
+    val createdAt: String,
+)
+
+@kotlinx.serialization.Serializable
+data class RefundResult(val refund: RefundView, val check: CheckView, val slipText: String)
+
+/** A check's grand total, what's been refunded so far, and its refund rows. */
+@kotlinx.serialization.Serializable
+data class RefundInfo(
+    val checkId: Int,
+    val grandTotalCents: Long,
+    val refundedCents: Long,
+    val refundableCents: Long,
+    val refunds: List<RefundView>,
+)
+
+/** A CLOSED check in the refund picker: what it was, what's left to refund. */
+@kotlinx.serialization.Serializable
+data class ClosedCheckSummary(
+    val id: Int,
+    val tableLabel: String,
+    val closedAt: String,
+    val grandTotalCents: Long,
+    val refundedCents: Long,
+    val refundableCents: Long,
+)
+
+/**
+ * Restaurant-vertical Check: a Transaction bound to a table.
+ * Status flow: OPEN → TOTAL_LOCKED (first tender) → CLOSED, or → VOID
+ * (manager-gated, only while no money is applied), or → CANCELLED (auto, when a
+ * mutation strips the check to zero lines + zero balance — nothing was rung, so no
+ * reason and no manager gate; see cancelIfEmpty), or → MERGED (its lines were
+ * folded into another table's check; see mergeCheck).
+ */
+class CheckService(private val config: CustomerConfig) {
+
+    private val log = LoggerFactory.getLogger(CheckService::class.java)
+
+    /** Refuse when the table's zone is CLOSED. Call inside a transaction. */
+    private fun requireZoneOpenForTable(tableId: String) {
+        val status = DiningTables
+            .join(Zones, JoinType.INNER, DiningTables.zoneId, Zones.id)
+            .selectAll().where { DiningTables.id eq tableId }
+            .firstOrNull()?.get(Zones.status)
+        if (status == "CLOSED")
+            throw ConflictException("table $tableId is in a closed zone", "zone_closed")
+    }
+
+    fun openCheck(tableId: String, userId: String): CheckView = transaction {
+        // deleted tables refuse new checks — an old QR slip must not revive one
+        DiningTables.selectAll()
+            .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
+            .firstOrNull() ?: throw NotFoundException("table $tableId not found")
+
+        // idempotent: reopening a table with a live check returns that check
+        val existing = Checks.selectAll()
+            .where { (Checks.tableId eq tableId) and (Checks.status inList listOf("OPEN", "TOTAL_LOCKED")) }
+            .firstOrNull()
+        if (existing != null) return@transaction loadCheck(existing[Checks.id].value)
+
+        // new checks only — existing open checks (returned above) stay usable in a
+        // closed zone so staff can finish editing and tender them
+        requireZoneOpenForTable(tableId)
+
+        val checkId = Checks.insertAndGetId {
+            it[Checks.tableId] = tableId
+            it[status] = "OPEN"
+            it[openedBy] = userId
+            it[openedAt] = LocalDateTime.now()
+        }.value
+
+        Outbox.write("check.opened", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("tableId", tableId)
+            put("openedBy", userId)
+        })
+        loadCheck(checkId)
+    }
+
+    fun addLine(checkId: Int, itemId: String, variantId: String, qty: Int, note: String?): CheckView = transaction {
+        require(qty > 0) { "qty must be positive" }
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
+
+        val variant = ItemVariants.selectAll()
+            .where { (ItemVariants.id eq variantId) and (ItemVariants.itemId eq itemId) and
+                ItemVariants.deletedAt.isNull() }
+            .firstOrNull() ?: throw NotFoundException("variant $variantId of item $itemId not found")
+
+        val lineId = CheckLines.insertAndGetId {
+            it[CheckLines.checkId] = checkId
+            it[CheckLines.itemId] = itemId
+            it[CheckLines.variantId] = variantId
+            it[CheckLines.qty] = qty
+            it[unitPriceCents] = variant[ItemVariants.priceCents]
+            it[CheckLines.note] = note
+            it[createdAt] = LocalDateTime.now()
+        }.value
+
+        Outbox.write("check.line_added", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("lineId", lineId)
+            put("itemId", itemId)
+            put("variantId", variantId)
+            put("qty", qty)
+            put("unitPriceCents", variant[ItemVariants.priceCents])
+            note?.let { n -> put("note", n) }
+        })
+        loadCheck(checkId)
+    }
+
+    /**
+     * Open / misc item: ring something that isn't in the catalog — a name, a
+     * price and a qty. Taxed and totalled like any line (the pipeline only ever
+     * reads unit_price_cents × qty); renderers show [name] wherever a catalog
+     * line would show the item name. No manager gate in v1 — the outbox event
+     * is the audit trail. TODO: manager-gate behind a venue setting if abused.
+     */
+    fun addOpenLine(checkId: Int, name: String, unitPriceCents: Long, qty: Int, note: String?): CheckView = transaction {
+        require(qty > 0) { "qty must be positive" }
+        require(name.isNotBlank()) { "name is required" }
+        require(unitPriceCents > 0) { "price must be positive" }
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
+
+        val lineId = CheckLines.insertAndGetId {
+            it[CheckLines.checkId] = checkId
+            it[displayName] = name.trim()
+            it[CheckLines.qty] = qty
+            it[CheckLines.unitPriceCents] = unitPriceCents
+            it[CheckLines.note] = note
+            it[createdAt] = LocalDateTime.now()
+        }.value
+
+        Outbox.write("check.line_open_added", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("lineId", lineId)
+            put("name", name.trim())
+            put("qty", qty)
+            put("unitPriceCents", unitPriceCents)
+            note?.let { n -> put("note", n) }
+        })
+        loadCheck(checkId)
+    }
+
+    /**
+     * Customer scan-to-order (M3): submitted basket lands as PENDING lines on the
+     * table's open check (auto-opened if none). Staff accept-before-fire — pending
+     * lines don't count, don't print, and block tendering until resolved.
+     */
+    fun submitPendingLines(tableId: String, lines: List<PendingLineRequest>): CheckView = transaction {
+        require(lines.isNotEmpty()) { "empty basket" }
+        // machine surface: reject QR orders for a closed zone outright (the customer
+        // menu already hides ordering, this guards the raw endpoint)
+        requireZoneOpenForTable(tableId)
+        val check = openCheck(tableId, userId = "qr-customer")
+        if (check.status != "OPEN") throw ConflictException("table $tableId bill is being paid; ask staff", "bill_locked")
+        for (line in lines) {
+            require(line.qty > 0) { "qty must be positive" }
+            val variant = ItemVariants.selectAll()
+                .where { (ItemVariants.id eq line.variantId) and (ItemVariants.itemId eq line.itemId) and
+                    ItemVariants.deletedAt.isNull() }
+                .firstOrNull() ?: throw NotFoundException("variant ${line.variantId} not found")
+            val lineId = CheckLines.insertAndGetId {
+                it[checkId] = check.id
+                it[itemId] = line.itemId
+                it[variantId] = line.variantId
+                it[qty] = line.qty
+                it[unitPriceCents] = variant[ItemVariants.priceCents]
+                it[note] = line.note
+                it[status] = "PENDING"
+                it[createdAt] = LocalDateTime.now()
+            }.value
+            Outbox.write("check.pending_line_submitted", "check", check.id.toString(), buildJsonObject {
+                put("checkId", check.id)
+                put("lineId", lineId)
+                put("itemId", line.itemId)
+                put("variantId", line.variantId)
+                put("qty", line.qty)
+                line.note?.let { n -> put("note", n) }
+            })
+        }
+        loadCheck(check.id)
+    }
+
+    fun acceptPendingLine(checkId: Int, lineId: Int): CheckView = transaction {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}")
+        val updated = CheckLines.update({
+            (CheckLines.id eq lineId) and (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING")
+        }) { it[status] = "ACTIVE" }
+        if (updated == 0) throw NotFoundException("pending line $lineId not on check $checkId")
+        Outbox.write("check.pending_line_accepted", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("lineId", lineId)
+        })
+        loadCheck(checkId)
+    }
+
+    fun rejectPendingLine(checkId: Int, lineId: Int): CheckView = transaction {
+        val removed = CheckLines.deleteWhere {
+            (CheckLines.id eq lineId) and (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING")
+        }
+        if (removed == 0) throw NotFoundException("pending line $lineId not on check $checkId")
+        Outbox.write("check.pending_line_rejected", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("lineId", lineId)
+        })
+        cancelIfEmpty(checkId)
+        loadCheck(checkId)
+    }
+
+    /** Stage-1 basket edit: change quantity on an ACTIVE line while OPEN. */
+    fun setLineQty(checkId: Int, lineId: Int, qty: Int): CheckView = transaction {
+        require(qty > 0) { "qty must be positive; use delete to remove the line" }
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
+        // can't shrink below what the split has already handed out — unassign first
+        val allocated = allocatedQtyForLine(lineId)
+        if (qty < allocated)
+            throw ConflictException("line $lineId has $allocated allocated to bill groups; unassign first", "qty_below_allocated")
+        val updated = CheckLines.update({
+            (CheckLines.id eq lineId) and (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE")
+        }) { it[CheckLines.qty] = qty }
+        if (updated == 0) throw NotFoundException("line $lineId not on check $checkId")
+        Outbox.write("check.line_qty_changed", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("lineId", lineId)
+            put("qty", qty)
+        })
+        loadCheck(checkId)
+    }
+
+    /** Stage-1 basket edit. Only while OPEN — after total lock the basket is frozen. */
+    fun removeLine(checkId: Int, lineId: Int): CheckView = transaction {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
+        val removed = CheckLines.deleteWhere {
+            (CheckLines.id eq lineId) and (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE")
+        }
+        if (removed == 0) throw NotFoundException("line $lineId not on check $checkId")
+        // a deleted item leaves the split too — its allocations go with it
+        BillGroupAllocations.deleteWhere { BillGroupAllocations.lineId eq lineId }
+        Outbox.write("check.line_removed", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("lineId", lineId)
+        })
+        cancelIfEmpty(checkId)
+        loadCheck(checkId)
+    }
+
+    fun setCorkage(checkId: Int, bottles: Int): CheckView = transaction {
+        require(bottles >= 0) { "bottles must be >= 0" }
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}")
+        Checks.update({ Checks.id eq checkId }) { it[corkageBottles] = bottles }
+        Outbox.write("check.corkage_set", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("bottles", bottles)
+        })
+        loadCheck(checkId)
+    }
+
+    // --- settlement-time split: bill groups ---
+    //
+    // A split partitions the check's ACTIVE lines into bill groups via per-group
+    // qty allocations (2 of 3 beers in group A, 1 in B — lines are never cloned).
+    // Each group's total runs through the same pricing pipeline (computeTotals)
+    // over its allocated quantities; percentage fees therefore assess per group
+    // with integer floor division, so a split's group totals can drop cents
+    // relative to the unsplit check — that per-group DOWN drop is deliberate and
+    // becomes the check's locked grand total (sum of group totals). Cash rounding
+    // stays a tender-time concern: each group's cash due rounds DOWN independently
+    // through the same RoundingPolicy; electronic tenders settle exact cents.
+    //
+    // The split is editable only while the check is OPEN. The first group tender
+    // locks totals (check → TOTAL_LOCKED), which freezes the split too — further
+    // changes require a void. The check finalizes only when EVERY group is covered.
+
+    /**
+     * Create a split with [groups] empty by-item groups (or money-only ÷N groups
+     * when [evenAmounts] is set). Refused once any money is involved — splitting
+     * after payment starts is out of scope; clear guards instead of surprises.
+     */
+    fun createSplit(checkId: Int, groups: Int): CheckView = transaction {
+        requireSplittable(checkId, groups)
+        for (n in 1..groups) insertGroup(checkId, n, includesCorkage = n == 1, fixedAmountCents = null)
+        Outbox.write("split.created", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("groups", groups)
+        })
+        loadCheck(checkId)
+    }
+
+    /**
+     * Even split ÷N: money-only groups, no line assignment. floor(total/N) each,
+     * remainder to group 1 (the explicit cents-drop rule from the spec). Group
+     * totals always sum exactly to the check's grand total.
+     */
+    fun createEvenSplit(checkId: Int, groups: Int): CheckView = transaction {
+        requireSplittable(checkId, groups)
+        val total = computeTotals(requireCheck(checkId)).grandTotal.cents
+        val share = total / groups
+        for (n in 1..groups) {
+            val amount = if (n == 1) total - share * (groups - 1) else share
+            insertGroup(checkId, n, includesCorkage = n == 1, fixedAmountCents = amount)
+        }
+        Outbox.write("split.created", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("groups", groups)
+            put("even", true)
+            put("totalCents", total)
+        })
+        loadCheck(checkId)
+    }
+
+    fun addSplitGroup(checkId: Int): CheckView = transaction {
+        val groups = requireEditableSplit(checkId, byItemOnly = true)
+        val next = groups.maxOf { it[BillGroups.groupNumber] } + 1
+        val groupId = insertGroup(checkId, next, includesCorkage = false, fixedAmountCents = null)
+        Outbox.write("split.group_added", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("groupId", groupId)
+            put("groupNumber", next)
+        })
+        loadCheck(checkId)
+    }
+
+    /** Delete a group; its allocations return to unassigned. The last group can't go — use clearSplit. */
+    fun deleteSplitGroup(checkId: Int, groupId: Int): CheckView = transaction {
+        val groups = requireEditableSplit(checkId, byItemOnly = true)
+        val group = groups.find { it[BillGroups.id].value == groupId }
+            ?: throw NotFoundException("group $groupId not on check $checkId", "group_not_found")
+        if (groups.size == 1) throw ConflictException("can't delete the last group; clear the split instead", "last_group")
+        BillGroupAllocations.deleteWhere { BillGroupAllocations.groupId eq groupId }
+        BillGroups.deleteWhere { BillGroups.id eq groupId }
+        // the corkage carrier must always exist while split — hand it to the lowest survivor
+        if (group[BillGroups.includesCorkage]) {
+            val heir = groups.filter { it[BillGroups.id].value != groupId }
+                .minBy { it[BillGroups.groupNumber] }[BillGroups.id].value
+            BillGroups.update({ BillGroups.id eq heir }) { it[includesCorkage] = true }
+        }
+        Outbox.write("split.group_deleted", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("groupId", groupId)
+        })
+        loadCheck(checkId)
+    }
+
+    /** Assign [qty] of a line's unassigned quantity to a group (upsert: adds to any existing allocation). */
+    fun assignLineToGroup(checkId: Int, groupId: Int, lineId: Int, qty: Int): CheckView = transaction {
+        require(qty > 0) { "qty must be positive" }
+        val groups = requireEditableSplit(checkId, byItemOnly = true)
+        if (groups.none { it[BillGroups.id].value == groupId })
+            throw NotFoundException("group $groupId not on check $checkId", "group_not_found")
+        val line = CheckLines.selectAll()
+            .where { (CheckLines.id eq lineId) and (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .firstOrNull() ?: throw NotFoundException("line $lineId not on check $checkId")
+        val allocated = allocatedQtyForLine(lineId)
+        if (qty > line[CheckLines.qty] - allocated)
+            throw ConflictException("only ${line[CheckLines.qty] - allocated} of line $lineId unassigned", "qty_exceeds_unassigned")
+
+        val existing = BillGroupAllocations.selectAll()
+            .where { (BillGroupAllocations.groupId eq groupId) and (BillGroupAllocations.lineId eq lineId) }
+            .firstOrNull()
+        if (existing != null) {
+            BillGroupAllocations.update({ BillGroupAllocations.id eq existing[BillGroupAllocations.id] }) {
+                it[BillGroupAllocations.qty] = existing[BillGroupAllocations.qty] + qty
+            }
+        } else {
+            BillGroupAllocations.insert {
+                it[BillGroupAllocations.groupId] = groupId
+                it[BillGroupAllocations.lineId] = lineId
+                it[BillGroupAllocations.qty] = qty
+            }
+        }
+        Outbox.write("split.line_assigned", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("groupId", groupId)
+            put("lineId", lineId)
+            put("qty", qty)
+        })
+        loadCheck(checkId)
+    }
+
+    /** Return [qty] of a group's allocation back to unassigned. */
+    fun unassignLineFromGroup(checkId: Int, groupId: Int, lineId: Int, qty: Int): CheckView = transaction {
+        require(qty > 0) { "qty must be positive" }
+        requireEditableSplit(checkId, byItemOnly = true)
+        val allocation = BillGroupAllocations.selectAll()
+            .where { (BillGroupAllocations.groupId eq groupId) and (BillGroupAllocations.lineId eq lineId) }
+            .firstOrNull() ?: throw NotFoundException("line $lineId not allocated to group $groupId")
+        if (qty > allocation[BillGroupAllocations.qty])
+            throw ConflictException("only ${allocation[BillGroupAllocations.qty]} allocated", "qty_exceeds_allocated")
+        if (qty == allocation[BillGroupAllocations.qty]) {
+            BillGroupAllocations.deleteWhere { BillGroupAllocations.id eq allocation[BillGroupAllocations.id] }
+        } else {
+            BillGroupAllocations.update({ BillGroupAllocations.id eq allocation[BillGroupAllocations.id] }) {
+                it[BillGroupAllocations.qty] = allocation[BillGroupAllocations.qty] - qty
+            }
+        }
+        Outbox.write("split.line_unassigned", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("groupId", groupId)
+            put("lineId", lineId)
+            put("qty", qty)
+        })
+        loadCheck(checkId)
+    }
+
+    /** Drop the whole split; all lines return to the single-bill flow. */
+    fun clearSplit(checkId: Int): CheckView = transaction {
+        val groups = requireEditableSplit(checkId)
+        val ids = groups.map { it[BillGroups.id].value }
+        BillGroupAllocations.deleteWhere { BillGroupAllocations.groupId inList ids }
+        BillGroups.deleteWhere { BillGroups.checkId eq checkId }
+        Outbox.write("split.cleared", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+        })
+        loadCheck(checkId)
+    }
+
+    /** Move the check-level corkage fee to another group (defaults to group 1 at split creation). */
+    fun moveCorkage(checkId: Int, groupId: Int): CheckView = transaction {
+        val groups = requireEditableSplit(checkId, byItemOnly = true)
+        if (groups.none { it[BillGroups.id].value == groupId })
+            throw NotFoundException("group $groupId not on check $checkId", "group_not_found")
+        BillGroups.update({ BillGroups.checkId eq checkId }) { it[includesCorkage] = false }
+        BillGroups.update({ BillGroups.id eq groupId }) { it[includesCorkage] = true }
+        Outbox.write("split.corkage_moved", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("groupId", groupId)
+        })
+        loadCheck(checkId)
+    }
+
+    private fun insertGroup(checkId: Int, number: Int, includesCorkage: Boolean, fixedAmountCents: Long?): Int =
+        BillGroups.insertAndGetId {
+            it[BillGroups.checkId] = checkId
+            it[groupNumber] = number
+            it[BillGroups.includesCorkage] = includesCorkage
+            it[BillGroups.fixedAmountCents] = fixedAmountCents
+            it[createdAt] = LocalDateTime.now()
+        }.value
+
+    private fun splitGroups(checkId: Int): List<ResultRow> =
+        BillGroups.selectAll().where { BillGroups.checkId eq checkId }
+            .orderBy(BillGroups.groupNumber).toList()
+
+    private fun allocatedQtyForLine(lineId: Int): Int =
+        BillGroupAllocations.selectAll().where { BillGroupAllocations.lineId eq lineId }
+            .sumOf { it[BillGroupAllocations.qty] }
+
+    private fun requireSplittable(checkId: Int, groups: Int) {
+        require(groups in 2..20) { "groups must be 2..20" }
+        val check = requireCheck(checkId)
+        when (check[Checks.status]) {
+            "OPEN" -> {}
+            "TOTAL_LOCKED" -> throw ConflictException("check $checkId already has money applied; can't split", "split_locked")
+            else -> throw ConflictException("check $checkId is ${check[Checks.status]}; can't split", "check_not_open")
+        }
+        val pending = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING") }.count()
+        if (pending > 0) throw ConflictException("check $checkId has $pending pending QR lines; accept or reject them first", "pending_lines_unresolved")
+        val active = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }.count()
+        if (active == 0L) throw ConflictException("check $checkId has no items to split", "empty_check")
+        if (splitGroups(checkId).isNotEmpty()) throw ConflictException("check $checkId is already split", "split_exists")
+    }
+
+    /**
+     * The split is editable only while the check is OPEN — the first group tender
+     * flips it to TOTAL_LOCKED, freezing the partition (void to undo). By-item
+     * mutations (assign/move/add group) are meaningless on an even ÷N split.
+     */
+    private fun requireEditableSplit(checkId: Int, byItemOnly: Boolean = false): List<ResultRow> {
+        val check = requireCheck(checkId)
+        val groups = splitGroups(checkId)
+        if (groups.isEmpty()) throw ConflictException("check $checkId is not split", "no_split")
+        if (check[Checks.status] != "OPEN")
+            throw ConflictException("check $checkId is ${check[Checks.status]}; split is locked once money is applied", "split_locked")
+        if (byItemOnly && groups.any { it[BillGroups.fixedAmountCents] != null })
+            throw ConflictException("check $checkId is split evenly; by-item edits don't apply", "even_split")
+        return groups
+    }
+
+    /**
+     * Cash tender. Stage 4 (total lock) happens implicitly at first tender;
+     * stage 5 applies $1 rounding to the CASH due only — and only when this
+     * payment settles the check (partial cash applies at face value).
+     * On a split check [groupId] is required and the tender pays into that
+     * group: rounding applies to the GROUP's cash due, independently per group.
+     */
+    fun tenderCash(checkId: Int, amountTenderedCents: Long, groupId: Int? = null): TenderView = transaction {
+        val outstanding = lockAndOutstanding(checkId, groupId)
+        val result = TransactionPipeline.tenderCash(outstanding, Money(amountTenderedCents), config)
+        recordTender(checkId, TenderType.CASH, "check.tendered",
+            amountTenderedCents, result.amountApplied, result.roundingAdjustment, result.change, groupId)
+    }
+
+    /**
+     * Confirm-then-record electronic tender, step 1: lock totals if needed and
+     * hand back payment instructions (Card QR payload / bank details).
+     * No tender row yet — money hasn't moved.
+     */
+    fun initiateElectronicTender(checkId: Int, type: TenderType, amountCents: Long?, groupId: Int? = null): TenderInstructions = transaction {
+        val method = config.tenderMethod(type)
+            ?: throw ConflictException("${config.displayName} does not accept $type", "tender_type_not_accepted")
+        val outstanding = lockAndOutstanding(checkId, groupId)
+        val amount = Money(amountCents ?: outstanding.cents)
+        require(amount > Money.ZERO && amount <= outstanding) { "amount must be within outstanding balance" }
+
+        val event = if (type == TenderType.CARD) "check.tender_qr_shown" else "check.tender_initiated"
+        Outbox.write(event, "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("type", type.name)
+            put("amountCents", amount.cents)
+            groupId?.let { g -> put("groupId", g) }
+        })
+        method.instructions(amount)
+    }
+
+    /** Step 2: staff saw the money arrive in their bank app — record the tender. Exact cents, no rounding. */
+    fun confirmElectronicTender(checkId: Int, type: TenderType, amountCents: Long, groupId: Int? = null): TenderView = transaction {
+        if (config.tenderMethod(type) == null) throw ConflictException("${config.displayName} does not accept $type", "tender_type_not_accepted")
+        val outstanding = lockAndOutstanding(checkId, groupId)
+        val applied = TransactionPipeline.tenderElectronic(outstanding, Money(amountCents))
+        recordTender(checkId, type, "check.tender_confirmed", amountCents, applied, Money.ZERO, Money.ZERO, groupId)
+    }
+
+    private fun lockAndOutstanding(checkId: Int, groupId: Int? = null): Money {
+        // money movement needs a shift to land in — otherwise the Z-report's
+        // drawer math can never account for this cash (walkthrough 2026-07-08)
+        currentOpenShiftId()
+            ?: throw ConflictException("no open shift; open a shift before taking payment", "no_open_shift")
+        var check = requireCheck(checkId)
+        val groups = splitGroups(checkId)
+        // a split check settles per group; an unsplit check must not name one
+        if (groups.isNotEmpty() && groupId == null)
+            throw ConflictException("check $checkId is split; tender a specific group", "group_required")
+        if (groups.isEmpty() && groupId != null)
+            throw ConflictException("check $checkId is not split", "no_split")
+        when (check[Checks.status]) {
+            "OPEN" -> { lockTotals(checkId); check = requireCheck(checkId) }
+            "TOTAL_LOCKED" -> {}
+            else -> throw ConflictException("check $checkId is ${check[Checks.status]}")
+        }
+        if (groupId == null) {
+            val outstanding = Money(check[Checks.lockedGrandTotalCents]!!) - tenderedSoFar(checkId)
+            if (outstanding.isZero) throw ConflictException("check $checkId is fully tendered", "already_paid")
+            return outstanding
+        }
+        val group = BillGroups.selectAll()
+            .where { (BillGroups.id eq groupId) and (BillGroups.checkId eq checkId) }.firstOrNull()
+            ?: throw NotFoundException("group $groupId not on check $checkId", "group_not_found")
+        val outstanding = Money(group[BillGroups.lockedTotalCents]!!) - groupTenderedSoFar(groupId)
+        if (outstanding.isZero) throw ConflictException("group $groupId is fully tendered", "group_already_paid")
+        return outstanding
+    }
+
+    private fun recordTender(
+        checkId: Int, type: TenderType, eventType: String,
+        tenderedCents: Long, applied: Money, rounding: Money, change: Money,
+        groupId: Int? = null,
+    ): TenderView {
+        val tenderId = Tenders.insertAndGetId {
+            it[transactionId] = checkId
+            it[Tenders.type] = type.name
+            it[amountTenderedCents] = tenderedCents
+            it[amountAppliedCents] = applied.cents
+            it[roundingAdjustmentCents] = rounding.cents
+            it[changeCents] = change.cents
+            it[billGroupId] = groupId
+            it[createdAt] = LocalDateTime.now()
+        }.value
+        Outbox.write(eventType, "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("tenderId", tenderId)
+            put("type", type.name)
+            put("amountTenderedCents", tenderedCents)
+            put("amountAppliedCents", applied.cents)
+            put("roundingAdjustmentCents", rounding.cents)
+            put("changeCents", change.cents)
+            groupId?.let { g -> put("groupId", g) }
+        })
+        if (groupId != null) {
+            val group = BillGroups.selectAll().where { BillGroups.id eq groupId }.first()
+            val outstanding = Money(group[BillGroups.lockedTotalCents]!!) - groupTenderedSoFar(groupId)
+            Outbox.write("split.group_tendered", "check", checkId.toString(), buildJsonObject {
+                put("checkId", checkId)
+                put("groupId", groupId)
+                put("tenderId", tenderId)
+                put("amountAppliedCents", applied.cents)
+                put("groupOutstandingCents", outstanding.cents)
+            })
+        }
+        return TenderView(tenderId, type.name, tenderedCents, applied.cents, rounding.cents, change.cents, groupId)
+    }
+
+    fun finalizeCheck(checkId: Int): CheckView = transaction {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "TOTAL_LOCKED") throw ConflictException("check $checkId is ${check[Checks.status]}; tender first")
+        val outstanding = Money(check[Checks.lockedGrandTotalCents]!!) - tenderedSoFar(checkId)
+        if (!outstanding.isZero) throw ConflictException("check $checkId has ${outstanding.cents} cents outstanding", "outstanding_balance")
+        // split guard: every group must be individually covered, not just the sum
+        // (per-group tenders can't overshoot, so this is belt-and-braces — but the
+        // rule is the spec's invariant, so enforce it explicitly)
+        for (group in splitGroups(checkId)) {
+            val gid = group[BillGroups.id].value
+            val due = Money(group[BillGroups.lockedTotalCents]!!) - groupTenderedSoFar(gid)
+            if (!due.isZero) throw ConflictException("group $gid has ${due.cents} cents outstanding", "group_outstanding")
+        }
+
+        val shift = currentOpenShiftId() // null = closed outside any shift (allowed; report skips it)
+        val now = LocalDateTime.now()
+        Checks.update({ Checks.id eq checkId }) {
+            it[status] = "CLOSED"
+            it[closedAt] = now
+            it[shiftId] = shift
+        }
+        Outbox.write("check.closed", "check", checkId.toString(),
+            closedCheckPayload(check, shift, now))
+        // stage 5 epilogue: cashier receipt through the customer's printer adapter
+        val lines = ReceiptRenderer.render(buildReceipt(checkId), receiptPolicyFor(check))
+        config.printer.print(PrintJob(checkId, lines, meta = buildMap {
+            shift?.let { s -> put("shiftId", s.toString()) }
+        }))
+        loadCheck(checkId)
+    }
+
+    /**
+     * Provisional customer bill ("Vérifiez la facture" / check please): render the check's current
+     * state and spool it to the bills/ directory. Deliberately non-mutating — the check
+     * stays OPEN and editable, so this is callable any number of times as items come and
+     * go. Refuses on a check that's no longer live (400 check_not_billable) and on
+     * unresolved QR lines (409, same guard as tender). Rounding is a tender-time concern
+     * (pipeline stage 5), so the bill shows the exact grand total — no cash-rounding line.
+     * Returns the rendered text for the client preview.
+     */
+    fun printBill(checkId: Int, groupId: Int? = null): String = transaction {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] !in listOf("OPEN", "TOTAL_LOCKED")) {
+            throw BadRequestException("check $checkId is ${check[Checks.status]}; no bill to print", "check_not_billable")
+        }
+        val pending = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING") }.count()
+        if (pending > 0) throw ConflictException("check $checkId has $pending pending QR lines; accept or reject them first", "pending_lines_unresolved")
+
+        val receipt = if (groupId == null) buildReceipt(checkId) else buildGroupReceipt(checkId, groupId)
+        val lines = ReceiptRenderer.render(receipt, receiptPolicyFor(check), ReceiptKind.PROVISIONAL)
+        val text = config.printer.printProvisional(PrintJob(checkId, lines))
+        Outbox.write("check.bill_printed", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("lineCount", receipt.items.size)
+            put("grandTotalCents", receipt.grandTotal.cents)
+            groupId?.let { g -> put("groupId", g) }
+        })
+        text
+    }
+
+    /**
+     * Provisional bill for ONE group of a split check: only its allocated
+     * quantities, its own fee lines, its own total. The table label carries a
+     * "· 2/3" marker so bills laid on the table are tellable apart.
+     */
+    private fun buildGroupReceipt(checkId: Int, groupId: Int): Receipt {
+        val check = requireCheck(checkId)
+        val groups = splitGroups(checkId)
+        val group = groups.find { it[BillGroups.id].value == groupId }
+            ?: throw NotFoundException("group $groupId not on check $checkId", "group_not_found")
+        val table = DiningTables.selectAll().where { DiningTables.id eq check[Checks.tableId] }.first()
+        val totals = computeGroupTotals(check, group)
+
+        val variantCounts = ItemVariants.selectAll()
+            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+        val items = BillGroupAllocations
+            .join(CheckLines, JoinType.INNER, BillGroupAllocations.lineId, CheckLines.id)
+            .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
+            .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
+            .selectAll().where { BillGroupAllocations.groupId eq groupId }
+            .map { row ->
+                val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
+                val open = row[CheckLines.displayName]
+                ReceiptItem(
+                    nameFr = row.getOrNull(Items.nameFr) ?: open ?: "?",
+                    nameEn = row.getOrNull(Items.nameEn) ?: open ?: "?",
+                    variantLabelFr = if (showVariant) row.getOrNull(ItemVariants.labelFr) else null,
+                    variantLabelEn = if (showVariant) row.getOrNull(ItemVariants.labelEn) else null,
+                    qty = row[BillGroupAllocations.qty],
+                    unitPrice = Money(row[CheckLines.unitPriceCents]),
+                    lineTotal = Money(row[CheckLines.unitPriceCents] * row[BillGroupAllocations.qty]),
+                    note = row[CheckLines.note],
+                )
+            }
+        val tenders = Tenders.selectAll()
+            .where { (Tenders.transactionId eq checkId) and (Tenders.billGroupId eq groupId) }
+            .map { row ->
+                val method = runCatching { config.tenderMethod(TenderType.valueOf(row[Tenders.type])) }.getOrNull()
+                ReceiptTender(
+                    labelFr = method?.labelFr ?: "espèces",
+                    labelEn = method?.labelEn ?: "Cash",
+                    amountTendered = Money(row[Tenders.amountTenderedCents]),
+                    amountApplied = Money(row[Tenders.amountAppliedCents]),
+                    roundingAdjustment = Money(row[Tenders.roundingAdjustmentCents]),
+                    change = Money(row[Tenders.changeCents]),
+                )
+            }
+        return Receipt(
+            checkId = checkId,
+            tableLabel = "${table[DiningTables.nameOverride] ?: table[DiningTables.label]} · " +
+                "${group[BillGroups.groupNumber]}/${groups.size}",
+            openedAt = check[Checks.openedAt],
+            closedAt = check[Checks.closedAt] ?: LocalDateTime.now(),
+            items = items,
+            fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
+            grandTotal = Money(group[BillGroups.lockedTotalCents] ?: totals.grandTotal.cents),
+            taxIncluded = totals.taxIncluded,
+            vatRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveVat)?.ratePercent,
+            tenders = tenders,
+        )
+    }
+
+    /** Re-render the receipt for a closed check (client preview; deterministic). */
+    fun receiptText(checkId: Int): String = transaction {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "CLOSED") throw ConflictException("check $checkId is ${check[Checks.status]}; no receipt yet", "no_receipt_yet")
+        PrinterAdapter.renderText(ReceiptRenderer.render(buildReceipt(checkId), receiptPolicyFor(check)))
+    }
+
+    /**
+     * Print language follows the check owner's (opener's) preference whenever a
+     * message catalog for it is loaded — the venue default policy covers
+     * qr-customer-opened checks and unknown users.
+     */
+    private fun receiptPolicyFor(check: ResultRow): dev.dwhipstock.pos.sdk.ReceiptPolicy {
+        val locale = Users.selectAll().where { Users.id eq check[Checks.openedBy] }
+            .firstOrNull()?.get(Users.languageCode)?.let { LocaleCode.of(it) }
+        return if (locale != null && Messages.supports(locale)) config.receiptPolicy.withLocale(locale)
+        else config.receiptPolicy
+    }
+
+    private fun buildReceipt(checkId: Int): Receipt {
+        val check = requireCheck(checkId)
+        val table = DiningTables.selectAll().where { DiningTables.id eq check[Checks.tableId] }.first()
+        val totals = computeTotals(check)
+
+        // variant label only matters when the item actually has multiple sizes
+        val variantCounts = ItemVariants.selectAll()
+            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+
+        // LEFT joins: an open line (null item/variant) renders from display_name
+        val items = CheckLines
+            .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
+            .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
+            .selectAll().where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .map { row ->
+                val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
+                val open = row[CheckLines.displayName]
+                ReceiptItem(
+                    nameFr = row.getOrNull(Items.nameFr) ?: open ?: "?",
+                    nameEn = row.getOrNull(Items.nameEn) ?: open ?: "?",
+                    variantLabelFr = if (showVariant) row.getOrNull(ItemVariants.labelFr) else null,
+                    variantLabelEn = if (showVariant) row.getOrNull(ItemVariants.labelEn) else null,
+                    qty = row[CheckLines.qty],
+                    unitPrice = Money(row[CheckLines.unitPriceCents]),
+                    lineTotal = Money(row[CheckLines.unitPriceCents] * row[CheckLines.qty]),
+                    note = row[CheckLines.note],
+                )
+            }
+        val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->
+            val method = runCatching { config.tenderMethod(TenderType.valueOf(row[Tenders.type])) }.getOrNull()
+            ReceiptTender(
+                labelFr = method?.labelFr ?: "espèces",
+                labelEn = method?.labelEn ?: "Cash",
+                amountTendered = Money(row[Tenders.amountTenderedCents]),
+                amountApplied = Money(row[Tenders.amountAppliedCents]),
+                roundingAdjustment = Money(row[Tenders.roundingAdjustmentCents]),
+                change = Money(row[Tenders.changeCents]),
+            )
+        }
+        return Receipt(
+            checkId = checkId,
+            tableLabel = table[DiningTables.nameOverride] ?: table[DiningTables.label],
+            openedAt = check[Checks.openedAt],
+            closedAt = check[Checks.closedAt] ?: LocalDateTime.now(),
+            items = items,
+            fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
+            grandTotal = Money(check[Checks.lockedGrandTotalCents] ?: totals.grandTotal.cents),
+            taxIncluded = Money(check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents),
+            vatRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveVat)?.ratePercent,
+            tenders = tenders,
+        )
+    }
+
+    /**
+     * Void with reason, manager-gated. Allowed while OPEN or TOTAL_LOCKED with no
+     * money applied. TODO: full manager-override framework (approval on someone
+     * else's terminal session, discount gating) — this is the minimal honest gate.
+     */
+    fun voidCheck(checkId: Int, reason: String, managerId: String): CheckView = transaction {
+        require(reason.isNotBlank()) { "void reason is required" }
+        // defense-in-depth: the route already authorized this; re-check the grant on the authorizer
+        if (!GrantsRepo.has(managerId, Permissions.VOID))
+            throw ConflictException("void requires the void grant or a manager's approval", "manager_approval_required")
+
+        val check = requireCheck(checkId)
+        if (check[Checks.status] !in listOf("OPEN", "TOTAL_LOCKED")) {
+            throw ConflictException("check $checkId is ${check[Checks.status]}")
+        }
+        if (!tenderedSoFar(checkId).isZero) {
+            throw ConflictException("check $checkId has tenders applied; refund flow TODO", "void_has_tenders")
+        }
+
+        val shift = currentOpenShiftId()
+        val now = LocalDateTime.now()
+        // TOTAL_LOCKED (tender initiated, no money confirmed): the locked totals
+        // are what the screen showed — live math would re-price a settings change
+        // and re-floor a split. Only an OPEN void computes fresh.
+        val (voidAmount, voidTax) = check[Checks.lockedGrandTotalCents]?.let {
+            it to check[Checks.lockedTaxIncludedCents]!!
+        } ?: computeTotals(check).let { it.grandTotal.cents to it.taxIncluded.cents }
+        Checks.update({ Checks.id eq checkId }) {
+            it[status] = "VOID"
+            it[closedAt] = now
+            it[voidReason] = reason
+            it[voidedBy] = managerId
+            it[shiftId] = shift
+        }
+        val tz = tableZoneRow(check[Checks.tableId])
+        Outbox.write("check.voided", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("reason", reason)
+            put("authorizedBy", managerId)
+            put("tableId", check[Checks.tableId])
+            put("tableLabel", tz[DiningTables.nameOverride] ?: tz[DiningTables.label])
+            put("zoneId", tz[Zones.id])
+            put("zoneNameFr", tz[Zones.nameFr])
+            put("zoneNameEn", tz[Zones.nameEn])
+            shift?.let { s -> put("shiftId", s) }
+            put("openedAt", check[Checks.openedAt].toString())
+            put("voidedAt", now.toString())
+            put("amountCents", voidAmount)
+            put("taxIncludedCents", voidTax)
+        })
+        loadCheck(checkId)
+    }
+
+    // --- refunds: return money on a finalized (CLOSED) check. Where void cancels
+    // a check before money is applied, a refund unwinds money already taken. Full
+    // or partial (by line or by amount), manager-gated, reason required, and it
+    // posts to the current shift so cash refunds land in the drawer math. The
+    // reversed inclusive VAT is decomposed proportionally against the check's
+    // locked totals (a full refund reverses tax exactly) — the store computes it,
+    // the cloud only aggregates. See CheckService.voidCheck for the manager gate.
+
+    /**
+     * Refund [amountCents] (by amount) or [lines] (by line) of a CLOSED check
+     * back via [tenderType] (CASH | CARD | BANK_TRANSFER — no card refunds).
+     * Guarded so cumulative refunds never exceed the check's grand total.
+     */
+    fun refundCheck(
+        checkId: Int,
+        amountCents: Long?,
+        lines: List<RefundLineRequest>?,
+        tenderType: String,
+        reason: String,
+        managerId: String,
+    ): RefundResult = transaction {
+        require(reason.isNotBlank()) { "refund reason is required" }
+        // defense-in-depth: the route already authorized this; re-check the grant on the authorizer
+        if (!GrantsRepo.has(managerId, Permissions.REFUND))
+            throw ConflictException("refund requires the refund grant or a manager's approval", "manager_approval_required")
+        val tt = runCatching { TenderType.valueOf(tenderType) }.getOrNull()
+            ?: throw BadRequestException("unknown tender type $tenderType", "refund_bad_tender")
+
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "CLOSED")
+            throw ConflictException("check $checkId is ${check[Checks.status]}; only a closed check can be refunded", "refund_not_closed")
+        val grandTotal = check[Checks.lockedGrandTotalCents]
+            ?: throw ConflictException("check $checkId has no locked total", "refund_no_total")
+        val checkTax = check[Checks.lockedTaxIncludedCents] ?: 0L
+
+        // by-line takes precedence when present; otherwise a flat amount
+        val (refundGross, linesJson) = if (!lines.isNullOrEmpty()) {
+            computeLineRefund(checkId, lines)
+        } else {
+            (amountCents ?: throw BadRequestException("refund needs an amount or lines", "refund_no_amount")) to null
+        }
+        if (refundGross <= 0) throw BadRequestException("refund amount must be positive", "refund_non_positive")
+        val already = refundedSoFar(checkId)
+        if (already + refundGross > grandTotal)
+            throw ConflictException(
+                "refund exceeds remaining refundable (${grandTotal - already} cents left on check $checkId)",
+                "refund_exceeds_total",
+            )
+
+        // reverse the inclusive VAT proportionally against the LOCKED totals:
+        // full refund → tax reverses exactly; partials stay bounded and additive.
+        val refundTax = if (grandTotal == 0L) 0L
+        else Math.round(checkTax.toDouble() * refundGross / grandTotal)
+        val refundNet = refundGross - refundTax
+
+        val shift = currentOpenShiftId()
+        val now = LocalDateTime.now()
+        val refundId = Refunds.insertAndGetId {
+            it[Refunds.checkId] = checkId
+            it[shiftId] = shift
+            it[grossCents] = refundGross
+            it[netCents] = refundNet
+            it[taxCents] = refundTax
+            it[Refunds.tenderType] = tt.name
+            it[Refunds.reason] = reason
+            it[Refunds.linesJson] = linesJson?.toString()
+            it[refundedBy] = managerId
+            it[createdAt] = now
+        }.value
+
+        val tz = tableZoneRowOrNull(check[Checks.tableId])
+        // report-complete refund.created (CONTRACT.md §2): the cloud nets these
+        // out of sales + VAT from the decomposition alone, no store join.
+        Outbox.write("refund.created", "refund", refundId.toString(), buildJsonObject {
+            put("refundId", refundId)
+            put("checkId", checkId)
+            shift?.let { s -> put("shiftId", s) }
+            put("grossCents", refundGross)
+            put("netCents", refundNet)
+            put("taxIncludedCents", refundTax)
+            put("tenderType", tt.name)
+            put("reason", reason)
+            put("refundedBy", managerId)
+            put("tableId", check[Checks.tableId])
+            put("tableLabel", tz?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] })
+            put("zoneId", tz?.get(Zones.id))
+            put("zoneNameFr", tz?.get(Zones.nameFr))
+            put("zoneNameEn", tz?.get(Zones.nameEn))
+            put("createdAt", now.toString())
+            linesJson?.let { put("lines", it) }
+        })
+
+        RefundResult(
+            refund = refundView(Refunds.selectAll().where { Refunds.id eq refundId }.first()),
+            check = loadCheck(checkId),
+            slipText = renderRefundSlip(check, refundId, refundGross, refundNet, refundTax, tt, reason, now),
+        )
+    }
+
+    /** Recent CLOSED checks with their refund state — the POS refund picker. */
+    fun recentClosedChecks(limit: Int = 50): List<ClosedCheckSummary> = transaction {
+        val refundsByCheck = Refunds.selectAll().toList()
+            .groupBy { it[Refunds.checkId] }
+            .mapValues { e -> e.value.sumOf { it[Refunds.grossCents] } }
+        Checks.selectAll().where { Checks.status eq "CLOSED" }
+            .orderBy(Checks.closedAt to SortOrder.DESC)
+            .limit(limit)
+            .map { row ->
+                val id = row[Checks.id].value
+                val grand = row[Checks.lockedGrandTotalCents] ?: 0
+                val refunded = refundsByCheck[id] ?: 0
+                val tz = tableZoneRowOrNull(row[Checks.tableId])
+                ClosedCheckSummary(
+                    id = id,
+                    tableLabel = tz?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] } ?: "?",
+                    closedAt = row[Checks.closedAt]?.toString() ?: "",
+                    grandTotalCents = grand,
+                    refundedCents = refunded,
+                    refundableCents = grand - refunded,
+                )
+            }
+    }
+
+    /** A check's refund history + how much is still refundable. */
+    fun refundInfo(checkId: Int): RefundInfo = transaction {
+        val check = requireCheck(checkId)
+        val grand = check[Checks.lockedGrandTotalCents] ?: 0
+        val refunds = Refunds.selectAll().where { Refunds.checkId eq checkId }
+            .orderBy(Refunds.id to SortOrder.ASC)
+            .map { refundView(it) }
+        val refunded = refunds.sumOf { it.grossCents }
+        RefundInfo(checkId, grand, refunded, grand - refunded, refunds)
+    }
+
+    private fun refundedSoFar(checkId: Int): Long =
+        Refunds.selectAll().where { Refunds.checkId eq checkId }.sumOf { it[Refunds.grossCents] }
+
+    /** Sum selected line quantities into a refund gross + a JSON breakdown. */
+    private fun computeLineRefund(checkId: Int, lines: List<RefundLineRequest>): Pair<Long, JsonArray> {
+        val lineRows = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .associate { it[CheckLines.id].value to (it[CheckLines.qty] to it[CheckLines.unitPriceCents]) }
+        var gross = 0L
+        val arr = buildJsonArray {
+            for (l in lines) {
+                if (l.qty <= 0) continue
+                val row = lineRows[l.lineId]
+                    ?: throw BadRequestException("line ${l.lineId} not on check $checkId", "refund_bad_line")
+                val (origQty, unit) = row
+                if (l.qty > origQty)
+                    throw BadRequestException("line ${l.lineId}: refund qty ${l.qty} exceeds $origQty", "refund_qty_too_high")
+                val amount = unit * l.qty
+                gross += amount
+                addJsonObject {
+                    put("lineId", l.lineId)
+                    put("qty", l.qty)
+                    put("amountCents", amount)
+                }
+            }
+        }
+        return gross to arr
+    }
+
+    private fun refundView(r: ResultRow) = RefundView(
+        id = r[Refunds.id].value,
+        checkId = r[Refunds.checkId],
+        grossCents = r[Refunds.grossCents],
+        netCents = r[Refunds.netCents],
+        taxCents = r[Refunds.taxCents],
+        tenderType = r[Refunds.tenderType],
+        reason = r[Refunds.reason],
+        refundedBy = r[Refunds.refundedBy],
+        createdAt = r[Refunds.createdAt].toString(),
+    )
+
+    /** 42-col refund slip, same virtual printer as receipts. Language follows the check owner. */
+    private fun renderRefundSlip(
+        check: ResultRow, refundId: Int, gross: Long, net: Long, tax: Long,
+        tt: TenderType, reason: String, now: LocalDateTime,
+    ): String {
+        val policy = receiptPolicyFor(check)
+        val locale = policy.locale
+        fun msg(key: MessageKey, vararg args: Any) = Messages.get(key, locale, *args)
+        val method = runCatching { config.tenderMethod(tt) }.getOrNull()
+        val tenderLabel = when (tt) {
+            TenderType.CASH -> msg(TENDER_CASH)
+            else -> method?.let { locale.dataText(it.labelFr, it.labelEn) } ?: tt.name
+        }
+        val vatRate = (config.taxPolicy as? TaxPolicy.InclusiveVat)?.ratePercent
+        val lines = buildList {
+            add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
+            policy.headerLines.forEach { add(PrintLine.Text(it, Align.CENTER)) }
+            add(PrintLine.Blank)
+            add(PrintLine.Header(msg(REFUND_HEADER)))
+            add(PrintLine.Blank)
+            add(PrintLine.KeyValue(
+                msg(REFUND_REF_BILL) + " #" + check[Checks.id].value,
+                msg(REFUND_NUMBER) + " #" + refundId,
+            ))
+            add(PrintLine.KeyValue(msg(SLIP_TIME), policy.formatDate(now)))
+            add(PrintLine.Divider)
+            add(PrintLine.KeyValue(msg(REFUND_TOTAL), Money(gross).format(), emphasized = true))
+            if (policy.showVat && vatRate != null) {
+                add(PrintLine.KeyValue(msg(RECEIPT_VAT_INCLUDED, vatRate), Money(tax).format()))
+            }
+            add(PrintLine.KeyValue(msg(REFUND_VIA), tenderLabel))
+            add(PrintLine.Blank)
+            add(PrintLine.Text(msg(SLIP_REASON) + " " + reason))
+            add(PrintLine.Blank)
+            add(PrintLine.Text(policy.footerText, Align.CENTER))
+        }
+        return dev.dwhipstock.pos.sdk.PrinterAdapter.renderText(lines)
+    }
+
+    // --- table ops: move & merge. One staff gesture (pick a destination table);
+    // an empty table means move, an occupied one means merge. Both only while the
+    // money is still fluid: no tender, no split, no unresolved QR lines.
+
+    /** Reassign a live check to a different, empty table (party changed seats). */
+    fun moveCheck(checkId: Int, toTableId: String): CheckView = transaction {
+        val check = requireMovable(checkId)
+        val fromTableId = check[Checks.tableId]
+        if (fromTableId == toTableId)
+            throw ConflictException("check $checkId is already on table $toTableId", "same_table")
+        DiningTables.selectAll()
+            .where { (DiningTables.id eq toTableId) and DiningTables.deletedAt.isNull() }
+            .firstOrNull() ?: throw NotFoundException("table $toTableId not found")
+        requireZoneOpenForTable(toTableId)
+        val occupied = Checks.selectAll()
+            .where { (Checks.tableId eq toTableId) and (Checks.status inList listOf("OPEN", "TOTAL_LOCKED")) }
+            .firstOrNull()
+        if (occupied != null)
+            throw ConflictException("table $toTableId already has bill #${occupied[Checks.id].value}; merge instead", "table_occupied")
+
+        Checks.update({ Checks.id eq checkId }) { it[tableId] = toTableId }
+        Outbox.write("check.moved", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("fromTableId", fromTableId)
+            put("toTableId", toTableId)
+        })
+        loadCheck(checkId)
+    }
+
+    /**
+     * Fold the source check's lines into the destination check (two parties
+     * became one table). Line rows MOVE — notes, captured unit prices and
+     * entry order all survive; corkage bottles sum. The source closes as
+     * MERGED: like CANCELLED it's a no-receipt, no-manager-gate close, and the
+     * occupancy reads ignore it so the source table frees immediately.
+     */
+    fun mergeCheck(sourceCheckId: Int, destCheckId: Int): CheckView = transaction {
+        if (sourceCheckId == destCheckId)
+            throw ConflictException("can't merge check $sourceCheckId into itself", "same_check")
+        val source = requireMovable(sourceCheckId)
+        val dest = requireMovable(destCheckId)
+        requireZoneOpenForTable(dest[Checks.tableId])
+
+        val movedLines = CheckLines.update({ CheckLines.checkId eq sourceCheckId }) {
+            it[checkId] = destCheckId
+        }
+        val movedCorkage = source[Checks.corkageBottles]
+        if (movedCorkage > 0) {
+            Checks.update({ Checks.id eq destCheckId }) {
+                it[corkageBottles] = dest[Checks.corkageBottles] + movedCorkage
+            }
+        }
+        Checks.update({ Checks.id eq sourceCheckId }) {
+            it[status] = "MERGED"
+            it[closedAt] = LocalDateTime.now()
+        }
+        Outbox.write("check.merged", "check", destCheckId.toString(), buildJsonObject {
+            put("sourceCheckId", sourceCheckId)
+            put("destCheckId", destCheckId)
+            put("lineCount", movedLines)
+            put("corkageBottles", movedCorkage)
+        })
+        loadCheck(destCheckId)
+    }
+
+    /**
+     * Move/merge shared guard: the check must be OPEN (not finalized and no
+     * money applied — the first tender flips to TOTAL_LOCKED), not mid-split,
+     * and have no pending QR lines (they belong to whoever is at THIS table;
+     * resolve before relocating the bill).
+     */
+    private fun requireMovable(checkId: Int): ResultRow {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN")
+            throw ConflictException("check $checkId is ${check[Checks.status]}", "check_not_open")
+        if (splitGroups(checkId).isNotEmpty())
+            throw ConflictException("check $checkId is split; clear the split first", "clear_split_first")
+        val pending = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING") }.count()
+        if (pending > 0)
+            throw ConflictException("check $checkId has $pending pending QR lines; accept or reject them first", "pending_lines_unresolved")
+        return check
+    }
+
+    fun getCheck(checkId: Int): CheckView = transaction { loadCheck(checkId) }
+
+    fun openCheckForTable(tableId: String): CheckView? = transaction {
+        Checks.selectAll()
+            .where { (Checks.tableId eq tableId) and (Checks.status inList listOf("OPEN", "TOTAL_LOCKED")) }
+            .firstOrNull()?.let { loadCheck(it[Checks.id].value) }
+    }
+
+    /**
+     * ISO timestamp of the oldest un-actioned PENDING (customer QR) line on this
+     * check, or null if none. The staff terminal uses it to age the escalation
+     * banner — server-derived so it survives an app restart. Cheap indexed read.
+     */
+    fun oldestPendingAt(checkId: Int): String? = transaction {
+        CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING") }
+            .orderBy(CheckLines.createdAt)
+            .limit(1)
+            .firstOrNull()?.get(CheckLines.createdAt)?.toString()
+    }
+
+    // --- internals ---
+
+    private fun tableZoneRow(tableId: String): ResultRow =
+        DiningTables.join(Zones, JoinType.INNER, DiningTables.zoneId, Zones.id)
+            .selectAll().where { DiningTables.id eq tableId }.first()
+
+    /**
+     * Like [tableZoneRow] but tolerates a check whose table or zone is gone —
+     * a hard-deleted or dangling ref on a legacy row. The report-complete
+     * payload only uses the zone for labels; the money it carries (grand total,
+     * tax, tenders) is independent, so a missing table degrades to null labels
+     * instead of throwing "Collection is empty." and wedging the backfill.
+     */
+    private fun tableZoneRowOrNull(tableId: String): ResultRow? =
+        DiningTables.join(Zones, JoinType.INNER, DiningTables.zoneId, Zones.id)
+            .selectAll().where { DiningTables.id eq tableId }.firstOrNull()
+
+    private fun feeLinesToJson(fees: List<FeeLine>): JsonArray = JsonArray(fees.map { f ->
+        buildJsonObject {
+            put("code", f.code)
+            put("labelFr", f.labelFr)
+            put("labelEn", f.labelEn)
+            put("amountCents", f.amount.cents)
+        }
+    })
+
+    /**
+     * Report-complete check.closed snapshot (CONTRACT.md §2): everything the
+     * cloud's sales reports need, so it never joins back into store internals.
+     * [check] is the pre-close row (TOTAL_LOCKED, locked totals stamped).
+     */
+    private fun closedCheckPayload(check: ResultRow, shift: Int?, closedAt: LocalDateTime): JsonObject {
+        val checkId = check[Checks.id].value
+        val tz = tableZoneRowOrNull(check[Checks.tableId])
+        // fees as assessed at lock time (021) — live settings must not re-price a
+        // closed check. Pre-021 rows (locked before the upgrade) fall back to a
+        // re-assessment, the old behaviour.
+        val fees = check[Checks.lockedFeesJson]?.let { Json.parseToJsonElement(it).jsonArray }
+            ?: feeLinesToJson(computeTotals(check).feeLines)
+
+        // same disambiguation rule as receipts: variant label only when the
+        // item has more than one live size
+        val liveVariantCounts = ItemVariants.selectAll()
+            .where { ItemVariants.deletedAt.isNull() }
+            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+        val lines = CheckLines
+            .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
+            .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
+            .selectAll().where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .map { row ->
+                buildJsonObject {
+                    put("lineId", row[CheckLines.id].value)
+                    val itemId = row[CheckLines.itemId]
+                    put("itemId", itemId)
+                    put("variantId", row[CheckLines.variantId])
+                    put("categoryId", if (itemId == null) null else row.getOrNull(Items.categoryId))
+                    if (itemId == null) {
+                        // off-menu open line: null ids, displayName instead of names
+                        put("displayName", row[CheckLines.displayName] ?: "?")
+                    } else {
+                        put("nameFr", row.getOrNull(Items.nameFr) ?: "?")
+                        put("nameEn", row.getOrNull(Items.nameEn) ?: "?")
+                        if ((liveVariantCounts[itemId] ?: 0) > 1) {
+                            put("variantLabelFr", row.getOrNull(ItemVariants.labelFr))
+                            put("variantLabelEn", row.getOrNull(ItemVariants.labelEn))
+                        }
+                    }
+                    put("qty", row[CheckLines.qty])
+                    put("unitPriceCents", row[CheckLines.unitPriceCents])
+                    put("lineTotalCents", row[CheckLines.unitPriceCents] * row[CheckLines.qty])
+                    put("note", row[CheckLines.note])
+                }
+            }
+        val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->
+            buildJsonObject {
+                put("tenderId", row[Tenders.id].value)
+                put("type", row[Tenders.type])
+                put("amountTenderedCents", row[Tenders.amountTenderedCents])
+                put("amountAppliedCents", row[Tenders.amountAppliedCents])
+                put("roundingAdjustmentCents", row[Tenders.roundingAdjustmentCents])
+                put("changeCents", row[Tenders.changeCents])
+                put("groupId", row[Tenders.billGroupId])
+            }
+        }
+        return buildJsonObject {
+            put("checkId", checkId)
+            put("tableId", check[Checks.tableId])
+            put("tableLabel", tz?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] })
+            put("zoneId", tz?.get(Zones.id))
+            put("zoneNameFr", tz?.get(Zones.nameFr))
+            put("zoneNameEn", tz?.get(Zones.nameEn))
+            shift?.let { s -> put("shiftId", s) }
+            put("openedAt", check[Checks.openedAt].toString())
+            put("closedAt", closedAt.toString())
+            put("openedBy", check[Checks.openedBy])
+            put("grandTotalCents", check[Checks.lockedGrandTotalCents]!!)
+            put("taxIncludedCents", check[Checks.lockedTaxIncludedCents]!!)
+            put("corkageBottles", check[Checks.corkageBottles])
+            put("fees", fees)
+            put("lines", JsonArray(lines))
+            put("tenders", JsonArray(tenders))
+        }
+    }
+
+    /**
+     * One-time backfill: re-emit a report-complete `check.closed` for every
+     * historically CLOSED check. Checks closed before the report-complete
+     * payload shipped (commit fd09a6f) were pushed thin — grand total only, no
+     * decomposed VAT and no tender rows — so the cloud's VAT and payment-mix
+     * reports undercount (they count ~1 detailed check while gross counts all).
+     *
+     * The store DB still holds the full history (locked tax + the Tenders
+     * rows), so re-running [closedCheckPayload] rebuilds a complete event; the
+     * cloud's idempotent upsert-by-checkId backfills tax + tenders in place. We
+     * never fabricate money here — the store is authoritative and simply
+     * re-emits what it already recorded. Returns the number of events written.
+     */
+    fun backfillReportCompleteClosedEvents(): Int = transaction {
+        var emitted = 0
+        Checks.selectAll().where { Checks.status eq "CLOSED" }
+            .orderBy(Checks.id).forEach { check ->
+                val checkId = check[Checks.id].value
+                try {
+                    val closedAt = check[Checks.closedAt]
+                    // Every CLOSED check passed TOTAL_LOCKED, which stamps both locked
+                    // totals — a null here is a pathological row, so skip loudly rather
+                    // than re-emit another thin event (or NPE mid-batch).
+                    if (check[Checks.lockedGrandTotalCents] == null ||
+                        check[Checks.lockedTaxIncludedCents] == null || closedAt == null) {
+                        log.warn("report backfill: check $checkId lacks locked totals/closedAt; skipped")
+                        return@forEach
+                    }
+                    Outbox.write("check.closed", "check", checkId.toString(),
+                        closedCheckPayload(check, check[Checks.shiftId], closedAt))
+                    emitted++
+                } catch (e: Exception) {
+                    // One pathological legacy check must never abort the whole
+                    // re-emit: if it did, the tick would throw before the marker is
+                    // set, so the backfill retries every 10s forever and no sync —
+                    // not just this event — ever drains. Skip loudly and continue.
+                    log.warn("report backfill: check $checkId failed to re-emit; skipped", e)
+                }
+            }
+        emitted
+    }
+
+    private fun requireCheck(checkId: Int): ResultRow =
+        Checks.selectAll().where { Checks.id eq checkId }.firstOrNull()
+            ?: throw NotFoundException("check $checkId not found")
+
+    /**
+     * Auto-cancel an OPEN check the moment nothing is on it — no ACTIVE lines, no
+     * PENDING lines, and no corkage (so a genuinely $0 balance). Distinct from VOID:
+     * nothing was ever rung, so there's no reason to capture and no manager gate. The
+     * table frees up immediately because openCheckForTable / the /zones occupancy read
+     * only match OPEN|TOTAL_LOCKED — a CANCELLED check disappears like a CLOSED/VOID one,
+     * with no receipt (there's nothing to print).
+     *
+     * Called after the two mutations that can strip a check to empty: line delete
+     * (removeLine) and pending-line reject (rejectPendingLine). A corkage-only check
+     * (bottles > 0, no lines) still owes money, so it is deliberately left OPEN.
+     * Existing pre-fix orphans are never touched — this only fires on a live mutation.
+     */
+    private fun cancelIfEmpty(checkId: Int) {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN") return
+        if (check[Checks.corkageBottles] > 0) return
+        val liveLines = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and
+                (CheckLines.status inList listOf("ACTIVE", "PENDING")) }
+            .count()
+        if (liveLines > 0L) return
+        Checks.update({ Checks.id eq checkId }) {
+            it[status] = "CANCELLED"
+            it[closedAt] = LocalDateTime.now()
+        }
+        Outbox.write("check.cancelled", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("reason", "empty")
+        })
+    }
+
+    /**
+     * Stage 4: freeze the pipeline output onto the check row. On a split check
+     * every ACTIVE quantity must be allocated to a group first (an unassigned
+     * beer would belong to no bill and never get paid); each group's total is
+     * stamped, and the check's locked grand total is the SUM of group totals —
+     * per-group fee floors are authoritative once split (documented above).
+     */
+    private fun lockTotals(checkId: Int) {
+        val pending = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING") }.count()
+        if (pending > 0) throw ConflictException("check $checkId has $pending pending QR lines; accept or reject them first", "pending_lines_unresolved")
+        val check = requireCheck(checkId)
+        val groups = splitGroups(checkId)
+        val assessedFees = mutableListOf<FeeLine>()
+        val totals: Pair<Long, Long> = if (groups.isEmpty()) {
+            val t = computeTotals(check)
+            assessedFees += t.feeLines
+            t.grandTotal.cents to t.taxIncluded.cents
+        } else {
+            if (groups.none { it[BillGroups.fixedAmountCents] != null }) {
+                val unassigned = CheckLines.selectAll()
+                    .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+                    .sumOf { it[CheckLines.qty] - allocatedQtyForLine(it[CheckLines.id].value) }
+                if (unassigned > 0)
+                    throw ConflictException("check $checkId has $unassigned unassigned item(s); assign everything before paying", "split_unassigned_lines")
+            }
+            var grand = 0L
+            var tax = 0L
+            for (group in groups) {
+                val t = computeGroupTotals(check, group)
+                BillGroups.update({ BillGroups.id eq group[BillGroups.id] }) {
+                    it[lockedTotalCents] = t.grandTotal.cents
+                }
+                assessedFees += t.feeLines
+                grand += t.grandTotal.cents
+                tax += t.taxIncluded.cents
+            }
+            grand to tax
+        }
+        // one line per fee code; on a split the per-group sums (their floors) are
+        // what the locked grand total actually charged
+        val lockedFees = assessedFees.groupBy { it.code }.map { (_, lines) ->
+            lines.first().copy(amount = Money(lines.sumOf { it.amount.cents }))
+        }
+        Checks.update({ Checks.id eq checkId }) {
+            it[status] = "TOTAL_LOCKED"
+            it[lockedGrandTotalCents] = totals.first
+            it[lockedTaxIncludedCents] = totals.second
+            it[lockedFeesJson] = feeLinesToJson(lockedFees).toString()
+        }
+        Outbox.write("check.total_locked", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("grandTotalCents", totals.first)
+            put("taxIncludedCents", totals.second)
+            if (groups.isNotEmpty()) put("groups", groups.size)
+        })
+    }
+
+    /**
+     * Per-group totals through the SAME pipeline as the whole check: the group's
+     * allocated quantities are its basket; the corkage fee lands on the (single)
+     * group that carries it. A money-only even-split group is a fixed amount.
+     */
+    private fun computeGroupTotals(check: ResultRow, group: ResultRow): Totals {
+        group[BillGroups.fixedAmountCents]?.let { fixed ->
+            val tax = config.taxPolicy.assess(Money(fixed))
+            return Totals(Money(fixed), emptyList(), Money(fixed) + tax.taxAdded, tax.taxIncluded, tax.showOnReceipt)
+        }
+        val groupId = group[BillGroups.id].value
+        val basket = BillGroupAllocations
+            .join(CheckLines, JoinType.INNER, BillGroupAllocations.lineId, CheckLines.id)
+            .selectAll().where { BillGroupAllocations.groupId eq groupId }
+            .map { BasketLine(Money(it[CheckLines.unitPriceCents]), it[BillGroupAllocations.qty]) }
+        val corkage = if (group[BillGroups.includesCorkage]) check[Checks.corkageBottles] else 0
+        return TransactionPipeline.computeTotals(basket, corkage, config)
+    }
+
+    private fun computeTotals(check: ResultRow): Totals {
+        val checkId = check[Checks.id].value
+        // PENDING (customer-submitted, unaccepted) lines never count toward totals
+        val basket = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .map { BasketLine(Money(it[CheckLines.unitPriceCents]), it[CheckLines.qty]) }
+        return TransactionPipeline.computeTotals(basket, check[Checks.corkageBottles], config)
+    }
+
+    private fun tenderedSoFar(checkId: Int): Money =
+        Money(Tenders.selectAll().where { Tenders.transactionId eq checkId }.sumOf { it[Tenders.amountAppliedCents] })
+
+    private fun groupTenderedSoFar(groupId: Int): Money =
+        Money(Tenders.selectAll().where { Tenders.billGroupId eq groupId }.sumOf { it[Tenders.amountAppliedCents] })
+
+    /** Settlement overlay for the client: live per-group totals + allocations + unassigned pool. */
+    private fun buildSplitView(check: ResultRow): SplitView? {
+        val checkId = check[Checks.id].value
+        val groups = splitGroups(checkId)
+        if (groups.isEmpty()) return null
+        val allocationsByGroup = BillGroupAllocations.selectAll()
+            .where { BillGroupAllocations.groupId inList groups.map { it[BillGroups.id].value } }
+            .groupBy { it[BillGroupAllocations.groupId] }
+        val groupViews = groups.map { group ->
+            val gid = group[BillGroups.id].value
+            val totals = computeGroupTotals(check, group)
+            val grand = group[BillGroups.lockedTotalCents] ?: totals.grandTotal.cents
+            val paid = groupTenderedSoFar(gid).cents
+            GroupView(
+                id = gid,
+                number = group[BillGroups.groupNumber],
+                includesCorkage = group[BillGroups.includesCorkage],
+                fixedAmountCents = group[BillGroups.fixedAmountCents],
+                allocations = (allocationsByGroup[gid] ?: emptyList()).map {
+                    AllocationView(it[BillGroupAllocations.lineId], it[BillGroupAllocations.qty])
+                },
+                itemsSubtotalCents = totals.itemsSubtotal.cents,
+                fees = totals.feeLines.map { FeeView(it.code, it.labelFr, it.labelEn, it.amount.cents) },
+                grandTotalCents = grand,
+                paidCents = paid,
+                outstandingCents = grand - paid,
+            )
+        }
+        val even = groups.any { it[BillGroups.fixedAmountCents] != null }
+        val allocatedByLine = allocationsByGroup.values.flatten()
+            .groupBy({ it[BillGroupAllocations.lineId] }) { it[BillGroupAllocations.qty] }
+            .mapValues { it.value.sum() }
+        // an even ÷N split is money-only: lines are never assigned, so there is
+        // no "unassigned pool" — reporting one would read as an incomplete split
+        val unassigned = if (even) emptyList() else CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .mapNotNull { row ->
+                val remaining = row[CheckLines.qty] - (allocatedByLine[row[CheckLines.id].value] ?: 0)
+                if (remaining > 0) AllocationView(row[CheckLines.id].value, remaining) else null
+            }
+        return SplitView(
+            groups = groupViews,
+            unassigned = unassigned,
+            even = even,
+            locked = check[Checks.status] != "OPEN",
+        )
+    }
+
+    private fun loadCheck(checkId: Int): CheckView {
+        val check = requireCheck(checkId)
+        val totals = computeTotals(check)
+        // same rule as the receipt: the variant label only disambiguates when
+        // the item actually has multiple sizes (bottle/pitcher/tower)
+        val variantCounts = ItemVariants.selectAll()
+            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+        val allLines = CheckLines
+            .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
+            .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
+            .selectAll()
+            .where { CheckLines.checkId eq checkId }
+            .map { row ->
+                val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
+                val open = row[CheckLines.displayName]
+                Pair(row[CheckLines.status], LineView(
+                    id = row[CheckLines.id].value,
+                    itemId = row[CheckLines.itemId],
+                    variantId = row[CheckLines.variantId],
+                    nameFr = row.getOrNull(Items.nameFr) ?: open ?: "?",
+                    nameEn = row.getOrNull(Items.nameEn) ?: open ?: "?",
+                    variantLabelFr = if (showVariant) row.getOrNull(ItemVariants.labelFr) else null,
+                    variantLabelEn = if (showVariant) row.getOrNull(ItemVariants.labelEn) else null,
+                    qty = row[CheckLines.qty],
+                    unitPriceCents = row[CheckLines.unitPriceCents],
+                    lineTotalCents = row[CheckLines.unitPriceCents] * row[CheckLines.qty],
+                    note = row[CheckLines.note],
+                ))
+            }
+        val lines = allLines.filter { it.first == "ACTIVE" }.map { it.second }
+        val pendingLines = allLines.filter { it.first == "PENDING" }.map { it.second }
+        val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map {
+            TenderView(it[Tenders.id].value, it[Tenders.type], it[Tenders.amountTenderedCents],
+                it[Tenders.amountAppliedCents], it[Tenders.roundingAdjustmentCents], it[Tenders.changeCents],
+                it[Tenders.billGroupId])
+        }
+        val grandTotal = check[Checks.lockedGrandTotalCents] ?: totals.grandTotal.cents
+        val applied = tenders.sumOf { it.amountAppliedCents }
+        return CheckView(
+            id = checkId,
+            tableId = check[Checks.tableId],
+            status = check[Checks.status],
+            openedAt = check[Checks.openedAt].toString(),
+            corkageBottles = check[Checks.corkageBottles],
+            lines = lines,
+            pendingLines = pendingLines,
+            itemsSubtotalCents = totals.itemsSubtotal.cents,
+            fees = totals.feeLines.map { FeeView(it.code, it.labelFr, it.labelEn, it.amount.cents) },
+            grandTotalCents = grandTotal,
+            taxIncludedCents = check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents,
+            paidCents = applied,
+            outstandingCents = grandTotal - applied,
+            tenders = tenders,
+            split = buildSplitView(check),
+        )
+    }
+}
+
+// These views double as API DTOs for now. TODO: split a real DTO layer when the
+// shared contracts package (M0 leftover) materializes.
+@kotlinx.serialization.Serializable
+data class CheckView(
+    val id: Int,
+    val tableId: String,
+    val status: String,
+    val openedAt: String = "",
+    val corkageBottles: Int,
+    val lines: List<LineView>,
+    /** Customer-submitted via QR, awaiting staff accept/reject. Not in totals. */
+    val pendingLines: List<LineView> = emptyList(),
+    val itemsSubtotalCents: Long,
+    val fees: List<FeeView>,
+    val grandTotalCents: Long,
+    val taxIncludedCents: Long, // internal-only for CopperLantern (hidden VAT); reporting uses it
+    val paidCents: Long,
+    val outstandingCents: Long,
+    val tenders: List<TenderView>,
+    /** Settlement-time bill groups; null = not split (the default single-bill flow). */
+    val split: SplitView? = null,
+)
+
+@kotlinx.serialization.Serializable
+data class SplitView(
+    val groups: List<GroupView>,
+    /** ACTIVE quantity not yet allocated to any group (lineId → remaining qty). */
+    val unassigned: List<AllocationView>,
+    /** Even ÷N split: money-only groups, no line allocation. */
+    val even: Boolean,
+    /** True once any group has a tender (check TOTAL_LOCKED) — no further split edits. */
+    val locked: Boolean,
+)
+
+@kotlinx.serialization.Serializable
+data class GroupView(
+    val id: Int,
+    val number: Int,
+    val includesCorkage: Boolean,
+    val fixedAmountCents: Long? = null,
+    val allocations: List<AllocationView>,
+    val itemsSubtotalCents: Long,
+    val fees: List<FeeView>,
+    val grandTotalCents: Long,
+    val paidCents: Long,
+    val outstandingCents: Long,
+)
+
+@kotlinx.serialization.Serializable
+data class AllocationView(val lineId: Int, val qty: Int)
+
+@kotlinx.serialization.Serializable
+data class LineView(
+    val id: Int,
+    /** Null on OPEN lines (rung off-menu by name + price). */
+    val itemId: String? = null,
+    val variantId: String? = null,
+    val nameFr: String,
+    val nameEn: String,
+    /** Only set when the item has >1 variant — same disambiguation rule as the receipt. */
+    val variantLabelFr: String? = null,
+    val variantLabelEn: String? = null,
+    val qty: Int,
+    val unitPriceCents: Long,
+    val lineTotalCents: Long,
+    val note: String?,
+)
+
+@kotlinx.serialization.Serializable
+data class FeeView(val code: String, val labelFr: String, val labelEn: String, val amountCents: Long)
+
+@kotlinx.serialization.Serializable
+data class TenderView(
+    val id: Int,
+    val type: String,
+    val amountTenderedCents: Long,
+    val amountAppliedCents: Long,
+    val roundingAdjustmentCents: Long,
+    val changeCents: Long,
+    /** Bill group this tender paid into; null = whole-check tender. */
+    val groupId: Int? = null,
+)

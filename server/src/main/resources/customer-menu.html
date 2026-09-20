@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Copper Lantern Pub — Commander de la nourriture</title>
+<style>
+  /* Customer scan-to-order menu (M3). Vanilla on purpose — loads instantly on any phone. */
+  :root {
+    --ink: #121212;        /* near-black text / dark surfaces (header, tabs, toast) */
+    --paper: #ffffff;      /* card / sheet surfaces */
+    --paper-alt: #fafafa;  /* body + sticky chip-bar background */
+    --surface-alt: #eeeeee; /* flat neutral fills: photo placeholder, close button */
+    --line: #e2e2e2;       /* neutral borders/dividers */
+    --muted: #8a8a8a;      /* secondary text (pending lines) */
+    --muted-strong: #555555; /* emphasized secondary text (lock note, pending header) */
+    --accent: #FF1F8E;     /* hot pink — CTAs, cart bar, selected state, price */
+    --accent-ink: #ffffff; /* text/icons on top of accent */
+  }
+  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
+  body { background: var(--paper-alt); padding-bottom: 90px; }
+  header { background: var(--ink); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 5;
+           display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 18px; }
+  header .table { font-size: 13px; opacity: .85; }
+  header .lang { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.5); color: #fff;
+                 border-radius: 16px; padding: 5px 14px; font-size: 14px; font-weight: 700; }
+  .tabs { display: flex; background: var(--ink); position: sticky; top: 62px; z-index: 5; }
+  .tabs button { flex: 1; background: none; border: 0; color: rgba(255,255,255,.7); font-size: 15px;
+                 font-weight: 700; padding: 10px 0 12px; border-bottom: 3px solid transparent; }
+  .tabs button.on { color: #fff; border-bottom-color: var(--accent); }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 12px; position: sticky; top: 107px; background: var(--paper-alt); z-index: 4; }
+  .chip { border: 1px solid var(--line); border-radius: 16px; padding: 5px 14px; white-space: nowrap; background: #fff; font-size: 14px; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 10px 12px; }
+  .card { background: #fff; border-radius: 10px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .ph { background: var(--surface-alt); border-radius: 8px; height: 72px; display: flex; align-items: center; justify-content: center;
+        color: var(--ink); font-weight: 700; font-size: 20px; } /* fallback when no photo */
+  .photo { width: 100%; height: 96px; object-fit: cover; border-radius: 8px; display: block; background: var(--surface-alt); }
+  .card .fr { font-weight: 700; margin-top: 6px; font-size: 15px; }
+  .card .en { color: #888; font-size: 12px; }
+  .card .price { color: var(--accent); font-size: 14px; margin-top: 2px; font-weight: 700; }
+  .card select, .card input[type=text] { width: 100%; margin-top: 6px; padding: 6px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+  .card .add { width: 100%; margin-top: 8px; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px; font-size: 15px; }
+  /* pre-send cart: persistent bar + bottom sheet (the old inline basket was invisible on phones) */
+  .bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--line);
+         padding: 12px 16px; display: none; justify-content: space-between; align-items: center; z-index: 6; }
+  .bar button { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 12px 22px; font-size: 16px; }
+  #cart-summary { font-size: 16px; font-weight: 700; display: inline-block; }
+  #cart-summary.pop { animation: pop .3s ease; }
+  @keyframes pop { 40% { transform: scale(1.15); } }
+  #cart-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none;
+                transition: opacity .2s; z-index: 7; }
+  #cart-scrim.open { opacity: 1; pointer-events: auto; }
+  #cart-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; z-index: 8;
+                border-radius: 16px 16px 0 0; transform: translateY(105%); transition: transform .25s ease;
+                display: flex; flex-direction: column; max-height: 78vh; box-shadow: 0 -4px 20px rgba(0,0,0,.15); }
+  #cart-sheet.open { transform: translateY(0); }
+  .chead { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 6px; }
+  .chead h3 { font-size: 17px; }
+  .chead .cclose { border: 0; background: var(--surface-alt); color: var(--ink); width: 32px; height: 32px;
+                   border-radius: 16px; font-size: 15px; }
+  #cart-lines { overflow-y: auto; padding: 0 16px; }
+  .cfoot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+  .cfoot .btotal { padding: 0 0 10px; }
+  .cfoot button { width: 100%; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px;
+                  padding: 14px; font-size: 17px; font-weight: 700; }
+  .bline { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .bline .note { color: #888; font-size: 12px; }
+  .bline button { border: 0; background: none; color: var(--ink); font-size: 16px; }
+  .bqty { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .bqty .step { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px;
+                background: #fff; font-size: 18px; line-height: 1; }
+  #toast { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%) translateY(8px); background: var(--ink);
+           color: #fff; border-radius: 18px; padding: 8px 18px; font-size: 14px; opacity: 0;
+           pointer-events: none; transition: opacity .2s, transform .2s; z-index: 9; }
+  #toast.show { opacity: .95; transform: translateX(-50%) translateY(0); }
+  #done { text-align: center; padding: 60px 24px; display: none; }
+  #done .big { font-size: 52px; }
+  /* bill view */
+  #bill { display: none; padding: 12px; }
+  .bsec { background: #fff; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .bsec h3 { font-size: 15px; margin-bottom: 4px; }
+  .brow { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .brow .nm { flex: 1; }
+  .brow .note { color: #888; font-size: 12px; }
+  .btotal { display: flex; justify-content: space-between; padding-top: 12px; font-weight: 700; font-size: 17px; }
+  .bpend .brow { color: var(--muted); }
+  .bpend h3 { color: var(--muted-strong); }
+  .locknote { color: var(--muted-strong); font-size: 13px; margin-top: 8px; text-align: right; }
+  .bempty { text-align: center; padding: 60px 24px; color: #888; }
+  .bempty .big { font-size: 52px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>The Copper Lantern Pub</h1>
+    <div class="table" id="hdr-table"></div>
+  </div>
+  <button class="lang" id="lang-btn" onclick="toggleLang()"></button>
+</header>
+
+<nav class="tabs">
+  <button id="tab-menu" class="on" onclick="showTab('menu')"></button>
+  <button id="tab-bill" onclick="showTab('bill')"></button>
+</nav>
+
+<div id="menu">
+  <div class="chips" id="chips"></div>
+  <div class="grid" id="grid"></div>
+  <div class="bar" id="cart-bar" onclick="openCart()">
+    <span id="cart-summary"></span>
+    <button id="cart-open-btn"></button>
+  </div>
+</div>
+
+<div id="cart-scrim" onclick="closeCart()"></div>
+<div id="cart-sheet">
+  <div class="chead">
+    <h3 id="cart-title"></h3>
+    <button class="cclose" onclick="closeCart()">✕</button>
+  </div>
+  <div id="cart-lines"></div>
+  <div class="cfoot">
+    <div class="btotal"><span id="cart-sub-label"></span><span id="cart-sub"></span></div>
+    <button id="submit"></button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<div id="bill"><div id="bill-body"></div></div>
+
+<div id="done">
+  <div class="big">🍻</div>
+  <h2 id="done-title"></h2>
+  <p id="done-text"></p>
+  <p style="margin-top:20px">
+    <button class="chip" onclick="reset()" id="more-btn"></button>
+    <button class="chip" onclick="showTab('bill')" id="see-bill-btn"></button>
+  </p>
+</div>
+
+<script>
+const TABLE_ID = "{{TABLE_ID}}";
+const TABLE_LABEL = "{{TABLE_LABEL}}";
+
+// Two locales end-to-end: fr (default) + en, persisted per phone.
+let lang = localStorage.getItem("menu_lang") || "en";
+const STR = {
+  fr: {
+    orderFromPhone: "tableau " + TABLE_LABEL + " — Commande depuis un téléphone portable",
+    langBtn: "EN",
+    basket: "panier", send: "Envoyer la commande", note: "Remarque (facultatif)",
+    addToBasket: "＋ Ajouter au panier", sizes: "taille",
+    doneTitle: "Commande envoyée !", doneText: "Le personnel confirmera votre commande sous peu.",
+    orderMore: "Commandez plus", failed: "L'envoi a échoué. Essayer à nouveau.",
+    billLocked: "La facture est en train d'être payée. — Veuillez contacter le personnel.",
+    viewCart: "Voir le panier", addedToast: "Ajouté au panier ✓", subtotal: "Total",
+    tabMenu: "menu", tabBill: "votre facture", seeBill: "Consulter la facture",
+    onBill: "sur votre facture", beingConfirmed: "Attendez que l'employé confirme.", total: "Total",
+    noOrders: "Il n'y a pas encore de commande. — Sélectionnez un menu pour commencer à commander maintenant.", billPaying: "La facture est en train d'être payée.",
+    billLoading: "Chargement de la facture…",
+  },
+  en: {
+    orderFromPhone: "Table " + TABLE_LABEL + " — order from your phone",
+    langBtn: "français",
+    basket: "Basket", send: "Send order", note: "Note (optional)",
+    addToBasket: "＋ Add to basket", sizes: "sizes",
+    doneTitle: "Order sent!", doneText: "Staff will confirm your order shortly.",
+    orderMore: "Order more", failed: "Failed to send, please retry",
+    billLocked: "Bill is being paid — please ask staff",
+    viewCart: "View basket", addedToast: "Added ✓", subtotal: "Subtotal",
+    tabMenu: "Menu", tabBill: "Your bill", seeBill: "View bill",
+    onBill: "On your bill", beingConfirmed: "Being confirmed", total: "Total",
+    noOrders: "No orders yet — browse the menu to start.", billPaying: "Bill is being paid",
+    billLoading: "Loading your bill…",
+  },
+};
+const T = () => STR[lang];
+const iname = i => lang === "en" ? i.nameEn : i.nameFr;
+const inameAlt = i => lang === "en" ? i.nameFr : i.nameEn;
+const vlabel = v => lang === "en" ? v.labelEn : v.labelFr;
+
+let items = [], categories = [], cat = null, basket = [];
+const catName = c => {
+  const row = categories.find(x => x.id === c);
+  return row ? (lang === "en" ? row.nameEn : row.nameFr) : c;
+};
+
+const CAD = s => "$" + (s / 100).toLocaleString("fr-FR");
+
+function toggleLang() {
+  lang = lang === "fr" ? "en" : "fr";
+  localStorage.setItem("menu_lang", lang);
+  render();
+}
+
+async function load() {
+  // categories are server data (sorted); no hardcoded menu structure here
+  [items, categories] = await Promise.all([
+    (await fetch("/items")).json(),
+    (await fetch("/categories")).json(),
+  ]);
+  cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
+  render();
+}
+
+function render() {
+  document.documentElement.lang = lang;
+  document.getElementById("hdr-table").textContent = T().orderFromPhone;
+  document.getElementById("lang-btn").textContent = T().langBtn;
+  document.getElementById("submit").textContent = T().send;
+  document.getElementById("done-title").textContent = T().doneTitle;
+  document.getElementById("done-text").textContent = T().doneText;
+  document.getElementById("more-btn").textContent = T().orderMore;
+  document.getElementById("see-bill-btn").textContent = T().seeBill;
+  document.getElementById("tab-menu").textContent = T().tabMenu;
+  document.getElementById("tab-bill").textContent = T().tabBill;
+  renderBill();
+
+  const cats = categories.filter(c => items.some(i => i.category === c.id)).map(c => c.id);
+  document.getElementById("chips").innerHTML = cats.map(c =>
+    `<button class="chip ${c === cat ? "on" : ""}" onclick="cat='${c}';render()">${catName(c)}</button>`).join("");
+  document.getElementById("grid").innerHTML = items.filter(i => i.category === cat).map(i => `
+    <div class="card">
+      ${i.photoVersion ? `<img class="photo" loading="lazy" src="/photos/${i.id}?v=${i.photoVersion}"
+           onerror="this.outerHTML='<div class=ph>${i.abbrev}</div>'">` : `<div class="ph">${i.abbrev}</div>`}
+      <div class="fr">${iname(i)}</div>
+      <div class="en">${inameAlt(i)}</div>
+      <div class="price">${i.variants.length === 1 ? cad(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
+      ${i.variants.length > 1 ? `<select id="v-${i.id}">` + i.variants.map(v =>
+        `<option value="${v.id}">${vlabel(v)} ${cad(v.priceCents)}</option>`).join("") + `</select>` : ""}
+      <input type="text" id="n-${i.id}" placeholder="${T().note}">
+      <button class="add" onclick="add('${i.id}')">${T().addToBasket}</button>
+    </div>`).join("");
+  document.getElementById("cart-title").textContent = T().basket;
+  document.getElementById("cart-open-btn").textContent = T().viewCart;
+  document.getElementById("cart-sub-label").textContent = T().subtotal;
+  renderCart();
+}
+
+// --- pre-send cart: bar + bottom sheet over the same basket[] state. The
+// subtotal here is a client-side preview from menu prices — the authoritative
+// total is always the server's, on the post-send bill view.
+const cartSubtotal = () => basket.reduce((a, b) => a + b.priceCents * b.qty, 0);
+
+function renderCart() {
+  const count = basket.reduce((a, b) => a + b.qty, 0);
+  const bar = document.getElementById("cart-bar");
+  if (!count) {
+    bar.style.display = "none";
+    closeCart();
+    return;
+  }
+  bar.style.display = "flex";
+  document.getElementById("cart-summary").textContent =
+    `🛒 ${T().basket} (${count}) · ${cad(cartSubtotal())}`;
+  document.getElementById("cart-lines").innerHTML = basket.map((b, ix) => `
+    <div class="bline">
+      <span>${esc(lang === "en" ? b.nameEn : b.nameFr)}${b.variantId && b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
+      <span class="bqty">
+        <button class="step" onclick="bumpQty(${ix},-1)">−</button>
+        <b>${b.qty}</b>
+        <button class="step" onclick="bumpQty(${ix},1)">＋</button>
+        ${cad(b.priceCents * b.qty)}
+        <button onclick="basket.splice(${ix},1);render()">✕</button>
+      </span>
+    </div>`).join("");
+  document.getElementById("cart-sub").textContent = cad(cartSubtotal());
+}
+
+function openCart() {
+  if (!basket.length) return;
+  document.getElementById("cart-scrim").classList.add("open");
+  document.getElementById("cart-sheet").classList.add("open");
+}
+
+function closeCart() {
+  document.getElementById("cart-scrim").classList.remove("open");
+  document.getElementById("cart-sheet").classList.remove("open");
+}
+
+let toastTimer = null;
+function addFeedback() {
+  const s = document.getElementById("cart-summary");
+  s.classList.remove("pop");
+  void s.offsetWidth; // restart the animation on rapid taps
+  s.classList.add("pop");
+  const t = document.getElementById("toast");
+  t.textContent = T().addedToast;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1400);
+}
+
+// basket −/＋ steppers; − at qty 1 removes the line (no confirm)
+function bumpQty(ix, delta) {
+  const line = basket[ix];
+  if (!line) return;
+  line.qty += delta;
+  if (line.qty <= 0) basket.splice(ix, 1);
+  render();
+}
+
+function add(itemId) {
+  const item = items.find(i => i.id === itemId);
+  const sel = document.getElementById("v-" + itemId);
+  const variant = sel ? item.variants.find(v => v.id === sel.value) : item.variants[0];
+  const note = document.getElementById("n-" + itemId).value.trim() || null;
+  const same = basket.find(b => b.variantId === variant.id && b.note === note);
+  if (same) same.qty++;
+  else basket.push({ itemId, variantId: variant.id, qty: 1, note,
+                     nameFr: item.nameFr, nameEn: item.nameEn,
+                     multiSize: item.variants.length > 1, variant,
+                     priceCents: variant.priceCents });
+  render();
+  addFeedback();
+}
+
+document.getElementById("submit").onclick = async () => {
+  const res = await fetch(`/tables/${TABLE_ID}/pending-lines`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lines: basket.map(b => ({ itemId: b.itemId, variantId: b.variantId, qty: b.qty, note: b.note })) }),
+  });
+  if (!res.ok) {
+    // server errors carry a machine code; translate here, never on the server
+    let code = null;
+    try { code = (await res.json()).code; } catch (_) {}
+    alert(code === "bill_locked" ? T().billLocked : T().failed);
+    return;
+  }
+  basket = [];
+  closeCart();
+  renderCart(); // hides the bar for when the menu comes back
+  document.getElementById("menu").style.display = "none";
+  document.getElementById("done").style.display = "block";
+};
+
+function reset() {
+  showTab("menu");
+  render();
+}
+
+// --- "Your bill" view: read-only mirror of the table's open check. All money
+// comes from the server (/m/{tableId}/bill) — this script never sums cents.
+let bill;            // undefined until the first successful fetch
+let billTimer = null;
+
+function showTab(v) {
+  closeCart();
+  document.getElementById("menu").style.display = v === "menu" ? "block" : "none";
+  document.getElementById("bill").style.display = v === "bill" ? "block" : "none";
+  document.getElementById("done").style.display = "none";
+  document.getElementById("tab-menu").classList.toggle("on", v === "menu");
+  document.getElementById("tab-bill").classList.toggle("on", v === "bill");
+  clearInterval(billTimer);
+  billTimer = null;
+  if (v === "bill") {
+    fetchBill();
+    // same cadence as the POS tables screen — a line hops from "being
+    // confirmed" to "on your bill" within one cycle of staff accepting it
+    billTimer = setInterval(fetchBill, 5000);
+  }
+}
+
+async function fetchBill() {
+  try {
+    const res = await fetch(`/m/${TABLE_ID}/bill`);
+    if (!res.ok) return; // keep the last known bill; next poll retries
+    bill = await res.json();
+  } catch (_) { return; }
+  renderBill();
+}
+
+// notes are guest-typed text seen by everyone at the table — always escape
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const lineName = l => {
+  const name = lang === "en" ? l.nameEn : l.nameFr;
+  const variant = lang === "en" ? l.variantLabelEn : l.variantLabelFr;
+  return esc(name + (variant ? " (" + variant + ")" : ""));
+};
+const billRow = l => `
+  <div class="brow">
+    <span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
+    <span>${cad(l.lineTotalCents)}</span>
+  </div>`;
+
+function renderBill() {
+  const el = document.getElementById("bill-body");
+  if (!bill) { el.innerHTML = `<div class="bempty">${T().billLoading}</div>`; return; }
+  if (!bill.open) {
+    el.innerHTML = `<div class="bempty"><div class="big">🧾</div><p>${T().noOrders}</p></div>`;
+    return;
+  }
+  const fees = bill.fees.map(f => `
+    <div class="brow">
+      <span class="nm">${esc(lang === "en" ? f.labelEn : f.labelFr)}</span>
+      <span>${cad(f.amountCents)}</span>
+    </div>`).join("");
+  const pending = bill.pendingLines.length ? `
+    <div class="bsec bpend">
+      <h3>⏳ ${T().beingConfirmed}</h3>
+      ${bill.pendingLines.map(billRow).join("")}
+    </div>` : "";
+  el.innerHTML = `
+    <div class="bsec">
+      <h3>${T().onBill}</h3>
+      ${bill.lines.map(billRow).join("")}${fees}
+      <div class="btotal"><span>${T().total}</span><span>${cad(bill.grandTotalCents)}</span></div>
+      ${bill.locked ? `<div class="locknote">${T().billPaying}</div>` : ""}
+    </div>
+    ${pending}`;
+}
+
+render();
+load();
+if (location.hash === "#bill") showTab("bill"); // deep-link straight to the bill
+</script>
+</body>
+</html>

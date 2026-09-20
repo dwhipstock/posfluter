@@ -1,0 +1,35 @@
+# Supply-chain scan: OSV-Scanner flags dependencies with known vulnerabilities
+# (npm lockfile, pubspec.lock, gradle) already present in the tree. Complements
+# Dependabot, which proposes the upgrades. Pinned to a commit SHA (version tag in
+# the comment); Dependabot's github-actions ecosystem bumps it.
+name: osv-scanner
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Catch newly-disclosed CVEs in unchanged deps — weekly, Mondays 06:00 UTC.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    permissions:
+      actions: read
+      contents: read
+      # Required: the reusable workflow declares security-events: write in its own
+      # permissions, and a reusable workflow can't request more than the caller
+      # grants — omit this and the whole workflow fails at startup. upload-sarif:false
+      # skips the code-scanning upload that would actually use it.
+      security-events: write
+    with:
+      upload-sarif: false
+      fail-on-vuln: true
+      scan-args: |-
+        --recursive
+        --skip-git
+        ./

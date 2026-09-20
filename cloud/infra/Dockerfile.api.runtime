@@ -1,0 +1,15 @@
+# Runtime-only cloud API image, built by CI and pushed as pos-cloud-api:<git-sha>.
+# COPYs a jar built on an x64 runner (arch-independent bytecode); only this thin
+# layer is assembled for linux/arm64. Build context: a staged dir holding the
+# prebuilt jar + migrations/ (see build.yml).
+FROM eclipse-temurin:17-jre@sha256:92999aea37688157a53a40bfcb187c30f317422e028045fd5fc5c548fde9e626
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --home /app --shell /usr/sbin/nologin api
+WORKDIR /app
+COPY api-all.jar /app/api-all.jar
+COPY migrations/ /app/migrations/
+USER api
+EXPOSE 8081
+CMD ["java", "-Xmx512m", "-jar", "/app/api-all.jar"]

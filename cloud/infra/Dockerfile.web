@@ -1,0 +1,32 @@
+# Build context is cloud/ (see docker-compose.yml). Requires next.config output: 'standalone'.
+# node:22-alpine pinned by digest (multi-arch manifest-list); Dependabot bumps it.
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS deps
+WORKDIR /app
+# .npmrc carries legacy-peer-deps — npm ci dies on the tremor/react-19 peer conflict without it
+COPY web/.npmrc web/package.json web/package-lock.json ./
+RUN npm ci
+
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY web/ ./
+ENV NEXT_TELEMETRY_DISABLED=1
+# Next bakes rewrites at build time; in prod Caddy owns /v1 so this is only a
+# fallback, but bake the compose-internal API origin rather than localhost.
+ARG API_ORIGIN=http://api:8081
+ENV API_ORIGIN=$API_ORIGIN
+RUN npm run build
+
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
+USER node
+ENV PORT=3000
+# Standalone server binds to HOSTNAME; must be reachable from caddy, not just loopback.
+ENV HOSTNAME=0.0.0.0
+EXPOSE 3000
+CMD ["node", "server.js"]

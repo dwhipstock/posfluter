@@ -1,0 +1,118 @@
+# LOCAL demo / EC2-rehearsal stack for THIS Mac (Docker Desktop or colima).
+# NO AWS, NO Caddy, NO TLS — plain HTTP on the LAN.
+#
+# The PRODUCTION path is cloud/infra/docker-compose.yml (with Caddy + real domain);
+# this file is separate and forward-only — it must never be used for EC2.
+#
+# Config/secrets come from ./.env.local (see .env.local.example). The Mac's LAN IP
+# is injected as POS_PUBLIC_URL by scripts/demo-up.sh so scan-to-order QR links
+# resolve from phones on the same Wi-Fi. Bring up with:  scripts/demo-up.sh
+name: pos-local
+
+services:
+  db:
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pos_cloud
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD in .env.local}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos_cloud"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # Cloud API (owner portal backend). Same image as prod (cloud/infra/Dockerfile.api),
+  # but COOKIE_SECURE=false because the portal is served over plain HTTP on the LAN —
+  # a Secure cookie would be silently dropped and owner login would fail.
+  api:
+    build:
+      context: ./cloud
+      dockerfile: infra/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "jdbc:postgresql://db:5432/pos_cloud"
+      DB_USER: pos
+      DB_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD in .env.local}"
+      PORT: "8081"
+      MIGRATIONS_DIR: /app/migrations
+      ADMIN_EMAIL: "${ADMIN_EMAIL:?set ADMIN_EMAIL in .env.local}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env.local}"
+      STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env.local}"
+      COOKIE_SECURE: "false"
+      VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
+      VENUE_TZ: "${VENUE_TZ:-America/Toronto}"
+    ports:
+      - "8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  # Next.js owner portal. API_ORIGIN is baked at build (ARG) AND set at runtime (ENV);
+  # both point at the compose-internal service name so the portal reaches the API
+  # in-network. Same image as prod (cloud/infra/Dockerfile.web).
+  web:
+    build:
+      context: ./cloud
+      dockerfile: infra/Dockerfile.web
+      args:
+        API_ORIGIN: "http://api:8081"
+    restart: unless-stopped
+    environment:
+      API_ORIGIN: "http://api:8081"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  # POS store server (SQLite). Talks to the cloud API over the compose network for
+  # sync. French receipts render as a Java2D raster inside this container — see
+  # server/Dockerfile for the required Unicode fonts. SQLite db + receipts/bills/photos
+  # live on the 'storedata' named volume under /data so they survive restarts.
+  store:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      POS_DB: /data/pos.db
+      POS_RECEIPTS_DIR: /data/receipts
+      POS_BILLS_DIR: /data/bills
+      POS_PHOTOS_DIR: /data/photos
+      # LAN IP:8080 (NOT a container-internal host) so scan-to-order QR codes resolve
+      # from phones on the same Wi-Fi. Injected by scripts/demo-up.sh.
+      POS_PUBLIC_URL: "${POS_PUBLIC_URL:?set POS_PUBLIC_URL in .env.local (e.g. http://192.168.1.40:8080)}"
+      # Store → cloud sync over the compose network; key must equal the API's STORE_API_KEY.
+      CLOUD_SYNC_URL: "http://api:8081"
+      CLOUD_SYNC_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env.local}"
+      CLOUD_SYNC_INTERVAL_SECONDS: "10"
+      # Owner reporting portal (the `web` service on :3000) as reached from a phone
+      # on the LAN. The sync host above (api:8081) is compose-internal and NOT
+      # scannable, so this overrides the derived Reports QR. Set by scripts/demo-up.sh.
+      REPORTING_PORTAL_URL: "${REPORTING_PORTAL_URL:-}"
+    volumes:
+      - storedata:/data
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  pgdata:
+  storedata:

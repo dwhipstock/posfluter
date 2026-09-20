@@ -1,0 +1,1 @@
+-- Reserved migration number. No legacy customer table layout is carried forward.

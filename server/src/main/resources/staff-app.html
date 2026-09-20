@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Copper Lantern POS — Staff</title>
+<style>
+  /* Staff mobile ordering app (M7). Served from the store at /staff-app. Vanilla
+     on purpose — loads instantly on any phone, no build step, offline-first.
+     Shares the customer menu's brand tokens (B&W + hot pink). */
+  :root {
+    --ink: #121212;         /* near-black text / dark surfaces (header, tabs) */
+    --paper: #ffffff;       /* card / sheet surfaces */
+    --paper-alt: #fafafa;   /* body + sticky bar background */
+    --surface-alt: #eeeeee; /* flat neutral fills */
+    --line: #e2e2e2;        /* neutral borders/dividers */
+    --muted: #8a8a8a;       /* secondary text */
+    --muted-strong: #555555;/* emphasized secondary text */
+    --accent: #FF1F8E;      /* hot pink — CTAs, selected state, price */
+    --accent-ink: #ffffff;  /* text/icons on top of accent */
+    --ok: #1f9d55;          /* approve green */
+    --danger: #d92d20;      /* reject / destructive red */
+  }
+  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--paper-alt); color: var(--ink); min-height: 100vh; }
+  button { font-family: inherit; cursor: pointer; }
+
+  header { background: var(--ink); color: #fff; padding: 12px 16px; position: sticky; top: 0; z-index: 5;
+           display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  header .brand { font-size: 17px; font-weight: 700; }
+  header .who { font-size: 12px; opacity: .8; }
+  header .actions { display: flex; gap: 8px; align-items: center; }
+  .hbtn { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.45); color: #fff;
+          border-radius: 16px; padding: 5px 12px; font-size: 13px; font-weight: 700; }
+
+  /* bottom tab bar (Tables / Pending) */
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line);
+            display: flex; z-index: 6; padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar button { flex: 1; background: none; border: 0; padding: 10px 0 12px; color: var(--muted);
+                   font-size: 13px; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .tabbar button.on { color: var(--accent); }
+  .tabbar .ic { font-size: 20px; line-height: 1; }
+  .tabbar .badge { position: absolute; transform: translate(14px, -6px); background: var(--accent); color: #fff;
+                   border-radius: 10px; font-size: 11px; min-width: 18px; height: 18px; line-height: 18px; padding: 0 5px; }
+
+  .screen { padding: 12px 12px 84px; display: none; }
+  .screen.on { display: block; }
+
+  /* login */
+  #login { min-height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center;
+           padding: 24px 20px calc(24px + env(safe-area-inset-bottom)); }
+  #login.on { display: flex; }
+  #login h1 { font-size: 24px; }
+  #login .sub { color: var(--muted); font-size: 14px; margin: 4px 0 20px; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 460px; margin-bottom: 20px; }
+  .tile { width: 132px; background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 10px;
+          text-align: center; }
+  .tile.sel { border-color: var(--accent); background: #fff0f7; }
+  .tile .ic { font-size: 22px; }
+  .tile .nm { font-weight: 600; font-size: 14px; margin-top: 4px; line-height: 1.3; }
+  .tile .rl { font-size: 11px; color: var(--muted); }
+  .pinrow { display: flex; gap: 12px; height: 22px; margin-bottom: 6px; }
+  .pindot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); }
+  .pindot.f { background: var(--ink); border-color: var(--ink); }
+  .errline { height: 22px; color: var(--danger); font-size: 13px; margin-bottom: 8px; }
+  .pad { display: grid; grid-template-columns: repeat(3, 74px); gap: 12px; }
+  .pad button { height: 74px; border-radius: 50%; border: 1px solid var(--line); background: #fff; font-size: 26px; font-weight: 600; }
+  .pad button:active { background: var(--surface-alt); }
+  .pad .blank { border: none; background: none; }
+  /* 2FA: authenticator code entry + first-time enrollment QR */
+  #login-code { display: none; flex-direction: column; align-items: center; text-align: center; max-width: 340px; }
+  .enroll-hint { font-size: 14px; color: var(--muted-strong); margin-bottom: 12px; }
+  .enroll-qr { width: 200px; height: 200px; border-radius: 12px; border: 1px solid var(--line); display: block; margin: 0 auto 8px; background: #fff; }
+  .enroll-manual { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+  .enroll-manual code { background: var(--surface-alt); border-radius: 6px; padding: 3px 8px; font-size: 13px; word-break: break-all; }
+  .code-prompt { font-size: 15px; margin-bottom: 14px; }
+  .code-input { width: 210px; text-align: center; letter-spacing: 8px; font-size: 28px; font-weight: 700;
+                padding: 12px; border: 1.5px solid var(--line); border-radius: 12px; margin-bottom: 4px; }
+  .code-input:focus { outline: none; border-color: var(--accent); }
+  .code-btn { max-width: 260px; margin: 4px auto 0; }
+  .linkbtn { background: none; border: 0; color: var(--muted-strong); font-size: 14px; padding: 12px; margin-top: 2px; }
+
+  /* zone / tables list */
+  .zone { margin-bottom: 18px; }
+  .zone-hd { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 4px 8px; }
+  .zone-hd .z-fr { font-size: 16px; font-weight: 700; }
+  .zone-hd .z-en { font-size: 12px; color: var(--muted); margin-left: 6px; }
+  .zone-hd .z-closed { font-size: 12px; color: var(--danger); font-weight: 700; }
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .tcard { background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; min-height: 76px;
+           display: flex; flex-direction: column; justify-content: space-between; position: relative; }
+  .tcard.open { border-color: var(--ink); }
+  .tcard.pend { border-color: var(--accent); background: #fff0f7; }
+  .tcard.closed { opacity: .5; }
+  .tcard .lbl { font-size: 17px; font-weight: 700; }
+  .tcard .meta { font-size: 12px; color: var(--muted-strong); }
+  .tcard .st { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .tcard .pbadge { position: absolute; top: 8px; right: 8px; background: var(--accent); color: #fff;
+                   border-radius: 12px; font-size: 12px; font-weight: 700; padding: 1px 7px; }
+
+  /* check screen */
+  .backbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .backbar button { background: none; border: 0; font-size: 22px; color: var(--ink); padding: 4px; }
+  .backbar .title { font-size: 20px; font-weight: 700; }
+  .backbar .title small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .sec { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .sec h3 { font-size: 14px; margin-bottom: 6px; color: var(--muted-strong); }
+  .row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .row:last-child { border-bottom: 0; }
+  .row .nm { flex: 1; }
+  .row .note { color: var(--muted); font-size: 12px; }
+  .total { display: flex; justify-content: space-between; padding-top: 12px; font-weight: 700; font-size: 18px; }
+  .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
+  .empty .big { font-size: 46px; }
+  .primary { width: 100%; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 12px;
+             padding: 14px; font-size: 16px; font-weight: 700; }
+  .ghost { width: 100%; background: #fff; color: var(--ink); border: 1.5px solid var(--line); border-radius: 12px;
+           padding: 13px; font-size: 15px; font-weight: 700; }
+
+  /* pending-line approve/reject controls */
+  .pact { display: flex; gap: 8px; white-space: nowrap; align-items: center; }
+  .pact button { border: 0; border-radius: 8px; width: 40px; height: 36px; font-size: 17px; font-weight: 700; }
+  .pact .ok { background: var(--ok); color: #fff; }
+  .pact .no { background: #fff; color: var(--danger); border: 1.5px solid var(--danger); }
+  .pcard { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .pcard .ph { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .pcard .ph .lbl { font-size: 16px; font-weight: 700; }
+  .pcard .ph .zn { font-size: 12px; color: var(--muted); }
+
+  /* menu browser (add items) */
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 12px; }
+  .chip { border: 1px solid var(--line); border-radius: 16px; padding: 6px 14px; white-space: nowrap; background: #fff; font-size: 14px; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .mcard { background: #fff; border-radius: 10px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .mcard .ph { background: var(--surface-alt); border-radius: 8px; height: 64px; display: flex; align-items: center;
+               justify-content: center; font-weight: 700; font-size: 20px; }
+  .mcard .photo { width: 100%; height: 84px; object-fit: cover; border-radius: 8px; display: block; background: var(--surface-alt); }
+  .mcard .fr { font-weight: 700; margin-top: 6px; font-size: 15px; }
+  .mcard .en { color: var(--muted); font-size: 12px; }
+  .mcard .price { color: var(--accent); font-size: 14px; margin-top: 2px; font-weight: 700; }
+  .mcard select, .mcard input { width: 100%; margin-top: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+  .mcard .add { width: 100%; margin-top: 8px; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px; font-size: 15px; }
+
+  /* cart bar + sheet (shared visual language with the customer menu) */
+  .cartbar { position: fixed; left: 12px; right: 12px; bottom: calc(64px + env(safe-area-inset-bottom)); background: var(--ink); color: #fff;
+             border-radius: 12px; padding: 12px 16px; display: none; justify-content: space-between; align-items: center; z-index: 7; }
+  .cartbar.show { display: flex; }
+  .cartbar .go { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 9px 18px; font-size: 15px; font-weight: 700; }
+  #scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 8; }
+  #scrim.open { opacity: 1; pointer-events: auto; }
+  #sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; z-index: 9; border-radius: 16px 16px 0 0;
+           transform: translateY(105%); transition: transform .25s ease; display: flex; flex-direction: column; max-height: 80vh;
+           box-shadow: 0 -4px 20px rgba(0,0,0,.15); }
+  #sheet.open { transform: translateY(0); }
+  .shead { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 6px; }
+  .shead h3 { font-size: 17px; }
+  .shead .x { border: 0; background: var(--surface-alt); width: 32px; height: 32px; border-radius: 16px; font-size: 15px; }
+  #cart-lines { overflow-y: auto; padding: 0 16px; }
+  .cline { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .cqty { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .cqty .step { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 18px; line-height: 1; }
+  .cline .rm { border: 0; background: none; font-size: 16px; }
+  .sfoot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+  .sfoot .st { display: flex; justify-content: space-between; padding-bottom: 10px; font-weight: 700; }
+
+  /* manager: reset a colleague's authenticator (lost phone) */
+  #reset-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 8; }
+  #reset-scrim.open { opacity: 1; pointer-events: auto; }
+  #reset-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; z-index: 9; border-radius: 16px 16px 0 0;
+                 transform: translateY(105%); transition: transform .25s ease; display: flex; flex-direction: column; max-height: 80vh;
+                 box-shadow: 0 -4px 20px rgba(0,0,0,.15); }
+  #reset-sheet.open { transform: translateY(0); }
+  #reset-list { overflow-y: auto; padding: 0 16px calc(14px + env(safe-area-inset-bottom)); }
+  .rrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+  .rrow .who2 { font-size: 15px; font-weight: 600; }
+  .rrow .who2 small { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .rrow button { border: 1.5px solid var(--danger); color: var(--danger); background: #fff; border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 700; }
+
+  #toast { position: fixed; left: 50%; bottom: calc(78px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(8px);
+           background: var(--ink); color: #fff; border-radius: 18px; padding: 9px 18px; font-size: 14px; opacity: 0;
+           pointer-events: none; transition: opacity .2s, transform .2s; z-index: 20; max-width: 90vw; text-align: center; }
+  #toast.show { opacity: .96; transform: translateX(-50%) translateY(0); }
+  #toast.err { background: var(--danger); }
+
+  .spinner { text-align: center; padding: 40px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <button class="hbtn" style="position:fixed;top:14px;right:14px;background:var(--surface-alt);color:var(--ink);border-color:var(--line)"
+          onclick="toggleLang()" id="login-lang"></button>
+  <h1>CopperLantern POS</h1>
+  <div class="sub" id="login-sub"></div>
+  <div id="login-pin">
+    <div class="tiles" id="tiles"></div>
+    <div class="pinrow" id="pinrow"></div>
+    <div class="errline" id="login-err"></div>
+    <div class="pad" id="pad"></div>
+  </div>
+  <div id="login-code">
+    <div id="enroll-block" style="display:none">
+      <p class="enroll-hint" id="enroll-hint"></p>
+      <img class="enroll-qr" id="enroll-qr" alt="">
+      <p class="enroll-manual"><span id="enroll-manual-label"></span> <code id="enroll-secret"></code></p>
+    </div>
+    <p class="code-prompt" id="code-prompt"></p>
+    <input class="code-input" id="code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="––––––">
+    <div class="errline" id="code-err"></div>
+    <button class="primary code-btn" id="code-submit" onclick="submitCode()"></button>
+    <button class="linkbtn" id="code-back" onclick="backToPin()"></button>
+  </div>
+</div>
+
+<!-- APP CHROME (hidden until logged in) -->
+<div id="app" style="display:none">
+  <header>
+    <div>
+      <div class="brand">CopperLantern POS</div>
+      <div class="who" id="who"></div>
+    </div>
+    <div class="actions">
+      <button class="hbtn" id="mgr-btn" style="display:none" onclick="openResetSheet()" title="reset authenticator">🔑</button>
+      <button class="hbtn" onclick="toggleLang()" id="app-lang"></button>
+      <button class="hbtn" onclick="logout()" id="logout-btn"></button>
+    </div>
+  </header>
+
+  <!-- TABLES -->
+  <div class="screen" id="scr-tables">
+    <div id="tables-body"><div class="spinner">…</div></div>
+  </div>
+
+  <!-- CHECK -->
+  <div class="screen" id="scr-check">
+    <div class="backbar">
+      <button onclick="goTables()">‹</button>
+      <div class="title" id="check-title"></div>
+    </div>
+    <div id="check-body"></div>
+  </div>
+
+  <!-- MENU (add items) -->
+  <div class="screen" id="scr-menu">
+    <div class="backbar">
+      <button onclick="showCheck()">‹</button>
+      <div class="title" id="menu-title"></div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="mgrid" id="mgrid"></div>
+  </div>
+
+  <!-- PENDING -->
+  <div class="screen" id="scr-pending">
+    <div id="pending-body"><div class="spinner">…</div></div>
+  </div>
+
+  <!-- bottom tab bar -->
+  <nav class="tabbar">
+    <button id="tab-tables" onclick="showTab('tables')"><span class="ic">🍽️</span><span id="tab-tables-l"></span></button>
+    <button id="tab-pending" onclick="showTab('pending')"><span class="ic" style="position:relative">📥<span class="badge" id="pending-badge" style="display:none">0</span></span><span id="tab-pending-l"></span></button>
+  </nav>
+</div>
+
+<!-- cart -->
+<div class="cartbar" id="cartbar" onclick="openSheet()">
+  <span id="cart-sum"></span>
+  <button class="go" id="cart-go"></button>
+</div>
+<div id="scrim" onclick="closeSheet()"></div>
+<div id="sheet">
+  <div class="shead"><h3 id="sheet-title"></h3><button class="x" onclick="closeSheet()">✕</button></div>
+  <div id="cart-lines"></div>
+  <div class="sfoot">
+    <div class="st"><span id="sheet-sub-l"></span><span id="sheet-sub"></span></div>
+    <button class="primary" id="cart-submit"></button>
+  </div>
+</div>
+
+<!-- manager: reset a colleague's authenticator -->
+<div id="reset-scrim" onclick="closeResetSheet()"></div>
+<div id="reset-sheet">
+  <div class="shead"><h3 id="reset-title"></h3><button class="x" onclick="closeResetSheet()">✕</button></div>
+  <div id="reset-list"></div>
+</div>
+
+<!-- store unreachable at boot: full-screen retry (a network failure is not a logout) -->
+<div id="boot-retry" style="display:none; position:fixed; inset:0; z-index:60; background:var(--paper-alt); flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:24px; text-align:center">
+  <div style="font-size:40px">📡</div>
+  <div id="boot-retry-msg" style="font-weight:600"></div>
+  <button class="primary" id="boot-retry-btn" style="max-width:220px" onclick="retryBoot()"></button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+// ---- i18n: FR default + EN, persisted per phone ----------------------------
+let lang = localStorage.getItem("staff_lang") || "en";
+const STR = {
+  fr: {
+    whoClockingIn: "Qui est en poste ?", enterPin: "Entrez le code PIN", pinWrong: "PIN incorrect",
+    langBtn: "EN", logout: "partir", tabTables: "tableau", tabPending: "En attente de confirmation",
+    free: "gratuit", open: "ouvrir", noZones: "Aucune zone pour l'instant", closed: "éteindre",
+    addItems: "＋ Ajouter un article", onCheck: "Articles sur la facture", pendingHd: "⏳ Commandes clients (en attente de confirmation)",
+    total: "Total", emptyCheck: "Il n'y a pas encore d'articles. — Appuyez sur Ajouter un élément pour commencer.",
+    basket: "panier", addToCheck: "ajouter à la facture", subtotal: "Total", note: "Remarque (facultatif)",
+    add: "＋ Ajouter au panier", sizes: "taille", viewBasket: "Voir le panier", addedOne: "Ajouté au panier ✓",
+    linesAdded: "Ajouté à la facture ✓", accepted: "Confirmé ✓", rejected: "Refusé",
+    noPending: "Il n'y a aucun élément en attente de confirmation.", pendingSub: "Les commandes depuis les téléphones mobiles des clients arriveront ici.",
+    billPaying: "La facture est en train d'être payée. — Impossible d'ajouter des éléments", failed: "Transaction échouée, réessayez.",
+    zoneClosed: "Cette zone est fermée.", table: "tableau", loading: "Chargement…",
+    codePrompt: "Entrez le code 6 Principal depuis l'application Authenticator", verify: "confirmer", backBtn: "‹ revenir",
+    enrollPrompt: "Balayage QR Avec l'application Authenticator puis entrez le code 6 principal",
+    enrollHint: "Configurer une fois, puis utiliser PIN long 90 jour", enrollManual: "ou entrez cette clé vous-même:",
+    codeWrong: "Code invalide. Essayer à nouveau.", resetTitle: "Réinitialiser Authenticator", resetBtn: "Réinitialiser",
+    resetConfirm: "Réinitialiser Authenticator de ", resetDone: "Réinitialiser — Demandez à l'employé de réinitialiser les paramètres.",
+    cantReach: "Impossible de se connecter au magasin — examiner Wi-Fi puis réessaye", retry: "Essayer à nouveau",
+  },
+  en: {
+    whoClockingIn: "Who's clocking in?", enterPin: "Enter your PIN", pinWrong: "Incorrect PIN",
+    langBtn: "français", logout: "Log out", tabTables: "Tables", tabPending: "Pending",
+    free: "Free", open: "Open", noZones: "No zones yet", closed: "Closed",
+    addItems: "＋ Add items", onCheck: "On the bill", pendingHd: "⏳ Customer orders (to confirm)",
+    total: "Total", emptyCheck: "No items yet — tap Add items to start",
+    basket: "Basket", addToCheck: "Add to bill", subtotal: "Subtotal", note: "Note (optional)",
+    add: "＋ Add", sizes: "sizes", viewBasket: "View basket", addedOne: "Added ✓",
+    linesAdded: "Added to bill ✓", accepted: "Confirmed ✓", rejected: "Rejected",
+    noPending: "Nothing to confirm", pendingSub: "Customer phone orders arrive here.",
+    billPaying: "Bill is being paid — can't add items", failed: "Action failed, please retry",
+    zoneClosed: "Zone closed", table: "Table", loading: "Loading…",
+    codePrompt: "Enter the 6-digit code from your authenticator app", verify: "Verify", backBtn: "‹ Back",
+    enrollPrompt: "Scan the QR with your authenticator app, then enter the 6-digit code",
+    enrollHint: "One-time setup — then just your PIN for 90 days", enrollManual: "Or enter this key manually:",
+    codeWrong: "Wrong code, try again", resetTitle: "Reset authenticator", resetBtn: "Reset",
+    resetConfirm: "Reset the authenticator for ", resetDone: "Reset — the staff member sets up again",
+    cantReach: "Can't reach the store — check Wi-Fi and try again", retry: "Try again",
+  },
+};
+const T = () => STR[lang];
+const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+// Embed an untrusted string as a JS string literal inside an inline-handler
+// attribute (onclick="fn(...)"). HTML entities are decoded BEFORE a handler
+// compiles, so entity-escaping a quote would just decode back to a quote and
+// still break out — we must use JS \uXXXX escapes (which survive HTML decoding)
+// for anything outside a conservative id charset. Output is quote-wrapped, safe
+// in both the double-quoted attribute and the single-quoted JS string it becomes.
+const jsArg = s => "'" + String(s ?? "").replace(/[^\w .:@/-]/g,
+  c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "'";
+// Photo-load fallback: swap the broken <img> for its abbrev badge via textContent
+// (never innerHTML) so a hostile abbrev can neither inject markup nor script.
+function photoFallback(img) {
+  const d = document.createElement("div");
+  d.className = "ph";
+  d.textContent = img.dataset.fallback || "";
+  img.replaceWith(d);
+}
+const CAD = s => "$" + (s / 100).toLocaleString("fr-FR");
+const iname = i => lang === "en" ? i.nameEn : i.nameFr;
+const inameAlt = i => lang === "en" ? i.nameFr : i.nameEn;
+const vlabel = v => lang === "en" ? v.labelEn : v.labelFr;
+const zname = z => lang === "en" ? z.nameEn : z.nameFr;
+
+// line label for a served LineView (name + variant when disambiguating)
+function lineName(l) {
+  const name = lang === "en" ? l.nameEn : l.nameFr;
+  const variant = lang === "en" ? l.variantLabelEn : l.variantLabelFr;
+  return esc(name + (variant ? " (" + variant + ")" : ""));
+}
+
+// ---- state -----------------------------------------------------------------
+let token = localStorage.getItem("staff_token") || null;
+// 90-day 2FA device-trust tokens — an array so a shared phone remembers each staff
+// member who cleared TOTP on it (not just the most recent).
+let deviceTokens = (() => { try { return JSON.parse(localStorage.getItem("staff_device_tokens")) || []; } catch (_) { return []; } })();
+let pendingPin = null;             // held between login step 1 (PIN) and step 2 (code)
+let codeSubmitting = false;        // guards the auto-submit from double-firing
+let me = null;
+let tab = "tables";              // active bottom tab
+let view = "tables";             // active screen: tables | check | menu | pending
+let zones = [];                  // last /zones snapshot
+let items = [], categories = [], cat = null;
+let check = null;                // current CheckView on the check screen
+let cart = [];                   // pre-commit cart on the menu screen
+let pinBuf = "";
+let selectedTile = null;
+let pollTimer = null;
+
+// ---- API -------------------------------------------------------------------
+class ApiError extends Error { constructor(code, status) { super(code || "error"); this.code = code; this.status = status; } }
+
+async function api(path, { method = "GET", body = null, auth = true } = {}) {
+  const headers = {};
+  if (body != null) headers["Content-Type"] = "application/json";
+  if (auth && token) headers["Authorization"] = "Bearer " + token;
+  // Cap the wait: on a black-holed Wi-Fi a fetch would otherwise hang for the
+  // browser's TCP timeout (minutes). status 0 = transport failure, NOT auth —
+  // callers must never treat it as a dead session.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 10000);
+  let res;
+  try {
+    res = await fetch(path, { method, headers, body: body != null ? JSON.stringify(body) : null, signal: ctl.signal });
+  } catch (_) {
+    throw new ApiError("network", 0);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.status === 401 && auth) { forceLogout(); throw new ApiError("login_required", 401); }
+  if (!res.ok) {
+    let code = null;
+    try { code = (await res.json()).code; } catch (_) {}
+    throw new ApiError(code, res.status);
+  }
+  if (res.status === 204) return null;
+  const ct = res.headers.get("content-type") || "";
+  return ct.includes("application/json") ? res.json() : res.text();
+}
+
+// ---- toast -----------------------------------------------------------------
+let toastTimer = null;
+function toast(msg, isErr = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.toggle("err", isErr);
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1600);
+}
+// server error → localized copy (translate on the client, never the server)
+function errMsg(e) {
+  if (e instanceof ApiError && e.code === "bill_locked") return T().billPaying;
+  if (e instanceof ApiError && e.status === 0) return T().cantReach;
+  return T().failed;
+}
+
+// ---- boot ------------------------------------------------------------------
+async function boot() {
+  applyStaticLabels();
+  if (token) {
+    try { me = await api("/me"); enterApp(); return; }
+    catch (e) {
+      // Only a real 401 means the session is gone. A transport failure or a
+      // server hiccup (store still booting, Wi-Fi blip, transient 5xx) keeps
+      // the token and offers a retry — wiping it here used to force a full
+      // re-login (PIN + TOTP) for every blip.
+      if (!(e instanceof ApiError) || e.status !== 401) { showBootRetry(); return; }
+      token = null; localStorage.removeItem("staff_token");
+    }
+  }
+  showLogin();
+}
+
+// Store unreachable at boot: a dead-end error page is never acceptable on a
+// service floor — always leave staff a "try again" that re-runs boot.
+function showBootRetry() {
+  document.getElementById("login").classList.remove("on");
+  document.getElementById("app").style.display = "none";
+  document.getElementById("boot-retry-msg").textContent = T().cantReach;
+  document.getElementById("boot-retry-btn").textContent = T().retry;
+  document.getElementById("boot-retry").style.display = "flex";
+}
+function retryBoot() {
+  document.getElementById("boot-retry").style.display = "none";
+  boot();
+}
+
+function toggleLang() {
+  lang = lang === "fr" ? "en" : "fr";
+  localStorage.setItem("staff_lang", lang);
+  document.documentElement.lang = lang;
+  applyStaticLabels();
+  renderView();
+  renderCart();
+}
+
+function applyStaticLabels() {
+  document.documentElement.lang = lang;
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set("login-lang", T().langBtn); set("app-lang", T().langBtn);
+  set("login-sub", T().whoClockingIn);
+  set("logout-btn", T().logout);
+  set("tab-tables-l", T().tabTables); set("tab-pending-l", T().tabPending);
+  set("sheet-sub-l", T().subtotal); set("cart-submit", T().addToCheck);
+  set("sheet-title", T().basket); set("cart-go", T().viewBasket);
+  set("code-submit", T().verify); set("code-back", T().backBtn);
+  set("enroll-hint", T().enrollHint); set("enroll-manual-label", T().enrollManual);
+  set("reset-title", T().resetTitle);
+  if (me) set("who", me.name + " · " + me.role);
+  // the authenticator-reset tool is a manager-only affordance
+  const mgr = document.getElementById("mgr-btn");
+  if (mgr) mgr.style.display = (me && me.role === "MANAGER") ? "inline-block" : "none";
+}
+
+// --- manager: reset a colleague's authenticator (lost phone) ----------------
+async function openResetSheet() {
+  document.getElementById("reset-scrim").classList.add("open");
+  document.getElementById("reset-sheet").classList.add("open");
+  const list = document.getElementById("reset-list");
+  list.innerHTML = `<div class="spinner">${T().loading}</div>`;
+  let staff = [];
+  try { staff = await api("/staff", { auth: false }); } catch (_) {}
+  list.innerHTML = staff.map(s => `
+    <div class="rrow">
+      <span class="who2">${esc(s.name)} <small>${esc(s.role)}</small></span>
+      <button onclick="doReset(${jsArg(s.id)}, ${jsArg(s.name)})">${T().resetBtn}</button>
+    </div>`).join("");
+}
+function closeResetSheet() {
+  document.getElementById("reset-scrim").classList.remove("open");
+  document.getElementById("reset-sheet").classList.remove("open");
+}
+async function doReset(id, name) {
+  if (!confirm(T().resetConfirm + name + "?")) return;
+  try { await api(`/staff/${encodeURIComponent(id)}/totp/reset`, { method: "POST", body: {} }); toast(T().resetDone); }
+  catch (e) { toast(errMsg(e), true); }
+  closeResetSheet();
+}
+
+// ---- login -----------------------------------------------------------------
+function showLogin() {
+  document.getElementById("app").style.display = "none";
+  document.getElementById("login").classList.add("on");
+  document.getElementById("login-code").style.display = "none"; // always start on the PIN step
+  document.getElementById("login-pin").style.display = "block";
+  pendingPin = null; pinBuf = "";
+  buildPad();
+  renderPinDots();
+  loadTiles();
+}
+
+async function loadTiles() {
+  let staff = [];
+  try { staff = await api("/staff", { auth: false }); } catch (_) {} // tiles are progressive enhancement
+  document.getElementById("tiles").innerHTML = staff.map(s => `
+    <div class="tile ${selectedTile === s.id ? "sel" : ""}" onclick="selectTile(${jsArg(s.id)})">
+      <div class="ic">${s.role === "MANAGER" ? "🛡️" : "👤"}</div>
+      <div class="nm">${esc(s.name)}</div>
+      <div class="rl">${esc(s.role)}</div>
+    </div>`).join("");
+}
+function selectTile(id) { selectedTile = selectedTile === id ? null : id; loadTiles(); }
+
+function buildPad() {
+  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  document.getElementById("pad").innerHTML = keys.map(k =>
+    k === "" ? `<button class="blank" disabled></button>`
+    : `<button onclick="pinKey('${k}')">${k}</button>`).join("");
+}
+function pinKey(k) {
+  if (k === "⌫") { pinBuf = pinBuf.slice(0, -1); renderPinDots(); return; }
+  if (pinBuf.length >= 4) return;
+  pinBuf += k;
+  renderPinDots();
+  if (pinBuf.length === 4) submitPin();
+}
+function renderPinDots() {
+  document.getElementById("pinrow").innerHTML =
+    [0,1,2,3].map(i => `<div class="pindot ${i < pinBuf.length ? "f" : ""}"></div>`).join("");
+}
+async function submitPin() {
+  const pin = pinBuf;
+  document.getElementById("login-err").textContent = "";
+  try {
+    // step 1: PIN (+ this phone's trust tokens). Server decides: straight in, or 2FA.
+    const r = await api("/staff-app/login", { method: "POST", body: { pin, deviceTokens }, auth: false });
+    if (r.status === "ok") { onLoggedIn(r.user); return; } // device still trusted → PIN only
+    pendingPin = pin;                                       // step 2 re-verifies the PIN with the code
+    showCodeStep(r);
+  } catch (e) {
+    pinBuf = ""; renderPinDots();
+    document.getElementById("login-err").textContent =
+      (e instanceof ApiError && e.code === "rate_limited") ? "⏳" : T().pinWrong;
+  }
+}
+
+function onLoggedIn(user) {
+  me = user; token = user.token;
+  localStorage.setItem("staff_token", token);
+  if (user.languageCode === "fr" || user.languageCode === "en") {
+    lang = user.languageCode; localStorage.setItem("staff_lang", lang);
+  }
+  pinBuf = ""; pendingPin = null; selectedTile = null;
+  enterApp();
+}
+
+// 2FA step 2 view: a 6-digit code, plus the enrollment QR the first time.
+function showCodeStep(r) {
+  document.getElementById("login-pin").style.display = "none";
+  document.getElementById("login-code").style.display = "flex";
+  const enroll = r.status === "enroll";
+  document.getElementById("enroll-block").style.display = enroll ? "block" : "none";
+  if (enroll) {
+    document.getElementById("enroll-qr").src = r.qrDataUri || "";
+    document.getElementById("enroll-secret").textContent = r.secret || "";
+  }
+  document.getElementById("code-prompt").textContent = enroll ? T().enrollPrompt : T().codePrompt;
+  const inp = document.getElementById("code-input");
+  inp.value = "";
+  document.getElementById("code-err").textContent = "";
+  applyStaticLabels();
+  inp.focus();
+}
+
+async function submitCode() {
+  const code = (document.getElementById("code-input").value || "").replace(/\D/g, "");
+  if (code.length !== 6 || pendingPin == null || codeSubmitting) return; // guard the auto-submit
+  codeSubmitting = true;
+  document.getElementById("code-err").textContent = "";
+  try {
+    const r = await api("/staff-app/totp", { method: "POST", body: { pin: pendingPin, code }, auth: false });
+    // trust this device ~90 days — keep it alongside any other staff's token on this phone
+    deviceTokens = [r.deviceToken, ...deviceTokens.filter(t => t !== r.deviceToken)].slice(0, 12);
+    localStorage.setItem("staff_device_tokens", JSON.stringify(deviceTokens));
+    backToPin();                                            // reset the code view for next time
+    onLoggedIn(r.user);
+  } catch (e) {
+    const el = document.getElementById("code-err");
+    if (e instanceof ApiError && e.code === "invalid_totp") el.textContent = T().codeWrong;
+    else if (e instanceof ApiError && e.code === "rate_limited") el.textContent = "⏳";
+    else { backToPin(); document.getElementById("login-err").textContent = T().pinWrong; return; }
+    document.getElementById("code-input").value = "";
+  } finally {
+    codeSubmitting = false;
+  }
+}
+
+function backToPin() {
+  pendingPin = null; pinBuf = ""; renderPinDots();
+  document.getElementById("login-code").style.display = "none";
+  document.getElementById("login-pin").style.display = "block";
+  document.getElementById("code-err").textContent = "";
+}
+
+function logout() {
+  api("/logout", { method: "POST" }).catch(() => {});
+  forceLogout();
+}
+function forceLogout() {
+  token = null; me = null; check = null; cart = []; zones = [];
+  localStorage.removeItem("staff_token");
+  stopPoll();
+  document.getElementById("login").classList.remove("on"); // reset before re-show
+  showLogin();
+}
+
+// ---- app shell / navigation ------------------------------------------------
+function enterApp() {
+  document.getElementById("login").classList.remove("on");
+  document.getElementById("app").style.display = "block";
+  applyStaticLabels();
+  showTab("tables");
+}
+
+function showTab(which) {
+  tab = which;
+  document.getElementById("tab-tables").classList.toggle("on", which === "tables");
+  document.getElementById("tab-pending").classList.toggle("on", which === "pending");
+  if (which === "tables") goTables();
+  else showPending();
+}
+
+function showScreen(id) {
+  view = id;
+  for (const s of ["tables","check","menu","pending"])
+    document.getElementById("scr-" + s).classList.toggle("on", s === id);
+  document.querySelector(".tabbar").style.display = (id === "check" || id === "menu") ? "none" : "flex";
+}
+
+// central re-render for the active screen (used after a language flip)
+function renderView() {
+  if (!me) return;
+  applyStaticLabels();
+  if (view === "tables") renderTables();
+  else if (view === "check") renderCheck();
+  else if (view === "menu") renderMenu();
+  else if (view === "pending") renderPending();
+}
+
+// polling: refresh the visible list on a cadence, matching the terminal's feel
+function startPoll(fn, ms) { stopPoll(); fn(); pollTimer = setInterval(fn, ms); }
+function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+// ---- tables (Chunk 2) ------------------------------------------------------
+function goTables() {
+  showScreen("tables");
+  startPoll(loadZones, 8000);
+}
+
+async function loadZones() {
+  try { zones = await api("/zones"); } catch (e) { if (e.status === 401) return; }
+  updatePendingBadge();
+  if (view === "tables") renderTables();
+  if (view === "pending") renderPending();
+}
+
+function updatePendingBadge() {
+  const n = zones.reduce((a, z) => a + z.tables.reduce((b, t) => b + (t.pendingCount || 0), 0), 0);
+  const badge = document.getElementById("pending-badge");
+  badge.textContent = n;
+  badge.style.display = n > 0 ? "block" : "none";
+}
+
+function elapsed(iso) {
+  if (!iso) return "";
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (isNaN(mins)) return "";
+  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+}
+
+function renderTables() {
+  const body = document.getElementById("tables-body");
+  if (!zones.length) { body.innerHTML = `<div class="empty"><div class="big">🍽️</div><p>${T().noZones}</p></div>`; return; }
+  body.innerHTML = zones.map(z => {
+    const closed = z.status === "CLOSED";
+    const cards = z.tables.map(t => {
+      const hasPending = (t.pendingCount || 0) > 0;
+      const isOpen = t.openCheckId != null;
+      const cls = closed ? "closed" : hasPending ? "pend" : isOpen ? "open" : "";
+      const st = isOpen ? T().open : T().free;
+      const meta = isOpen && t.openCheckTotalCents != null
+        ? `<div class="meta">${cad(t.openCheckTotalCents)} · ${elapsed(t.openCheckOpenedAt)}</div>` : "";
+      const badge = hasPending ? `<div class="pbadge">⏳ ${t.pendingCount}</div>` : "";
+      const onclick = closed ? "" : `onclick="openTable(${jsArg(t.id)})"`;
+      return `<div class="tcard ${cls}" ${onclick}>
+        ${badge}
+        <div class="lbl">${esc(t.label)}</div>
+        ${meta || `<div class="st">${st}</div>`}
+      </div>`;
+    }).join("");
+    return `<div class="zone">
+      <div class="zone-hd">
+        <div><span class="z-fr">${esc(zname(z))}</span><span class="z-en">${esc(lang === "en" ? z.nameFr : z.nameEn)}</span></div>
+        ${closed ? `<span class="z-closed">${T().closed}</span>` : ""}
+      </div>
+      <div class="tgrid">${cards}</div>
+    </div>`;
+  }).join("");
+}
+
+// ---- check screen (Chunk 2) ------------------------------------------------
+async function openTable(tableId) {
+  stopPoll();
+  showScreen("check");
+  document.getElementById("check-body").innerHTML = `<div class="spinner">${T().loading}</div>`;
+  try {
+    // idempotent open/resume — returns the table's live check, creating one if none
+    check = await api(`/tables/${encodeURIComponent(tableId)}/checks`, { method: "POST" });
+    renderCheck();
+    startPoll(refreshCheck, 6000); // keep pending lines / totals fresh while viewing
+  } catch (e) {
+    goTables();
+    toast(errMsg(e), true);
+  }
+}
+
+async function refreshCheck() {
+  if (!check) return;
+  try { check = await api(`/checks/${check.id}`); } catch (e) { if (e.status === 401) return; }
+  if (view === "check") renderCheck();
+}
+
+// Return to the check screen and re-arm its refresh poll. Central so every path
+// back to the check (menu back-arrow, failed item fetch, cart submit) keeps the
+// pending-lines/total live instead of going stale.
+function showCheck() { showScreen("check"); renderCheck(); if (check) startPoll(refreshCheck, 6000); }
+
+function renderCheck() {
+  if (!check) return;
+  const tableLabel = tableLabelFor(check.tableId);
+  document.getElementById("check-title").innerHTML =
+    `${T().table} ${esc(tableLabel)} <small>#${check.id}</small>`;
+  const locked = check.status !== "OPEN";
+  const body = document.getElementById("check-body");
+
+  const lineRow = l => `
+    <div class="row"><span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
+    <span>${cad(l.lineTotalCents)}</span></div>`;
+
+  const feeRow = f => `
+    <div class="row"><span class="nm">${esc(lang === "en" ? f.labelEn : f.labelFr)}</span><span>${cad(f.amountCents)}</span></div>`;
+
+  const pendingSec = check.pendingLines.length ? `
+    <div class="sec">
+      <h3>${T().pendingHd}</h3>
+      ${check.pendingLines.map(l => `
+        <div class="row">
+          <span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
+          <span class="pact">
+            <button class="ok" onclick="acceptLine(${l.id})">✓</button>
+            <button class="no" onclick="rejectLine(${l.id})">✕</button>
+          </span>
+        </div>`).join("")}
+    </div>` : "";
+
+  const linesSec = (check.lines.length || check.fees.length) ? `
+    <div class="sec">
+      <h3>${T().onCheck}</h3>
+      ${check.lines.map(lineRow).join("")}
+      ${check.fees.map(feeRow).join("")}
+      <div class="total"><span>${T().total}</span><span>${cad(check.grandTotalCents)}</span></div>
+    </div>`
+    : (check.pendingLines.length ? "" : `<div class="empty"><div class="big">🧾</div><p>${T().emptyCheck}</p></div>`);
+
+  body.innerHTML = `
+    ${pendingSec}
+    ${linesSec}
+    ${locked ? `<div class="empty" style="padding:16px">${T().billPaying}</div>`
+             : `<button class="primary" onclick="openMenu()">${T().addItems}</button>`}`;
+}
+
+function tableLabelFor(tableId) {
+  for (const z of zones) for (const t of z.tables) if (t.id === tableId) return t.label;
+  return tableId;
+}
+
+// approve / reject a pending customer line (Chunk 3, reused on the check screen)
+async function acceptLine(lineId) {
+  try { check = await api(`/checks/${check.id}/pending-lines/${lineId}/accept`, { method: "POST" }); renderCheck(); toast(T().accepted); }
+  catch (e) { toast(errMsg(e), true); refreshCheck(); }
+}
+async function rejectLine(lineId) {
+  try { check = await api(`/checks/${check.id}/pending-lines/${lineId}/reject`, { method: "POST" }); renderCheck(); toast(T().rejected); }
+  catch (e) { toast(errMsg(e), true); refreshCheck(); }
+}
+
+// ---- menu browser + cart (Chunk 2) -----------------------------------------
+async function openMenu() {
+  stopPoll();
+  cart = [];
+  showScreen("menu");
+  document.getElementById("menu-title").innerHTML =
+    `${T().table} ${esc(tableLabelFor(check.tableId))}`;
+  if (!items.length) {
+    document.getElementById("mgrid").innerHTML = `<div class="spinner">${T().loading}</div>`;
+    try {
+      [items, categories] = await Promise.all([
+        api("/items", { auth: false }), api("/categories", { auth: false }),
+      ]);
+    } catch (_) { toast(T().failed, true); showCheck(); return; }
+  }
+  cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
+  renderMenu();
+  renderCart();
+}
+
+function renderMenu() {
+  if (view !== "menu") return;
+  // Preserve in-progress card input (typed note, chosen variant) across a
+  // re-render such as a language flip — the grid is rebuilt wholesale below.
+  const draft = {};
+  document.querySelectorAll('#mgrid [id^="n-"], #mgrid [id^="v-"]').forEach(el => { draft[el.id] = el.value; });
+  const cats = categories.filter(c => items.some(i => i.category === c.id));
+  document.getElementById("chips").innerHTML = cats.map(c =>
+    `<button class="chip ${c.id === cat ? "on" : ""}" onclick="pickCat(${jsArg(c.id)})">${esc(lang === "en" ? c.nameEn : c.nameFr)}</button>`).join("");
+  document.getElementById("mgrid").innerHTML = items.filter(i => i.category === cat).map(i => `
+    <div class="mcard">
+      ${i.photoVersion ? `<img class="photo" loading="lazy" src="/photos/${encodeURIComponent(i.id)}?v=${i.photoVersion}&w=512" data-fallback="${esc(i.abbrev)}" onerror="photoFallback(this)">` : `<div class="ph">${esc(i.abbrev)}</div>`}
+      <div class="fr">${esc(iname(i))}</div>
+      <div class="en">${esc(inameAlt(i))}</div>
+      <div class="price">${i.variants.length === 1 ? cad(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
+      ${i.variants.length > 1 ? `<select id="v-${esc(i.id)}">` + i.variants.map(v => `<option value="${esc(v.id)}">${esc(vlabel(v))} ${cad(v.priceCents)}</option>`).join("") + `</select>` : ""}
+      <input type="text" id="n-${esc(i.id)}" placeholder="${T().note}">
+      <button class="add" onclick="addToCart(${jsArg(i.id)})">${T().add}</button>
+    </div>`).join("");
+  for (const id in draft) { const el = document.getElementById(id); if (el) el.value = draft[id]; }
+}
+function pickCat(id) { cat = id; renderMenu(); }
+
+function addToCart(itemId) {
+  const item = items.find(i => i.id === itemId);
+  if (!item) return;
+  const sel = document.getElementById("v-" + itemId);
+  const variant = sel ? item.variants.find(v => v.id === sel.value) : item.variants[0];
+  const noteEl = document.getElementById("n-" + itemId);
+  const note = (noteEl.value || "").trim() || null;
+  const same = cart.find(c => c.variantId === variant.id && c.note === note);
+  if (same) same.qty++;
+  else cart.push({ itemId, variantId: variant.id, qty: 1, note,
+                   nameFr: item.nameFr, nameEn: item.nameEn,
+                   multiSize: item.variants.length > 1, variant, priceCents: variant.priceCents });
+  if (noteEl) noteEl.value = "";
+  renderCart();
+  toast(T().addedOne);
+}
+
+const cartSubtotal = () => cart.reduce((a, b) => a + b.priceCents * b.qty, 0);
+
+function renderCart() {
+  const count = cart.reduce((a, b) => a + b.qty, 0);
+  const bar = document.getElementById("cartbar");
+  if (!count) { bar.classList.remove("show"); closeSheet(); return; }
+  bar.classList.add("show");
+  document.getElementById("cart-sum").textContent = `🛒 ${count} · ${cad(cartSubtotal())}`;
+  document.getElementById("cart-lines").innerHTML = cart.map((b, ix) => `
+    <div class="cline">
+      <span>${esc(lang === "en" ? b.nameEn : b.nameFr)}${b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
+      <span class="cqty">
+        <button class="step" onclick="bumpCart(${ix},-1)">−</button><b>${b.qty}</b>
+        <button class="step" onclick="bumpCart(${ix},1)">＋</button>
+        ${cad(b.priceCents * b.qty)}
+        <button class="rm" onclick="removeCart(${ix})">✕</button>
+      </span>
+    </div>`).join("");
+  document.getElementById("sheet-sub").textContent = cad(cartSubtotal());
+}
+function bumpCart(ix, d) { const l = cart[ix]; if (!l) return; l.qty += d; if (l.qty <= 0) cart.splice(ix, 1); renderCart(); }
+function removeCart(ix) { cart.splice(ix, 1); renderCart(); }
+function openSheet() { if (!cart.length) return; document.getElementById("scrim").classList.add("open"); document.getElementById("sheet").classList.add("open"); }
+function closeSheet() { document.getElementById("scrim").classList.remove("open"); document.getElementById("sheet").classList.remove("open"); }
+
+document.getElementById("cart-submit").onclick = submitCart;
+async function submitCart() {
+  if (!cart.length || !check) return;
+  const btn = document.getElementById("cart-submit");
+  btn.disabled = true;
+  try {
+    // Commit real, staff-authoritative lines one at a time, dropping each from the
+    // cart as it lands. A mid-batch failure therefore leaves ONLY the un-committed
+    // lines behind — re-tapping submit can never double-post what's already on the
+    // bill (there's no server-side idempotency key on POST /lines).
+    while (cart.length) {
+      const c = cart[0];
+      check = await api(`/checks/${check.id}/lines`, { method: "POST",
+        body: { itemId: c.itemId, variantId: c.variantId, qty: c.qty, note: c.note } });
+      cart.shift();
+    }
+    renderCart();
+    closeSheet();
+    toast(T().linesAdded);
+    showCheck(); // returns to the check screen and re-arms its refresh poll
+  } catch (e) {
+    renderCart(); // reflect the remaining (un-committed) lines
+    toast(errMsg(e), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---- pending queue (Chunk 3) ----------------------------------------------
+function showPending() {
+  showScreen("pending");
+  startPoll(loadZones, 5000); // /zones drives both the badge and this queue
+}
+
+// Build the queue from the /zones snapshot (tables with pendingCount>0), then
+// pull each open check for its pending lines + ids. Kept to the tables that
+// actually have pending work — small N, one round of fetches.
+async function renderPending() {
+  const body = document.getElementById("pending-body");
+  const targets = [];
+  for (const z of zones) for (const t of z.tables)
+    if ((t.pendingCount || 0) > 0 && t.openCheckId != null)
+      targets.push({ tableId: t.id, label: t.label, checkId: t.openCheckId, zone: zname(z) });
+
+  if (!targets.length) {
+    body.innerHTML = `<div class="empty"><div class="big">📥</div><p>${T().noPending}</p><p style="font-size:13px">${T().pendingSub}</p></div>`;
+    return;
+  }
+  let checks;
+  try { checks = await Promise.all(targets.map(t => api(`/checks/${t.checkId}`).catch(() => null))); }
+  catch (e) { if (e.status === 401) return; checks = []; }
+  if (view !== "pending") return; // navigated away while fetching
+
+  body.innerHTML = targets.map((t, ix) => {
+    const c = checks[ix];
+    if (!c || !c.pendingLines.length) return "";
+    return `<div class="pcard">
+      <div class="ph"><span class="lbl">${T().table} ${esc(t.label)}</span><span class="zn">${esc(t.zone)} · #${c.id}</span></div>
+      ${c.pendingLines.map(l => `
+        <div class="row">
+          <span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
+          <span class="pact">
+            <button class="ok" onclick="acceptPending(${c.id}, ${l.id})">✓</button>
+            <button class="no" onclick="rejectPending(${c.id}, ${l.id})">✕</button>
+          </span>
+        </div>`).join("")}
+    </div>`;
+  }).join("") || `<div class="empty"><div class="big">📥</div><p>${T().noPending}</p></div>`;
+}
+
+async function acceptPending(checkId, lineId) {
+  try { await api(`/checks/${checkId}/pending-lines/${lineId}/accept`, { method: "POST" }); toast(T().accepted); }
+  catch (e) { toast(errMsg(e), true); }
+  loadZones();
+}
+async function rejectPending(checkId, lineId) {
+  try { await api(`/checks/${checkId}/pending-lines/${lineId}/reject`, { method: "POST" }); toast(T().rejected); }
+  catch (e) { toast(errMsg(e), true); }
+  loadZones();
+}
+
+// 2FA code field: digits only, auto-submit once six are entered
+document.getElementById("code-input").addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6);
+  if (e.target.value.length === 6) submitCode();
+});
+
+boot();
+</script>
+</body>
+</html>

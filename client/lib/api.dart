@@ -1,0 +1,1919 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show Platform, SocketException;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
+
+import 'connection_monitor.dart';
+import 'i18n.dart';
+
+/// Thin API client for the store server. The client owns NO money logic —
+/// pricing, tax, rounding all live server-side (architecture principle #2).
+class Api {
+  Api._();
+
+  static const _storage = FlutterSecureStorage();
+
+  // --- store server URL: no hardcoded venue IP -------------------------------
+  // The base URL resolves, in priority order:
+  //   1. a manual override the user typed          (device-local, persisted)
+  //   2. a URL auto-discovered by scanning the LAN (cached from last success)
+  //   3. a build-time --dart-define=SERVER_URL     (demo/CI convenience)
+  //   4. the platform default                      (emulator/desktop only)
+  // 1 and 2 are loaded ONCE at startup by [loadServerConfig] so [baseUrl] stays
+  // synchronous for every caller; changes apply on the next launch.
+  static String? _override; // user-typed; wins over everything
+  static String? _discovered; // last successful LAN scan
+  static const _envServerUrl = String.fromEnvironment('SERVER_URL');
+
+  /// Only reachable when the store runs on the same host (Android emulator →
+  /// 10.0.2.2, desktop → localhost). On a real tablet this never answers, so an
+  /// override or LAN discovery is expected to supply the real URL.
+  static String get _platformDefault {
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8080';
+    return 'http://localhost:8080';
+  }
+
+  static String get baseUrl {
+    if (_override != null && _override!.isNotEmpty) return _override!;
+    if (_discovered != null && _discovered!.isNotEmpty) return _discovered!;
+    if (_envServerUrl.isNotEmpty) return _envServerUrl;
+    return _platformDefault;
+  }
+
+  /// The manual override (null = auto-detect). For the settings/startup UI.
+  static String? get serverUrlOverride => _override;
+  static bool get hasServerOverride =>
+      _override != null && _override!.isNotEmpty;
+
+  /// Load persisted server config once at startup, before any request.
+  static Future<void> loadServerConfig() async {
+    _override = _normalizeUrl(await _storage.read(key: 'server_url_override'));
+    _discovered = _normalizeUrl(await _storage.read(key: 'server_url_cache'));
+    _deviceToken = await _storage.read(key: 'device_token');
+  }
+
+  /// Persist (or clear) the manual override. Empty/null clears it → auto-detect.
+  static Future<void> setServerUrlOverride(String? url) async {
+    final v = _normalizeUrl(url);
+    _override = v;
+    if (v == null) {
+      await _storage.delete(key: 'server_url_override');
+    } else {
+      await _storage.write(key: 'server_url_override', value: v);
+    }
+  }
+
+  /// Record a discovered URL as the working default (cached for next launch).
+  static Future<void> setDiscovered(String url) async {
+    final v = _normalizeUrl(url);
+    if (v == null) return;
+    _discovered = v;
+    await _storage.write(key: 'server_url_cache', value: v);
+  }
+
+  /// Normalize user input into 'http://host:port', or null when blank/invalid.
+  /// Adds http:// and the default :8080 when omitted; trims trailing slashes.
+  static String? _normalizeUrl(String? raw) {
+    var s = raw?.trim() ?? '';
+    if (s.isEmpty) return null;
+    if (!s.contains('://')) s = 'http://$s';
+    s = s.replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.tryParse(s);
+    if (uri == null || uri.host.isEmpty) return null;
+    if (!uri.hasPort) s = '$s:8080';
+    return s;
+  }
+
+  /// GET /health → parsed body, or null on any non-200/error. The single health
+  /// request shape both probes below share, so /health moving or changing shape
+  /// is a one-line fix, not two divergent copies.
+  static Future<Map<String, dynamic>?> _getHealth(
+    String base,
+    Duration timeout,
+  ) async {
+    try {
+      final res = await http.get(Uri.parse('$base/health')).timeout(timeout);
+      if (res.statusCode != 200) return null;
+      final body = jsonDecode(utf8.decode(res.bodyBytes));
+      return body is Map<String, dynamic> ? body : <String, dynamic>{};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Quick liveness probe of a base URL's /health — used by startup + discovery
+  /// (short timeout: the LAN scan probes many hosts).
+  static Future<bool> probeHealth(
+    String base, {
+    Duration timeout = const Duration(milliseconds: 800),
+  }) async => await _getHealth(base, timeout) != null;
+
+  /// Does this store demand a paired device? From GET /health's `pairingRequired`
+  /// field; false when absent (pre-pairing servers) or the probe fails — the
+  /// caller has already established reachability.
+  static Future<bool> checkPairingRequired(
+    String base, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async => (await _getHealth(base, timeout))?['pairingRequired'] == true;
+
+  // --- device pairing: cloud venues hand each terminal a per-device token ---
+  // Minted once via POST /pair (single-use code from the owner portal) and
+  // sent as X-Device-Token on every request from then on. Harmless on LAN
+  // servers that don't require it.
+  static String? _deviceToken;
+
+  static bool get hasDevicePairing =>
+      _deviceToken != null && _deviceToken!.isNotEmpty;
+
+  /// Normalize a typed venue address for pairing. Unlike [_normalizeUrl] (LAN:
+  /// http + :8080), a bare host is assumed to be a cloud venue → https. An
+  /// explicit port picks the scheme by the port: :443 is TLS (https), any other
+  /// port is a LAN box (http, e.g. :8080). Explicit schemes are kept as typed.
+  static String? normalizeVenueAddress(String? raw) {
+    var s = raw?.trim() ?? '';
+    if (s.isEmpty) return null;
+    final hasScheme = s.contains(
+      '://',
+    ); // checked before slash-trimming can eat "http://"
+    s = s.replaceAll(RegExp(r'/+$'), '');
+    if (!hasScheme) {
+      if (s.isEmpty) return null;
+      // scheme by port: :443 → https (TLS), any other explicit port → http (LAN
+      // box like :8080), no port → https (cloud venue behind Caddy)
+      final port = RegExp(r':(\d+)$').firstMatch(s)?.group(1);
+      s = (port == null || port == '443') ? 'https://$s' : 'http://$s';
+    }
+    final uri = Uri.tryParse(s);
+    if (uri == null || uri.host.isEmpty) return null;
+    return s;
+  }
+
+  /// Canonicalize a typed pairing code: uppercase, drop spaces/dashes/etc.,
+  /// then re-group as XXXX-XXXX (the format the store expects). Null when the
+  /// input holds no code characters at all.
+  static String? normalizePairingCode(String? raw) {
+    final cleaned = (raw ?? '').toUpperCase().replaceAll(
+      RegExp(r'[^A-Z0-9]'),
+      '',
+    );
+    if (cleaned.isEmpty) return null;
+    final groups = <String>[];
+    for (var i = 0; i < cleaned.length; i += 4) {
+      groups.add(
+        cleaned.substring(i, i + 4 > cleaned.length ? cleaned.length : i + 4),
+      );
+    }
+    return groups.join('-');
+  }
+
+  /// Pair this terminal with a venue. Hits POST /pair on the GIVEN url — not
+  /// [baseUrl] — because pairing is what establishes the URL. On success the
+  /// device token is persisted and the venue URL becomes the server override.
+  static Future<void> pair(
+    String serverUrl,
+    String code,
+    String deviceName,
+  ) async {
+    // canonicalize once; the result is a full scheme://host[:port] origin
+    final base = normalizeVenueAddress(serverUrl) ?? serverUrl;
+    final res = await http
+        .post(
+          Uri.parse('$base/pair'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'code': code, 'deviceName': deviceName}),
+        )
+        .timeout(const Duration(seconds: 10));
+    _throwOnError(res);
+    final json = jsonDecode(utf8.decode(res.bodyBytes));
+    _deviceToken = json['deviceToken'];
+    await _storage.write(key: 'device_token', value: _deviceToken);
+    // Persist the paired origin VERBATIM — NOT via setServerUrlOverride, whose
+    // _normalizeUrl appends :8080 to a portless URL and would point an https
+    // cloud venue at a port Caddy never serves, bricking the terminal.
+    _override = base;
+    await _storage.write(key: 'server_url_override', value: base);
+    _redirectingToPairing = false;
+  }
+
+  /// Forget this terminal's pairing (revoked server-side, or manual reset).
+  static Future<void> clearPairing() async {
+    _deviceToken = null;
+    await _storage.delete(key: 'device_token');
+  }
+
+  static String? _token;
+  static AuthUser? currentUser;
+
+  /// Wired by main.dart: navigate to the login screen, clearing the stack.
+  /// Session expiry is not an error the user acknowledges — no toast, just go.
+  static void Function()? onSessionExpired;
+  static bool _redirectingToLogin = false;
+
+  /// Wired by main.dart: navigate to the pairing screen, clearing the stack.
+  /// Fires on 401 device_required / device_revoked (mirrors [onSessionExpired]).
+  static void Function()? onPairingRequired;
+  static bool _redirectingToPairing = false;
+
+  static Map<String, String> get _headers => {
+    'Content-Type': 'application/json',
+    if (_token != null) 'Authorization': 'Bearer $_token',
+    if (hasDevicePairing) 'X-Device-Token': _deviceToken!,
+  };
+
+  /// Headers for non-Api fetches of store media (Image.network on /photos):
+  /// just the device token, so photos keep loading on device-gated stores.
+  static Map<String, String> get mediaHeaders => {
+    if (hasDevicePairing) 'X-Device-Token': _deviceToken!,
+  };
+
+  /// Cap on any single gated request. Without it a black-holed network (router
+  /// power-cycled mid-shift, packets silently dropped) would hang each call for
+  /// the OS TCP timeout (~1-2 min), so the reconnecting overlay would take
+  /// minutes to appear — the exact state it exists to prevent. 15s is generous
+  /// for a working LAN/cloud round-trip incl. a small photo upload.
+  static const Duration _requestTimeout = Duration(seconds: 15);
+
+  /// Run one HTTP call, feeding the global [ConnectionMonitor]: transport-level
+  /// failures (socket/timeout/client) count toward the reconnecting overlay;
+  /// any completed response — success OR http error status — counts as alive.
+  static Future<http.Response> _send(
+    Future<http.Response> Function() run,
+  ) async {
+    try {
+      final res = await run().timeout(_requestTimeout);
+      ConnectionMonitor.instance.reportSuccess();
+      return res;
+    } catch (e) {
+      if (e is SocketException ||
+          e is TimeoutException ||
+          e is http.ClientException) {
+        ConnectionMonitor.instance.reportFailure();
+      }
+      rethrow;
+    }
+  }
+
+  /// Restore a persisted session; returns the user or null (→ login screen).
+  /// The startup gate owns navigation here — the expiry and pairing redirects
+  /// stay off; a pairing demand is rethrown for the gate to route itself.
+  static Future<AuthUser?> restoreSession() async {
+    _token = await _storage.read(key: 'session_token');
+    if (_token == null) return null;
+    final expiredHandler = onSessionExpired;
+    final pairingHandler = onPairingRequired;
+    onSessionExpired = null;
+    onPairingRequired = null;
+    try {
+      currentUser = AuthUser.fromJson(await _get('/me'), _token!);
+      Prefs.instance.hydrate(
+        languageCode: currentUser!.languageCode,
+        calendarPref: currentUser!.calendar,
+      );
+      return currentUser;
+    } on PairingRequiredException {
+      _token = null;
+      rethrow; // the startup gate shows the pairing screen
+    } on AuthException {
+      _token = null;
+      return null;
+    } catch (_) {
+      // server unreachable: keep the token, let the caller show retry UI
+      rethrow;
+    } finally {
+      onSessionExpired = expiredHandler;
+      onPairingRequired = pairingHandler;
+      _redirectingToLogin = false;
+      _redirectingToPairing = false;
+    }
+  }
+
+  static Future<AuthUser> login(String pin) async {
+    final json = await _post('/login', {'pin': pin});
+    _redirectingToLogin = false;
+    _redirectingToPairing = false;
+    _token = json['token'];
+    currentUser = AuthUser.fromJson(json, _token!);
+    await _storage.write(key: 'session_token', value: _token);
+    Prefs.instance.hydrate(
+      languageCode: currentUser!.languageCode,
+      calendarPref: currentUser!.calendar,
+    );
+    return currentUser!;
+  }
+
+  static Future<void> logout() async {
+    try {
+      await _post('/logout');
+    } catch (_) {}
+    _token = null;
+    currentUser = null;
+    await _storage.delete(key: 'session_token');
+  }
+
+  /// Backoff for GETs. GETs are idempotent, so a bounded auto-retry is safe — it
+  /// absorbs transient failures (server restart, Wi-Fi blip, a lost-lock 5xx)
+  /// that otherwise make a first load a coin flip. Writes (_post/_patch/_delete)
+  /// NEVER retry: a duplicated write is worse than an error the user can re-issue.
+  static const _getRetryDelays = [
+    Duration(milliseconds: 250),
+    Duration(milliseconds: 750),
+  ];
+
+  static Future<dynamic> _get(String path) async {
+    for (var attempt = 0; ; attempt++) {
+      final canRetry = attempt < _getRetryDelays.length;
+      try {
+        final res = await _send(
+          () => http.get(Uri.parse('$baseUrl$path'), headers: _headers),
+        );
+        // 5xx = server alive but hiccuped; give it another chance before surfacing
+        // an error. 4xx (auth, not-found) throws immediately.
+        if (res.statusCode < 500 || !canRetry) {
+          _throwOnError(res);
+          return jsonDecode(utf8.decode(res.bodyBytes));
+        }
+      } on SocketException {
+        if (!canRetry) rethrow;
+      } on TimeoutException {
+        if (!canRetry) rethrow;
+      } on http.ClientException {
+        if (!canRetry) rethrow;
+      }
+      await Future<void>.delayed(_getRetryDelays[attempt]);
+    }
+  }
+
+  static Future<dynamic> _post(
+    String path, [
+    Map<String, dynamic>? body,
+  ]) async {
+    final res = await _send(
+      () => http.post(
+        Uri.parse('$baseUrl$path'),
+        headers: _headers,
+        body: jsonEncode(body ?? {}),
+      ),
+    );
+    _throwOnError(res);
+    return jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  static Future<dynamic> _patch(String path, Map<String, dynamic> body) async {
+    final res = await _send(
+      () => http.patch(
+        Uri.parse('$baseUrl$path'),
+        headers: _headers,
+        body: jsonEncode(body),
+      ),
+    );
+    _throwOnError(res);
+    return jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  static Future<dynamic> _put(String path, Map<String, dynamic> body) async {
+    final res = await _send(
+      () => http.put(
+        Uri.parse('$baseUrl$path'),
+        headers: _headers,
+        body: jsonEncode(body),
+      ),
+    );
+    _throwOnError(res);
+    return jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  static Future<dynamic> _delete(String path) async {
+    final res = await _send(
+      () => http.delete(Uri.parse('$baseUrl$path'), headers: _headers),
+    );
+    _throwOnError(res);
+    return jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  static void _throwOnError(http.Response res) {
+    if (res.statusCode == 401) {
+      String? code;
+      try {
+        code = jsonDecode(utf8.decode(res.bodyBytes))['code'];
+      } catch (_) {}
+      // Device pairing problems — with or without a session (/login 401s too).
+      // Revocation wipes the stored pairing; both routes go to the pairing
+      // screen via the same silent-redirect pattern as session expiry.
+      if (code == 'device_required' || code == 'device_revoked') {
+        if (code == 'device_revoked') clearPairing(); // fire-and-forget wipe
+        _token = null;
+        currentUser = null;
+        _storage.delete(key: 'session_token');
+        if (!_redirectingToPairing) {
+          _redirectingToPairing = true;
+          onPairingRequired?.call();
+        }
+        throw PairingRequiredException(code!);
+      }
+      // mid-session expiry (we HAD a token): silently return to login.
+      // pre-login 401s (wrong PIN) fall through as normal coded errors.
+      if (_token != null) {
+        _token = null;
+        currentUser = null;
+        _storage.delete(key: 'session_token');
+        if (!_redirectingToLogin) {
+          _redirectingToLogin = true;
+          onSessionExpired?.call();
+        }
+        throw SessionExpiredException();
+      }
+    }
+    if (res.statusCode >= 400) {
+      String message = 'HTTP ${res.statusCode}';
+      String? code;
+      try {
+        final body = jsonDecode(utf8.decode(res.bodyBytes));
+        message = body['error'] ?? message;
+        code = body['code'];
+      } catch (_) {}
+      throw ApiException(message, code);
+    }
+  }
+
+  static Future<AuthUser> updatePreferences(
+    String languageCode,
+    String calendar,
+  ) async {
+    final json = await _patch('/me/preferences', {
+      'languageCode': languageCode,
+      'calendar': calendar,
+    });
+    currentUser = AuthUser.fromJson(json, _token!);
+    return currentUser!;
+  }
+
+  static Future<List<Zone>> zones() async =>
+      ((await _get('/zones')) as List).map((z) => Zone.fromJson(z)).toList();
+
+  /// Close/reopen a zone. Manager-gated inline like void/86 — [managerPin] is
+  /// re-verified server-side. status is 'OPEN' or 'CLOSED'.
+  static Future<void> setZoneStatus(
+    String zoneId,
+    String status,
+    String? managerPin,
+  ) async => _patch('/zones/$zoneId/status', {
+    'status': status,
+    'managerPin': ?managerPin,
+  });
+
+  // --- zone (room) management: add / rename / delete / reorder, same inline
+  // manager-PIN gate as the floor-plan editor ---
+
+  /// Create an empty room; the returned zone opens to a blank floor plan.
+  static Future<Zone> createZone(
+    String nameFr,
+    String nameEn,
+    String managerPin,
+  ) async => Zone.fromJson(
+    await _post('/zones', {
+      'nameFr': nameFr,
+      'nameEn': nameEn,
+      'managerPin': managerPin,
+    }),
+  );
+
+  /// Rename a room. Ids never change; status has its own route.
+  static Future<Zone> renameZone(
+    String zoneId, {
+    required String nameFr,
+    required String nameEn,
+    required String managerPin,
+  }) async => Zone.fromJson(
+    await _patch('/zones/$zoneId', {
+      'nameFr': nameFr,
+      'nameEn': nameEn,
+      'managerPin': managerPin,
+    }),
+  );
+
+  /// Delete a room. Server refuses with zone_not_empty while it holds tables or
+  /// floor objects.
+  static Future<void> deleteZone(String zoneId, String managerPin) async =>
+      _post('/zones/$zoneId/delete', {'managerPin': managerPin});
+
+  /// Reorder the room switcher: index in [orderedIds] becomes sort order.
+  static Future<void> reorderZones(
+    List<String> orderedIds,
+    String managerPin,
+  ) async => _patch('/zones/order', {
+    'orderedIds': orderedIds,
+    'managerPin': managerPin,
+  });
+
+  // --- floor plan (all manager-PIN-gated inline, like void/86/zone-status) ---
+
+  /// Batch "save layout": one write for a whole zone after an edit session.
+  static Future<void> saveZoneLayout(
+    String zoneId,
+    List<Map<String, dynamic>> tables,
+    String managerPin,
+  ) async => _put('/zones/$zoneId/layout', {
+    'tables': tables,
+    'managerPin': managerPin,
+  });
+
+  static Future<TableInfo> addTable(
+    String zoneId,
+    Map<String, dynamic> body,
+    String managerPin,
+  ) async => TableInfo.fromJson(
+    await _post('/zones/$zoneId/tables', {...body, 'managerPin': managerPin}),
+  );
+
+  /// Soft delete. Server refuses with table_in_use / has_sub_tables.
+  static Future<void> deleteTable(String tableId, String managerPin) async =>
+      _post('/tables/$tableId/delete', {'managerPin': managerPin});
+
+  /// Rename label and/or VIP name. Empty [nameOverride] clears it; null leaves it.
+  static Future<TableInfo> renameTable(
+    String tableId, {
+    String? label,
+    String? nameOverride,
+    required String managerPin,
+  }) async => TableInfo.fromJson(
+    await _patch('/tables/$tableId', {
+      'label': ?label,
+      'nameOverride': ?nameOverride,
+      'managerPin': managerPin,
+    }),
+  );
+
+  // --- floor objects (pool / bar front / pillar), same manager-PIN gate ---
+
+  /// Drop a structural prop on the plan. [body] carries type + geometry.
+  static Future<FloorObject> addObject(
+    String zoneId,
+    Map<String, dynamic> body,
+    String managerPin,
+  ) async => FloorObject.fromJson(
+    await _post('/zones/$zoneId/objects', {...body, 'managerPin': managerPin}),
+  );
+
+  /// Hard delete — nothing references a floor object.
+  static Future<void> deleteObject(String objectId, String managerPin) async =>
+      _post('/objects/$objectId/delete', {'managerPin': managerPin});
+
+  /// Batch geometry write for a zone's objects, mirroring saveZoneLayout.
+  static Future<void> saveZoneObjects(
+    String zoneId,
+    List<Map<String, dynamic>> objects,
+    String managerPin,
+  ) async => _put('/zones/$zoneId/objects-layout', {
+    'objects': objects,
+    'managerPin': managerPin,
+  });
+
+  static Future<List<Category>> categories() async =>
+      ((await _get('/categories')) as List)
+          .map((c) => Category.fromJson(c))
+          .toList();
+
+  /// Open route: login-screen staff tiles. Names + roles only.
+  static Future<List<Staff>> staff() async =>
+      ((await _get('/staff')) as List).map((s) => Staff.fromJson(s)).toList();
+
+  static Future<VenueSettings> settings() async =>
+      VenueSettings.fromJson(await _get('/settings'));
+
+  static Future<VenueSettings> updateSettings(
+    Map<String, dynamic> patch,
+  ) async => VenueSettings.fromJson(await _patch('/settings', patch));
+
+  /// Fire a test page at the configured thermal printer (manager-only).
+  static Future<PrinterStatus> testPrint() async =>
+      PrinterStatus.fromJson(await _post('/printer/test'));
+
+  /// Live printer health — used to surface a "printer offline" toast post-sale.
+  static Future<PrinterStatus> printerStatus() async =>
+      PrinterStatus.fromJson(await _get('/printer/status'));
+
+  /// Print one table's scan-to-order QR slip on the thermal printer. The QR
+  /// payload is built server-side (matches the on-screen QR). Reports printer
+  /// state via [PrinterStatus] rather than throwing when it's offline/unset.
+  static Future<PrinterStatus> printTableSlip(String tableId) async =>
+      PrinterStatus.fromJson(await _post('/tables/$tableId/slip/print'));
+
+  /// Bulk-print every active table's QR slip (manager, venue setup).
+  static Future<PrintAllResult> printAllTableSlips() async =>
+      PrintAllResult.fromJson(await _post('/tables/slips/print-all'));
+
+  /// Pending-order alert config — readable by any staff (not manager-gated like
+  /// full settings), so every terminal can drive its chime/escalation.
+  static Future<AlertConfig> alertConfig() async =>
+      AlertConfig.fromJson(await _get('/alert-config'));
+
+  /// Owner reporting-portal URL, derived server-side from the store's cloud
+  /// config (never hardcoded here). Null when cloud sync isn't configured — the
+  /// settings screen hides the QR in that case.
+  static Future<String?> cloudPortalUrl() async =>
+      (await _get('/cloud/info'))['portalUrl'] as String?;
+
+  static Future<void> changePin(String currentPin, String newPin) async =>
+      _patch('/me/pin', {'currentPin': currentPin, 'newPin': newPin});
+
+  /// Modal pre-flight: can this PIN approve [permission]? Throws (403/429) if not.
+  /// Grant-aware when [permission] is given — the approver must hold it too
+  /// (CONTRACT §7). The action endpoint still re-verifies the PIN it is sent.
+  static Future<void> verifyManagerPin(
+    String pin, {
+    String? permission,
+  }) async => _post('/auth/verify-manager-pin', {
+    'pin': pin,
+    'permission': ?permission,
+  });
+
+  static Future<List<Item>> items({bool includeInactive = false}) async =>
+      ((await _get('/items${includeInactive ? "?all=true" : ""}')) as List)
+          .map((i) => Item.fromJson(i))
+          .toList();
+
+  // --- owner-editable catalog (manager session) ---
+
+  static Future<Item> createItem(Map<String, dynamic> body) async =>
+      Item.fromJson(await _post('/items', body));
+
+  static Future<Item> updateItem(
+    String itemId,
+    Map<String, dynamic> patch,
+  ) async => Item.fromJson(await _patch('/items/$itemId', patch));
+
+  static Future<void> deleteItem(String itemId) async =>
+      _delete('/items/$itemId');
+
+  static Future<Item> addVariant(
+    String itemId,
+    Map<String, dynamic> body,
+  ) async => Item.fromJson(await _post('/items/$itemId/variants', body));
+
+  static Future<Item> updateVariant(
+    String itemId,
+    String variantId,
+    Map<String, dynamic> patch,
+  ) async =>
+      Item.fromJson(await _patch('/items/$itemId/variants/$variantId', patch));
+
+  static Future<Item> deleteVariant(String itemId, String variantId) async =>
+      Item.fromJson(await _delete('/items/$itemId/variants/$variantId'));
+
+  static Future<Category> createCategory(Map<String, dynamic> body) async =>
+      Category.fromJson(await _post('/categories', body));
+
+  static Future<Category> updateCategory(
+    String id,
+    Map<String, dynamic> patch,
+  ) async => Category.fromJson(await _patch('/categories/$id', patch));
+
+  static Future<void> deleteCategory(String id) async =>
+      _delete('/categories/$id');
+
+  static Future<void> reorderCategories(List<String> orderedIds) async =>
+      _patch('/categories/order', {'orderedIds': orderedIds});
+
+  static Future<Check> openCheck(String tableId) async =>
+      Check.fromJson(await _post('/tables/$tableId/checks'));
+
+  static Future<Check> getCheck(int id) async =>
+      Check.fromJson(await _get('/checks/$id'));
+
+  static Future<Check> addLine(
+    int checkId,
+    String itemId,
+    String variantId,
+    int qty, {
+    String? note,
+  }) async => Check.fromJson(
+    await _post('/checks/$checkId/lines', {
+      'itemId': itemId,
+      'variantId': variantId,
+      'qty': qty,
+      'note': ?note,
+    }),
+  );
+
+  static Future<Check> removeLine(int checkId, int lineId) async {
+    final res = await _send(
+      () => http.delete(
+        Uri.parse('$baseUrl/checks/$checkId/lines/$lineId'),
+        headers: _headers,
+      ),
+    );
+    _throwOnError(res);
+    return Check.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  static Future<Check> setLineQty(int checkId, int lineId, int qty) async =>
+      Check.fromJson(
+        await _post('/checks/$checkId/lines/$lineId/qty', {'qty': qty}),
+      );
+
+  /// Table ops: one gesture, two outcomes. Empty destination → move;
+  /// occupied → merge into its open check (client confirms first).
+  static Future<Check> moveCheck(int checkId, String tableId) async =>
+      Check.fromJson(
+        await _post('/checks/$checkId/move', {'tableId': tableId}),
+      );
+
+  static Future<Check> mergeCheck(int checkId, int intoCheckId) async =>
+      Check.fromJson(
+        await _post('/checks/$checkId/merge', {'intoCheckId': intoCheckId}),
+      );
+
+  /// Off-menu "open item": name + price + qty, no catalog row.
+  static Future<Check> addOpenLine(
+    int checkId,
+    String name,
+    int unitPriceCents,
+    int qty,
+  ) async => Check.fromJson(
+    await _post('/checks/$checkId/open-lines', {
+      'name': name,
+      'unitPriceCents': unitPriceCents,
+      'qty': qty,
+    }),
+  );
+
+  static Future<Check> voidCheck(
+    int checkId,
+    String reason,
+    String? managerPin,
+  ) async => Check.fromJson(
+    await _post('/checks/$checkId/void', {
+      'reason': reason,
+      'managerPin': ?managerPin,
+    }),
+  );
+
+  static Future<void> setAvailability(
+    String itemId,
+    bool active,
+    String? managerPin,
+  ) async => _post('/items/$itemId/availability', {
+    'active': active,
+    'managerPin': ?managerPin,
+  });
+
+  /// Multipart photo upload (manager-gated). JPEG/PNG, ≤2MB, replaces existing.
+  static Future<void> uploadItemPhoto(
+    String itemId,
+    List<int> bytes,
+    String contentType,
+    String managerPin,
+  ) async {
+    final req =
+        http.MultipartRequest('POST', Uri.parse('$baseUrl/items/$itemId/photo'))
+          ..headers['Authorization'] = 'Bearer $_token'
+          ..fields['managerPin'] = managerPin
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'photo',
+              bytes,
+              filename: 'photo',
+              contentType: http_parser.MediaType.parse(contentType),
+            ),
+          );
+    if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
+    final res = await _send(
+      () async => http.Response.fromStream(await req.send()),
+    );
+    _throwOnError(res);
+  }
+
+  static Future<Check> setCorkage(int checkId, int bottles) async =>
+      Check.fromJson(
+        await _post('/checks/$checkId/corkage', {'bottles': bottles}),
+      );
+
+  // --- settlement-time split: bill groups. All money comes back server-computed
+  // on the Check (check.split); the client never sums group totals itself.
+
+  static Future<Check> createSplit(
+    int checkId, {
+    int groups = 2,
+    bool even = false,
+  }) async => Check.fromJson(
+    await _post('/checks/$checkId/split', {'groups': groups, 'even': even}),
+  );
+
+  static Future<Check> clearSplit(int checkId) async =>
+      Check.fromJson(await _delete('/checks/$checkId/split'));
+
+  static Future<Check> addSplitGroup(int checkId) async =>
+      Check.fromJson(await _post('/checks/$checkId/split/groups'));
+
+  static Future<Check> deleteSplitGroup(int checkId, int groupId) async =>
+      Check.fromJson(await _delete('/checks/$checkId/split/groups/$groupId'));
+
+  static Future<Check> assignLine(
+    int checkId,
+    int groupId,
+    int lineId,
+    int qty,
+  ) async => Check.fromJson(
+    await _post('/checks/$checkId/split/groups/$groupId/lines', {
+      'lineId': lineId,
+      'qty': qty,
+    }),
+  );
+
+  static Future<Check> unassignLine(
+    int checkId,
+    int groupId,
+    int lineId,
+    int qty,
+  ) async => Check.fromJson(
+    await _post(
+      '/checks/$checkId/split/groups/$groupId/lines/$lineId/unassign',
+      {'qty': qty},
+    ),
+  );
+
+  static Future<Check> moveCorkage(int checkId, int groupId) async =>
+      Check.fromJson(
+        await _post('/checks/$checkId/split/corkage', {'groupId': groupId}),
+      );
+
+  static Future<TenderResult> tenderCash(
+    int checkId,
+    int amountTenderedCents, {
+    int? groupId,
+  }) async {
+    final json = await _post('/checks/$checkId/tenders', {
+      'type': 'CASH',
+      'amountTenderedCents': amountTenderedCents,
+      'groupId': ?groupId,
+    });
+    return TenderResult(
+      Tender.fromJson(json['tender']),
+      Check.fromJson(json['check']),
+    );
+  }
+
+  static Future<Check> finalizeCheck(int checkId) async =>
+      Check.fromJson(await _post('/checks/$checkId/finalize'));
+
+  /// Confirm-then-record electronic tender, step 1: get payment instructions.
+  static Future<TenderInstructions> initiateTender(
+    int checkId,
+    String type, {
+    int? amountCents,
+    int? groupId,
+  }) async => TenderInstructions.fromJson(
+    await _post('/checks/$checkId/tenders/initiate', {
+      'type': type,
+      'amountCents': ?amountCents,
+      'groupId': ?groupId,
+    }),
+  );
+
+  /// Step 2: staff saw the money arrive — record it.
+  static Future<TenderResult> confirmTender(
+    int checkId,
+    String type,
+    int amountCents, {
+    int? groupId,
+  }) async {
+    final json = await _post('/checks/$checkId/tenders/confirm', {
+      'type': type,
+      'amountCents': amountCents,
+      'groupId': ?groupId,
+    });
+    return TenderResult(
+      Tender.fromJson(json['tender']),
+      Check.fromJson(json['check']),
+    );
+  }
+
+  static Future<String> receiptText(int checkId) async =>
+      (await _get('/checks/$checkId/receipt'))['text'];
+
+  /// Provisional "check please" bill: render + spool the current state, return the
+  /// text for preview. Non-mutating server-side — callable repeatedly after edits.
+  /// [groupId] prints one bill group of a split check.
+  static Future<String> printBill(int checkId, {int? groupId}) async =>
+      (await _post(
+        '/checks/$checkId/bill${groupId == null ? "" : "?groupId=$groupId"}',
+      ))['text'];
+
+  static Future<Check> acceptPendingLine(int checkId, int lineId) async =>
+      Check.fromJson(
+        await _post('/checks/$checkId/pending-lines/$lineId/accept'),
+      );
+
+  static Future<Check> rejectPendingLine(int checkId, int lineId) async =>
+      Check.fromJson(
+        await _post('/checks/$checkId/pending-lines/$lineId/reject'),
+      );
+
+  /// null when no shift is open.
+  static Future<ShiftInfo?> currentShift() async {
+    final res = await _send(
+      () => http.get(Uri.parse('$baseUrl/shifts/current'), headers: _headers),
+    );
+    if (res.statusCode == 404) return null;
+    _throwOnError(res);
+    return ShiftInfo.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  static Future<ShiftInfo> openShift(
+    int openingFloatCents,
+    String? managerPin,
+  ) async => ShiftInfo.fromJson(
+    await _post('/shifts', {
+      'openingFloatCents': openingFloatCents,
+      'managerPin': ?managerPin,
+    }),
+  );
+
+  static Future<ShiftReport> xReport() async =>
+      ShiftReport.fromJson(await _get('/shifts/current/report'));
+
+  /// X-report layout over closed-at dates, inclusive (YYYY-MM-DD).
+  static Future<ShiftReport> rangeReport(String from, String to) async =>
+      ShiftReport.fromJson(await _get('/reports/range?from=$from&to=$to'));
+
+  static Future<ShiftReport> closeShift(
+    int closingCountCents,
+    String? managerPin,
+  ) async => ShiftReport.fromJson(
+    await _post('/shifts/current/close', {
+      'closingCountCents': closingCountCents,
+      'managerPin': ?managerPin,
+    }),
+  );
+
+  // --- refunds: return money on a finalized (CLOSED) check ---
+
+  /// Recent CLOSED checks with their refund state — the refund picker.
+  static Future<List<ClosedCheckSummary>> recentClosedChecks() async =>
+      ((await _get('/checks/recent')) as List)
+          .map((c) => ClosedCheckSummary.fromJson(c))
+          .toList();
+
+  /// A check's grand total, what's been refunded, and its refund history.
+  static Future<RefundInfo> refundInfo(int checkId) async =>
+      RefundInfo.fromJson(await _get('/checks/$checkId/refunds'));
+
+  /// Refund by amount ([amountCents]) or by line ([lines] = [{lineId,qty}]).
+  /// [tenderType] is CASH | CARD | BANK_TRANSFER. Returns the refund + slip.
+  static Future<RefundResult> refundCheck(
+    int checkId, {
+    int? amountCents,
+    List<Map<String, int>>? lines,
+    required String tenderType,
+    required String reason,
+    String? managerPin,
+  }) async {
+    final json = await _post('/checks/$checkId/refund', {
+      'amountCents': ?amountCents,
+      'lines': ?lines,
+      'tenderType': tenderType,
+      'reason': reason,
+      'managerPin': ?managerPin,
+    });
+    return RefundResult.fromJson(json);
+  }
+
+  // --- cash movements: non-sale cash in/out of the till ---
+
+  /// Cash movements on the open shift (empty if none). The till log.
+  static Future<List<CashMovement>> cashMovements() async =>
+      ((await _get('/cash-movements')) as List)
+          .map((m) => CashMovement.fromJson(m))
+          .toList();
+
+  /// Record a cash-in (IN) or cash-out (OUT). Manager-gated. Returns the row + slip.
+  static Future<CashMovementResult> recordCashMovement(
+    String direction,
+    int amountCents,
+    String reason,
+    String? managerPin,
+  ) async {
+    final json = await _post('/cash-movements', {
+      'direction': direction,
+      'amountCents': amountCents,
+      'reason': reason,
+      'managerPin': ?managerPin,
+    });
+    return CashMovementResult.fromJson(json);
+  }
+}
+
+class ApiException implements Exception {
+  final String message; // server's english debug message (logs/debug only)
+  final String? code; // machine code, translated client-side
+  ApiException(this.message, [this.code]);
+
+  /// User-facing text: the localized copy for [code], or — for an unknown or
+  /// missing code — a clean generic message. The raw server [message] (internal
+  /// ids, "HTTP 409", etc.) is never shown to end users; use it only for logs.
+  @override
+  String toString() =>
+      L(Prefs.instance.isEn).apiError(code) ??
+      L(Prefs.instance.isEn).apiError('internal')!;
+}
+
+/// 401 — session missing/expired; UI should return to the login screen.
+class AuthException implements Exception {
+  @override
+  String toString() => L(Prefs.instance.isEn).apiError('login_required')!;
+}
+
+/// Mid-session expiry: the redirect to login already happened (or is in
+/// flight). Display sites suppress this — it is not a user-facing error.
+class SessionExpiredException extends AuthException {}
+
+/// 401 device_required / device_revoked: this terminal must (re)pair. The
+/// redirect to the pairing screen already happened (or is in flight); display
+/// sites suppress it like [SessionExpiredException].
+class PairingRequiredException extends SessionExpiredException {
+  final String code; // device_required | device_revoked
+  PairingRequiredException([this.code = 'device_required']);
+  @override
+  String toString() =>
+      L(Prefs.instance.isEn).apiError(code) ??
+      L(Prefs.instance.isEn).apiError('internal')!;
+}
+
+class AuthUser {
+  final String token, userId, name, role, languageCode, calendar;
+
+  /// Effective grants the store computed for this user (CONTRACT §7). Used to
+  /// skip the manager-PIN prompt for actions the user is already allowed.
+  final Set<String> grants;
+  AuthUser(
+    this.token,
+    this.userId,
+    this.name,
+    this.role,
+    this.languageCode,
+    this.calendar, {
+    this.grants = const {},
+  });
+  factory AuthUser.fromJson(Map<String, dynamic> j, String token) => AuthUser(
+    token,
+    j['userId'],
+    j['name'],
+    j['role'],
+    j['languageCode'] ?? 'en',
+    j['calendar'] ?? 'CE',
+    grants: ((j['grants'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toSet(),
+  );
+  bool get isManager => role == 'MANAGER';
+
+  /// Offline grant check: does the acting user hold [permission]?
+  bool can(String permission) => grants.contains(permission);
+}
+
+/// The fixed grant vocabulary (mirrors the store / CONTRACT §7).
+class Perm {
+  static const voidCheck = 'void';
+  static const refund = 'refund';
+  static const cashMovement = 'cash_movement';
+  static const openShift = 'open_shift';
+  static const closeShift = 'close_shift';
+  static const zoneOpenClose = 'zone_open_close';
+  static const editMenu = 'edit_menu';
+  // Defined for completeness; portal-configurable but not yet gated on the store.
+  static const discountComp = 'discount_comp';
+  static const priceOverride = 'price_override';
+  static const manageStaff = 'manage_staff';
+}
+
+/// $1,010 for whole CAD, $10.50 otherwise. Cents everywhere on the wire.
+String cad(int cents) {
+  final sign = cents < 0 ? '-' : '';
+  final abs = cents.abs();
+  final whole = abs ~/ 100;
+  final frac = abs % 100;
+  final grouped = whole.toString().replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+$)'),
+    (m) => '${m[1]},',
+  );
+  return frac == 0
+      ? '$sign\$$grouped'
+      : '$sign\$$grouped.${frac.toString().padLeft(2, '0')}';
+}
+
+class Category {
+  final String id, nameFr, nameEn;
+  final int sortOrder;
+  Category(this.id, this.nameFr, this.nameEn, this.sortOrder);
+  factory Category.fromJson(Map<String, dynamic> j) =>
+      Category(j['id'], j['nameFr'], j['nameEn'], j['sortOrder'] ?? 0);
+}
+
+class Staff {
+  final String id, name, role;
+  Staff(this.id, this.name, this.role);
+  factory Staff.fromJson(Map<String, dynamic> j) =>
+      Staff(j['id'], j['name'], j['role']);
+}
+
+class VenueSettings {
+  final String cardProcessor, bankName, bankAccountNumber, bankAccountName;
+  final int serviceChargePercent;
+  final int corkagePerBottleCents;
+  final String receiptFooter, venuePhone, venueAddress;
+  final int sessionIdleMinutes;
+  final bool pendingAlertsEnabled;
+  final int pendingAlertEscalateSeconds;
+  final int pendingAlertVolume;
+  final String printerIp;
+  final int printerPort;
+  VenueSettings(
+    this.cardProcessor,
+    this.bankName,
+    this.bankAccountNumber,
+    this.bankAccountName,
+    this.serviceChargePercent,
+    this.corkagePerBottleCents,
+    this.receiptFooter,
+    this.venuePhone,
+    this.venueAddress,
+    this.sessionIdleMinutes,
+    this.pendingAlertsEnabled,
+    this.pendingAlertEscalateSeconds,
+    this.pendingAlertVolume,
+    this.printerIp,
+    this.printerPort,
+  );
+  factory VenueSettings.fromJson(Map<String, dynamic> j) => VenueSettings(
+    j['cardProcessor'],
+    j['bankName'],
+    j['bankAccountNumber'],
+    j['bankAccountName'],
+    j['serviceChargePercent'],
+    j['corkagePerBottleCents'],
+    j['receiptFooter'],
+    j['venuePhone'],
+    j['venueAddress'],
+    j['sessionIdleMinutes'],
+    j['pendingAlertsEnabled'] ?? true,
+    j['pendingAlertEscalateSeconds'] ?? 90,
+    j['pendingAlertVolume'] ?? 80,
+    j['printerIp'] ?? '',
+    j['printerPort'] ?? 9100,
+  );
+}
+
+/// Network thermal-printer health, from GET /printer/status and POST /printer/test.
+class PrinterStatus {
+  final bool configured;
+  final bool online;
+  final String? lastError;
+  final String? lastOkAt;
+  PrinterStatus(this.configured, this.online, this.lastError, this.lastOkAt);
+  factory PrinterStatus.fromJson(Map<String, dynamic> j) => PrinterStatus(
+    j['configured'] ?? false,
+    j['online'] ?? false,
+    j['lastError'],
+    j['lastOkAt'],
+  );
+}
+
+/// Result of the bulk "print all table QR slips" action (POST /tables/slips/print-all).
+class PrintAllResult {
+  final int printed, attempted;
+  final bool configured, online;
+  PrintAllResult(this.printed, this.attempted, this.configured, this.online);
+  factory PrintAllResult.fromJson(Map<String, dynamic> j) => PrintAllResult(
+    j['printed'] ?? 0,
+    j['attempted'] ?? 0,
+    j['configured'] ?? false,
+    j['online'] ?? false,
+  );
+}
+
+/// The any-staff subset of settings that drives pending-order alerts.
+class AlertConfig {
+  final bool pendingAlertsEnabled;
+  final int pendingAlertEscalateSeconds;
+  final int pendingAlertVolume;
+  AlertConfig(
+    this.pendingAlertsEnabled,
+    this.pendingAlertEscalateSeconds,
+    this.pendingAlertVolume,
+  );
+  factory AlertConfig.fromJson(Map<String, dynamic> j) => AlertConfig(
+    j['pendingAlertsEnabled'] ?? true,
+    j['pendingAlertEscalateSeconds'] ?? 90,
+    j['pendingAlertVolume'] ?? 80,
+  );
+}
+
+class Zone {
+  final String id, nameFr, nameEn;
+  final String status; // OPEN | CLOSED
+  final List<TableInfo> tables;
+
+  /// Inert structural props (pool/bar/pillar) drawn beneath the tables.
+  final List<FloorObject> objects;
+
+  /// Table-label prefix (U/O/B/L): every table here is labelled "{prefix}-{n}".
+  final String labelPrefix;
+  Zone(
+    this.id,
+    this.nameFr,
+    this.nameEn,
+    this.status,
+    this.tables,
+    this.objects,
+    this.labelPrefix,
+  );
+  bool get isClosed => status == 'CLOSED';
+  factory Zone.fromJson(Map<String, dynamic> j) => Zone(
+    j['id'],
+    j['nameFr'],
+    j['nameEn'],
+    j['status'] ?? 'OPEN',
+    (j['tables'] as List).map((t) => TableInfo.fromJson(t)).toList(),
+    ((j['objects'] as List?) ?? const [])
+        .map((o) => FloorObject.fromJson(o))
+        .toList(),
+    j['labelPrefix'] ?? '',
+  );
+}
+
+/// A non-orderable structural prop on the floor plan — a pool table, the bar
+/// front, a pillar. Pure context: never a check, no seats, no status color, not
+/// tappable in service mode. Same logical 0–1000 canvas as [TableInfo].
+class FloorObject {
+  final String id;
+  final String type; // POOL | BAR_FRONT | PILLAR
+  final int x, y, width, height, rotation;
+  final String? label;
+  FloorObject(
+    this.id,
+    this.type,
+    this.x,
+    this.y,
+    this.width,
+    this.height,
+    this.rotation,
+    this.label,
+  );
+  factory FloorObject.fromJson(Map<String, dynamic> j) => FloorObject(
+    j['id'],
+    j['type'],
+    j['x'] ?? 0,
+    j['y'] ?? 0,
+    j['width'] ?? 100,
+    j['height'] ?? 100,
+    j['rotation'] ?? 0,
+    j['label'],
+  );
+
+  /// Editor-local geometry mutation (drag/resize/rotate); identity carries over.
+  FloorObject copyWith({
+    int? x,
+    int? y,
+    int? width,
+    int? height,
+    int? rotation,
+  }) => FloorObject(
+    id,
+    type,
+    x ?? this.x,
+    y ?? this.y,
+    width ?? this.width,
+    height ?? this.height,
+    rotation ?? this.rotation,
+    label,
+  );
+
+  /// The geometry slice the batch "objects layout" endpoint expects.
+  Map<String, dynamic> get geometryJson => {
+    'id': id,
+    'x': x,
+    'y': y,
+    'width': width,
+    'height': height,
+    'rotation': rotation,
+  };
+}
+
+class TableInfo {
+  final String id, label;
+  final String? parentTableId, nameOverride;
+  final int? openCheckId;
+  final String? openCheckStatus; // OPEN | TOTAL_LOCKED (null = free)
+  final int pendingCount;
+
+  /// ISO timestamp of the oldest un-actioned pending line; null when none.
+  final String? oldestPendingAt;
+  final int? openCheckTotalCents;
+  final String? openCheckOpenedAt;
+
+  /// Floor-plan geometry: logical units on the server's 0–1000 canvas.
+  final int x, y, width, height, rotation, seats;
+  final String shape; // ROUND | SQUARE | RECT | BAR
+  TableInfo(
+    this.id,
+    this.label,
+    this.parentTableId,
+    this.nameOverride,
+    this.openCheckId,
+    this.openCheckStatus,
+    this.pendingCount,
+    this.oldestPendingAt,
+    this.openCheckTotalCents,
+    this.openCheckOpenedAt,
+    this.x,
+    this.y,
+    this.width,
+    this.height,
+    this.rotation,
+    this.shape,
+    this.seats,
+  );
+  factory TableInfo.fromJson(Map<String, dynamic> j) => TableInfo(
+    j['id'],
+    j['label'],
+    j['parentTableId'],
+    j['nameOverride'],
+    j['openCheckId'],
+    j['openCheckStatus'],
+    j['pendingCount'] ?? 0,
+    j['oldestPendingAt'],
+    j['openCheckTotalCents'],
+    j['openCheckOpenedAt'],
+    j['x'] ?? 0,
+    j['y'] ?? 0,
+    j['width'] ?? 100,
+    j['height'] ?? 100,
+    j['rotation'] ?? 0,
+    j['shape'] ?? 'SQUARE',
+    j['seats'] ?? 4,
+  );
+  String get displayLabel => nameOverride ?? label;
+  bool get isVip => nameOverride != null;
+
+  /// Editor-local mutation (drag/resize/rename); occupancy fields carry over.
+  TableInfo copyWith({
+    int? x,
+    int? y,
+    int? width,
+    int? height,
+    int? rotation,
+    String? shape,
+    int? seats,
+    String? label,
+    String? nameOverride,
+    bool clearNameOverride = false,
+  }) => TableInfo(
+    id,
+    label ?? this.label,
+    parentTableId,
+    clearNameOverride ? null : (nameOverride ?? this.nameOverride),
+    openCheckId,
+    openCheckStatus,
+    pendingCount,
+    oldestPendingAt,
+    openCheckTotalCents,
+    openCheckOpenedAt,
+    x ?? this.x,
+    y ?? this.y,
+    width ?? this.width,
+    height ?? this.height,
+    rotation ?? this.rotation,
+    shape ?? this.shape,
+    seats ?? this.seats,
+  );
+
+  /// The geometry slice the batch "save layout" endpoint expects.
+  Map<String, dynamic> get geometryJson => {
+    'id': id,
+    'x': x,
+    'y': y,
+    'width': width,
+    'height': height,
+    'rotation': rotation,
+    'shape': shape,
+    'seats': seats,
+  };
+}
+
+class Variant {
+  final String id, labelFr, labelEn;
+  final int priceCents;
+  Variant(this.id, this.labelFr, this.labelEn, this.priceCents);
+  factory Variant.fromJson(Map<String, dynamic> j) =>
+      Variant(j['id'], j['labelFr'], j['labelEn'], j['priceCents']);
+}
+
+class Item {
+  final String id,
+      nameFr,
+      nameEn,
+      descriptionFr,
+      descriptionEn,
+      category,
+      abbrev;
+  final bool isAlcohol, active;
+  final List<Variant> variants;
+
+  /// Cache-busting photo version; null = no photo (tile shows the badge).
+  final int? photoVersion;
+  Item(
+    this.id,
+    this.nameFr,
+    this.nameEn,
+    this.descriptionFr,
+    this.descriptionEn,
+    this.category,
+    this.abbrev,
+    this.isAlcohol,
+    this.active,
+    this.variants,
+    this.photoVersion,
+  );
+  factory Item.fromJson(Map<String, dynamic> j) => Item(
+    j['id'],
+    j['nameFr'],
+    j['nameEn'],
+    j['descriptionFr'] ?? '',
+    j['descriptionEn'] ?? '',
+    j['category'],
+    j['abbrev'],
+    j['isAlcohol'],
+    j['active'] ?? true,
+    (j['variants'] as List).map((v) => Variant.fromJson(v)).toList(),
+    j['photoVersion'],
+  );
+
+  /// Photo URL, version-busted (?v=) so a replaced photo bypasses every cache
+  /// layer. [width] asks the server for its downscaled variant (?w=, snapped
+  /// to fixed buckets) — tiles should never pull the ~170KB 1000px original.
+  String? photoUrl({int? width}) => photoVersion == null
+      ? null
+      : '${Api.baseUrl}/photos/$id?v=$photoVersion${width == null ? '' : '&w=$width'}';
+}
+
+class CheckLine {
+  final int id, qty, unitPriceCents, lineTotalCents;
+  final String nameFr, nameEn;
+
+  /// Null on open (off-menu) lines — the name lives on the line itself.
+  final String? itemId, variantId;
+
+  /// Set only when the item has >1 variant (bottle/pitcher/tower).
+  final String? variantLabelFr, variantLabelEn;
+  final String? note;
+  CheckLine(
+    this.id,
+    this.itemId,
+    this.variantId,
+    this.nameFr,
+    this.nameEn,
+    this.variantLabelFr,
+    this.variantLabelEn,
+    this.qty,
+    this.unitPriceCents,
+    this.lineTotalCents,
+    this.note,
+  );
+  factory CheckLine.fromJson(Map<String, dynamic> j) => CheckLine(
+    j['id'],
+    j['itemId'],
+    j['variantId'],
+    j['nameFr'],
+    j['nameEn'],
+    j['variantLabelFr'],
+    j['variantLabelEn'],
+    j['qty'],
+    j['unitPriceCents'],
+    j['lineTotalCents'],
+    j['note'],
+  );
+}
+
+class FeeLine {
+  final String code, labelFr, labelEn;
+  final int amountCents;
+  FeeLine(this.code, this.labelFr, this.labelEn, this.amountCents);
+  factory FeeLine.fromJson(Map<String, dynamic> j) =>
+      FeeLine(j['code'], j['labelFr'], j['labelEn'], j['amountCents']);
+}
+
+class Tender {
+  final int id,
+      amountTenderedCents,
+      amountAppliedCents,
+      roundingAdjustmentCents,
+      changeCents;
+  final String type;
+
+  /// Bill group this tender paid into; null = whole-check tender.
+  final int? groupId;
+  Tender(
+    this.id,
+    this.type,
+    this.amountTenderedCents,
+    this.amountAppliedCents,
+    this.roundingAdjustmentCents,
+    this.changeCents,
+    this.groupId,
+  );
+  factory Tender.fromJson(Map<String, dynamic> j) => Tender(
+    j['id'],
+    j['type'],
+    j['amountTenderedCents'],
+    j['amountAppliedCents'],
+    j['roundingAdjustmentCents'],
+    j['changeCents'],
+    j['groupId'],
+  );
+}
+
+/// One (lineId, qty) slice of a check line inside a bill group / unassigned pool.
+class Allocation {
+  final int lineId, qty;
+  Allocation(this.lineId, this.qty);
+  factory Allocation.fromJson(Map<String, dynamic> j) =>
+      Allocation(j['lineId'], j['qty']);
+}
+
+/// One bill group of a split check. All money server-computed.
+class BillGroup {
+  final int id, number;
+  final bool includesCorkage;
+  final int? fixedAmountCents; // set on even ÷N money-only groups
+  final List<Allocation> allocations;
+  final int itemsSubtotalCents, grandTotalCents, paidCents, outstandingCents;
+  final List<FeeLine> fees;
+  BillGroup(
+    this.id,
+    this.number,
+    this.includesCorkage,
+    this.fixedAmountCents,
+    this.allocations,
+    this.itemsSubtotalCents,
+    this.fees,
+    this.grandTotalCents,
+    this.paidCents,
+    this.outstandingCents,
+  );
+  factory BillGroup.fromJson(Map<String, dynamic> j) => BillGroup(
+    j['id'],
+    j['number'],
+    j['includesCorkage'] ?? false,
+    j['fixedAmountCents'],
+    ((j['allocations'] ?? []) as List)
+        .map((a) => Allocation.fromJson(a))
+        .toList(),
+    j['itemsSubtotalCents'],
+    ((j['fees'] ?? []) as List).map((f) => FeeLine.fromJson(f)).toList(),
+    j['grandTotalCents'],
+    j['paidCents'],
+    j['outstandingCents'],
+  );
+
+  /// Paid = money actually covered this group — an empty $0 group is NOT paid.
+  bool get isPaid => outstandingCents == 0 && paidCents > 0;
+}
+
+/// Settlement-time split overlay: groups + the not-yet-assigned pool.
+class SplitInfo {
+  final List<BillGroup> groups;
+  final List<Allocation> unassigned;
+  final bool even; // ÷N money-only split (no line allocation)
+  final bool locked; // any group tendered → no more edits
+  SplitInfo(this.groups, this.unassigned, this.even, this.locked);
+  factory SplitInfo.fromJson(Map<String, dynamic> j) => SplitInfo(
+    (j['groups'] as List).map((g) => BillGroup.fromJson(g)).toList(),
+    ((j['unassigned'] ?? []) as List)
+        .map((a) => Allocation.fromJson(a))
+        .toList(),
+    j['even'] ?? false,
+    j['locked'] ?? false,
+  );
+}
+
+class Check {
+  final int id;
+  final String tableId, status;
+  final int corkageBottles,
+      itemsSubtotalCents,
+      grandTotalCents,
+      paidCents,
+      outstandingCents;
+  final List<CheckLine> lines;
+  final List<CheckLine> pendingLines;
+  final List<FeeLine> fees;
+  final List<Tender> tenders;
+
+  /// Settlement-time bill groups; null = not split (normal single-bill flow).
+  final SplitInfo? split;
+  Check(
+    this.id,
+    this.tableId,
+    this.status,
+    this.corkageBottles,
+    this.lines,
+    this.pendingLines,
+    this.fees,
+    this.itemsSubtotalCents,
+    this.grandTotalCents,
+    this.paidCents,
+    this.outstandingCents,
+    this.tenders,
+    this.split,
+  );
+  factory Check.fromJson(Map<String, dynamic> j) => Check(
+    j['id'],
+    j['tableId'],
+    j['status'],
+    j['corkageBottles'],
+    (j['lines'] as List).map((l) => CheckLine.fromJson(l)).toList(),
+    ((j['pendingLines'] ?? []) as List)
+        .map((l) => CheckLine.fromJson(l))
+        .toList(),
+    (j['fees'] as List).map((f) => FeeLine.fromJson(f)).toList(),
+    j['itemsSubtotalCents'],
+    j['grandTotalCents'],
+    j['paidCents'],
+    j['outstandingCents'],
+    (j['tenders'] as List).map((t) => Tender.fromJson(t)).toList(),
+    j['split'] == null ? null : SplitInfo.fromJson(j['split']),
+  );
+}
+
+class ShiftInfo {
+  final int id;
+  final String status, openedAt, openedBy;
+  final int openingFloatCents;
+  ShiftInfo(
+    this.id,
+    this.status,
+    this.openedAt,
+    this.openedBy,
+    this.openingFloatCents,
+  );
+  factory ShiftInfo.fromJson(Map<String, dynamic> j) => ShiftInfo(
+    j['id'],
+    j['status'],
+    j['openedAt'],
+    j['openedBy'],
+    j['openingFloatCents'],
+  );
+}
+
+class TenderSummary {
+  final String type;
+  final int amountCents, count;
+  TenderSummary(this.type, this.amountCents, this.count);
+  factory TenderSummary.fromJson(Map<String, dynamic> j) =>
+      TenderSummary(j['type'], j['amountCents'], j['count']);
+}
+
+class ItemMixEntry {
+  final String itemId, nameFr, nameEn;
+  final int qty, revenueCents;
+  ItemMixEntry(
+    this.itemId,
+    this.nameFr,
+    this.nameEn,
+    this.qty,
+    this.revenueCents,
+  );
+  factory ItemMixEntry.fromJson(Map<String, dynamic> j) => ItemMixEntry(
+    j['itemId'],
+    j['nameFr'],
+    j['nameEn'] ?? j['nameFr'],
+    j['qty'],
+    j['revenueCents'],
+  );
+}
+
+class VoidEntry {
+  final int checkId;
+  final String reason, voidedBy;
+  VoidEntry(this.checkId, this.reason, this.voidedBy);
+  factory VoidEntry.fromJson(Map<String, dynamic> j) =>
+      VoidEntry(j['checkId'], j['reason'], j['voidedBy']);
+}
+
+class ShiftReport {
+  final int shiftId;
+  final String shiftStatus, openedAt, openedBy;
+  final int openingFloatCents,
+      revenueCents,
+      transactionCount,
+      avgCheckCents,
+      corkageCents;
+  final List<TenderSummary> tenderBreakdown;
+  final List<ItemMixEntry> itemMix;
+  final List<VoidEntry> voids;
+
+  /// Non-sale cash movements + refunds posted to the shift (feed expected cash).
+  final int cashPaidInCents,
+      cashPaidOutCents,
+      cashRefundCents,
+      refundTotalCents;
+  final int? expectedCashCents, closingCountCents, overShortCents;
+  ShiftReport(
+    this.shiftId,
+    this.shiftStatus,
+    this.openedAt,
+    this.openedBy,
+    this.openingFloatCents,
+    this.revenueCents,
+    this.transactionCount,
+    this.avgCheckCents,
+    this.corkageCents,
+    this.tenderBreakdown,
+    this.itemMix,
+    this.voids,
+    this.cashPaidInCents,
+    this.cashPaidOutCents,
+    this.cashRefundCents,
+    this.refundTotalCents,
+    this.expectedCashCents,
+    this.closingCountCents,
+    this.overShortCents,
+  );
+  factory ShiftReport.fromJson(Map<String, dynamic> j) => ShiftReport(
+    j['shiftId'],
+    j['shiftStatus'],
+    j['openedAt'],
+    j['openedBy'],
+    j['openingFloatCents'],
+    j['revenueCents'],
+    j['transactionCount'],
+    j['avgCheckCents'],
+    j['corkageCents'],
+    (j['tenderBreakdown'] as List)
+        .map((t) => TenderSummary.fromJson(t))
+        .toList(),
+    (j['itemMix'] as List).map((i) => ItemMixEntry.fromJson(i)).toList(),
+    (j['voids'] as List).map((v) => VoidEntry.fromJson(v)).toList(),
+    j['cashPaidInCents'] ?? 0,
+    j['cashPaidOutCents'] ?? 0,
+    j['cashRefundCents'] ?? 0,
+    j['refundTotalCents'] ?? 0,
+    j['expectedCashCents'],
+    j['closingCountCents'],
+    j['overShortCents'],
+  );
+}
+
+/// A CLOSED check in the refund picker: what it was, what's left to refund.
+class ClosedCheckSummary {
+  final int id;
+  final String tableLabel, closedAt;
+  final int grandTotalCents, refundedCents, refundableCents;
+  ClosedCheckSummary(
+    this.id,
+    this.tableLabel,
+    this.closedAt,
+    this.grandTotalCents,
+    this.refundedCents,
+    this.refundableCents,
+  );
+  factory ClosedCheckSummary.fromJson(Map<String, dynamic> j) =>
+      ClosedCheckSummary(
+        j['id'],
+        j['tableLabel'],
+        j['closedAt'],
+        j['grandTotalCents'],
+        j['refundedCents'],
+        j['refundableCents'],
+      );
+}
+
+class RefundView {
+  final int id, checkId, grossCents, netCents, taxCents;
+  final String tenderType, reason, refundedBy, createdAt;
+  RefundView(
+    this.id,
+    this.checkId,
+    this.grossCents,
+    this.netCents,
+    this.taxCents,
+    this.tenderType,
+    this.reason,
+    this.refundedBy,
+    this.createdAt,
+  );
+  factory RefundView.fromJson(Map<String, dynamic> j) => RefundView(
+    j['id'],
+    j['checkId'],
+    j['grossCents'],
+    j['netCents'],
+    j['taxCents'],
+    j['tenderType'],
+    j['reason'],
+    j['refundedBy'],
+    j['createdAt'],
+  );
+}
+
+class RefundInfo {
+  final int checkId, grandTotalCents, refundedCents, refundableCents;
+  final List<RefundView> refunds;
+  RefundInfo(
+    this.checkId,
+    this.grandTotalCents,
+    this.refundedCents,
+    this.refundableCents,
+    this.refunds,
+  );
+  factory RefundInfo.fromJson(Map<String, dynamic> j) => RefundInfo(
+    j['checkId'],
+    j['grandTotalCents'],
+    j['refundedCents'],
+    j['refundableCents'],
+    (j['refunds'] as List).map((r) => RefundView.fromJson(r)).toList(),
+  );
+}
+
+class RefundResult {
+  final RefundView refund;
+  final Check check;
+  final String slipText;
+  RefundResult(this.refund, this.check, this.slipText);
+  factory RefundResult.fromJson(Map<String, dynamic> j) => RefundResult(
+    RefundView.fromJson(j['refund']),
+    Check.fromJson(j['check']),
+    j['slipText'],
+  );
+}
+
+class CashMovement {
+  final int id;
+  final int? shiftId;
+  final String direction, reason, createdBy, createdAt;
+  final int amountCents;
+  CashMovement(
+    this.id,
+    this.shiftId,
+    this.direction,
+    this.amountCents,
+    this.reason,
+    this.createdBy,
+    this.createdAt,
+  );
+  factory CashMovement.fromJson(Map<String, dynamic> j) => CashMovement(
+    j['id'],
+    j['shiftId'],
+    j['direction'],
+    j['amountCents'],
+    j['reason'],
+    j['createdBy'],
+    j['createdAt'],
+  );
+}
+
+class CashMovementResult {
+  final CashMovement movement;
+  final String slipText;
+  CashMovementResult(this.movement, this.slipText);
+  factory CashMovementResult.fromJson(Map<String, dynamic> j) =>
+      CashMovementResult(CashMovement.fromJson(j['movement']), j['slipText']);
+}
+
+class DisplayField {
+  final String labelFr, labelEn, value;
+  DisplayField(this.labelFr, this.labelEn, this.value);
+  factory DisplayField.fromJson(Map<String, dynamic> j) =>
+      DisplayField(j['labelFr'], j['labelEn'], j['value']);
+}
+
+class TenderInstructions {
+  final String type;
+  final int amountCents;
+  final String? qrPayload;
+  final List<DisplayField> displayFields;
+  TenderInstructions(
+    this.type,
+    this.amountCents,
+    this.qrPayload,
+    this.displayFields,
+  );
+  factory TenderInstructions.fromJson(Map<String, dynamic> j) =>
+      TenderInstructions(
+        j['type'],
+        j['amountCents'],
+        j['qrPayload'],
+        ((j['displayFields'] ?? []) as List)
+            .map((f) => DisplayField.fromJson(f))
+            .toList(),
+      );
+}
+
+class TenderResult {
+  final Tender tender;
+  final Check check;
+  TenderResult(this.tender, this.check);
+}

@@ -1,0 +1,20 @@
+# Keep the build context small and free of local state. The image rebuilds the
+# fat jar from source, so ship only sources + the Gradle wrapper.
+.gradle/
+.kotlin/
+build/
+out/
+bin/
+data/
+receipts/
+bills/
+# Local SQLite databases (+ WAL/SHM sidecars) — never bake dev data into the image.
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.log
+hs_err_pid*
+.env
+.env.*
+!.env.example

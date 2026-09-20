@@ -1,0 +1,1 @@
+-- Reserved migration number. New installations start with a clean fictional floor plan.

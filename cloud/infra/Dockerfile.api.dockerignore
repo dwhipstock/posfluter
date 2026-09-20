@@ -1,0 +1,7 @@
+# Per-Dockerfile ignore (BuildKit); paths relative to the build context (cloud/).
+# Keeps local build artifacts out of the context on rebuilds.
+web
+infra
+api/build
+api/.gradle
+api/.kotlin

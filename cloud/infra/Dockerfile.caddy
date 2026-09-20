@@ -1,0 +1,11 @@
+# Caddy + Route53 DNS plugin (M8): the wildcard cert for *.<base domain> is
+# issued via DNS-01, so venue store containers get TLS with zero per-cert steps.
+# Credentials come from the EC2 instance profile (IMDS) — no static AWS keys.
+# NOTE: IMDSv2 from inside a container needs the instance's metadata hop limit
+# set to 2 (see scripts/cloud-wildcard-setup.sh).
+# Base images pinned by digest (multi-arch manifest-list); Dependabot bumps them.
+FROM caddy:2-builder@sha256:198d47eaee306d4d0c38a9960c89ff2c959aa29ad51d3e2dafa3e93ac961782a AS builder
+RUN xcaddy build --with github.com/caddy-dns/route53
+
+FROM caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy

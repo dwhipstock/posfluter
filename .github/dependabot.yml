@@ -1,0 +1,89 @@
+# Dependabot: weekly dependency + base-image + action updates across every tier.
+# Runs alongside the osv-scanner workflow (osv-scanner.yml): Dependabot proposes
+# upgrades, osv-scanner flags known-vulnerable versions already in the tree.
+#
+# All updates target `develop` (not the default branch `main`) so bumps flow
+# through the same gate as everything else, released to main via a develop->main
+# PR. Never straight to main.
+#
+# We IGNORE semver-major bumps on the app tiers (gradle/npm/pub): majors carry
+# breaking API changes that fail ci and just create noise (see PRs #11/#12/#13).
+# Only the safe minor+patch bumps are proposed, batched one PR per tier, so every
+# Dependabot PR is green and mergeable. Major upgrades are done deliberately by
+# hand when we actually want them. osv-scanner still flags any known-vulnerable
+# version regardless, so security coverage is unaffected.
+version: 2
+updates:
+  # --- GitHub Actions used by the workflows ---
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # --- Gradle (JVM) — store server ---
+  - package-ecosystem: gradle
+    directory: /server
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      server-gradle:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # --- Gradle (JVM) — cloud API ---
+  - package-ecosystem: gradle
+    directory: /cloud/api
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      cloud-api-gradle:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # --- npm — Next.js portal ---
+  - package-ecosystem: npm
+    directory: /cloud/web
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      portal-npm:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # --- pub — Flutter client ---
+  - package-ecosystem: pub
+    directory: /client
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      client-pub:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # --- Docker base images (digest-pinned; Dependabot bumps the digest) ---
+  - package-ecosystem: docker
+    directories:
+      - /server
+      - /cloud/infra
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      base-images:
+        patterns: ["*"]

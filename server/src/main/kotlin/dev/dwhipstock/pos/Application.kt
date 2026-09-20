@@ -1,0 +1,285 @@
+package dev.dwhipstock.pos
+
+import dev.dwhipstock.pos.api.ManagerApprovalException
+import dev.dwhipstock.pos.api.authRoutes
+import dev.dwhipstock.pos.api.catalogRoutes
+import dev.dwhipstock.pos.api.cloudRoutes
+import dev.dwhipstock.pos.api.customerRoutes
+import dev.dwhipstock.pos.api.portalUrlFrom
+import dev.dwhipstock.pos.api.installAuthGate
+import dev.dwhipstock.pos.api.pairingRoutes
+import dev.dwhipstock.pos.api.PairingService
+import dev.dwhipstock.pos.api.floorObjectRoutes
+import dev.dwhipstock.pos.api.photoRoutes
+import dev.dwhipstock.pos.api.posRoutes
+import dev.dwhipstock.pos.api.settingsRoutes
+import dev.dwhipstock.pos.api.shiftRoutes
+import dev.dwhipstock.pos.api.tableRoutes
+import dev.dwhipstock.pos.api.zoneManagementRoutes
+import dev.dwhipstock.pos.base.AuthService
+import dev.dwhipstock.pos.base.RateLimitException
+import dev.dwhipstock.pos.base.SettingsRepository
+import dev.dwhipstock.pos.restaurant.ShiftService
+import dev.dwhipstock.pos.customers.copperlantern.CopperLanternConfig
+import dev.dwhipstock.pos.customers.copperlantern.CopperLanternSeed
+import dev.dwhipstock.pos.db.initDatabase
+import dev.dwhipstock.pos.restaurant.CheckService
+import dev.dwhipstock.pos.sdk.FilesystemPhotoStore
+import dev.dwhipstock.pos.sdk.PhotoStore
+import dev.dwhipstock.pos.sdk.PrinterAdapter
+import dev.dwhipstock.pos.sdk.NetworkThermalPrinter
+import dev.dwhipstock.pos.sdk.PrinterTarget
+import dev.dwhipstock.pos.api.printerRoutes
+import dev.dwhipstock.pos.restaurant.BadRequestException
+import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.sync.CloudSync
+import dev.dwhipstock.pos.sync.HttpCloudTransport
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.plugins.calllogging.*
+import io.ktor.server.plugins.compression.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.cors.routing.*
+import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
+
+fun main() {
+    embeddedServer(Netty, port = 8080, host = "0.0.0.0", module = Application::module).start(wait = true)
+}
+
+/**
+ * Primary non-loopback IPv4 — the address venue phones can reach when the
+ * tablet and the guests share the venue wifi. Null on airplane-mode dev boxes.
+ */
+fun detectLanIpv4(): String? = runCatching {
+    java.net.NetworkInterface.getNetworkInterfaces().asSequence()
+        .filter { it.isUp && !it.isLoopback && !it.isVirtual }
+        .flatMap { it.inetAddresses.asSequence() }
+        .filterIsInstance<java.net.Inet4Address>()
+        .firstOrNull { it.isSiteLocalAddress }?.hostAddress
+}.getOrNull()
+
+fun Application.module(
+    dbPath: String = System.getenv("POS_DB") ?: "pos.db",
+    receiptsDir: String = System.getenv("POS_RECEIPTS_DIR") ?: "receipts",
+    billsDir: String = System.getenv("POS_BILLS_DIR") ?: "bills",
+    photosDir: String = System.getenv("POS_PHOTOS_DIR") ?: "data/photos",
+    // test seams (env-driven in production): device gate + a fake pairing transport + seed mode
+    requireDeviceTokenOverride: Boolean? = null,
+    pairingTransport: dev.dwhipstock.pos.sync.CloudTransport? = null,
+    seedMode: String = System.getenv("POS_SEED") ?: "copperlantern",
+) {
+    initDatabase(dbPath)
+    // discover i18n message catalogs now so missing-key warnings surface at
+    // boot, not on the first printed receipt
+    dev.dwhipstock.pos.sdk.i18n.Messages.ensureLoaded()
+    // POS_SEED=none for cloud-provisioned venues: they start EMPTY and receive
+    // their catalog/staff from the cloud — anything present at first sync would
+    // be pushed UP into the venue's cloud catalog by ensureCatalogSnapshot().
+    // Skipping CopperLanternSeed is not enough: migrations 005/008/011/… INSERT the
+    // CopperLantern menu + floor plan directly (they mirror the seed for existing
+    // installs), so a never-synced empty-mode store also wipes that residue.
+    // Gate = no install_id yet: after the first sync the catalog is
+    // cloud-owned and must never be touched again.
+    if (seedMode != "none") {
+        CopperLanternSeed.seedIfEmpty()
+    } else {
+        wipeMigrationSeedResidueIfNeverSynced()
+    }
+    // pre-M5 databases carry plaintext PINs — hash them in place, once
+    AuthService.upgradePlaintextPins()
+    // seed the default role→grant matrix (CONTRACT §7) if absent — covers existing
+    // stores too (migration 024 only creates the table). Cloud edits override it.
+    dev.dwhipstock.pos.base.GrantsRepo.seedDefaultRoleGrantsIfEmpty()
+    // Customer tier wired statically for the single-tenant embedded deployment.
+    // TODO: config registry when a second customer exists.
+    // POS_PUBLIC_URL wins; otherwise auto-detect the LAN address so printed
+    // table QRs work out of the box at the venue.
+    val publicBaseUrl = System.getenv("POS_PUBLIC_URL")
+        ?: detectLanIpv4()?.let { "http://$it:8080" }
+        ?: "http://192.168.1.100:8080"
+    val settingsRepo = SettingsRepository()
+    // Real ESC/POS network printer, wrapping the virtual printer for the audit
+    // spool + receipt.printed outbox (unchanged), then also pushing a French-capable
+    // raster to the physical printer. Target IP/port read live from venue settings
+    // so a DHCP change applies without a restart; sends are async/non-blocking so
+    // an offline printer never blocks or rolls back a sale.
+    val thermalPrinter = NetworkThermalPrinter(
+        audit = PrinterAdapter.VirtualPrinter(receiptsDir, billsDir),
+        target = { settingsRepo.get().let { PrinterTarget(it.printerIp, it.printerPort) } },
+    )
+    val config = CopperLanternConfig(
+        settings = settingsRepo,
+        printer = thermalPrinter,
+        publicBaseUrl = publicBaseUrl,
+    )
+    log.info("Customers scan: $publicBaseUrl/m/{zone}/{n} (e.g. /m/lower/8; /m/{tableId} still works)  — table slips: $publicBaseUrl/slips")
+    val checkService = CheckService(config)
+    val shiftService = ShiftService(config)
+    val authService = AuthService(settingsRepo)
+    val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
+
+    // Cloud sync (CONTRACT.md): outbox pusher + catalog puller. Never constructed
+    // unless both env vars are set — offline-first stays the default (and tests).
+    val syncUrl = System.getenv("CLOUD_SYNC_URL")
+    val syncKey = System.getenv("CLOUD_SYNC_API_KEY")
+    var pairingService: PairingService? = pairingTransport?.let { PairingService(it) }
+    if (!syncUrl.isNullOrBlank() && !syncKey.isNullOrBlank()) {
+        val interval = System.getenv("CLOUD_SYNC_INTERVAL_SECONDS")?.toLongOrNull() ?: 10L
+        // Re-evaluated each tick (DHCP-safe). Null when nothing real is reachable
+        // (airplane-mode dev) — the heartbeat is skipped rather than reporting the
+        // fake QR fallback, so the portal shows "offline" instead of a dead IP.
+        val lanBaseUrlProvider: () -> String? = {
+            System.getenv("POS_PUBLIC_URL")?.takeIf { it.isNotBlank() }
+                ?: detectLanIpv4()?.let { "http://$it:8080" }
+        }
+        val transport = HttpCloudTransport(syncUrl, syncKey)
+        if (pairingService == null) pairingService = PairingService(transport)
+        CloudSync(
+            transport, photoStore, interval,
+            reEmitReportHistory = checkService::backfillReportCompleteClosedEvents,
+            lanBaseUrl = lanBaseUrlProvider,
+        ).start(this)
+        log.info("cloud sync enabled → $syncUrl (every ${interval}s)")
+    }
+
+    // Cloud-hosted venues run with the device gate on: terminals must pair before
+    // they can list staff or log in, and sessions stay bound to their device.
+    // On-prem/embedded stores keep the LAN behavior (off).
+    val requireDeviceToken = requireDeviceTokenOverride
+        ?: (System.getenv("POS_REQUIRE_DEVICE_TOKEN")?.toBoolean() ?: false)
+    if (requireDeviceToken) log.info("device gate ON: terminals must pair (POS_REQUIRE_DEVICE_TOKEN)")
+
+    install(ContentNegotiation) { json() }
+    // JSON payloads only (zones/items are 10-20KB of very compressible JSON —
+    // matters for staff phones on venue Wi-Fi); photos are already JPEG.
+    install(Compression) {
+        gzip {
+            matchContentType(ContentType.Application.Json, ContentType.Text.Html)
+            minimumSize(1024)
+        }
+    }
+    installAuthGate(authService, requireDeviceToken)
+    install(CallLogging)
+    install(StatusPages) {
+        // error bodies: machine `code` for client-side translation + english
+        // `error` message for logs/debugging. The server never localizes.
+        exception<NotFoundException> { call, cause ->
+            call.respond(HttpStatusCode.NotFound,
+                mapOf("error" to (cause.message ?: "not found"), "code" to cause.code))
+        }
+        exception<ConflictException> { call, cause ->
+            call.respond(HttpStatusCode.Conflict,
+                mapOf("error" to (cause.message ?: "conflict"), "code" to cause.code))
+        }
+        exception<BadRequestException> { call, cause ->
+            call.respond(HttpStatusCode.BadRequest,
+                mapOf("error" to (cause.message ?: "bad request"), "code" to cause.code))
+        }
+        exception<ManagerApprovalException> { call, cause ->
+            call.respond(HttpStatusCode.Forbidden,
+                mapOf("error" to (cause.message ?: "manager approval required"),
+                    "code" to "manager_approval_required"))
+        }
+        exception<RateLimitException> { call, cause ->
+            call.response.header(HttpHeaders.RetryAfter, cause.retryAfterSeconds.toString())
+            call.respond(HttpStatusCode.TooManyRequests,
+                mapOf("error" to (cause.message ?: "rate limited"), "code" to "rate_limited"))
+        }
+        exception<IllegalArgumentException> { call, cause ->
+            call.respond(HttpStatusCode.BadRequest,
+                mapOf("error" to (cause.message ?: "bad request"), "code" to "bad_request"))
+        }
+        exception<Throwable> { call, cause ->
+            call.application.log.error("unhandled", cause)
+            call.respond(HttpStatusCode.InternalServerError,
+                mapOf("error" to (cause.message ?: "unknown"), "code" to "internal"))
+        }
+    }
+    install(CORS) {
+        anyHost() // TODO: lock down for production
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Patch)
+        allowMethod(HttpMethod.Delete)
+        allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.Authorization)
+    }
+    routing {
+        get("/") { call.respond(mapOf("service" to "pos-server", "version" to "0.1.0")) }
+        // pairingRequired lets the terminal decide between the pairing screen and
+        // the legacy LAN flow before it has any credentials
+        get("/health") { call.respond(HealthResponse(status = "ok", pairingRequired = requireDeviceToken)) }
+        // Staff ordering web app (M7): a mobile-first page served from the store.
+        // Public shell (like the customer menu); it authenticates via POST /login
+        // inside and drives the gated ordering API with the returned bearer token.
+        // Read once — the resource is baked into the jar, and re-reading the
+        // 50KB file per request showed up as the slowest route in the logs.
+        val staffAppHtml = Thread.currentThread().contextClassLoader
+            .getResource("staff-app.html")!!.readText()
+        get("/staff-app") {
+            call.respondText(staffAppHtml, ContentType.Text.Html)
+        }
+        customerRoutes(checkService, config)
+        authRoutes(authService)
+        pairingRoutes(pairingService)
+        posRoutes(checkService, authService, photoStore)
+        tableRoutes(authService)
+        floorObjectRoutes(authService)
+        zoneManagementRoutes(authService)
+        catalogRoutes()
+        photoRoutes(photoStore, authService)
+        shiftRoutes(shiftService, authService)
+        settingsRoutes(settingsRepo)
+        printerRoutes(thermalPrinter, config)
+        // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in
+        // production, where Caddy fronts the sync API and the Next.js portal on one
+        // host — so the derived scheme://host is correct. On a SPLIT deployment
+        // (e.g. the local compose stack: sync host is the internal `api:8081`, but
+        // the owner portal is a separate LAN service on :3000) that derivation is
+        // an unreachable URL, so an explicit REPORTING_PORTAL_URL wins when set.
+        // Unset/blank → derive from CLOUD_SYNC_URL exactly as before.
+        val portalUrl = System.getenv("REPORTING_PORTAL_URL")?.takeIf { it.isNotBlank() }
+            ?: portalUrlFrom(syncUrl)
+        cloudRoutes(portalUrl)
+    }
+}
+
+/** See the POS_SEED=none branch in [module]. Clears demo seed residue, but ONLY
+ *  while the store has never synced. The
+ *  outbox goes too: pre-first-sync it holds nothing but migration echoes
+ *  (table.relabeled etc.), which would push up as junk venue history.
+ *
+ *  venue_settings is RESET, not deleted — SettingsRepository reads row id=1 with
+ *  .first() and would crash on an empty table. Migration 006 carries fictional
+ *  demo values, which must not be inherited by a newly provisioned venue. Blank
+ *  the payment and identity fields to neutral defaults; the
+ *  owner sets their own values in the portal or Settings. Later-migration columns
+ *  (printer, idle, alerts) already default to neutral values. */
+private fun wipeMigrationSeedResidueIfNeverSynced() =
+    org.jetbrains.exposed.sql.transactions.transaction {
+        if (dev.dwhipstock.pos.db.SyncState.get("install_id") != null) return@transaction
+        exec("DELETE FROM item_variants")
+        exec("DELETE FROM items")
+        exec("DELETE FROM categories")
+        exec("DELETE FROM floor_objects")
+        exec("DELETE FROM dining_tables")
+        exec("DELETE FROM zones")
+        exec("DELETE FROM sync_outbox")
+        exec(
+            "UPDATE venue_settings SET card_processor='', bank_name='', bank_account_number='', " +
+                "bank_account_name='', receipt_footer='', venue_phone='', venue_address='', " +
+                "service_charge_percent=0, corkage_per_bottle_cents=0 WHERE id=1"
+        )
+    }
+
+@Serializable
+data class HealthResponse(val status: String, val pairingRequired: Boolean = false)

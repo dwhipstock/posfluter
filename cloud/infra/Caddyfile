@@ -1,0 +1,66 @@
+# TLS via Let's Encrypt: DOMAIN must resolve to this host and port 80/443 be open
+# before first start, or the ACME challenge fails.
+{
+	email {$ACME_EMAIL}
+}
+
+# The portal + cloud API keep their own EXACT-host block (HTTP-01 cert,
+# unchanged since day one) so the wildcard block below can never take the
+# live portal down. Caddy prefers the exact host over the wildcard.
+{$DOMAIN} {
+	encode gzip
+
+	# API routes first; handle blocks are mutually exclusive.
+	handle /health {
+		reverse_proxy api:8081
+	}
+
+	handle /v1/* {
+		reverse_proxy api:8081
+	}
+
+	# Everything else is the portal.
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+# M8: every venue's store container, one wildcard cert (Route53 DNS-01 — needs
+# the route53-plugin build, see Dockerfile.caddy). <venue>.<BASE_DOMAIN> routes
+# to the container named store-<venue> on the shared compose network; a new
+# venue needs NO edit here — the provisioning script just starts its container.
+#
+# The venue slug is ALWAYS the leftmost hostname label, regardless of how many
+# labels BASE_DOMAIN has (example.com vs pos.example.com). The old
+# labels.2 index only worked for a 2-label BASE_DOMAIN and 502'd every venue on
+# a 3-label one, so we capture the leftmost label with a host_regexp instead.
+# The portal/API keep their own EXACT-host block above; Caddy prefers the exact
+# host, so this wildcard can never intercept the portal. A request with no Host
+# (empty capture) simply doesn't match @venue → no route, never store-:8080.
+# An unknown subdomain hits a nonexistent upstream → 502, never someone else's
+# venue.
+#
+# NOTE on BASE_DOMAIN: this site address needs the real base domain so the
+# route53 DNS-01 challenge requests the right "*.<base>" wildcard cert. It is
+# therefore effectively required for VENUE hosting. docker-compose defaults it
+# to empty (${BASE_DOMAIN:-}) so `docker compose ps/logs`, api-only starts, and
+# the pg_dump cron don't abort at interpolation on an un-migrated host — but a
+# host that actually serves venues MUST set BASE_DOMAIN in .env. If BASE_DOMAIN
+# is empty this address becomes "*." and Caddy will reject it, so only start the
+# caddy service once BASE_DOMAIN is set (the portal's own {$DOMAIN} block is a
+# separate exact-host site and is unaffected by this one).
+*.{$BASE_DOMAIN} {
+	encode gzip
+
+	tls {
+		dns route53
+	}
+
+	# Leftmost label = venue slug. host_regexp anchors on the label charset so
+	# a bare/malformed Host (empty capture) can't match and fall through to
+	# store-:8080; the portal's exact-host block always wins over this wildcard.
+	@venue host_regexp venue ^(?P<slug>[a-z0-9][a-z0-9-]*)\.
+	handle @venue {
+		reverse_proxy store-{http.regexp.venue.slug}:8080
+	}
+}

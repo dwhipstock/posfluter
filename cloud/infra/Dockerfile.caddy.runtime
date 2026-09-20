@@ -1,0 +1,6 @@
+# Runtime-only Caddy image, built by CI and pushed as pos-cloud-caddy:<git-sha>.
+# COPYs a caddy binary (with the route53 DNS plugin) cross-compiled for arm64 on
+# the x64 runner — Caddy is pure Go, so CGO_ENABLED=0 + GOARCH=arm64 cross-compiles
+# cleanly with no emulation. Build context: a dir containing the `caddy` binary.
+FROM caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+COPY caddy /usr/bin/caddy

@@ -1,0 +1,6 @@
+# Per-Dockerfile ignore (BuildKit); paths relative to the build context (cloud/).
+api
+migrations
+infra
+web/node_modules
+web/.next

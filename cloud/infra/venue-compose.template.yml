@@ -1,0 +1,79 @@
+# Per-venue store container (M8) — rendered by scripts/provision-venue.sh into
+# /home/ubuntu/pos/venues/<slug>/docker-compose.yml on the cloud host, with a
+# sibling .env holding the venue's CLOUD_SYNC_API_KEY (chmod 600).
+#
+# One compose project per venue: independent lifecycle (`docker compose up/down`
+# per venue), its own named volume for the SQLite DB + receipts/photos, and a
+# stable container name store-<slug> that Caddy routes <slug>.<base domain> to.
+# Joins the pos-cloud stack's network so `api` resolves in-box (sync never
+# leaves the machine) and Caddy can reach the container by name.
+name: pos-venue-__SLUG__
+services:
+  store-__SLUG__:
+    # Rendered by provision-venue.sh: either the legacy on-box `pos-store:latest`
+    # or an immutable ECR ref `…/pos-store:<git-sha>`. scripts/upgrade-venue.sh
+    # rewrites this line to roll the venue to a new tag.
+    image: __STORE_IMAGE__
+    container_name: store-__SLUG__
+    restart: unless-stopped
+    environment:
+      POS_DB: /data/pos.db
+      POS_RECEIPTS_DIR: /data/receipts
+      POS_BILLS_DIR: /data/bills
+      POS_PHOTOS_DIR: /data/photos
+      # Public base for table QR codes + the heartbeat's reported host —
+      # the cloud only accepts this exact registered origin.
+      POS_PUBLIC_URL: https://__SLUG__.__BASE_DOMAIN__
+      # Cloud venues boot EMPTY (catalog/staff come down from the cloud) and
+      # demand paired devices — this is the internet, not the venue LAN.
+      POS_SEED: none
+      POS_REQUIRE_DEVICE_TOKEN: "true"
+      POS_XMX: __XMX__
+      CLOUD_SYNC_URL: http://api:8081
+      CLOUD_SYNC_API_KEY: "${CLOUD_SYNC_API_KEY:?set in .env next to this file}"
+      CLOUD_SYNC_INTERVAL_SECONDS: "10"
+      TZ: __TZ__
+    volumes:
+      - storedata:/data
+    networks:
+      - posnet
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  # Backup sidecar (S5a): continuously replicates /data/pos.db to S3 with
+  # seconds RPO. Shares the store's volume read/write and runs as the SAME uid
+  # (999) so the shadow WAL it writes leaves /data owned by the store user.
+  # S3 auth = the EC2 instance profile over IMDSv2 (no static keys); config is
+  # the shared cloud/infra/litestream.yml, copied next to this file by
+  # provision-venue.sh. If this sidecar dies, the store keeps serving — the
+  # backup-freshness cron notices the stalled replica.
+  litestream-__SLUG__:
+    image: litestream/litestream:0.3.13@sha256:027eda2a89a86015b9797d2129d4dd447e8953097b4190e1d5a30b73e76d8d58
+    container_name: litestream-__SLUG__
+    restart: unless-stopped
+    user: "999:999"
+    depends_on:
+      - store-__SLUG__
+    command: ["replicate"]
+    environment:
+      LITESTREAM_DB_PATH: /data/pos.db
+      LITESTREAM_BUCKET: __BACKUP_BUCKET__
+      LITESTREAM_PATH: litestream/__SLUG__
+      AWS_REGION: __AWS_REGION__
+    volumes:
+      - storedata:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    networks:
+      - posnet
+
+networks:
+  posnet:
+    external: true
+    name: pos-cloud_default
+
+volumes:
+  storedata:

@@ -1,0 +1,4 @@
+# Every change requests a review from the repo owner. On a free private repo we
+# can't *enforce* this with branch protection, but CODEOWNERS still auto-requests
+# Dennis on every PR so nothing is reviewed by accident.
+* @dwhipstock

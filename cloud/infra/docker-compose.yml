@@ -1,0 +1,99 @@
+# Cloud tier for a single t4g.small (ARM64). Every image below is multi-arch.
+# Secrets come from ./.env (compose reads it automatically) — see .env.example.
+name: pos-cloud
+
+services:
+  db:
+    # Pinned by digest (multi-arch manifest-list); Dependabot's docker ecosystem bumps it.
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pos_cloud
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD in .env}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos_cloud"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      # Context is cloud/ so the image can copy both api/ and migrations/.
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "jdbc:postgresql://db:5432/pos_cloud"
+      DB_USER: pos
+      DB_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD in .env}"
+      PORT: "8081"
+      MIGRATIONS_DIR: /app/migrations
+      ADMIN_EMAIL: "${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}"
+      STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env}"
+      COOKIE_SECURE: "true"
+      VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
+      VENUE_TZ: "America/Toronto"
+      # Base domain for cloud-hosted venue stores (<venue>.<this>); pairing
+      # URLs and heartbeat public-host validation key off it (M8).
+      PUBLIC_BASE_DOMAIN: "${BASE_DOMAIN:-}"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      API_ORIGIN: "http://api:8081"
+    depends_on:
+      - api
+
+  caddy:
+    # Custom build: caddy + route53 DNS plugin for the *.BASE_DOMAIN wildcard
+    # cert (M8). Certs live in caddy_data and survive image changes.
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: "${DOMAIN:?set DOMAIN in .env}"
+      # Default to empty instead of hard-failing: a `:?` here aborts EVERY
+      # `docker compose` command (ps/logs/`up -d api`, the pg_dump cron) at
+      # interpolation on a host whose .env predates M8. Empty is safe for
+      # non-venue ops; venue hosting still requires it (see Caddyfile note —
+      # an empty BASE_DOMAIN makes the wildcard site address invalid, so start
+      # the caddy service only once BASE_DOMAIN is set in .env).
+      BASE_DOMAIN: "${BASE_DOMAIN:-}"
+      ACME_EMAIL: "${ACME_EMAIL:?set ACME_EMAIL in .env}"
+      # route53 plugin uses the AWS default credential chain → EC2 instance
+      # profile via IMDSv2 (hop limit must be 2; see cloud-wildcard-setup.sh)
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

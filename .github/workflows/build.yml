@@ -1,0 +1,148 @@
+# Build & publish immutable images to ECR (S5c / rec 6). Runs on push to main and
+# on version tags. Jars/portal build on free x64 runners; the arm64 runtime images
+# only COPY those prebuilt artifacts, so building leaves the production box entirely.
+#
+# Auth is OIDC — CI assumes the pos-ci-ecr-push role (scripts/aws/ci-ecr-setup.sh);
+# no static AWS keys live in GitHub. The box pulls with its instance profile.
+#
+# Each image is tagged with the full git sha → immutable (the ECR repos reject a
+# re-push of an existing tag). scripts/upgrade-venue.sh rolls a venue to a tag.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:   # manual re-run (assumes OIDC on main/tags only)
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # assume the ECR role via OIDC
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  REGISTRY: 842588910054.dkr.ecr.us-east-1.amazonaws.com
+  CADDY_BUILDER: caddy:2-builder@sha256:198d47eaee306d4d0c38a9960c89ff2c959aa29ad51d3e2dafa3e93ac961782a
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60   # arm64 QEMU builds are slow; fail rather than hang for hours
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cloud/web/package-lock.json
+
+      # --- prebuild the arch-independent artifacts on x64 ---
+      - name: build store jar
+        working-directory: server
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon buildFatJar
+
+      - name: build cloud-api jar
+        working-directory: cloud/api
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon buildFatJar
+
+      - name: build portal (next standalone)
+        working-directory: cloud/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: cross-compile caddy (arm64, route53 plugin)
+        run: |
+          mkdir -p cloud/infra/caddybuild
+          docker run --rm \
+            -e GOOS=linux -e GOARCH=arm64 -e CGO_ENABLED=0 \
+            -v "$PWD/cloud/infra/caddybuild:/out" \
+            "${CADDY_BUILDER}" \
+            sh -c 'xcaddy build --with github.com/caddy-dns/route53 --output /out/caddy'
+
+      - name: stage image contexts
+        # Assemble a clean, minimal build context per image holding ONLY the
+        # prebuilt artifacts. Avoids fighting the source .dockerignore files and
+        # keeps context uploads tiny.
+        run: |
+          rm -rf ci-context
+          mkdir -p ci-context/store ci-context/api/migrations ci-context/web
+          cp server/build/libs/pos-server-all.jar ci-context/store/
+          cp cloud/api/build/libs/api-all.jar     ci-context/api/
+          cp -r cloud/migrations/.                ci-context/api/migrations/
+          cp -r cloud/web/.next/standalone        ci-context/web/standalone
+          cp -r cloud/web/.next/static            ci-context/web/static
+          cp -r cloud/web/public                  ci-context/web/public
+
+      # --- auth to ECR via OIDC (no static keys) ---
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::842588910054:role/pos-ci-ecr-push
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      # --- assemble the arm64 runtime images and push :<git-sha> ---
+      - uses: docker/setup-qemu-action@v3   # apt-get in the jar images runs under arm64 emulation
+      - uses: docker/setup-buildx-action@v3
+
+      - name: build + push pos-store
+        uses: docker/build-push-action@v6
+        with:
+          context: ci-context/store
+          file: server/Dockerfile.runtime
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ env.REGISTRY }}/pos-store:${{ github.sha }}
+
+      - name: build + push pos-cloud-api
+        uses: docker/build-push-action@v6
+        with:
+          context: ci-context/api
+          file: cloud/infra/Dockerfile.api.runtime
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ env.REGISTRY }}/pos-cloud-api:${{ github.sha }}
+
+      - name: build + push pos-cloud-web
+        uses: docker/build-push-action@v6
+        with:
+          context: ci-context/web
+          file: cloud/infra/Dockerfile.web.runtime
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ env.REGISTRY }}/pos-cloud-web:${{ github.sha }}
+
+      - name: build + push pos-cloud-caddy
+        uses: docker/build-push-action@v6
+        with:
+          context: cloud/infra/caddybuild
+          file: cloud/infra/Dockerfile.caddy.runtime
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ env.REGISTRY }}/pos-cloud-caddy:${{ github.sha }}
+
+      - name: summary
+        run: |
+          echo "Pushed to ${REGISTRY} @ ${GITHUB_SHA}:" >> "$GITHUB_STEP_SUMMARY"
+          for r in pos-store pos-cloud-api pos-cloud-web pos-cloud-caddy; do
+            echo "- $r:${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          done

@@ -1,0 +1,39 @@
+# Litestream config for a venue's store SQLite DB → S3 (S5a data-safety).
+#
+# One file, identical for every venue: all the venue-specific values come from
+# the sidecar's environment (set in the rendered venue docker-compose.yml), and
+# Litestream expands ${VAR} references below at load time. Mounted read-only at
+# the default config path (/etc/litestream.yml) so `litestream replicate` needs
+# no flags.
+#
+# S3 auth is the EC2 instance profile (pos-caddy-route53, inline policy
+# pos-backups-s3) reached over IMDSv2 — NO static keys. The IMDS hop limit is
+# already 2 (scripts/cloud-wildcard-setup.sh) so the container can read creds.
+#
+# The DB is WAL-mode (what Litestream requires). This sidecar runs as uid 999,
+# the same unprivileged `pos` user the store runs as, so the shadow WAL and any
+# checkpoints it writes keep /data owned by 999 — the store never trips over a
+# root-owned -wal.
+dbs:
+  - path: ${LITESTREAM_DB_PATH}
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: ${LITESTREAM_PATH}
+        region: ${AWS_REGION}
+        # Seconds RPO: push new WAL frames to S3 every second.
+        sync-interval: 1s
+        # Snapshot every 5 min. This doubles as a durable heartbeat: an IDLE
+        # venue writes no WAL, so without periodic snapshots its newest S3
+        # object would only refresh hourly and the freshness check (15-min
+        # threshold) would false-trip. 5 min keeps every venue's newest object
+        # comfortably fresh while replication is healthy. Keep 72h of
+        # snapshots+WAL for point-in-time restore; Litestream prunes its own
+        # generations past retention (the bucket lifecycle only mops up
+        # noncurrent versions/aborted MPUs).
+        snapshot-interval: 5m
+        retention: 72h
+        retention-check-interval: 1h
+        # Periodically restore to a temp file and compare checksums, so silent
+        # replica corruption surfaces in the sidecar log rather than at restore.
+        validation-interval: 12h

@@ -1,0 +1,4 @@
+# Cached TOTP secret from the qa portal admin's first login — never commit.
+.qa-totp-secret
+*-totp-secret
+__pycache__/

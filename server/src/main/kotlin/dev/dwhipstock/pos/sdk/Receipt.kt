@@ -1,0 +1,174 @@
+package dev.dwhipstock.pos.sdk
+
+import dev.dwhipstock.pos.sdk.i18n.LocaleCode
+import dev.dwhipstock.pos.sdk.i18n.MessageKey
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_BILL
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_BILL_BANNER
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_CHANGE
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_CLOSE
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_NOT_A_RECEIPT
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_OPEN
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_PRINTED_AT
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_ROUNDING
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TABLE
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TOTAL
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_VAT_INCLUDED
+import dev.dwhipstock.pos.sdk.i18n.Messages
+import dev.dwhipstock.pos.sdk.i18n.dataText
+import dev.dwhipstock.pos.sdk.i18n.dataTextOrNull
+import java.time.LocalDateTime
+
+/**
+ * Structured receipt — everything the layout needs, no strings pre-baked.
+ * Built by the vertical (Check → Receipt), rendered by [ReceiptRenderer]
+ * against the customer's [ReceiptPolicy], printed via [PrinterAdapter].
+ */
+data class Receipt(
+    val checkId: Int,
+    val tableLabel: String,
+    val openedAt: LocalDateTime,
+    val closedAt: LocalDateTime,
+    val items: List<ReceiptItem>,
+    val fees: List<ReceiptFee>,
+    val grandTotal: Money,
+    /** Inclusive VAT already inside grandTotal; policy decides whether it prints. */
+    val taxIncluded: Money,
+    val vatRatePercent: Int?,
+    val tenders: List<ReceiptTender>,
+)
+
+data class ReceiptItem(
+    val nameFr: String,
+    val nameEn: String,
+    /** Container/size label when the item has more than one (Bouteille / Pichet / Tour). */
+    val variantLabelFr: String?,
+    val variantLabelEn: String?,
+    val qty: Int,
+    val unitPrice: Money,
+    val lineTotal: Money,
+    val note: String?,
+)
+
+data class ReceiptFee(val labelFr: String, val labelEn: String, val amount: Money)
+
+data class ReceiptTender(
+    val labelFr: String,
+    val labelEn: String,
+    val amountTendered: Money,
+    val amountApplied: Money,
+    val roundingAdjustment: Money,
+    val change: Money,
+)
+
+/**
+ * FINAL = post-payment reçu (proof of payment). PROVISIONAL = the "check please"
+ * customer bill (déclaration) printed on request before payment — same layout, minus
+ * the tender section, plus a CUSTOMER BILL header and a NOT A RECEIPT footer.
+ */
+enum class ReceiptKind { FINAL, PROVISIONAL }
+
+/** Customer-tier receipt policy: header/footer identity + formatting decisions. */
+sealed interface ReceiptPolicy {
+    val logoFallbackText: String
+    val headerLines: List<String>
+    val footerText: String
+    val showVat: Boolean
+    val gregorianDates: Boolean
+    val locale: LocaleCode
+
+    /**
+     * Date order (dd-MM-yyyy) and calendar era are VENUE policy — continuity
+     * with the venue's paper receipts — deliberately NOT locale-driven, so a
+     * locale pack cannot change them. Per-locale date patterns would be a
+     * future catalog key (e.g. receipt.date_pattern), not a format here.
+     */
+    fun formatDate(dt: LocalDateTime): String {
+        return "%04d-%02d-%02d %02d:%02d".format(dt.year, dt.monthValue, dt.dayOfMonth, dt.hour, dt.minute)
+    }
+
+    /** Same venue identity, different print locale — the check owner's preference wins at close time. */
+    fun withLocale(locale: LocaleCode): ReceiptPolicy
+
+    data class Standard(
+        override val logoFallbackText: String,
+        override val headerLines: List<String>,
+        override val footerText: String,
+        override val showVat: Boolean,
+        override val gregorianDates: Boolean = true,
+        override val locale: LocaleCode = LocaleCode.EN,
+    ) : ReceiptPolicy {
+        override fun withLocale(locale: LocaleCode) = copy(locale = locale)
+    }
+}
+
+/** Layout as data: policy + receipt → ordered PrintLines. No device knowledge here. */
+object ReceiptRenderer {
+
+    fun render(
+        receipt: Receipt,
+        policy: ReceiptPolicy,
+        kind: ReceiptKind = ReceiptKind.FINAL,
+    ): List<PrintLine> = buildList {
+        val locale = policy.locale
+        fun msg(key: MessageKey, vararg args: Any) = Messages.get(key, locale, *args)
+        val provisional = kind == ReceiptKind.PROVISIONAL
+
+        add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
+        policy.headerLines.forEach { add(PrintLine.Text(it, Align.CENTER)) }
+        add(PrintLine.Blank)
+        if (provisional) {
+            // Customer-facing banner: bilingual in every locale pack — anyone at
+            // the table might read it, so it doesn't defer to the owner's locale.
+            add(PrintLine.Header(msg(RECEIPT_BILL_BANNER)))
+            add(PrintLine.Blank)
+        }
+        add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " #" + receipt.checkId))
+        add(PrintLine.KeyValue(msg(RECEIPT_OPEN), policy.formatDate(receipt.openedAt)))
+        // provisional: "Printed at" (this snapshot); final: the close/paid time
+        add(PrintLine.KeyValue(
+            if (provisional) msg(RECEIPT_PRINTED_AT) else msg(RECEIPT_CLOSE),
+            policy.formatDate(receipt.closedAt)))
+        add(PrintLine.Divider)
+
+        for (item in receipt.items) {
+            val name = locale.dataText(item.nameFr, item.nameEn)
+            val variant = locale.dataTextOrNull(item.variantLabelFr, item.variantLabelEn)?.let { " ($it)" } ?: ""
+            add(PrintLine.KeyValue("$name$variant ×${item.qty}", item.lineTotal.format()))
+            if (item.qty > 1) add(PrintLine.Text("  @${item.unitPrice.format()}"))
+            item.note?.let { add(PrintLine.Text("  • $it")) }
+        }
+        for (fee in receipt.fees) {
+            add(PrintLine.KeyValue(locale.dataText(fee.labelFr, fee.labelEn), fee.amount.format()))
+        }
+        add(PrintLine.Divider)
+
+        add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.format(), emphasized = true))
+        if (policy.showVat && receipt.vatRatePercent != null) {
+            add(PrintLine.KeyValue(
+                msg(RECEIPT_VAT_INCLUDED, receipt.vatRatePercent),
+                receipt.taxIncluded.format(),
+            ))
+        }
+        add(PrintLine.Blank)
+
+        // A provisional bill has no payment yet — omit the tender section, and
+        // close with a bold NOT-A-RECEIPT footer instead of the thank-you line.
+        if (provisional) {
+            add(PrintLine.Header(msg(RECEIPT_NOT_A_RECEIPT)))
+            return@buildList
+        }
+
+        for (tender in receipt.tenders) {
+            add(PrintLine.KeyValue(locale.dataText(tender.labelFr, tender.labelEn), tender.amountTendered.format()))
+            if (!tender.roundingAdjustment.isZero) {
+                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), tender.roundingAdjustment.format()))
+            }
+            if (!tender.change.isZero) {
+                add(PrintLine.KeyValue(msg(RECEIPT_CHANGE), tender.change.format()))
+            }
+        }
+
+        add(PrintLine.Blank)
+        add(PrintLine.Text(policy.footerText, Align.CENTER))
+    }
+}

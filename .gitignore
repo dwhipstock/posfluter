@@ -1,0 +1,85 @@
+# macOS
+.DS_Store
+._*
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.fleet/
+
+# Flutter / Dart
+client/.dart_tool/
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+client/.packages
+client/.pub-cache/
+client/.pub/
+client/build/
+client/.dart_tool/build/
+client/pubspec.lock
+client/*.iml
+client/.gradle/
+client/local.properties
+client/ios/Pods/
+client/ios/Runner.xcworkspace/xcshareddata/
+client/macos/Pods/
+client/**/GeneratedPluginRegistrant*
+client/**/Flutter/flutter_export_environment.sh
+client/**/Flutter/Generated.xcconfig
+client/**/Flutter/flutter_assets/
+
+# Android
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/key.properties
+*.jks
+*.keystore
+
+# Kotlin / Gradle (keep gradle-wrapper.jar and gradlew — needed for reproducible builds)
+server/.gradle/
+server/build/
+server/out/
+server/.kotlin/
+server/bin/
+server/hs_err_pid*
+server/.env
+
+# Cloud tier (cloud/)
+cloud/api/.gradle/
+cloud/api/build/
+cloud/api/out/
+cloud/api/.kotlin/
+cloud/api/bin/
+cloud/web/node_modules/
+cloud/web/.next/
+cloud/web/out/
+cloud/web/next-env.d.ts
+
+# Logs
+*.log
+
+# Secrets — do not commit
+.env
+.env.*
+!.env.example
+!.env.local.example
+secrets/
+*.pem
+*.key
+!application.conf
+
+# Local SQLite databases (WAL mode adds -wal/-shm sidecars alongside the .db)
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+receipts/
+bills/
+
+# Uploaded item photos — never in git (manager uploads through the app)
+server/data/
