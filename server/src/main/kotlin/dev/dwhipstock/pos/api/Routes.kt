@@ -633,13 +633,14 @@ private fun zoneClosedMenuPage(tableLabel: String): String = """<!DOCTYPE html>
 <title>The Copper Lantern Pub</title>
 <style>
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
-  body { background: #0F1419; color: #E8ECEF; min-height: 100vh; display: flex;
+  body { background: #F3F7FC; color: #17263A; min-height: 100vh; display: flex;
          align-items: center; justify-content: center; padding: 24px; }
-  .card { max-width: 420px; text-align: center; }
+  .card { max-width: 420px; text-align: center; background: #FFFFFF; border: 1px solid #C8D5E6;
+          border-radius: 16px; padding: 36px 28px; box-shadow: 0 8px 30px rgba(32,78,128,.08); }
   .icon { font-size: 44px; margin-bottom: 16px; }
-  .table { font-size: 13px; color: #8B96A3; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+  .table { font-size: 13px; color: #1565C0; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
   .fr { font-size: 22px; font-weight: 700; line-height: 1.5; }
-  .en { font-size: 16px; color: #8B96A3; margin-top: 10px; line-height: 1.5; }
+  .en { font-size: 16px; color: #5B6D82; margin-top: 10px; line-height: 1.5; }
 </style>
 </head>
 <body>

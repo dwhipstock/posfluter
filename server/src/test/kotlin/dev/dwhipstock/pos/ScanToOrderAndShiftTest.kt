@@ -28,8 +28,12 @@ class ScanToOrderAndShiftTest {
         application { module(dbPath = tempDb()) }
         val page = client.get("/m/t5-5")
         assertEquals(HttpStatusCode.OK, page.status)
-        assertTrue("Commande depuis un téléphone portable" in page.bodyAsText())
-        assertTrue("5-5" in page.bodyAsText())
+        val html = page.bodyAsText()
+        assertTrue("Commande depuis un téléphone portable" in html)
+        assertTrue("5-5" in html)
+        assertTrue("--accent: #1565c0" in html)
+        assertTrue("const cad =" in html)
+        assertTrue("const CAD =" !in html)
 
         assertEquals(HttpStatusCode.NotFound, client.get("/m/no-such-table").status)
 

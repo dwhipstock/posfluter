@@ -3,48 +3,62 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Copper Lantern Pub — Commander de la nourriture</title>
+<title>The Copper Lantern Pub — Order Online</title>
 <style>
   /* Customer scan-to-order menu (M3). Vanilla on purpose — loads instantly on any phone. */
   :root {
-    --ink: #121212;        /* near-black text / dark surfaces (header, tabs, toast) */
-    --paper: #ffffff;      /* card / sheet surfaces */
-    --paper-alt: #fafafa;  /* body + sticky chip-bar background */
-    --surface-alt: #eeeeee; /* flat neutral fills: photo placeholder, close button */
-    --line: #e2e2e2;       /* neutral borders/dividers */
-    --muted: #8a8a8a;      /* secondary text (pending lines) */
-    --muted-strong: #555555; /* emphasized secondary text (lock note, pending header) */
-    --accent: #FF1F8E;     /* hot pink — CTAs, cart bar, selected state, price */
-    --accent-ink: #ffffff; /* text/icons on top of accent */
+    --ink: #17263a;
+    --paper: #ffffff;
+    --paper-alt: #f3f7fc;
+    --surface-alt: #e7eff9;
+    --line: #c8d5e6;
+    --muted: #6a7b90;
+    --muted-strong: #506278;
+    --accent: #1565c0;
+    --accent-soft: #dceafa;
+    --accent-ink: #ffffff;
   }
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
-  body { background: var(--paper-alt); padding-bottom: 90px; }
-  header { background: var(--ink); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 5;
-           display: flex; justify-content: space-between; align-items: center; }
-  header h1 { font-size: 18px; }
-  header .table { font-size: 13px; opacity: .85; }
-  header .lang { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.5); color: #fff;
-                 border-radius: 16px; padding: 5px 14px; font-size: 14px; font-weight: 700; }
-  .tabs { display: flex; background: var(--ink); position: sticky; top: 62px; z-index: 5; }
-  .tabs button { flex: 1; background: none; border: 0; color: rgba(255,255,255,.7); font-size: 15px;
+  body { background: var(--paper-alt); color: var(--ink); padding-bottom: 96px; line-height: 1.35; }
+  button, select, input { color: inherit; }
+  button { cursor: pointer; }
+  header { background: var(--paper); color: var(--ink); padding: 14px 16px; position: sticky; top: 0; z-index: 5;
+           display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+  header h1 { color: var(--accent); font-size: 19px; letter-spacing: -.2px; }
+  header .table { color: var(--muted-strong); font-size: 13px; margin-top: 2px; }
+  header .lang { background: var(--accent-soft); border: 1px solid #a8c7ec; color: var(--accent);
+                 border-radius: 18px; padding: 7px 14px; font-size: 14px; font-weight: 700; }
+  .tabs { display: flex; background: var(--paper); position: sticky; top: 65px; z-index: 5;
+          border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; background: none; border: 0; color: var(--muted); font-size: 15px;
                  font-weight: 700; padding: 10px 0 12px; border-bottom: 3px solid transparent; }
-  .tabs button.on { color: #fff; border-bottom-color: var(--accent); }
-  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 12px; position: sticky; top: 107px; background: var(--paper-alt); z-index: 4; }
-  .chip { border: 1px solid var(--line); border-radius: 16px; padding: 5px 14px; white-space: nowrap; background: #fff; font-size: 14px; }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 11px 12px; position: sticky; top: 110px;
+           background: rgba(243,247,252,.97); z-index: 4; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { border: 1px solid var(--line); border-radius: 18px; padding: 7px 14px; white-space: nowrap;
+          background: var(--paper); font-size: 14px; font-weight: 650; }
   .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 10px 12px; }
-  .card { background: #fff; border-radius: 10px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px; padding: 8px 12px 18px; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 13px; padding: 10px;
+          box-shadow: 0 3px 12px rgba(32,78,128,.06); overflow: hidden; }
   .ph { background: var(--surface-alt); border-radius: 8px; height: 72px; display: flex; align-items: center; justify-content: center;
         color: var(--ink); font-weight: 700; font-size: 20px; } /* fallback when no photo */
-  .photo { width: 100%; height: 96px; object-fit: cover; border-radius: 8px; display: block; background: var(--surface-alt); }
-  .card .fr { font-weight: 700; margin-top: 6px; font-size: 15px; }
-  .card .en { color: #888; font-size: 12px; }
+  .photo { width: 100%; height: 108px; object-fit: cover; border-radius: 9px; display: block; background: var(--surface-alt); }
+  .card .fr { font-weight: 750; margin-top: 8px; font-size: 15px; }
+  .card .en { color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .card .desc { color: var(--muted-strong); font-size: 12px; margin-top: 5px; min-height: 32px; }
   .card .price { color: var(--accent); font-size: 14px; margin-top: 2px; font-weight: 700; }
-  .card select, .card input[type=text] { width: 100%; margin-top: 6px; padding: 6px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
-  .card .add { width: 100%; margin-top: 8px; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px; font-size: 15px; }
+  .card select, .card input[type=text] { width: 100%; min-height: 40px; margin-top: 7px; padding: 8px;
+                                        background: var(--paper); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+  .card .add { width: 100%; min-height: 44px; margin-top: 8px; background: var(--accent); color: var(--accent-ink);
+               border: 0; border-radius: 9px; padding: 9px; font-size: 15px; font-weight: 700; }
+  .menu-status { grid-column: 1 / -1; margin: 34px 0; padding: 28px 20px; text-align: center;
+                 color: var(--muted-strong); background: var(--paper); border: 1px solid var(--line); border-radius: 13px; }
   /* pre-send cart: persistent bar + bottom sheet (the old inline basket was invisible on phones) */
-  .bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--line);
-         padding: 12px 16px; display: none; justify-content: space-between; align-items: center; z-index: 6; }
+  .bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--paper); border-top: 1px solid var(--line);
+         padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: none; justify-content: space-between;
+         align-items: center; z-index: 6; box-shadow: 0 -4px 16px rgba(32,78,128,.1); }
   .bar button { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 12px 22px; font-size: 16px; }
   #cart-summary { font-size: 16px; font-weight: 700; display: inline-block; }
   #cart-summary.pop { animation: pop .3s ease; }
@@ -52,7 +66,7 @@
   #cart-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none;
                 transition: opacity .2s; z-index: 7; }
   #cart-scrim.open { opacity: 1; pointer-events: auto; }
-  #cart-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; z-index: 8;
+  #cart-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--paper); z-index: 8;
                 border-radius: 16px 16px 0 0; transform: translateY(105%); transition: transform .25s ease;
                 display: flex; flex-direction: column; max-height: 78vh; box-shadow: 0 -4px 20px rgba(0,0,0,.15); }
   #cart-sheet.open { transform: translateY(0); }
@@ -70,7 +84,7 @@
   .bline button { border: 0; background: none; color: var(--ink); font-size: 16px; }
   .bqty { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .bqty .step { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px;
-                background: #fff; font-size: 18px; line-height: 1; }
+                background: var(--paper); font-size: 18px; line-height: 1; }
   #toast { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%) translateY(8px); background: var(--ink);
            color: #fff; border-radius: 18px; padding: 8px 18px; font-size: 14px; opacity: 0;
            pointer-events: none; transition: opacity .2s, transform .2s; z-index: 9; }
@@ -79,7 +93,8 @@
   #done .big { font-size: 52px; }
   /* bill view */
   #bill { display: none; padding: 12px; }
-  .bsec { background: #fff; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .bsec { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+          margin-bottom: 12px; box-shadow: 0 3px 12px rgba(32,78,128,.06); }
   .bsec h3 { font-size: 15px; margin-bottom: 4px; }
   .brow { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
   .brow .nm { flex: 1; }
@@ -108,7 +123,7 @@
 
 <div id="menu">
   <div class="chips" id="chips"></div>
-  <div class="grid" id="grid"></div>
+  <div class="grid" id="grid"><div class="menu-status">Loading menu…</div></div>
   <div class="bar" id="cart-bar" onclick="openCart()">
     <span id="cart-summary"></span>
     <button id="cart-open-btn"></button>
@@ -161,6 +176,7 @@ const STR = {
     onBill: "sur votre facture", beingConfirmed: "Attendez que l'employé confirme.", total: "Total",
     noOrders: "Il n'y a pas encore de commande. — Sélectionnez un menu pour commencer à commander maintenant.", billPaying: "La facture est en train d'être payée.",
     billLoading: "Chargement de la facture…",
+    menuLoading: "Chargement du menu…", menuUnavailable: "Le menu n’est pas disponible pour le moment. Veuillez réessayer.",
   },
   en: {
     orderFromPhone: "Table " + TABLE_LABEL + " — order from your phone",
@@ -175,20 +191,25 @@ const STR = {
     onBill: "On your bill", beingConfirmed: "Being confirmed", total: "Total",
     noOrders: "No orders yet — browse the menu to start.", billPaying: "Bill is being paid",
     billLoading: "Loading your bill…",
+    menuLoading: "Loading menu…", menuUnavailable: "The menu is unavailable right now. Please try again.",
   },
 };
 const T = () => STR[lang];
 const iname = i => lang === "en" ? i.nameEn : i.nameFr;
 const inameAlt = i => lang === "en" ? i.nameFr : i.nameEn;
+const idesc = i => lang === "en" ? i.descriptionEn : i.descriptionFr;
 const vlabel = v => lang === "en" ? v.labelEn : v.labelFr;
 
 let items = [], categories = [], cat = null, basket = [];
+let menuError = false;
 const catName = c => {
   const row = categories.find(x => x.id === c);
   return row ? (lang === "en" ? row.nameEn : row.nameFr) : c;
 };
 
-const CAD = s => "$" + (s / 100).toLocaleString("fr-FR");
+const cad = cents => (cents / 100).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA", {
+  style: "currency", currency: "CAD",
+});
 
 function toggleLang() {
   lang = lang === "fr" ? "en" : "fr";
@@ -198,11 +219,14 @@ function toggleLang() {
 
 async function load() {
   // categories are server data (sorted); no hardcoded menu structure here
-  [items, categories] = await Promise.all([
-    (await fetch("/items")).json(),
-    (await fetch("/categories")).json(),
-  ]);
-  cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
+  try {
+    const [itemsResponse, categoriesResponse] = await Promise.all([fetch("/items"), fetch("/categories")]);
+    if (!itemsResponse.ok || !categoriesResponse.ok) throw new Error("catalog request failed");
+    [items, categories] = await Promise.all([itemsResponse.json(), categoriesResponse.json()]);
+    cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
+  } catch (_) {
+    menuError = true;
+  }
   render();
 }
 
@@ -222,12 +246,18 @@ function render() {
   const cats = categories.filter(c => items.some(i => i.category === c.id)).map(c => c.id);
   document.getElementById("chips").innerHTML = cats.map(c =>
     `<button class="chip ${c === cat ? "on" : ""}" onclick="cat='${c}';render()">${catName(c)}</button>`).join("");
-  document.getElementById("grid").innerHTML = items.filter(i => i.category === cat).map(i => `
+  const visibleItems = items.filter(i => i.category === cat);
+  document.getElementById("grid").innerHTML = menuError
+    ? `<div class="menu-status">${T().menuUnavailable}</div>`
+    : !items.length
+    ? `<div class="menu-status">${T().menuLoading}</div>`
+    : visibleItems.map(i => `
     <div class="card">
       ${i.photoVersion ? `<img class="photo" loading="lazy" src="/photos/${i.id}?v=${i.photoVersion}"
            onerror="this.outerHTML='<div class=ph>${i.abbrev}</div>'">` : `<div class="ph">${i.abbrev}</div>`}
       <div class="fr">${iname(i)}</div>
       <div class="en">${inameAlt(i)}</div>
+      <div class="desc">${esc(idesc(i))}</div>
       <div class="price">${i.variants.length === 1 ? cad(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
       ${i.variants.length > 1 ? `<select id="v-${i.id}">` + i.variants.map(v =>
         `<option value="${v.id}">${vlabel(v)} ${cad(v.priceCents)}</option>`).join("") + `</select>` : ""}
