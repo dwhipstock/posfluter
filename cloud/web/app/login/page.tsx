@@ -75,6 +75,11 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const res = await post<LoginResponse>("/v1/auth/login", { email, password });
+      if (res.stage === "authenticated") {
+        router.replace("/");
+        router.refresh();
+        return;
+      }
       setStage(
         res.stage === "totp"
           ? { step: "totp", pendingToken: res.pendingToken }

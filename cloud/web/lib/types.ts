@@ -8,6 +8,7 @@ export interface Me {
 }
 
 export type LoginResponse =
+  | { stage: "authenticated" }
   | { stage: "totp"; pendingToken: string }
   | { stage: "totp_setup"; pendingToken: string; secret: string; otpauthUri: string };
 

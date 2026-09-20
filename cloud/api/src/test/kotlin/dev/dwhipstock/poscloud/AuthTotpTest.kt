@@ -67,6 +67,18 @@ class AuthTotpTest {
         }
 
     @Test
+    fun demoModeCanAuthenticateWithPasswordOnly() = testApplication {
+        application { module(bootstrapConfig().copy(totpRequired = false)) }
+
+        val response = login()
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = testJson.parseToJsonElement(response.bodyAsText()).jsonObject
+        assertEquals("authenticated", body["stage"]!!.jsonPrimitive.content)
+        val session = response.setCookie().first { it.name == "pos_portal_session" }.value
+        assertEquals(HttpStatusCode.OK, getWithCookie("/v1/auth/me", session).status)
+    }
+
+    @Test
     fun firstLoginForcesTotpEnrollmentThenSessionsWork() = testApplication {
         application { module(bootstrapConfig()) }
 

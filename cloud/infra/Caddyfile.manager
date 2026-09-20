@@ -2,8 +2,7 @@
 	email {$ACME_EMAIL}
 }
 
-# Dedicated manager/reporting portal. This intentionally has no wildcard venue
-# routing: customer-facing stores remain on their existing, independent host.
+# Dedicated manager/reporting portal.
 {$DOMAIN}, {$LEGACY_DOMAIN} {
 	encode gzip
 
@@ -18,4 +17,12 @@
 	handle {
 		reverse_proxy web:3000
 	}
+}
+
+# Copper Lantern's customer/table app is deliberately an exact hostname. It
+# cannot collide with the manager portal and does not introduce wildcard
+# routing for unrelated venues.
+{$STORE_DOMAIN} {
+	encode gzip
+	reverse_proxy store:8080
 }

@@ -9,6 +9,9 @@ data class CloudConfig(
     val migrationsDir: String = env("MIGRATIONS_DIR") ?: "../migrations",
     val adminEmail: String? = env("ADMIN_EMAIL"),
     val adminPassword: String? = env("ADMIN_PASSWORD"),
+    // Demo-only escape hatch. Production keeps the secure default; isolated
+    // sales demos can opt out when account friction matters more than 2FA.
+    val totpRequired: Boolean = env("TOTP_REQUIRED")?.toBoolean() ?: true,
     // Break-glass lockout recovery: set to the owner's email, restart, and their
     // TOTP is wiped so the next login re-enrolls from scratch. Clear it afterwards.
     val resetTotpEmail: String? = env("RESET_TOTP_EMAIL"),

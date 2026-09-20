@@ -170,7 +170,7 @@ private data class LoginRequest(val email: String, val password: String)
 
 @Serializable
 private data class LoginResponse(
-    val stage: String, val pendingToken: String,
+    val stage: String, val pendingToken: String? = null,
     val secret: String? = null, val otpauthUri: String? = null)
 
 @Serializable
@@ -190,7 +190,7 @@ fun Route.authRoutes(config: CloudConfig) {
     post("/auth/login") {
         val req = call.receive<LoginRequest>()
         LoginRateLimiter.record("${req.email.lowercase()}|${call.request.origin.remoteHost}")
-        val response = transaction {
+        val (response, sessionToken) = transaction {
             // email is unique per tenant, not globally: pick the row the password verifies against
             val candidates = PortalUsers.selectAll().where { PortalUsers.email eq req.email }
                 .orderBy(PortalUsers.id).toList()
@@ -199,9 +199,12 @@ fun Route.authRoutes(config: CloudConfig) {
                 ?: throw UnauthorizedException("wrong email or password", "bad_credentials")
             val now = LocalDateTime.now()
             val token = newToken()
-            if (user[PortalUsers.totpEnabled]) {
+            if (!config.totpRequired) {
+                LoginResponse(stage = "authenticated") to
+                    createSession(user[PortalUsers.tenantId], user[PortalUsers.id])
+            } else if (user[PortalUsers.totpEnabled]) {
                 insertPending(token, user, "totp", user[PortalUsers.totpSecret]!!, now)
-                LoginResponse(stage = "totp", pendingToken = token)
+                LoginResponse(stage = "totp", pendingToken = token) to null
             } else {
                 val secret = Totp.newSecret()
                 insertPending(token, user, "totp_setup", secret, now)
@@ -209,9 +212,10 @@ fun Route.authRoutes(config: CloudConfig) {
                 LoginResponse(
                     stage = "totp_setup", pendingToken = token, secret = secret,
                     otpauthUri = Totp.otpauthUri(issuer, user[PortalUsers.email], secret),
-                )
+                ) to null
             }
         }
+        sessionToken?.let { call.setSessionCookie(it, config) }
         call.respond(response)
     }
 
