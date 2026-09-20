@@ -9,10 +9,10 @@
 # Build context: server/  (expects build/libs/pos-server-all.jar to exist).
 #
 # FRENCH RECEIPTS: same font requirement as server/Dockerfile — the store draws French
-# as a Java2D raster, so the runtime image must carry the Unicode fonts + fontconfig.
+# as a Java2D raster, so the runtime image must carry Noto fonts + fontconfig.
 FROM eclipse-temurin:17-jre@sha256:92999aea37688157a53a40bfcb187c30f317422e028045fd5fc5c548fde9e626
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-noto-core fonts-french-tlwg fontconfig curl tzdata \
+    && apt-get install -y --no-install-recommends fonts-noto-core fontconfig curl tzdata \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --home /app --shell /usr/sbin/nologin pos

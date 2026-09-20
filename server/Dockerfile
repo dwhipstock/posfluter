@@ -4,7 +4,7 @@
 #
 # FRENCH RECEIPTS: the store draws French as a Java2D raster bitmap (no printer code
 # page), so the runtime image MUST carry Unicode fonts + fontconfig or SansSerif
-# falls back to boxes (□□□). fonts-french-tlwg supplies the French glyphs; fontconfig
+# falls back to boxes (□□□). Noto Core supplies Latin and French glyphs; fontconfig
 # lets the JVM discover them; -Djava.awt.headless=true lets Java2D render with no
 # X server. See docs/demo-runbook.md for the test-print gate.
 # Base images are pinned by digest (tag kept for readability); Dependabot's
@@ -19,10 +19,10 @@ RUN chmod +x gradlew && ./gradlew --no-daemon buildFatJar
 
 FROM eclipse-temurin:17-jre@sha256:92999aea37688157a53a40bfcb187c30f317422e028045fd5fc5c548fde9e626
 # fonts-noto-core: supplies "Noto Sans" — the renderer's first-choice family.
-# fonts-french-tlwg: additional French families + lets SansSerif compose French as fallback.
+# fonts-noto-core: broad Unicode coverage, including French Latin characters.
 # fontconfig: JVM font discovery. curl: compose healthcheck. tzdata: local time on receipts.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-noto-core fonts-french-tlwg fontconfig curl tzdata \
+    && apt-get install -y --no-install-recommends fonts-noto-core fontconfig curl tzdata \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --home /app --shell /usr/sbin/nologin pos
