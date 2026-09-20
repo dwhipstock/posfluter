@@ -7,35 +7,36 @@
 <style>
   /* Staff mobile ordering app (M7). Served from the store at /staff-app. Vanilla
      on purpose — loads instantly on any phone, no build step, offline-first.
-     Shares the customer menu's brand tokens (B&W + hot pink). */
+     Shares the customer menu's light blue Copper Lantern brand tokens. */
   :root {
-    --ink: #121212;         /* near-black text / dark surfaces (header, tabs) */
-    --paper: #ffffff;       /* card / sheet surfaces */
-    --paper-alt: #fafafa;   /* body + sticky bar background */
-    --surface-alt: #eeeeee; /* flat neutral fills */
-    --line: #e2e2e2;        /* neutral borders/dividers */
-    --muted: #8a8a8a;       /* secondary text */
-    --muted-strong: #555555;/* emphasized secondary text */
-    --accent: #FF1F8E;      /* hot pink — CTAs, selected state, price */
-    --accent-ink: #ffffff;  /* text/icons on top of accent */
-    --ok: #1f9d55;          /* approve green */
-    --danger: #d92d20;      /* reject / destructive red */
+    --ink: #17263a;
+    --paper: #ffffff;
+    --paper-alt: #f3f7fc;
+    --surface-alt: #e7eff9;
+    --line: #c8d5e6;
+    --muted: #6a7b90;
+    --muted-strong: #506278;
+    --accent: #1565c0;
+    --accent-soft: #dceafa;
+    --accent-ink: #ffffff;
+    --ok: #18864b;
+    --danger: #c62828;
   }
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
   body { background: var(--paper-alt); color: var(--ink); min-height: 100vh; }
   button { font-family: inherit; cursor: pointer; }
 
-  header { background: var(--ink); color: #fff; padding: 12px 16px; position: sticky; top: 0; z-index: 5;
-           display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  header .brand { font-size: 17px; font-weight: 700; }
-  header .who { font-size: 12px; opacity: .8; }
+  header { background: var(--paper); color: var(--ink); padding: 12px 16px; position: sticky; top: 0; z-index: 5;
+           display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); }
+  header .brand { color: var(--accent); font-size: 18px; font-weight: 750; }
+  header .who { color: var(--muted-strong); font-size: 12px; }
   header .actions { display: flex; gap: 8px; align-items: center; }
-  .hbtn { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.45); color: #fff;
+  .hbtn { background: var(--accent-soft); border: 1px solid #a8c7ec; color: var(--accent);
           border-radius: 16px; padding: 5px 12px; font-size: 13px; font-weight: 700; }
 
   /* bottom tab bar (Tables / Pending) */
-  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line);
-            display: flex; z-index: 6; padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--paper); border-top: 1px solid var(--line);
+            display: flex; z-index: 6; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -4px 16px rgba(32,78,128,.08); }
   .tabbar button { flex: 1; background: none; border: 0; padding: 10px 0 12px; color: var(--muted);
                    font-size: 13px; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .tabbar button.on { color: var(--accent); }
@@ -48,23 +49,25 @@
 
   /* login */
   #login { min-height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center;
-           padding: 24px 20px calc(24px + env(safe-area-inset-bottom)); }
+           padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+           background: radial-gradient(circle at 50% 10%, #ffffff 0, var(--paper-alt) 52%); }
   #login.on { display: flex; }
-  #login h1 { font-size: 24px; }
+  #login h1 { color: var(--accent); font-size: 25px; }
   #login .sub { color: var(--muted); font-size: 14px; margin: 4px 0 20px; }
   .tiles { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 460px; margin-bottom: 20px; }
-  .tile { width: 132px; background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 10px;
-          text-align: center; }
-  .tile.sel { border-color: var(--accent); background: #fff0f7; }
+  .tile { width: 132px; background: var(--paper); border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 10px;
+          text-align: center; box-shadow: 0 3px 12px rgba(32,78,128,.05); }
+  .tile.sel { border-color: var(--accent); background: var(--accent-soft); }
   .tile .ic { font-size: 22px; }
   .tile .nm { font-weight: 600; font-size: 14px; margin-top: 4px; line-height: 1.3; }
   .tile .rl { font-size: 11px; color: var(--muted); }
   .pinrow { display: flex; gap: 12px; height: 22px; margin-bottom: 6px; }
   .pindot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); }
-  .pindot.f { background: var(--ink); border-color: var(--ink); }
+  .pindot.f { background: var(--accent); border-color: var(--accent); }
   .errline { height: 22px; color: var(--danger); font-size: 13px; margin-bottom: 8px; }
   .pad { display: grid; grid-template-columns: repeat(3, 74px); gap: 12px; }
-  .pad button { height: 74px; border-radius: 50%; border: 1px solid var(--line); background: #fff; font-size: 26px; font-weight: 600; }
+  .pad button { height: 74px; border-radius: 50%; border: 1px solid var(--line); background: var(--paper); font-size: 26px;
+                font-weight: 600; box-shadow: 0 2px 8px rgba(32,78,128,.05); }
   .pad button:active { background: var(--surface-alt); }
   .pad .blank { border: none; background: none; }
   /* 2FA: authenticator code entry + first-time enrollment QR */
@@ -87,10 +90,11 @@
   .zone-hd .z-en { font-size: 12px; color: var(--muted); margin-left: 6px; }
   .zone-hd .z-closed { font-size: 12px; color: var(--danger); font-weight: 700; }
   .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
-  .tcard { background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; min-height: 76px;
-           display: flex; flex-direction: column; justify-content: space-between; position: relative; }
-  .tcard.open { border-color: var(--ink); }
-  .tcard.pend { border-color: var(--accent); background: #fff0f7; }
+  .tcard { background: var(--paper); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; min-height: 76px;
+           display: flex; flex-direction: column; justify-content: space-between; position: relative;
+           box-shadow: 0 3px 12px rgba(32,78,128,.05); }
+  .tcard.open { border-color: #7e9fc4; }
+  .tcard.pend { border-color: var(--accent); background: var(--accent-soft); }
   .tcard.closed { opacity: .5; }
   .tcard .lbl { font-size: 17px; font-weight: 700; }
   .tcard .meta { font-size: 12px; color: var(--muted-strong); }
@@ -103,7 +107,8 @@
   .backbar button { background: none; border: 0; font-size: 22px; color: var(--ink); padding: 4px; }
   .backbar .title { font-size: 20px; font-weight: 700; }
   .backbar .title small { font-size: 13px; color: var(--muted); font-weight: 400; }
-  .sec { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .sec { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+         margin-bottom: 12px; box-shadow: 0 3px 12px rgba(32,78,128,.05); }
   .sec h3 { font-size: 14px; margin-bottom: 6px; color: var(--muted-strong); }
   .row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
   .row:last-child { border-bottom: 0; }
@@ -114,37 +119,46 @@
   .empty .big { font-size: 46px; }
   .primary { width: 100%; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 12px;
              padding: 14px; font-size: 16px; font-weight: 700; }
-  .ghost { width: 100%; background: #fff; color: var(--ink); border: 1.5px solid var(--line); border-radius: 12px;
+  .ghost { width: 100%; background: var(--paper); color: var(--ink); border: 1.5px solid var(--line); border-radius: 12px;
            padding: 13px; font-size: 15px; font-weight: 700; }
 
   /* pending-line approve/reject controls */
   .pact { display: flex; gap: 8px; white-space: nowrap; align-items: center; }
   .pact button { border: 0; border-radius: 8px; width: 40px; height: 36px; font-size: 17px; font-weight: 700; }
   .pact .ok { background: var(--ok); color: #fff; }
-  .pact .no { background: #fff; color: var(--danger); border: 1.5px solid var(--danger); }
-  .pcard { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .pact .no { background: var(--paper); color: var(--danger); border: 1.5px solid var(--danger); }
+  .pcard { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+           margin-bottom: 12px; box-shadow: 0 3px 12px rgba(32,78,128,.05); }
   .pcard .ph { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
   .pcard .ph .lbl { font-size: 16px; font-weight: 700; }
   .pcard .ph .zn { font-size: 12px; color: var(--muted); }
 
   /* menu browser (add items) */
-  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 12px; }
-  .chip { border: 1px solid var(--line); border-radius: 16px; padding: 6px 14px; white-space: nowrap; background: #fff; font-size: 14px; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 12px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { border: 1px solid var(--line); border-radius: 18px; padding: 7px 14px; white-space: nowrap;
+          background: var(--paper); font-size: 14px; font-weight: 650; }
   .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-  .mcard { background: #fff; border-radius: 10px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .mcard { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px;
+           box-shadow: 0 3px 12px rgba(32,78,128,.05); }
   .mcard .ph { background: var(--surface-alt); border-radius: 8px; height: 64px; display: flex; align-items: center;
                justify-content: center; font-weight: 700; font-size: 20px; }
-  .mcard .photo { width: 100%; height: 84px; object-fit: cover; border-radius: 8px; display: block; background: var(--surface-alt); }
+  .mcard .photo { width: 100%; height: 96px; object-fit: cover; border-radius: 8px; display: block; background: var(--surface-alt); }
   .mcard .fr { font-weight: 700; margin-top: 6px; font-size: 15px; }
   .mcard .en { color: var(--muted); font-size: 12px; }
+  .mcard .desc { color: var(--muted-strong); font-size: 12px; margin-top: 5px; min-height: 32px; }
   .mcard .price { color: var(--accent); font-size: 14px; margin-top: 2px; font-weight: 700; }
-  .mcard select, .mcard input { width: 100%; margin-top: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
-  .mcard .add { width: 100%; margin-top: 8px; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px; font-size: 15px; }
+  .mcard select, .mcard input { width: 100%; min-height: 40px; margin-top: 7px; padding: 8px; background: var(--paper);
+                                border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+  .mcard .add { width: 100%; min-height: 44px; margin-top: 8px; background: var(--accent); color: var(--accent-ink);
+                border: 0; border-radius: 9px; padding: 9px; font-size: 15px; font-weight: 700; }
 
   /* cart bar + sheet (shared visual language with the customer menu) */
-  .cartbar { position: fixed; left: 12px; right: 12px; bottom: calc(64px + env(safe-area-inset-bottom)); background: var(--ink); color: #fff;
-             border-radius: 12px; padding: 12px 16px; display: none; justify-content: space-between; align-items: center; z-index: 7; }
+  .cartbar { position: fixed; left: 12px; right: 12px; bottom: calc(64px + env(safe-area-inset-bottom));
+             background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
+             padding: 12px 16px; display: none; justify-content: space-between; align-items: center; z-index: 7;
+             box-shadow: 0 6px 22px rgba(32,78,128,.16); }
   .cartbar.show { display: flex; }
   .cartbar .go { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 9px 18px; font-size: 15px; font-weight: 700; }
   #scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 8; }
@@ -192,7 +206,7 @@
 <div id="login">
   <button class="hbtn" style="position:fixed;top:14px;right:14px;background:var(--surface-alt);color:var(--ink);border-color:var(--line)"
           onclick="toggleLang()" id="login-lang"></button>
-  <h1>CopperLantern POS</h1>
+  <h1>Copper Lantern POS</h1>
   <div class="sub" id="login-sub"></div>
   <div id="login-pin">
     <div class="tiles" id="tiles"></div>
@@ -218,7 +232,7 @@
 <div id="app" style="display:none">
   <header>
     <div>
-      <div class="brand">CopperLantern POS</div>
+      <div class="brand">Copper Lantern POS</div>
       <div class="who" id="who"></div>
     </div>
     <div class="actions">
@@ -302,23 +316,23 @@
 let lang = localStorage.getItem("staff_lang") || "en";
 const STR = {
   fr: {
-    whoClockingIn: "Qui est en poste ?", enterPin: "Entrez le code PIN", pinWrong: "PIN incorrect",
-    langBtn: "EN", logout: "partir", tabTables: "tableau", tabPending: "En attente de confirmation",
-    free: "gratuit", open: "ouvrir", noZones: "Aucune zone pour l'instant", closed: "éteindre",
-    addItems: "＋ Ajouter un article", onCheck: "Articles sur la facture", pendingHd: "⏳ Commandes clients (en attente de confirmation)",
-    total: "Total", emptyCheck: "Il n'y a pas encore d'articles. — Appuyez sur Ajouter un élément pour commencer.",
-    basket: "panier", addToCheck: "ajouter à la facture", subtotal: "Total", note: "Remarque (facultatif)",
-    add: "＋ Ajouter au panier", sizes: "taille", viewBasket: "Voir le panier", addedOne: "Ajouté au panier ✓",
-    linesAdded: "Ajouté à la facture ✓", accepted: "Confirmé ✓", rejected: "Refusé",
-    noPending: "Il n'y a aucun élément en attente de confirmation.", pendingSub: "Les commandes depuis les téléphones mobiles des clients arriveront ici.",
-    billPaying: "La facture est en train d'être payée. — Impossible d'ajouter des éléments", failed: "Transaction échouée, réessayez.",
-    zoneClosed: "Cette zone est fermée.", table: "tableau", loading: "Chargement…",
-    codePrompt: "Entrez le code 6 Principal depuis l'application Authenticator", verify: "confirmer", backBtn: "‹ revenir",
-    enrollPrompt: "Balayage QR Avec l'application Authenticator puis entrez le code 6 principal",
-    enrollHint: "Configurer une fois, puis utiliser PIN long 90 jour", enrollManual: "ou entrez cette clé vous-même:",
-    codeWrong: "Code invalide. Essayer à nouveau.", resetTitle: "Réinitialiser Authenticator", resetBtn: "Réinitialiser",
-    resetConfirm: "Réinitialiser Authenticator de ", resetDone: "Réinitialiser — Demandez à l'employé de réinitialiser les paramètres.",
-    cantReach: "Impossible de se connecter au magasin — examiner Wi-Fi puis réessaye", retry: "Essayer à nouveau",
+    whoClockingIn: "Qui prend son service ?", enterPin: "Entrez votre NIP", pinWrong: "NIP incorrect",
+    langBtn: "EN", logout: "Déconnexion", tabTables: "Tables", tabPending: "En attente",
+    free: "Libre", open: "Ouverte", noZones: "Aucune zone pour l'instant", closed: "Fermée",
+    addItems: "＋ Ajouter des articles", onCheck: "Sur l’addition", pendingHd: "⏳ Commandes clients à confirmer",
+    total: "Total", emptyCheck: "Aucun article — touchez Ajouter des articles pour commencer.",
+    basket: "Panier", addToCheck: "Ajouter à l’addition", subtotal: "Sous-total", note: "Remarque (facultatif)",
+    add: "＋ Ajouter", sizes: "formats", viewBasket: "Voir le panier", addedOne: "Ajouté ✓",
+    linesAdded: "Ajouté à l’addition ✓", accepted: "Confirmé ✓", rejected: "Refusé",
+    noPending: "Rien à confirmer", pendingSub: "Les commandes des clients apparaissent ici.",
+    billPaying: "L’addition est en cours de paiement — impossible d’ajouter des articles", failed: "Action échouée, veuillez réessayer.",
+    zoneClosed: "Zone fermée", table: "Table", loading: "Chargement…",
+    codePrompt: "Entrez le code à 6 chiffres de votre application d’authentification", verify: "Confirmer", backBtn: "‹ Retour",
+    enrollPrompt: "Scannez le code QR avec votre application d’authentification, puis entrez le code à 6 chiffres",
+    enrollHint: "Configuration unique — utilisez ensuite seulement votre NIP pendant 90 jours", enrollManual: "Ou entrez cette clé manuellement :",
+    codeWrong: "Code invalide. Veuillez réessayer.", resetTitle: "Réinitialiser l’authentification", resetBtn: "Réinitialiser",
+    resetConfirm: "Réinitialiser l’authentification de ", resetDone: "Réinitialisation terminée — l’employé peut recommencer la configuration.",
+    cantReach: "Impossible de joindre le restaurant — vérifiez le Wi-Fi et réessayez", retry: "Réessayer",
   },
   en: {
     whoClockingIn: "Who's clocking in?", enterPin: "Enter your PIN", pinWrong: "Incorrect PIN",
@@ -358,9 +372,12 @@ function photoFallback(img) {
   d.textContent = img.dataset.fallback || "";
   img.replaceWith(d);
 }
-const CAD = s => "$" + (s / 100).toLocaleString("fr-FR");
+const cad = cents => (cents / 100).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA", {
+  style: "currency", currency: "CAD",
+});
 const iname = i => lang === "en" ? i.nameEn : i.nameFr;
 const inameAlt = i => lang === "en" ? i.nameFr : i.nameEn;
+const idesc = i => lang === "en" ? i.descriptionEn : i.descriptionFr;
 const vlabel = v => lang === "en" ? v.labelEn : v.labelFr;
 const zname = z => lang === "en" ? z.nameEn : z.nameFr;
 
@@ -861,6 +878,7 @@ function renderMenu() {
       ${i.photoVersion ? `<img class="photo" loading="lazy" src="/photos/${encodeURIComponent(i.id)}?v=${i.photoVersion}&w=512" data-fallback="${esc(i.abbrev)}" onerror="photoFallback(this)">` : `<div class="ph">${esc(i.abbrev)}</div>`}
       <div class="fr">${esc(iname(i))}</div>
       <div class="en">${esc(inameAlt(i))}</div>
+      <div class="desc">${esc(idesc(i))}</div>
       <div class="price">${i.variants.length === 1 ? cad(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
       ${i.variants.length > 1 ? `<select id="v-${esc(i.id)}">` + i.variants.map(v => `<option value="${esc(v.id)}">${esc(vlabel(v))} ${cad(v.priceCents)}</option>`).join("") + `</select>` : ""}
       <input type="text" id="n-${esc(i.id)}" placeholder="${T().note}">

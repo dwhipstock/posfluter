@@ -18,6 +18,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * M8 terminal pairing + device gate: /pair exchanges a cloud-verified code for a
@@ -220,6 +221,11 @@ class DevicePairingTest {
         }
 
         // the /staff-app shell page itself stays public (it's just HTML)
-        assertEquals(HttpStatusCode.OK, client.get("/staff-app").status)
+        val shell = client.get("/staff-app")
+        assertEquals(HttpStatusCode.OK, shell.status)
+        val html = shell.bodyAsText()
+        assertTrue("--accent: #1565c0" in html)
+        assertTrue("const cad =" in html)
+        assertTrue("const CAD =" !in html)
     }
 }
