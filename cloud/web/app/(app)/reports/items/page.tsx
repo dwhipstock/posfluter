@@ -178,7 +178,7 @@ function CatChip({ label, active, onClick }: { label: string; active: boolean; o
       className={cn(
         "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
         active
-          ? "border-accent bg-accent text-black"
+          ? "border-accent bg-accent text-white"
           : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-ink"
       )}
     >

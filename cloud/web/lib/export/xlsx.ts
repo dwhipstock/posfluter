@@ -10,11 +10,11 @@ import ExcelJS from "exceljs";
 import type { Cell, ExportDoc, Section } from "./doc";
 import { saveBlob } from "./download";
 
-const MUTED = "FF71717A";
-const FAINT = "FFA1A1AA";
-const HEADER_FILL = "FFF4F4F5";
-const ACCENT = "FFFF1F8E";
-const RULE = "FFD4D4D8";
+const MUTED = "FF5B6D82";
+const FAINT = "FF8292A5";
+const HEADER_FILL = "FFE7EFF9";
+const ACCENT = "FF1565C0";
+const RULE = "FFC8D5E6";
 const MONEY_FMT = "#,##0.00";
 const INT_FMT = "#,##0";
 

@@ -9,13 +9,13 @@ import type {
 } from "pdfmake/interfaces";
 import type { Cell, ExportDoc, Kpi, Section } from "./doc";
 
-const INK = "#0A0A0A";
-const ACCENT = "#FF1F8E";
-const MUTED = "#71717A";
-const FAINT = "#A1A1AA";
-const HEADER_FILL = "#F4F4F5";
-const LINE = "#E5E5E5";
-const RULE = "#D4D4D8";
+const INK = "#17263A";
+const ACCENT = "#1565C0";
+const MUTED = "#5B6D82";
+const FAINT = "#8292A5";
+const HEADER_FILL = "#E7EFF9";
+const LINE = "#C8D5E6";
+const RULE = "#C8D5E6";
 const CONTENT_WIDTH = 515; // A4 (595pt) minus 40pt margins each side
 
 function CADStr(cents: number): string {

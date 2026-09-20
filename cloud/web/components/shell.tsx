@@ -10,6 +10,7 @@ import { useMe } from "@/lib/hooks";
 import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { LangEraToggle } from "@/components/lang-toggle";
+import { BarcodeMark } from "@/components/brand-mark";
 import { cn } from "@/lib/utils";
 
 const NAV: { href: string; labelKey: MsgKey; icon: typeof LayoutGrid }[] = [
@@ -29,11 +30,7 @@ function isActive(pathname: string, href: string) {
 }
 
 function Wordmark() {
-  return (
-    <span className="flex items-baseline text-sm font-bold uppercase tracking-[0.18em]">
-      CopperLantern<span className="ml-0.5 text-lg leading-none text-accent">.</span>
-    </span>
-  );
+  return <BarcodeMark />;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {

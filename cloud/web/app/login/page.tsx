@@ -12,6 +12,7 @@ import type { ConfirmResponse, LoginResponse } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { LangEraToggle } from "@/components/lang-toggle";
+import { BarcodeMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,13 +125,10 @@ export default function LoginPage() {
           <LangEraToggle />
         </div>
         <div className="mb-8 flex flex-col items-center">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-ink text-2xl font-extrabold text-white">
-            B<span className="-mt-3 text-accent">.</span>
+          <div className="rounded-xl bg-ink px-5 py-3 text-white shadow-sm">
+            <BarcodeMark />
           </div>
-          <h1 className="mt-4 text-lg font-bold uppercase tracking-[0.2em]">
-            CopperLantern<span className="text-accent">.</span>
-          </h1>
-          <p className="mt-1 text-sm text-neutral-500">{t("brand_tagline")}</p>
+          <p className="mt-3 text-sm text-neutral-500">{t("brand_tagline")}</p>
         </div>
 
         <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
