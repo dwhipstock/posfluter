@@ -1,0 +1,79 @@
+# Independent production stack for the internet-facing manager portal.
+# Images are built by .github/workflows/build.yml and selected by immutable SHA.
+name: copper-lantern-manager
+
+services:
+  db:
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pos_cloud
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD in .env}"
+    volumes:
+      - manager_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos_cloud"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  api:
+    image: "${REGISTRY:?set REGISTRY in .env}/pos-cloud-api:${IMAGE_TAG:?set IMAGE_TAG in .env}"
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "jdbc:postgresql://db:5432/pos_cloud"
+      DB_USER: pos
+      DB_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD in .env}"
+      PORT: "8081"
+      MIGRATIONS_DIR: /app/migrations
+      ADMIN_EMAIL: "${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}"
+      STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env}"
+      COOKIE_SECURE: "true"
+      VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
+      VENUE_TZ: "America/Toronto"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  web:
+    image: "${REGISTRY:?set REGISTRY in .env}/pos-cloud-web:${IMAGE_TAG:?set IMAGE_TAG in .env}"
+    restart: unless-stopped
+    environment:
+      API_ORIGIN: "http://api:8081"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  caddy:
+    image: "${REGISTRY:?set REGISTRY in .env}/pos-cloud-caddy:${IMAGE_TAG:?set IMAGE_TAG in .env}"
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: "${DOMAIN:?set DOMAIN in .env}"
+      ACME_EMAIL: "${ACME_EMAIL:?set ACME_EMAIL in .env}"
+    volumes:
+      - ./Caddyfile.manager:/etc/caddy/Caddyfile:ro
+      - manager_caddy_data:/data
+      - manager_caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+volumes:
+  manager_pgdata:
+  manager_caddy_data:
+  manager_caddy_config:

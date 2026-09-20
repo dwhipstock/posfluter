@@ -18,3 +18,16 @@ replaced for a real deployment.
 Never commit `.env` files, TLS private keys, database dumps, device tokens, customer
 photos, or backups. Use `scripts/provision-venue.sh` for a new venue and the scripts in
 `scripts/e2e/` for validation against an isolated test deployment.
+
+## Independent manager portal
+
+`docker-compose.manager.yml` runs a reporting-only deployment on its own host and
+volumes. It uses immutable ECR image tags produced by the build workflow and the
+exact-host-only `Caddyfile.manager`, so it cannot intercept or modify existing venue
+store traffic. Set `REGISTRY`, `IMAGE_TAG`, `DOMAIN`, `ACME_EMAIL`, the database and
+admin credentials, and `STORE_API_KEY` in an untracked `.env`, then run:
+
+```sh
+docker compose -f docker-compose.manager.yml pull
+docker compose -f docker-compose.manager.yml up -d
+```

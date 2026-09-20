@@ -1,0 +1,21 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# Dedicated manager/reporting portal. This intentionally has no wildcard venue
+# routing: customer-facing stores remain on their existing, independent host.
+{$DOMAIN} {
+	encode gzip
+
+	handle /health {
+		reverse_proxy api:8081
+	}
+
+	handle /v1/* {
+		reverse_proxy api:8081
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
