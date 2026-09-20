@@ -50,7 +50,7 @@ class FloorPlanTest {
         json.parseToJsonElement(body).jsonObject["code"]!!.jsonPrimitive.content
 
     @Test
-    fun `existing tables are auto-laid into a non-overlapping grid with geometry`() = testApplication {
+    fun `seeded tables have valid non-overlapping pub layouts`() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
         val zones = json.parseToJsonElement(c.get("/zones").bodyAsText()).jsonArray
@@ -63,16 +63,16 @@ class FloorPlanTest {
                 val y = t["y"]!!.jsonPrimitive.int
                 assertTrue(x in 0..1000 && y in 0..1000, "coords in canvas: $t")
                 assertTrue(t["width"]!!.jsonPrimitive.int >= 20)
-                assertEquals("SQUARE", t["shape"]!!.jsonPrimitive.content)
-                assertEquals(4, t["seats"]!!.jsonPrimitive.int)
+                assertTrue(t["shape"]!!.jsonPrimitive.content in setOf("SQUARE", "ROUND", "RECT"))
+                assertTrue(t["seats"]!!.jsonPrimitive.int in 1..8)
                 assertTrue(positions.add(x to y),
                     "tables overlap at ($x,$y) in zone ${zone.jsonObject["id"]}")
             }
         }
-        // the seeded upper zone (10 tables, 5-per-row grid) spans two rows
+        // The dining room combines seven barstools with varied dining tables.
         val upperYs = zoneTables(c.get("/zones").bodyAsText(), "upper")
             .map { it["y"]!!.jsonPrimitive.int }.toSet()
-        assertEquals(setOf(60, 220), upperYs)
+        assertEquals(setOf(145, 330, 340, 635, 650, 835), upperYs)
     }
 
     @Test
@@ -141,7 +141,7 @@ class FloorPlanTest {
             """{"label":"O-3","x":400,"y":400,"shape":"ROUND","seats":6,"managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, created.status)
         val id = json.parseToJsonElement(created.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
-        assertEquals("outside-o-3", id)
+        assertEquals("outside-o-5", id)
 
         val onPlan = table(c.get("/zones").bodyAsText(), "outside", id)!!
         assertEquals("ROUND", onPlan["shape"]!!.jsonPrimitive.content)
@@ -155,7 +155,7 @@ class FloorPlanTest {
         val second = c.postJson("/zones/outside/tables",
             """{"label":"O-3","x":100,"y":100,"managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, second.status)
-        assertEquals("O-4",
+        assertEquals("O-6",
             json.parseToJsonElement(second.bodyAsText()).jsonObject["label"]!!.jsonPrimitive.content)
     }
 
@@ -197,10 +197,10 @@ class FloorPlanTest {
         val c = loginClient()
 
         assertEquals(HttpStatusCode.OK, c.patchJson("/tables/t3",
-            """{"label":"O-9","nameOverride":"Frère Nueng","managerPin":"1234"}""").status)
+            """{"label":"O-9","nameOverride":"Camille Roy","managerPin":"1234"}""").status)
         var t3 = table(c.get("/zones").bodyAsText(), "outside", "t3")!!
         assertEquals("O-9", t3["label"]!!.jsonPrimitive.content)
-        assertEquals("Frère Nueng", t3["nameOverride"]!!.jsonPrimitive.content)
+        assertEquals("Camille Roy", t3["nameOverride"]!!.jsonPrimitive.content)
         assertEquals(1, outboxEvents("table.renamed").size)
 
         // empty string clears the VIP name; label untouched

@@ -35,7 +35,7 @@ class ReadableMenuUrlTest {
         application { module(dbPath = tempDb()) }
         val res = client.get("/m/t1")
         assertEquals(HttpStatusCode.OK, res.status)
-        assertTrue(res.bodyAsText().contains("U-1"))
+        assertTrue(res.bodyAsText().contains("U-8"))
     }
 
     @Test

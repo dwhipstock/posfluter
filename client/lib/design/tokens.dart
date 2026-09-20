@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Design tokens — the single source of visual truth. Dark, flat, bordered:
-/// what a real POS terminal looks like (reference: Toast), not a Material demo.
+/// Design tokens — the single source of visual truth. Light, flat, bordered,
+/// and blue-led for a calm, high-contrast pub service environment.
 ///
 /// Rules encoded here and enforced by the widgets in this folder:
 /// - flat surfaces + 1px borders, NO Material shadows
@@ -11,20 +11,17 @@ import 'package:google_fonts/google_fonts.dart';
 /// - touch targets ≥56pt (POS is finger-first)
 abstract final class T {
   // colors
-  static const background = Color(0xFF0A0A0A);
-  static const surface = Color(0xFF141414);
-  static const surfaceAlt = Color(0xFF1F1F1F); // elevated cards
-  static const border = Color(0xFF2A2A2A); // 1px separators
-  static const textPrimary = Color(0xFFE8ECEF);
-  static const textMuted = Color(0xFF8A8A8A);
-  static const accent = Color(
-    0xFFFF1F8E,
-  ); // confirm, pay, primary CTA — matches the customer web front's --accent
-  static const onAccent =
-      background; // text/icons on the pink accent (~5.8:1 vs ~3.6:1 for white — WCAG AA)
-  static const destructive = Color(0xFFEF4444); // void, delete, force-close
+  static const background = Color(0xFFF3F7FC);
+  static const surface = Color(0xFFFFFFFF);
+  static const surfaceAlt = Color(0xFFE7EFF9); // selected/elevated cards
+  static const border = Color(0xFFC8D5E6); // 1px separators
+  static const textPrimary = Color(0xFF17263A);
+  static const textMuted = Color(0xFF5B6D82);
+  static const accent = Color(0xFF1565C0); // confirm, pay, primary CTA
+  static const onAccent = Colors.white;
+  static const destructive = Color(0xFFC62828); // void, delete, force-close
   static const onDestructive = Colors.white;
-  static const attention = Color(0xFFF59E0B); // pending badges, warnings
+  static const attention = Color(0xFFA85D00); // pending badges, warnings
 
   // the one deliberately light surface in the app — physical receipt paper
   static const receiptPaper = Color(0xFFFAF8F5);
@@ -100,7 +97,7 @@ ThemeData buildPosTheme() {
     headlineSmall: T.headline(),
   );
 
-  const scheme = ColorScheme.dark(
+  const scheme = ColorScheme.light(
     surface: T.surface,
     onSurface: T.textPrimary,
     primary: T.accent,

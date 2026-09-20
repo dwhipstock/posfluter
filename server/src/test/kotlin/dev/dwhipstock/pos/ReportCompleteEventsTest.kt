@@ -65,7 +65,7 @@ class ReportCompleteEventsTest {
         c.postJson("/shifts", """{"openingFloatCents":100000,"managerPin":"1234"}""")
             .let { assertEquals(HttpStatusCode.Created, it.status) }
 
-        // t5 = B-1 in the bar-front zone
+        // t5 = U-1, the first stool in the combined dining room and bar
         val checkId = json.parseToJsonElement(c.postJson("/tables/t5/checks", "{}").bodyAsText())
             .jsonObject["id"]!!.jsonPrimitive.int
         // multi-variant item (variant label expected), single-variant item (no label),
@@ -88,10 +88,10 @@ class ReportCompleteEventsTest {
         val closed = lastPayload("check.closed")
         assertEquals(checkId, closed["checkId"]!!.jsonPrimitive.int)
         assertEquals("t5", closed["tableId"]!!.jsonPrimitive.content)
-        assertEquals("B-1", closed["tableLabel"]!!.jsonPrimitive.content)
-        assertEquals("bar-front", closed["zoneId"]!!.jsonPrimitive.content)
-        assertEquals("Bar", closed["zoneNameFr"]!!.jsonPrimitive.content)
-        assertEquals("Bar", closed["zoneNameEn"]!!.jsonPrimitive.content)
+        assertEquals("U-1", closed["tableLabel"]!!.jsonPrimitive.content)
+        assertEquals("upper", closed["zoneId"]!!.jsonPrimitive.content)
+        assertEquals("Salle à manger et bar", closed["zoneNameFr"]!!.jsonPrimitive.content)
+        assertEquals("Dining Room & Bar", closed["zoneNameEn"]!!.jsonPrimitive.content)
         assertEquals(1, closed["shiftId"]!!.jsonPrimitive.int)
         assertTrue(closed["openedAt"]!!.jsonPrimitive.content.isNotEmpty())
         assertTrue(closed["closedAt"]!!.jsonPrimitive.content.isNotEmpty())
@@ -153,10 +153,10 @@ class ReportCompleteEventsTest {
         assertEquals("J'ai commandé la mauvaise table", voided["reason"]!!.jsonPrimitive.content)
         assertEquals("manager", voided["authorizedBy"]!!.jsonPrimitive.content)
         assertEquals("t6", voided["tableId"]!!.jsonPrimitive.content)
-        assertEquals("B-3", voided["tableLabel"]!!.jsonPrimitive.content)
-        assertEquals("bar-front", voided["zoneId"]!!.jsonPrimitive.content)
-        assertEquals("Bar", voided["zoneNameFr"]!!.jsonPrimitive.content)
-        assertEquals("Bar", voided["zoneNameEn"]!!.jsonPrimitive.content)
+        assertEquals("U-3", voided["tableLabel"]!!.jsonPrimitive.content)
+        assertEquals("upper", voided["zoneId"]!!.jsonPrimitive.content)
+        assertEquals("Salle à manger et bar", voided["zoneNameFr"]!!.jsonPrimitive.content)
+        assertEquals("Dining Room & Bar", voided["zoneNameEn"]!!.jsonPrimitive.content)
         assertEquals(1, voided["shiftId"]!!.jsonPrimitive.int)
         assertTrue(voided["openedAt"]!!.jsonPrimitive.content.isNotEmpty())
         assertTrue(voided["voidedAt"]!!.jsonPrimitive.content.isNotEmpty())

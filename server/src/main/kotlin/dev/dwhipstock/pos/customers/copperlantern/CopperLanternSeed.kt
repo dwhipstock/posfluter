@@ -5,6 +5,7 @@ import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.restaurant.DiningTables
+import dev.dwhipstock.pos.restaurant.FloorObjects
 import dev.dwhipstock.pos.restaurant.Zones
 import dev.dwhipstock.pos.sdk.Outbox
 import kotlinx.serialization.json.buildJsonObject
@@ -22,6 +23,17 @@ object CopperLanternSeed {
         val descriptionFr: String, val descriptionEn: String,
         val category: String, val abbrev: String, val alcohol: Boolean,
         val variants: List<Variant>,
+    )
+    private data class SeedTable(
+        val id: String, val zoneId: String, val label: String, val sortOrder: Int,
+        val x: Int, val y: Int, val width: Int, val height: Int,
+        val shape: String, val seats: Int,
+        val parentId: String? = null, val nameOverride: String? = null,
+    )
+    private data class SeedObject(
+        val id: String, val zoneId: String, val type: String,
+        val x: Int, val y: Int, val width: Int, val height: Int,
+        val label: String? = null,
     )
 
     private fun one(cents: Long) = listOf(Variant("regular", "Régulier", "Regular", cents))
@@ -104,54 +116,52 @@ object CopperLanternSeed {
 
     // Stable internal IDs preserve API compatibility; only fictional pub labels are shown.
     private val zones = listOf(
-        arrayOf("upper", "Salle à manger", "Dining Room", "U"),
+        arrayOf("upper", "Salle à manger et bar", "Dining Room & Bar", "U"),
         arrayOf("outside", "Terrasse", "Patio", "O"),
-        arrayOf("bar-front", "Bar", "Bar", "B"),
         arrayOf("lower", "Salle de jeux", "Games Room", "L"),
     )
     private val tables = listOf(
-        arrayOf("t1", "upper", "U-1", null, null, "1"),
-        arrayOf("t1-1", "upper", "U-2", "t1", null, "2"),
-        arrayOf("t2", "upper", "U-3", null, null, "3"),
-        arrayOf("u2-2", "upper", "U-4", "t2", null, "4"),
-        arrayOf("u3", "upper", "U-5", null, null, "5"),
-        arrayOf("u3-3", "upper", "U-6", "u3", null, "6"),
-        arrayOf("u4", "upper", "U-7", null, null, "7"),
-        arrayOf("u4-4", "upper", "U-8", "u4", null, "8"),
-        arrayOf("u5", "upper", "U-9", null, null, "9"),
-        arrayOf("u5-5", "upper", "U-10", "u5", null, "10"),
-        arrayOf("t3", "outside", "O-1", null, null, "1"),
-        arrayOf("t4", "outside", "O-2", null, null, "2"),
-        arrayOf("t5", "bar-front", "B-1", null, null, "1"),
-        arrayOf("t5-5", "bar-front", "B-2", "t5", null, "2"),
-        arrayOf("t6", "bar-front", "B-3", null, null, "3"),
-        arrayOf("b1", "bar-front", "B-4", null, null, "4"),
-        arrayOf("b2", "bar-front", "B-5", null, null, "5"),
-        arrayOf("b3", "bar-front", "B-6", null, null, "6"),
-        arrayOf("b4", "bar-front", "B-7", null, null, "7"),
-        arrayOf("t7", "lower", "L-1", null, null, "1"),
-        arrayOf("t8", "lower", "L-2", null, "Alex Morgan", "2"),
-        arrayOf("t101", "lower", "L-3", null, null, "3"),
-        arrayOf("l9", "lower", "L-4", null, null, "4"),
-        arrayOf("l10", "lower", "L-5", null, null, "5"),
-        arrayOf("l11", "lower", "L-6", null, null, "6"),
-        arrayOf("l12", "lower", "L-7", null, null, "7"),
-        arrayOf("l13", "lower", "L-8", null, null, "8"),
-        arrayOf("l14", "lower", "L-9", null, null, "9"),
-        arrayOf("l15", "lower", "L-10", null, null, "10"),
-        arrayOf("l16", "lower", "L-11", null, null, "11"),
-        arrayOf("l17", "lower", "L-12", null, null, "12"),
-        arrayOf("l18", "lower", "L-13", null, null, "13"),
-        arrayOf("l19", "lower", "L-14", null, null, "14"),
-        arrayOf("l20", "lower", "L-15", null, null, "15"),
-        arrayOf("l21", "lower", "L-16", null, null, "16"),
-        arrayOf("l22", "lower", "L-17", null, null, "17"),
-        arrayOf("l23", "lower", "L-18", null, null, "18"),
-        arrayOf("l24", "lower", "L-19", null, null, "19"),
-        arrayOf("l25", "lower", "L-20", null, null, "20"),
-        arrayOf("l26", "lower", "L-21", null, null, "21"),
-        arrayOf("l27", "lower", "L-22", null, null, "22"),
-        arrayOf("l28", "lower", "L-23", null, null, "23"),
+        // Seven individual barstools plus varied dining tables: 47 seats total.
+        SeedTable("t5", "upper", "U-1", 1, 50, 145, 65, 65, "ROUND", 1),
+        SeedTable("t5-5", "upper", "U-2", 2, 180, 145, 65, 65, "ROUND", 1, parentId = "t5"),
+        SeedTable("t6", "upper", "U-3", 3, 310, 145, 65, 65, "ROUND", 1),
+        SeedTable("b1", "upper", "U-4", 4, 440, 145, 65, 65, "ROUND", 1),
+        SeedTable("b2", "upper", "U-5", 5, 570, 145, 65, 65, "ROUND", 1),
+        SeedTable("b3", "upper", "U-6", 6, 700, 145, 65, 65, "ROUND", 1),
+        SeedTable("b4", "upper", "U-7", 7, 830, 145, 65, 65, "ROUND", 1),
+        SeedTable("t1", "upper", "U-8", 8, 75, 340, 180, 110, "RECT", 6),
+        SeedTable("t1-1", "upper", "U-9", 9, 365, 330, 110, 110, "ROUND", 4, parentId = "t1"),
+        SeedTable("t2", "upper", "U-10", 10, 650, 340, 180, 110, "RECT", 6),
+        SeedTable("u2-2", "upper", "U-11", 11, 75, 650, 110, 110, "SQUARE", 4, parentId = "t2"),
+        SeedTable("u3", "upper", "U-12", 12, 300, 635, 220, 120, "RECT", 8),
+        SeedTable("u3-3", "upper", "U-13", 13, 680, 650, 110, 110, "ROUND", 4, parentId = "u3"),
+        SeedTable("u4", "upper", "U-14", 14, 75, 835, 110, 110, "ROUND", 4),
+        SeedTable("u4-4", "upper", "U-15", 15, 300, 835, 110, 110, "SQUARE", 4, parentId = "u4"),
+        SeedTable("u5", "upper", "U-16", 16, 500, 835, 110, 110, "ROUND", 4),
+        SeedTable("u5-5", "upper", "U-17", 17, 700, 835, 110, 110, "SQUARE", 4, parentId = "u5"),
+
+        SeedTable("t3", "outside", "O-1", 1, 120, 150, 110, 110, "ROUND", 4),
+        SeedTable("t4", "outside", "O-2", 2, 390, 150, 110, 110, "ROUND", 4),
+        SeedTable("o3", "outside", "O-3", 3, 660, 150, 110, 110, "ROUND", 4),
+        SeedTable("o4", "outside", "O-4", 4, 390, 470, 180, 110, "RECT", 6),
+
+        // Eight perimeter tables leave the centre open for games.
+        SeedTable("t7", "lower", "L-1", 1, 60, 60, 110, 110, "ROUND", 4),
+        SeedTable("t8", "lower", "L-2", 2, 250, 60, 110, 110, "ROUND", 4, nameOverride = "Alex Morgan"),
+        SeedTable("t101", "lower", "L-3", 3, 640, 60, 110, 110, "ROUND", 4),
+        SeedTable("l9", "lower", "L-4", 4, 830, 60, 110, 110, "ROUND", 4),
+        SeedTable("l10", "lower", "L-5", 5, 60, 690, 110, 110, "SQUARE", 4),
+        SeedTable("l11", "lower", "L-6", 6, 250, 690, 110, 110, "SQUARE", 4),
+        SeedTable("l12", "lower", "L-7", 7, 640, 690, 110, 110, "SQUARE", 4),
+        SeedTable("l13", "lower", "L-8", 8, 830, 690, 110, 110, "SQUARE", 4),
+    )
+    private val floorObjects = listOf(
+        SeedObject("upper-bar", "upper", "BAR_FRONT", 40, 30, 920, 80, "Copper Bar"),
+        SeedObject("upper-pillar-1", "upper", "PILLAR", 275, 470, 65, 65),
+        SeedObject("upper-pillar-2", "upper", "PILLAR", 610, 470, 65, 65),
+        SeedObject("lower-pool", "lower", "POOL", 250, 260, 500, 280, "Pool"),
+        SeedObject("lower-pillar-1", "lower", "PILLAR", 70, 360, 65, 65),
+        SeedObject("lower-pillar-2", "lower", "PILLAR", 865, 360, 65, 65),
     )
 
     fun seedIfEmpty() = transaction {
@@ -171,11 +181,18 @@ object CopperLanternSeed {
             this[Zones.sortOrder] = i; this[Zones.labelPrefix] = z[3]
         }
         DiningTables.batchInsert(tables) { t ->
-            this[DiningTables.id] = t[0]!!; this[DiningTables.zoneId] = t[1]!!; this[DiningTables.label] = t[2]!!
-            this[DiningTables.parentTableId] = t[3]; this[DiningTables.nameOverride] = t[4]; this[DiningTables.sortOrder] = t[5]!!.toInt()
-            val position = t[5]!!.toInt() - 1
-            this[DiningTables.x] = 60 + 180 * (position % 5)
-            this[DiningTables.y] = 60 + 160 * (position / 5)
+            this[DiningTables.id] = t.id; this[DiningTables.zoneId] = t.zoneId; this[DiningTables.label] = t.label
+            this[DiningTables.parentTableId] = t.parentId; this[DiningTables.nameOverride] = t.nameOverride
+            this[DiningTables.sortOrder] = t.sortOrder
+            this[DiningTables.x] = t.x; this[DiningTables.y] = t.y
+            this[DiningTables.width] = t.width; this[DiningTables.height] = t.height
+            this[DiningTables.shape] = t.shape; this[DiningTables.seats] = t.seats
+        }
+        FloorObjects.batchInsert(floorObjects) { o ->
+            this[FloorObjects.id] = o.id; this[FloorObjects.zoneId] = o.zoneId; this[FloorObjects.type] = o.type
+            this[FloorObjects.x] = o.x; this[FloorObjects.y] = o.y
+            this[FloorObjects.width] = o.width; this[FloorObjects.height] = o.height
+            this[FloorObjects.label] = o.label
         }
         Users.insert { it[id] = "manager"; it[name] = "Demo Manager"; it[role] = "MANAGER"; it[pin] = AuthService.hashPin("1234"); it[languageCode] = "en"; it[calendar] = "CE" }
         Users.insert { it[id] = "server1"; it[name] = "Demo Server"; it[role] = "SERVER"; it[pin] = AuthService.hashPin("9999"); it[languageCode] = "en"; it[calendar] = "CE" }

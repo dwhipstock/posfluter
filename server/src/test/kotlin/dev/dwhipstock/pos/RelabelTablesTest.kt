@@ -15,8 +15,8 @@ import kotlin.test.assertNull
 
 /**
  * Migration 012 relabel: a freshly-migrated + seeded DB exposes zone-prefixed
- * sequential labels (U-/O-/B-/L-), Upper shrunk to 10, IDs unchanged, and the
- * VIP name_override preserved. Asserts through /zones — the real read path the
+ * sequential labels (U-/O-/L-), a combined dining room and bar, IDs unchanged,
+ * and the VIP name_override preserved. Asserts through /zones — the real read path the
  * client uses — so the whole migration+seed+API chain is exercised.
  */
 class RelabelTablesTest {
@@ -43,15 +43,14 @@ class RelabelTablesTest {
         val byZone = c.zoneTables()
 
         // exact labels, in order, per zone
-        assertEquals((1..10).map { "U-$it" }, byZone["upper"]!!.map { it.first })
-        assertEquals(listOf("O-1", "O-2"), byZone["outside"]!!.map { it.first })
-        assertEquals((1..7).map { "B-$it" }, byZone["bar-front"]!!.map { it.first })
-        assertEquals((1..23).map { "L-$it" }, byZone["lower"]!!.map { it.first })
-        assertEquals(42, byZone.values.sumOf { it.size })
+        assertEquals((1..17).map { "U-$it" }, byZone["upper"]!!.map { it.first })
+        assertEquals((1..4).map { "O-$it" }, byZone["outside"]!!.map { it.first })
+        assertEquals((1..8).map { "L-$it" }, byZone["lower"]!!.map { it.first })
+        assertEquals(29, byZone.values.sumOf { it.size })
 
         // IDs never changed — labels are pure display over stable internal ids
-        assertEquals("t1", byZone["upper"]!!.first { it.first == "U-1" }.second)
-        assertEquals("t5-5", byZone["bar-front"]!!.first { it.first == "B-2" }.second)
+        assertEquals("t5", byZone["upper"]!!.first { it.first == "U-1" }.second)
+        assertEquals("t1", byZone["upper"]!!.first { it.first == "U-8" }.second)
 
         // the 3 dropped upper tables are gone
         assertNull(byZone["upper"]!!.firstOrNull { it.second in setOf("u6", "u6-6", "u7") })

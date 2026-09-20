@@ -16,7 +16,7 @@ import kotlin.test.assertEquals
  * The server owns table labels: create/rename always coerce to the zone's
  * "{prefix}-{n}" form, honouring a free requested number but fixing the prefix,
  * so a hand-typed mismatch (a B1 in Lower) is impossible and numbers stay unique
- * per zone. Seeded zones: upper=U (1..10 taken), outside=O (1..2 taken).
+ * per zone. Seeded zones: upper=U (1..17 taken), outside=O (1..4 taken).
  */
 class LabelEnforcementTest {
 
@@ -37,14 +37,14 @@ class LabelEnforcementTest {
         val c = loginClient()
         // "B1" in Upper: prefix fixed to U; 1 is taken (U-1) so it lands on the next free
         val label = c.addLabel("upper", """{"label":"B1","x":100,"y":100,"managerPin":"1234"}""")
-        assertEquals("U-11", label)
+        assertEquals("U-18", label)
     }
 
     @Test
     fun `free requested number is honoured, only the prefix corrected`() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
-        // Outside has O-1, O-2 only — 7 is free, so "B7" becomes O-7 (kept number, fixed prefix)
+        // Outside has O-1 through O-4 — 7 is free, so "B7" becomes O-7 (kept number, fixed prefix)
         assertEquals("O-7", c.addLabel("outside", """{"label":"B7","x":100,"y":100,"managerPin":"1234"}"""))
     }
 
@@ -52,9 +52,9 @@ class LabelEnforcementTest {
     fun `no label auto-assigns the next free number`() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
-        assertEquals("O-3", c.addLabel("outside", """{"x":100,"y":100,"managerPin":"1234"}"""))
+        assertEquals("O-5", c.addLabel("outside", """{"x":100,"y":100,"managerPin":"1234"}"""))
         // and the next one is sequential
-        assertEquals("O-4", c.addLabel("outside", """{"x":140,"y":140,"managerPin":"1234"}"""))
+        assertEquals("O-6", c.addLabel("outside", """{"x":140,"y":140,"managerPin":"1234"}"""))
     }
 
     @Test
@@ -74,9 +74,9 @@ class LabelEnforcementTest {
     fun `two adds requesting the same number do not collide`() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
-        // outside 5 free first time...
+        // outside 5 is free first time...
         assertEquals("O-5", c.addLabel("outside", """{"label":"5","x":100,"y":100,"managerPin":"1234"}"""))
         // ...second request for 5 is bumped to the next free number
-        assertEquals("O-3", c.addLabel("outside", """{"label":"5","x":150,"y":150,"managerPin":"1234"}"""))
+        assertEquals("O-6", c.addLabel("outside", """{"label":"5","x":150,"y":150,"managerPin":"1234"}"""))
     }
 }

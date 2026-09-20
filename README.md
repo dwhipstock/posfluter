@@ -35,6 +35,16 @@ flutter run
 
 The demo manager PIN is `1234` and the demo server PIN is `9999`. Change both before using the software outside an isolated demo.
 
+To populate the local menu with freely licensed Wikimedia Commons photos and
+generate an attribution report:
+
+```bash
+python3 scripts/demo-menu-photos.py
+```
+
+The downloaded binaries stay in ignored local store data; photo sources and
+licenses are recorded in `docs/menu-photo-credits.md`.
+
 For the complete local stack, see `docs/demo-runbook.md`.
 
 ## Sample catalog
