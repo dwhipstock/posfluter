@@ -47,6 +47,14 @@ jobs:
           cache: npm
           cache-dependency-path: cloud/web/package-lock.json
 
+      # Authenticate before the expensive builds so an IAM/OIDC regression fails
+      # immediately instead of wasting several runner-minutes first.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::842588910054:role/pos-ci-ecr-push
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+
       # --- prebuild the arch-independent artifacts on x64 ---
       - name: build store jar
         working-directory: server
@@ -88,13 +96,6 @@ jobs:
           cp -r cloud/web/.next/standalone        ci-context/web/standalone
           cp -r cloud/web/.next/static            ci-context/web/static
           cp -r cloud/web/public                  ci-context/web/public
-
-      # --- auth to ECR via OIDC (no static keys) ---
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::842588910054:role/pos-ci-ecr-push
-          aws-region: ${{ env.AWS_REGION }}
-      - uses: aws-actions/amazon-ecr-login@v2
 
       # --- assemble the arm64 runtime images and push :<git-sha> ---
       - uses: docker/setup-qemu-action@v3   # apt-get in the jar images runs under arm64 emulation
