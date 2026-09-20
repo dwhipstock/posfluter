@@ -4,7 +4,7 @@
 
 # Dedicated manager/reporting portal. This intentionally has no wildcard venue
 # routing: customer-facing stores remain on their existing, independent host.
-{$DOMAIN} {
+{$DOMAIN}, {$LEGACY_DOMAIN} {
 	encode gzip
 
 	handle /health {
