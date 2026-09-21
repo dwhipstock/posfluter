@@ -75,6 +75,18 @@ class Api {
     await _storage.write(key: 'server_url_cache', value: v);
   }
 
+  /// Switch to a restaurant found on the current Wi-Fi. A previously entered
+  /// address is only a hint, never a permanent lock: when it stops answering,
+  /// discovery must be able to move the terminal back to the local venue.
+  static Future<void> useDiscovered(String url) async {
+    final v = _normalizeUrl(url);
+    if (v == null) return;
+    _override = null;
+    _discovered = v;
+    await _storage.delete(key: 'server_url_override');
+    await _storage.write(key: 'server_url_cache', value: v);
+  }
+
   /// Normalize user input into a server origin, or null when blank/invalid.
   /// Bare/LAN HTTP addresses default to :8080; HTTPS uses its standard :443.
   static String? _normalizeUrl(String? raw) {

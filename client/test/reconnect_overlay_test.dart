@@ -32,12 +32,14 @@ void main() {
 
   setUp(() {
     ConnectionMonitor.instance.debugReset();
+    ConnectionMonitor.findRestaurant = null;
   });
 
   tearDown(() {
     ReconnectingOverlay.detach();
     ReconnectingOverlay.debugDropPostFrameSync = false;
     ReconnectingOverlay.onEscape = null;
+    ConnectionMonitor.findRestaurant = null;
     ConnectionMonitor.instance.debugReset();
   });
 
@@ -172,4 +174,28 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     await finish(tester);
   });
+
+  testWidgets(
+    'offline monitor can recover by finding the restaurant on Wi-Fi',
+    (tester) async {
+      var discoveries = 0;
+      ConnectionMonitor.findRestaurant = () async {
+        discoveries++;
+        return true;
+      };
+      await tester.pumpWidget(app());
+      ReconnectingOverlay.attach(navKey);
+
+      goOffline();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(discoveries, greaterThan(0));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await finish(tester);
+    },
+  );
 }

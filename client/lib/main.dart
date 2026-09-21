@@ -28,6 +28,14 @@ Future<void> main() async {
   WidgetsBinding.instance.addObserver(_WakelockObserver());
   await Prefs.instance.load(); // device-level fallback until login hydrates
   await Api.loadServerConfig(); // manual override + last-discovered store URL
+  // A saved address is a hint, not a lock. If it disappears while the app is
+  // open, look for this restaurant on local Wi-Fi and move over automatically.
+  ConnectionMonitor.findRestaurant = () async {
+    final found = await ServerDiscovery.discover();
+    if (found == null) return false;
+    await Api.useDiscovered(found);
+    return Api.probeHealth(Api.baseUrl);
+  };
   // session expiry is not an error the user acknowledges: no toast, just
   // land on the login screen with the dead stack (and its dialogs) gone.
   Api.onSessionExpired = () {
@@ -135,7 +143,6 @@ class StartupGate extends StatefulWidget {
 class _StartupGateState extends State<StartupGate> {
   bool _checking = true;
   bool _connecting = false;
-  String? _error;
 
   // The connect poll is patient (60s window), but the person standing at the
   // terminal must never face a bare spinner with nothing to press: after a few
@@ -175,7 +182,6 @@ class _StartupGateState extends State<StartupGate> {
     final gen = ++_generation;
     setState(() {
       _checking = true;
-      _error = null;
     });
     try {
       await _ensureServer(gen);
@@ -199,12 +205,9 @@ class _StartupGateState extends State<StartupGate> {
     } on PairingRequiredException {
       // stored device token no longer accepted (revoked → already wiped)
       _replaceWith(const PairingScreen());
-    } catch (e) {
+    } catch (_) {
       if (mounted && gen == _generation) {
-        setState(() {
-          _checking = false;
-          _error = '$e';
-        });
+        setState(() => _checking = false);
       }
     }
   }
@@ -239,15 +242,13 @@ class _StartupGateState extends State<StartupGate> {
       while (true) {
         if (gen != _generation) return; // a manual retry took over
         if (await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) return;
-        // No known-good URL yet: try to find one on the LAN this round. The
-        // server may not answer discovery until it's booted, so keep looping.
-        if (!Api.hasServerOverride) {
-          final found = await ServerDiscovery.discover();
-          if (found != null) {
-            await Api.setDiscovered(found);
-            if (await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) {
-              return;
-            }
+        // The saved address is only a hint. Always search local Wi-Fi when it
+        // fails; this lets an old cloud/demo address heal itself with no form.
+        final found = await ServerDiscovery.discover();
+        if (found != null) {
+          await Api.useDiscovered(found);
+          if (await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) {
+            return;
           }
         }
         if (DateTime.now().isAfter(deadline)) {
@@ -309,7 +310,7 @@ class _StartupGateState extends State<StartupGate> {
                   const CircularProgressIndicator(),
                   if (_connecting) ...[
                     const SizedBox(height: 16),
-                    Text(l.connectingToServer, style: T.small()),
+                    Text(l.findingRestaurant, style: T.small()),
                     const SizedBox(height: 12),
                     // Never trap the kiosk on the spinner: an immediate escape to
                     // reconfigure the server URL (e.g. after switching networks).
@@ -317,7 +318,7 @@ class _StartupGateState extends State<StartupGate> {
                     // abandoning this connect-loop.
                     TextButton.icon(
                       icon: const Icon(LucideIcons.pencil),
-                      label: Text(l.setServerUrl),
+                      label: Text(l.connectionHelp),
                       onPressed: _enterServerUrl,
                     ),
                   ],
@@ -327,8 +328,7 @@ class _StartupGateState extends State<StartupGate> {
                   // available from the first frame).
                   if (_connecting && _showConnectActions) ...[
                     const SizedBox(height: 8),
-                    Text(l.currentlyUsing(Api.baseUrl), style: T.small()),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     FilledButton.icon(
                       icon: const Icon(LucideIcons.refreshCw),
                       label: Text(l.retry),
@@ -346,10 +346,7 @@ class _StartupGateState extends State<StartupGate> {
                     color: T.textMuted,
                   ),
                   const SizedBox(height: 12),
-                  Text(l.cannotReachServer),
-                  Text(_error ?? '', style: T.small()),
-                  const SizedBox(height: 8),
-                  Text(l.currentlyUsing(Api.baseUrl), style: T.small()),
+                  Text(l.restaurantUnavailable),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     icon: const Icon(LucideIcons.refreshCw),
@@ -359,7 +356,7 @@ class _StartupGateState extends State<StartupGate> {
                   const SizedBox(height: 8),
                   TextButton.icon(
                     icon: const Icon(LucideIcons.pencil),
-                    label: Text(l.setServerUrl),
+                    label: Text(l.connectionHelp),
                     onPressed: _enterServerUrl,
                   ),
                 ],

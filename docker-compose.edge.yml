@@ -1,0 +1,35 @@
+# On-site Copper Lantern store. Tablets and guest ordering talk to this service
+# over venue Wi-Fi; Internet access is used only by the background cloud sync.
+name: copper-lantern-edge
+
+services:
+  store:
+    image: copper-lantern-store:local
+    restart: unless-stopped
+    environment:
+      POS_DB: /data/pos.db
+      POS_RECEIPTS_DIR: /data/receipts
+      POS_BILLS_DIR: /data/bills
+      POS_PHOTOS_DIR: /data/photos
+      POS_PUBLIC_URL: "${POS_PUBLIC_URL:-http://192.168.1.2:8080}"
+      POS_SEED: none
+      POS_REQUIRE_DEVICE_TOKEN: "false"
+      POS_XMX: 512m
+      CLOUD_SYNC_URL: "https://copperlantern-manager.lostmindllc.com"
+      CLOUD_SYNC_API_KEY: "${CLOUD_SYNC_API_KEY:?set CLOUD_SYNC_API_KEY in .env.edge}"
+      CLOUD_SYNC_INTERVAL_SECONDS: "10"
+      REPORTING_PORTAL_URL: "https://copperlantern-manager.lostmindllc.com"
+      TZ: America/Toronto
+    volumes:
+      - storedata:/data
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  storedata:

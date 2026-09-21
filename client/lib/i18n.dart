@@ -136,8 +136,10 @@ class L {
   String get ok => _t('accepter', 'OK');
   String get done => _t('finition', 'Done');
   String get close => _t('éteindre', 'Close');
-  String get cannotReachServer =>
-      _t('Impossible de se connecter au serveur', 'Cannot reach server');
+  String get cannotReachServer => _t(
+    'Restaurant temporairement indisponible',
+    'Restaurant temporarily unavailable',
+  );
 
   // login
   String get enterPin =>
@@ -620,22 +622,27 @@ class L {
 
   // store server URL (device-local; auto-discovered on the LAN)
   String get sectionServer =>
-      _t('Serveur de boutique (cet appareil)', 'Store server (this device)');
-  String get serverUrlLabel => _t(
-    'URL du serveur (vide = découverte automatique)',
-    'Server URL (blank = auto-detect)',
-  );
+      _t('Connexion du restaurant', 'Restaurant connection');
+  String get serverUrlLabel =>
+      _t('Adresse de connexion avancée', 'Advanced connection address');
   String get scanForServer =>
-      _t('Rechercher des serveurs sur le réseau', 'Scan network for server');
+      _t('Trouver le restaurant sur le Wi-Fi', 'Find restaurant on Wi-Fi');
   String get scanningForServer =>
-      _t('Recherche de serveur...', 'Scanning for server…');
+      _t('Recherche du restaurant…', 'Finding restaurant…');
   String get connectingToServer =>
-      _t('Connexion au serveur…', 'Connecting to server…');
+      _t('Recherche du restaurant…', 'Finding your restaurant…');
+  String get findingRestaurant =>
+      _t('Recherche du restaurant…', 'Finding your restaurant…');
+  String get restaurantUnavailable => _t(
+    'Restaurant indisponible sur ce réseau Wi-Fi.',
+    'Restaurant is not available on this Wi-Fi',
+  );
+  String get connectionHelp => _t('Aide de connexion', 'Connection help');
   String serverFoundAt(String url) =>
-      _t('Serveur trouvé : $url', 'Found server: $url');
+      _t('Restaurant trouvé', 'Restaurant found');
   String get serverNotFound => _t(
-    'Aucun serveur trouvé sur ce réseau.',
-    'No server found on this network',
+    'Restaurant introuvable sur ce Wi-Fi.',
+    'Restaurant not found on this Wi-Fi',
   );
   String currentlyUsing(String url) =>
       _t('Utilise actuellement : $url', 'Currently using: $url');
@@ -643,7 +650,11 @@ class L {
     'Enregistré : redémarrez l\'application pour l\'utiliser.',
     'Saved — restart the app to apply',
   );
-  String get setServerUrl => _t('Définir l\'URL du serveur', 'Set server URL');
+  String get setServerUrl => _t('Connexion avancée', 'Advanced connection');
+  String get restaurantConnectionReady =>
+      _t('Restaurant disponible', 'Restaurant available');
+  String get advancedConnection =>
+      _t('Dépannage avancé', 'Advanced troubleshooting');
 
   // terminal pairing (cloud venues)
   String get pairTerminalTitle =>
@@ -669,9 +680,11 @@ class L {
 
   // global reconnecting overlay
   String get reconnectingToServer =>
-      _t('Connexion à un nouveau serveur…', 'Reconnecting to server…');
+      _t('Reconnexion au restaurant…', 'Reconnecting to your restaurant…');
+  String get reconnectingToRestaurant =>
+      _t('Reconnexion au restaurant…', 'Reconnecting to your restaurant…');
   String get reconnectChangeServer =>
-      _t('Changer de serveur/repair', 'Change server / re-pair');
+      _t('Aide de connexion', 'Connection help');
 
   // on-screen QR codes: table scan-to-order (long-press a table) + staff app
   String tableQrTitle(String label) => _t(

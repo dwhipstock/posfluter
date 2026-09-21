@@ -71,21 +71,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Auto-discover the store server on the LAN and fill the field with it.
+  /// Auto-discover the restaurant on Wi-Fi and switch immediately. There is
+  /// no address form in the normal path; the advanced field is only a fallback.
   Future<void> _scanServer() async {
     if (_scanning) return;
     setState(() => _scanning = true);
     final l = L.of(context);
     final found = await ServerDiscovery.discover();
+    if (found != null) await Api.useDiscovered(found);
     if (!mounted) return;
     setState(() {
       _scanning = false;
-      if (found != null) _serverUrl.text = found;
+      if (found != null) _serverUrl.clear();
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          found != null ? l.serverFoundAt(found) : l.serverNotFound,
+          found != null ? l.restaurantConnectionReady : l.serverNotFound,
         ),
       ),
     );
@@ -315,14 +317,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
-                        l.currentlyUsing(Api.baseUrl),
+                        l.restaurantConnectionReady,
                         style: T.small(),
                       ),
-                    ),
-                    _field(
-                      _serverUrl,
-                      l.serverUrlLabel,
-                      keyboard: TextInputType.url,
                     ),
                     SizedBox(
                       height: T.minTouch,
@@ -341,6 +338,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         onPressed: _scanning ? null : _scanServer,
                       ),
+                    ),
+                    ExpansionTile(
+                      title: Text(l.advancedConnection, style: T.small()),
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(bottom: 8),
+                      children: [
+                        _field(
+                          _serverUrl,
+                          l.serverUrlLabel,
+                          keyboard: TextInputType.url,
+                        ),
+                        Text(l.currentlyUsing(Api.baseUrl), style: T.small()),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     // Staff-app QR: employees scan it off this screen to

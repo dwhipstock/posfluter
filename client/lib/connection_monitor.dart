@@ -22,6 +22,10 @@ class ConnectionMonitor extends ChangeNotifier {
   static const _probeInterval = Duration(seconds: 3);
   static const _probeTimeout = Duration(seconds: 2);
 
+  /// Installed by main.dart to find the restaurant on local Wi-Fi. Kept as a
+  /// callback so this low-level monitor does not own discovery or navigation.
+  static Future<bool> Function()? findRestaurant;
+
   int _consecutiveFailures = 0;
   bool _offline = false;
   Timer? _probeTimer;
@@ -97,6 +101,11 @@ class ConnectionMonitor extends ChangeNotifier {
     _probing = true;
     try {
       if (await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) {
+        if (_offline) _goOnline();
+        return;
+      }
+      final find = findRestaurant;
+      if (find != null && await find()) {
         if (_offline) _goOnline();
       }
     } finally {
@@ -205,7 +214,7 @@ class ReconnectingOverlay {
   }
 }
 
-/// Dark scrim + spinner + "Reconnecting to server…" and the venue URL, small.
+/// Dark scrim + a plain-language local restaurant connection status.
 /// Blocks all input while the server is away (a POS must not queue taps into a
 /// dead connection); disappears on its own the moment /health answers. After a
 /// sustained outage it reveals a "change server" escape so a wrong URL / gone
@@ -255,11 +264,9 @@ class _ReconnectingBarrierState extends State<_ReconnectingBarrier> {
                 const CircularProgressIndicator(),
                 const SizedBox(height: 20),
                 Text(
-                  l.reconnectingToServer,
+                  l.reconnectingToRestaurant,
                   style: T.text(weight: FontWeight.w600),
                 ),
-                const SizedBox(height: 6),
-                Text(Api.baseUrl, style: T.small()),
                 const SizedBox(height: 20),
                 // auto-probes run every 3s anyway, but staff need a button to
                 // press — a barrier with no affordance reads as a hang
@@ -271,7 +278,7 @@ class _ReconnectingBarrierState extends State<_ReconnectingBarrier> {
                   const SizedBox(height: 28),
                   TextButton(
                     onPressed: ReconnectingOverlay.onEscape,
-                    child: Text(l.reconnectChangeServer),
+                    child: Text(l.connectionHelp),
                   ),
                 ],
               ],
