@@ -75,8 +75,8 @@ class Api {
     await _storage.write(key: 'server_url_cache', value: v);
   }
 
-  /// Normalize user input into 'http://host:port', or null when blank/invalid.
-  /// Adds http:// and the default :8080 when omitted; trims trailing slashes.
+  /// Normalize user input into a server origin, or null when blank/invalid.
+  /// Bare/LAN HTTP addresses default to :8080; HTTPS uses its standard :443.
   static String? _normalizeUrl(String? raw) {
     var s = raw?.trim() ?? '';
     if (s.isEmpty) return null;
@@ -84,7 +84,7 @@ class Api {
     s = s.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.tryParse(s);
     if (uri == null || uri.host.isEmpty) return null;
-    if (!uri.hasPort) s = '$s:8080';
+    if (!uri.hasPort && uri.scheme.toLowerCase() != 'https') s = '$s:8080';
     return s;
   }
 
