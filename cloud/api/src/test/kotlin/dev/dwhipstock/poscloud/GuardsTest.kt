@@ -16,6 +16,7 @@ import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -39,6 +40,26 @@ class GuardsTest {
             contentType(ContentType.Application.Json)
             setBody(testJson.encodeToString(IngestRequest.serializer(), IngestRequest(events.toList(), installId)))
         }
+
+    @Test
+    fun bootstrapRestartPreservesStoreRoutingIdentity() {
+        transaction {
+            Venues.update({ (Venues.tenantId eq "copperlantern") and (Venues.id eq "main") }) {
+                it[subdomain] = "copperlantern"
+                it[storeInstallId] = "install-A"
+            }
+        }
+
+        Bootstrap.run(TestSupport.config)
+
+        transaction {
+            val venue = Venues.selectAll().where {
+                (Venues.tenantId eq "copperlantern") and (Venues.id eq "main")
+            }.first()
+            assertEquals("copperlantern", venue[Venues.subdomain])
+            assertEquals("install-A", venue[Venues.storeInstallId])
+        }
+    }
 
     @Test
     fun firstPushPinsInstallIdAndMismatchIs409() = testApplication {

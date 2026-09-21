@@ -17,7 +17,6 @@ import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.upsert
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
 
@@ -40,9 +39,16 @@ object Bootstrap {
             it[name] = config.venueName
             it[createdAt] = now
         }
-        Venues.upsert {
+        // Do not use upsert here: PostgreSQL fills omitted columns from their
+        // defaults on the UPDATE path, which erased the store's subdomain,
+        // install identity, heartbeat, and LAN URL on every API restart.
+        Venues.insertIgnore {
             it[tenantId] = TENANT
             it[id] = VENUE
+            it[name] = config.venueName
+            it[timezone] = config.venueTz
+        }
+        Venues.update({ (Venues.tenantId eq TENANT) and (Venues.id eq VENUE) }) {
             it[name] = config.venueName
             it[timezone] = config.venueTz
         }
