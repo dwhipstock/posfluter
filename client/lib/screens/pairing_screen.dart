@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -7,6 +9,7 @@ import '../connection_monitor.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
 import 'login_screen.dart';
+import 'zones_screen.dart';
 
 /// First-run pairing: this terminal introduces itself to a venue with a
 /// single-use code minted in the owner portal, and receives the per-device
@@ -27,6 +30,9 @@ class _PairingScreenState extends State<PairingScreen> {
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController(text: 'Terminal');
   bool _busy = false;
+  bool _checkingLocal = false;
+  bool _localProbeInFlight = false;
+  Timer? _localProbeTimer;
   String? _error;
 
   @override
@@ -34,15 +40,58 @@ class _PairingScreenState extends State<PairingScreen> {
     super.initState();
     // This screen owns its connectivity story — keep the global overlay away.
     ConnectionMonitor.instance.pushSuppress();
+    // Pairing is a cloud/device-gated concern. If this route was opened by a
+    // stale response while the terminal is on its local restaurant, leave it
+    // automatically as soon as /health explicitly says pairing is disabled.
+    _checkingLocal = Api.isLocalVenueUrl(Api.baseUrl);
+    if (_checkingLocal) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkLocalMode());
+    }
+    _localProbeTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _checkLocalMode(),
+    );
   }
 
   @override
   void dispose() {
     ConnectionMonitor.instance.popSuppress();
+    _localProbeTimer?.cancel();
     _addressCtrl.dispose();
     _codeCtrl.dispose();
     _nameCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkLocalMode() async {
+    if (!mounted || _localProbeInFlight || !Api.isLocalVenueUrl(Api.baseUrl)) {
+      return;
+    }
+    _localProbeInFlight = true;
+    try {
+      final required = await Api.pairingRequirement(Api.baseUrl);
+      if (!mounted) return;
+      if (required == null) return; // local service is booting; keep checking
+      if (required) {
+        setState(() => _checkingLocal = false);
+        return;
+      }
+
+      AuthUser? user;
+      try {
+        user = await Api.restoreSession();
+      } catch (_) {}
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) =>
+              user != null ? const ZonesScreen() : const LoginScreen(),
+        ),
+        (_) => false,
+      );
+    } finally {
+      _localProbeInFlight = false;
+    }
   }
 
   Future<void> _pair() async {
@@ -88,6 +137,9 @@ class _PairingScreenState extends State<PairingScreen> {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    if (_checkingLocal) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return Scaffold(
       body: SafeArea(
         child: Stack(

@@ -51,8 +51,13 @@ Future<void> main() async {
   Api.onPairingRequired = () {
     final nav = rootNavigatorKey.currentState;
     if (nav == null) return;
+    // The on-site service explicitly runs without device pairing. A stale
+    // cloud response must never strand a LAN terminal in the pairing form.
+    final screen = Api.isLocalVenueUrl(Api.baseUrl)
+        ? const LoginScreen()
+        : const PairingScreen();
     nav.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const PairingScreen()),
+      MaterialPageRoute(builder: (_) => screen),
       (_) => false,
     );
   };
@@ -65,8 +70,11 @@ Future<void> main() async {
   ReconnectingOverlay.onEscape = () {
     final nav = rootNavigatorKey.currentState;
     if (nav == null) return;
+    final screen = Api.isLocalVenueUrl(Api.baseUrl)
+        ? const StartupGate()
+        : const PairingScreen();
     nav.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const PairingScreen()),
+      MaterialPageRoute(builder: (_) => screen),
       (_) => false,
     );
   };

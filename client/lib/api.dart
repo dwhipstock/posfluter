@@ -175,7 +175,18 @@ class Api {
   static Future<bool> checkPairingRequired(
     String base, {
     Duration timeout = const Duration(seconds: 2),
-  }) async => (await _getHealth(base, timeout))?['pairingRequired'] == true;
+  }) async => (await pairingRequirement(base, timeout: timeout)) == true;
+
+  /// Nullable form used by the pairing screen: null means the restaurant did
+  /// not answer, which is different from an explicit `pairingRequired:false`.
+  static Future<bool?> pairingRequirement(
+    String base, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final health = await _getHealth(base, timeout);
+    if (health == null) return null;
+    return health['pairingRequired'] == true;
+  }
 
   // --- device pairing: cloud venues hand each terminal a per-device token ---
   // Minted once via POST /pair (single-use code from the owner portal) and
