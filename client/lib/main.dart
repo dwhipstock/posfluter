@@ -131,8 +131,9 @@ class PosApp extends StatelessWidget {
   }
 }
 
-/// Restores a persisted session: → zones if valid, → login if not,
-/// → full-screen retry if the server is unreachable.
+/// Finds the on-site restaurant and restores a persisted session. Only the
+/// local restaurant gates startup; cloud sync/reporting is server-side and
+/// never participates in this path.
 class StartupGate extends StatefulWidget {
   const StartupGate({super.key});
 
@@ -141,13 +142,10 @@ class StartupGate extends StatefulWidget {
 }
 
 class _StartupGateState extends State<StartupGate> {
-  bool _checking = true;
   bool _connecting = false;
 
-  // The connect poll is patient (60s window), but the person standing at the
-  // terminal must never face a bare spinner with nothing to press: after a few
-  // seconds the spinner grows "Retry now" / "Set server URL" so a wrong URL or
-  // dead store is escapable immediately, not after the window expires.
+  // Automatic discovery never gives up. Troubleshooting appears after a few
+  // seconds, but recovery never depends on somebody pressing a retry button.
   bool _showConnectActions = false;
   Timer? _actionsTimer;
 
@@ -158,7 +156,6 @@ class _StartupGateState extends State<StartupGate> {
 
   // A cold colima/Docker/Ktor boot takes far longer than a single probe: poll
   // health while the server comes up, and proceed the instant it answers.
-  static const _connectWindow = Duration(seconds: 60);
   static const _probeTimeout = Duration(seconds: 2);
   static const _probeGap = Duration(milliseconds: 1500);
   static const _actionsAfter = Duration(seconds: 5);
@@ -180,9 +177,6 @@ class _StartupGateState extends State<StartupGate> {
 
   Future<void> _check() async {
     final gen = ++_generation;
-    setState(() {
-      _checking = true;
-    });
     try {
       await _ensureServer(gen);
       if (gen != _generation) return; // superseded by a manual retry
@@ -205,10 +199,12 @@ class _StartupGateState extends State<StartupGate> {
     } on PairingRequiredException {
       // stored device token no longer accepted (revoked → already wiped)
       _replaceWith(const PairingScreen());
-    } catch (_) {
-      if (mounted && gen == _generation) {
-        setState(() => _checking = false);
-      }
+    } catch (e) {
+      // Local health already succeeded. A stale/corrupt saved session or a
+      // one-off secure-storage failure must not strand the terminal at startup;
+      // the login screen can establish a fresh session against the local store.
+      debugPrint('[startup] session restore skipped: $e');
+      if (mounted && gen == _generation) _replaceWith(const LoginScreen());
     }
   }
 
@@ -219,11 +215,10 @@ class _StartupGateState extends State<StartupGate> {
     ).pushReplacement(MaterialPageRoute(builder: (_) => screen));
   }
 
-  /// Locate the store server before we try to use it, polling until it answers
-  /// so a still-booting server doesn't fail the launch. A manual override is
-  /// polled directly; otherwise we probe the best-guess URL and, failing that,
-  /// scan the LAN — all inside a bounded retry window. Throws only once the
-  /// window elapses without a live server, surfacing the "unreachable" screen.
+  /// Locate the on-site restaurant before use. A cached LAN address is a fast
+  /// path; remote/cloud addresses are deliberately ignored. Discovery retries
+  /// forever so a booting Mac, Wi-Fi handoff, or brief keystore failure heals
+  /// without leaving a dead screen that needs a person to press Retry.
   Future<void> _ensureServer(int gen) async {
     if (mounted) {
       setState(() {
@@ -238,21 +233,24 @@ class _StartupGateState extends State<StartupGate> {
       }
     });
     try {
-      final deadline = DateTime.now().add(_connectWindow);
       while (true) {
         if (gen != _generation) return; // a manual retry took over
-        if (await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) return;
-        // The saved address is only a hint. Always search local Wi-Fi when it
-        // fails; this lets an old cloud/demo address heal itself with no form.
-        final found = await ServerDiscovery.discover();
-        if (found != null) {
-          await Api.useDiscovered(found);
-          if (await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) {
+        try {
+          if (Api.isLocalVenueUrl(Api.baseUrl) &&
+              await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) {
             return;
           }
-        }
-        if (DateTime.now().isAfter(deadline)) {
-          throw TimeoutException('server did not respond', _connectWindow);
+          final found = await ServerDiscovery.discover();
+          if (found != null) {
+            await Api.useDiscovered(found);
+            if (await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) {
+              return;
+            }
+          }
+        } catch (e) {
+          // Discovery/persistence is best-effort and retried below. Never turn
+          // a transient platform failure into a terminal startup state.
+          debugPrint('[startup] local discovery retry: $e');
         }
         await Future<void>.delayed(_probeGap);
       }
@@ -303,64 +301,24 @@ class _StartupGateState extends State<StartupGate> {
     final l = L.of(context);
     return Scaffold(
       body: Center(
-        child: _checking
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(),
-                  if (_connecting) ...[
-                    const SizedBox(height: 16),
-                    Text(l.findingRestaurant, style: T.small()),
-                    const SizedBox(height: 12),
-                    // Never trap the kiosk on the spinner: an immediate escape to
-                    // reconfigure the server URL (e.g. after switching networks).
-                    // _enterServerUrl restarts _check(), bumping _generation and
-                    // abandoning this connect-loop.
-                    TextButton.icon(
-                      icon: const Icon(LucideIcons.pencil),
-                      label: Text(l.connectionHelp),
-                      onPressed: _enterServerUrl,
-                    ),
-                  ],
-                  // A slow connect must never be a dead spinner: after a few
-                  // seconds also surface an explicit retry and show which URL
-                  // we're stuck on (the Set-server-URL escape above is already
-                  // available from the first frame).
-                  if (_connecting && _showConnectActions) ...[
-                    const SizedBox(height: 8),
-                    const SizedBox(height: 8),
-                    FilledButton.icon(
-                      icon: const Icon(LucideIcons.refreshCw),
-                      label: Text(l.retry),
-                      onPressed: _check,
-                    ),
-                  ],
-                ],
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    LucideIcons.cloudOff,
-                    size: 56,
-                    color: T.textMuted,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(l.restaurantUnavailable),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    icon: const Icon(LucideIcons.refreshCw),
-                    label: Text(l.retry),
-                    onPressed: _check,
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    icon: const Icon(LucideIcons.pencil),
-                    label: Text(l.connectionHelp),
-                    onPressed: _enterServerUrl,
-                  ),
-                ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            if (_connecting) ...[
+              const SizedBox(height: 16),
+              Text(l.findingRestaurant, style: T.small()),
+            ],
+            if (_connecting && _showConnectActions) ...[
+              const SizedBox(height: 16),
+              TextButton.icon(
+                icon: const Icon(LucideIcons.wifi),
+                label: Text(l.connectionHelp),
+                onPressed: _enterServerUrl,
               ),
+            ],
+          ],
+        ),
       ),
     );
   }

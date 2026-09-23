@@ -16,6 +16,27 @@ class Api {
   Api._();
 
   static const _storage = FlutterSecureStorage();
+  static const _storageTimeout = Duration(seconds: 2);
+
+  static Future<String?> _readStorage(String key) async {
+    try {
+      return await _storage.read(key: key).timeout(_storageTimeout);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _writeStorage(String key, String? value) async {
+    try {
+      await _storage.write(key: key, value: value).timeout(_storageTimeout);
+    } catch (_) {}
+  }
+
+  static Future<void> _deleteStorage(String key) async {
+    try {
+      await _storage.delete(key: key).timeout(_storageTimeout);
+    } catch (_) {}
+  }
 
   // --- store server URL: no hardcoded venue IP -------------------------------
   // The base URL resolves, in priority order:
@@ -51,9 +72,12 @@ class Api {
 
   /// Load persisted server config once at startup, before any request.
   static Future<void> loadServerConfig() async {
-    _override = _normalizeUrl(await _storage.read(key: 'server_url_override'));
-    _discovered = _normalizeUrl(await _storage.read(key: 'server_url_cache'));
-    _deviceToken = await _storage.read(key: 'device_token');
+    // A damaged/temporarily unavailable Android keystore must not brick a POS
+    // before its first frame. Connection addresses are only hints and device
+    // pairing is optional on the LAN, so load each value independently.
+    _override = _normalizeUrl(await _readStorage('server_url_override'));
+    _discovered = _normalizeUrl(await _readStorage('server_url_cache'));
+    _deviceToken = await _readStorage('device_token');
   }
 
   /// Persist (or clear) the manual override. Empty/null clears it → auto-detect.
@@ -61,9 +85,9 @@ class Api {
     final v = _normalizeUrl(url);
     _override = v;
     if (v == null) {
-      await _storage.delete(key: 'server_url_override');
+      await _deleteStorage('server_url_override');
     } else {
-      await _storage.write(key: 'server_url_override', value: v);
+      await _writeStorage('server_url_override', v);
     }
   }
 
@@ -72,7 +96,7 @@ class Api {
     final v = _normalizeUrl(url);
     if (v == null) return;
     _discovered = v;
-    await _storage.write(key: 'server_url_cache', value: v);
+    await _writeStorage('server_url_cache', v);
   }
 
   /// Switch to a restaurant found on the current Wi-Fi. A previously entered
@@ -83,8 +107,29 @@ class Api {
     if (v == null) return;
     _override = null;
     _discovered = v;
-    await _storage.delete(key: 'server_url_override');
-    await _storage.write(key: 'server_url_cache', value: v);
+    // The in-memory switch is authoritative for this run. Persistence is
+    // best-effort: an Android keystore hiccup must never turn a healthy local
+    // restaurant into a blocking startup error.
+    await _deleteStorage('server_url_override');
+    await _writeStorage('server_url_cache', v);
+  }
+
+  /// True only for an on-site/LAN origin. The tablet must never prefer an old
+  /// Internet-hosted demo merely because it answers; cloud is sync/reporting,
+  /// while all live POS traffic belongs on local Wi-Fi.
+  static bool isLocalVenueUrl(String value) {
+    final host = Uri.tryParse(value)?.host.toLowerCase() ?? '';
+    if (host.isEmpty) return false;
+    if (host == 'localhost' || host.endsWith('.local')) return true;
+    final parts = host.split('.').map(int.tryParse).toList();
+    if (parts.length != 4 || parts.any((part) => part == null)) return false;
+    final a = parts[0]!;
+    final b = parts[1]!;
+    return a == 10 ||
+        a == 127 ||
+        (a == 172 && b >= 16 && b <= 31) ||
+        (a == 192 && b == 168) ||
+        (a == 169 && b == 254);
   }
 
   /// Normalize user input into a server origin, or null when blank/invalid.
@@ -202,19 +247,19 @@ class Api {
     _throwOnError(res);
     final json = jsonDecode(utf8.decode(res.bodyBytes));
     _deviceToken = json['deviceToken'];
-    await _storage.write(key: 'device_token', value: _deviceToken);
+    await _writeStorage('device_token', _deviceToken);
     // Persist the paired origin VERBATIM — NOT via setServerUrlOverride, whose
     // _normalizeUrl appends :8080 to a portless URL and would point an https
     // cloud venue at a port Caddy never serves, bricking the terminal.
     _override = base;
-    await _storage.write(key: 'server_url_override', value: base);
+    await _writeStorage('server_url_override', base);
     _redirectingToPairing = false;
   }
 
   /// Forget this terminal's pairing (revoked server-side, or manual reset).
   static Future<void> clearPairing() async {
     _deviceToken = null;
-    await _storage.delete(key: 'device_token');
+    await _deleteStorage('device_token');
   }
 
   static String? _token;
@@ -253,10 +298,11 @@ class Api {
   /// failures (socket/timeout/client) count toward the reconnecting overlay;
   /// any completed response — success OR http error status — counts as alive.
   static Future<http.Response> _send(
-    Future<http.Response> Function() run,
-  ) async {
+    Future<http.Response> Function() run, {
+    Duration timeout = _requestTimeout,
+  }) async {
     try {
-      final res = await run().timeout(_requestTimeout);
+      final res = await run().timeout(timeout);
       ConnectionMonitor.instance.reportSuccess();
       return res;
     } catch (e) {
@@ -273,7 +319,7 @@ class Api {
   /// The startup gate owns navigation here — the expiry and pairing redirects
   /// stay off; a pairing demand is rethrown for the gate to route itself.
   static Future<AuthUser?> restoreSession() async {
-    _token = await _storage.read(key: 'session_token');
+    _token = await _readStorage('session_token');
     if (_token == null) return null;
     final expiredHandler = onSessionExpired;
     final pairingHandler = onPairingRequired;
@@ -304,12 +350,37 @@ class Api {
   }
 
   static Future<AuthUser> login(String pin) async {
-    final json = await _post('/login', {'pin': pin});
+    dynamic json;
+    // Login is the one POST that is safe to repeat. If the local store accepts
+    // it but Wi-Fi drops the response, retrying only replaces an unused session
+    // token; it cannot duplicate a sale or another business operation.
+    for (var attempt = 0; ; attempt++) {
+      try {
+        final res = await _send(
+          () => http.post(
+            Uri.parse('$baseUrl/login'),
+            headers: _headers,
+            body: jsonEncode({'pin': pin}),
+          ),
+          timeout: const Duration(seconds: 4),
+        );
+        _throwOnError(res);
+        json = jsonDecode(utf8.decode(res.bodyBytes));
+        break;
+      } on SocketException {
+        if (attempt >= 1) rethrow;
+      } on TimeoutException {
+        if (attempt >= 1) rethrow;
+      } on http.ClientException {
+        if (attempt >= 1) rethrow;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
     _redirectingToLogin = false;
     _redirectingToPairing = false;
     _token = json['token'];
     currentUser = AuthUser.fromJson(json, _token!);
-    await _storage.write(key: 'session_token', value: _token);
+    await _writeStorage('session_token', _token);
     Prefs.instance.hydrate(
       languageCode: currentUser!.languageCode,
       calendarPref: currentUser!.calendar,
@@ -323,7 +394,7 @@ class Api {
     } catch (_) {}
     _token = null;
     currentUser = null;
-    await _storage.delete(key: 'session_token');
+    await _deleteStorage('session_token');
   }
 
   /// Backoff for GETs. GETs are idempotent, so a bounded auto-retry is safe — it
@@ -419,7 +490,7 @@ class Api {
         if (code == 'device_revoked') clearPairing(); // fire-and-forget wipe
         _token = null;
         currentUser = null;
-        _storage.delete(key: 'session_token');
+        _deleteStorage('session_token');
         if (!_redirectingToPairing) {
           _redirectingToPairing = true;
           onPairingRequired?.call();
@@ -431,7 +502,7 @@ class Api {
       if (_token != null) {
         _token = null;
         currentUser = null;
-        _storage.delete(key: 'session_token');
+        _deleteStorage('session_token');
         if (!_redirectingToLogin) {
           _redirectingToLogin = true;
           onSessionExpired?.call();

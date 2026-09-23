@@ -2,6 +2,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_client/api.dart';
 
 void main() {
+  group('isLocalVenueUrl', () {
+    test('accepts private, loopback, link-local, and mDNS origins', () {
+      expect(Api.isLocalVenueUrl('http://192.168.1.2:8080'), isTrue);
+      expect(Api.isLocalVenueUrl('http://10.0.0.5:8080'), isTrue);
+      expect(Api.isLocalVenueUrl('http://172.20.4.8:8080'), isTrue);
+      expect(Api.isLocalVenueUrl('http://127.0.0.1:8080'), isTrue);
+      expect(Api.isLocalVenueUrl('http://copper-lantern.local:8080'), isTrue);
+      expect(Api.isLocalVenueUrl('http://169.254.10.2:8080'), isTrue);
+    });
+
+    test('rejects Internet-hosted and malformed origins', () {
+      expect(
+        Api.isLocalVenueUrl('https://copperlantern.lostmindllc.com'),
+        isFalse,
+      );
+      expect(Api.isLocalVenueUrl('https://8.8.8.8'), isFalse);
+      expect(Api.isLocalVenueUrl('not a url'), isFalse);
+    });
+  });
+
   group('normalizeVenueAddress', () {
     test('bare host gets https (cloud venue)', () {
       expect(

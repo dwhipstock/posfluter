@@ -52,7 +52,11 @@ class _LoginScreenState extends State<LoginScreen> {
       ).pushReplacement(MaterialPageRoute(builder: (_) => const ZonesScreen()));
     } catch (e) {
       if (mounted) {
-        setState(() => _error = '$e');
+        setState(
+          () => _error = e is ApiException
+              ? '$e'
+              : L.of(context).loginInterrupted,
+        );
         _padKey.currentState?.clear();
       }
     } finally {

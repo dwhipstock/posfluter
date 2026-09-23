@@ -144,6 +144,10 @@ class L {
   // login
   String get enterPin =>
       _t('Entrez votre code PIN pour y accéder.', 'Enter your PIN to sign in');
+  String get loginInterrupted => _t(
+    'Connexion interrompue — entrez de nouveau votre code PIN.',
+    'Connection interrupted — enter your PIN again',
+  );
   String get whoClockingIn => _t('Qui est en poste ?', "Who's clocking in?");
 
   // zones
