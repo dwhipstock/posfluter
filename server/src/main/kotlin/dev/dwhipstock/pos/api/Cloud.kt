@@ -16,9 +16,9 @@ import kotlinx.serialization.Serializable
  * returns ONLY the derived portal URL, never the sync API key or any other
  * secret. Stays per-venue (multi-tenant later) — nothing is hardcoded here.
  */
-fun Route.cloudRoutes(portalUrl: String?) {
+fun Route.cloudRoutes(portalUrl: String?, storeUrl: () -> String? = { null }) {
     get("/cloud/info") {
-        call.respond(CloudInfo(portalUrl = portalUrl))
+        call.respond(CloudInfo(portalUrl = portalUrl, storeUrl = storeUrl()))
     }
 }
 
@@ -26,6 +26,8 @@ fun Route.cloudRoutes(portalUrl: String?) {
 data class CloudInfo(
     /** Owner reporting portal, or null when cloud sync isn't configured. */
     val portalUrl: String?,
+    /** LAN URL for staff/customer phones; never the terminal's loopback API URL. */
+    val storeUrl: String? = null,
 )
 
 /**

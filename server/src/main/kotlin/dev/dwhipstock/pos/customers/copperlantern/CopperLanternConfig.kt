@@ -21,8 +21,14 @@ import dev.dwhipstock.pos.sdk.TenderMethod
 class CopperLanternConfig(
     private val settings: SettingsRepository,
     override val printer: PrinterAdapter,
-    override val publicBaseUrl: String,
+    publicBaseUrl: String,
+    private val publicUrlProvider: (() -> String)? = null,
 ) : CustomerConfig {
+
+    override val publicBaseUrl: String
+        get() = publicUrlProvider?.invoke() ?: initialPublicBaseUrl
+
+    private val initialPublicBaseUrl = publicBaseUrl
 
     override val customerId = "copperlantern"
     override val displayName = "The Copper Lantern Pub"

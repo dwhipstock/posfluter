@@ -24,7 +24,7 @@ class FetchedPhoto(val bytes: ByteArray, val contentType: String)
 
 /**
  * Wire seam for the sync loop: tests drive the drain/apply core with a fake;
- * HttpCloudTransport is the thin java.net.http adapter. Implementations may
+ * HttpCloudTransport is the thin JDK/Android HTTP adapter. Implementations may
  * throw on transport errors — the loop treats a throw like a failed result.
  */
 interface CloudTransport {

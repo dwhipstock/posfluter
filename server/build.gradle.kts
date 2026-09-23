@@ -9,7 +9,7 @@ group = "dev.dwhipstock.pos"
 version = "0.1.0"
 
 application {
-    mainClass.set("dev.dwhipstock.pos.ApplicationKt")
+    mainClass.set("dev.dwhipstock.pos.DesktopMainKt")
 }
 
 repositories {

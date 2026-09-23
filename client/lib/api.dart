@@ -15,6 +15,11 @@ import 'i18n.dart';
 class Api {
   Api._();
 
+  /// Android hosts its own store. Desktop/web builds retain LAN discovery for
+  /// development; an Android tablet never silently falls back to a Mac.
+  static bool get usesEmbeddedStore => !kIsWeb && Platform.isAndroid;
+  static const embeddedStoreUrl = 'http://127.0.0.1:8080';
+
   static const _storage = FlutterSecureStorage();
   static const _storageTimeout = Duration(seconds: 2);
 
@@ -59,6 +64,7 @@ class Api {
   }
 
   static String get baseUrl {
+    if (usesEmbeddedStore) return embeddedStoreUrl;
     if (_override != null && _override!.isNotEmpty) return _override!;
     if (_discovered != null && _discovered!.isNotEmpty) return _discovered!;
     if (_envServerUrl.isNotEmpty) return _envServerUrl;
@@ -718,8 +724,11 @@ class Api {
   /// Owner reporting-portal URL, derived server-side from the store's cloud
   /// config (never hardcoded here). Null when cloud sync isn't configured — the
   /// settings screen hides the QR in that case.
+  static Future<Map<String, dynamic>> cloudInfo() async =>
+      (await _get('/cloud/info')) as Map<String, dynamic>;
+
   static Future<String?> cloudPortalUrl() async =>
-      (await _get('/cloud/info'))['portalUrl'] as String?;
+      (await cloudInfo())['portalUrl'] as String?;
 
   static Future<void> changePin(String currentPin, String newPin) async =>
       _patch('/me/pin', {'currentPin': currentPin, 'newPin': newPin});

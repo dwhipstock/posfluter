@@ -637,6 +637,16 @@ class L {
       _t('Recherche du restaurant…', 'Finding your restaurant…');
   String get findingRestaurant =>
       _t('Recherche du restaurant…', 'Finding your restaurant…');
+  String get startingThisTablet =>
+      _t('Démarrage de cette tablette…', 'Starting this tablet…');
+  String get tabletStoreFailed => _t(
+    'Le service local de cette tablette n’a pas démarré.',
+    'This tablet’s local store did not start.',
+  );
+  String get staffAppNeedsWifi => _t(
+    'Connectez la tablette au Wi-Fi pour afficher le code du personnel.',
+    'Connect this tablet to Wi-Fi to show the staff app code.',
+  );
   String get restaurantUnavailable => _t(
     'Restaurant indisponible sur ce réseau Wi-Fi.',
     'Restaurant is not available on this Wi-Fi',

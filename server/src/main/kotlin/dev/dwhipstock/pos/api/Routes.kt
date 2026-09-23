@@ -274,11 +274,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
         val url = "${config.publicBaseUrl}$path"
         val matrix = com.google.zxing.MultiFormatWriter()
             .encode(url, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512)
-        val png = java.io.ByteArrayOutputStream().use { out ->
-            javax.imageio.ImageIO.write(
-                com.google.zxing.client.j2se.MatrixToImageWriter.toBufferedImage(matrix), "png", out)
-            out.toByteArray()
-        }
+        val png = dev.dwhipstock.pos.sdk.QrPng.encode(matrix)
         call.respondBytes(png, ContentType.Image.PNG)
     }
 }
@@ -692,8 +688,7 @@ private suspend fun serveCustomerMenu(call: io.ktor.server.application.Applicati
         call.respondText(zoneClosedMenuPage(label), ContentType.Text.Html)
         return
     }
-    val html = Thread.currentThread().contextClassLoader
-        .getResource("customer-menu.html")!!.readText()
+    val html = dev.dwhipstock.pos.StoreAssets.readText("customer-menu.html")
         .replace("{{TABLE_ID}}", tableId)
         // label is a user-authored nameOverride; escape it (like zoneClosedMenuPage does for
         // the same value) so it can't inject markup/script into the customer menu page.

@@ -16,6 +16,8 @@ client/.packages
 client/.pub-cache/
 client/.pub/
 client/build/
+client/android/build/
+.tablet-snapshot.*/
 client/.dart_tool/build/
 client/pubspec.lock
 client/*.iml

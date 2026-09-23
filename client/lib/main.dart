@@ -15,6 +15,12 @@ import 'screens/zones_screen.dart';
 import 'server_discovery.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+const _storeChannel = MethodChannel('dev.dwhipstock.pos_client/store');
+
+class _EmbeddedStoreStartupException implements Exception {
+  const _EmbeddedStoreStartupException(this.message);
+  final String message;
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +37,7 @@ Future<void> main() async {
   // A saved address is a hint, not a lock. If it disappears while the app is
   // open, look for this restaurant on local Wi-Fi and move over automatically.
   ConnectionMonitor.findRestaurant = () async {
+    if (Api.usesEmbeddedStore) return false;
     final found = await ServerDiscovery.discover();
     if (found == null) return false;
     await Api.useDiscovered(found);
@@ -151,6 +158,7 @@ class StartupGate extends StatefulWidget {
 
 class _StartupGateState extends State<StartupGate> {
   bool _connecting = false;
+  String? _startupError;
 
   // Automatic discovery never gives up. Troubleshooting appears after a few
   // seconds, but recovery never depends on somebody pressing a retry button.
@@ -185,6 +193,7 @@ class _StartupGateState extends State<StartupGate> {
 
   Future<void> _check() async {
     final gen = ++_generation;
+    if (mounted) setState(() => _startupError = null);
     try {
       await _ensureServer(gen);
       if (gen != _generation) return; // superseded by a manual retry
@@ -204,6 +213,13 @@ class _StartupGateState extends State<StartupGate> {
               user != null ? const ZonesScreen() : const LoginScreen(),
         ),
       );
+    } on _EmbeddedStoreStartupException catch (e) {
+      if (mounted && gen == _generation) {
+        setState(() {
+          _connecting = false;
+          _startupError = e.message;
+        });
+      }
     } on PairingRequiredException {
       // stored device token no longer accepted (revoked → already wiped)
       _replaceWith(const PairingScreen());
@@ -244,6 +260,20 @@ class _StartupGateState extends State<StartupGate> {
       while (true) {
         if (gen != _generation) return; // a manual retry took over
         try {
+          if (Api.usesEmbeddedStore) {
+            if (await Api.probeHealth(
+              Api.embeddedStoreUrl,
+              timeout: _probeTimeout,
+            )) {
+              return;
+            }
+            final failure = await _storeChannel.invokeMethod<String>(
+              'startupFailure',
+            );
+            if (failure != null) throw _EmbeddedStoreStartupException(failure);
+            await Future<void>.delayed(_probeGap);
+            continue;
+          }
           if (Api.isLocalVenueUrl(Api.baseUrl) &&
               await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout)) {
             return;
@@ -255,6 +285,8 @@ class _StartupGateState extends State<StartupGate> {
               return;
             }
           }
+        } on _EmbeddedStoreStartupException {
+          rethrow;
         } catch (e) {
           // Discovery/persistence is best-effort and retried below. Never turn
           // a transient platform failure into a terminal startup state.
@@ -312,12 +344,31 @@ class _StartupGateState extends State<StartupGate> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(),
+            if (_startupError == null) const CircularProgressIndicator(),
             if (_connecting) ...[
               const SizedBox(height: 16),
-              Text(l.findingRestaurant, style: T.small()),
+              Text(
+                Api.usesEmbeddedStore
+                    ? l.startingThisTablet
+                    : l.findingRestaurant,
+                style: T.small(),
+              ),
             ],
-            if (_connecting && _showConnectActions) ...[
+            if (_startupError != null) ...[
+              const SizedBox(height: 16),
+              Text(l.tabletStoreFailed, style: T.small()),
+              Text(_startupError!, style: T.small()),
+              TextButton(
+                onPressed: () async {
+                  await _storeChannel.invokeMethod<void>('restart');
+                  _check();
+                },
+                child: Text(l.retry),
+              ),
+            ],
+            if (_connecting &&
+                _showConnectActions &&
+                !Api.usesEmbeddedStore) ...[
               const SizedBox(height: 16),
               TextButton.icon(
                 icon: const Icon(LucideIcons.wifi),

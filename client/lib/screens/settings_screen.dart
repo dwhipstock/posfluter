@@ -46,6 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // _portalLoaded gates the section so it doesn't flash the "not configured"
   // hint while the fetch is still in flight.
   String? _portalUrl;
+  String? _staffAppUrl;
   bool _portalLoaded = false;
 
   @override
@@ -60,10 +61,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// section hidden — it never blocks the settings screen.
   Future<void> _loadPortalUrl() async {
     try {
-      final url = await Api.cloudPortalUrl();
+      final info = await Api.cloudInfo();
       if (!mounted) return;
       setState(() {
-        _portalUrl = url;
+        _portalUrl = info['portalUrl'] as String?;
+        final storeUrl = info['storeUrl'] as String?;
+        _staffAppUrl = Api.usesEmbeddedStore
+            ? (storeUrl == null ? null : '$storeUrl/staff-app')
+            : '${Api.baseUrl}/staff-app';
         _portalLoaded = true;
       });
     } catch (_) {
@@ -178,7 +183,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _persist();
       // Persist the device-local server URL AFTER the venue settings, so the
       // save above still lands on the current server even when repointing.
-      await Api.setServerUrlOverride(_serverUrl.text);
+      if (!Api.usesEmbeddedStore) {
+        await Api.setServerUrlOverride(_serverUrl.text);
+      }
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -313,46 +320,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
-                    SectionLabel(l.sectionServer),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        l.restaurantConnectionReady,
-                        style: T.small(),
-                      ),
-                    ),
-                    SizedBox(
-                      height: T.minTouch,
-                      child: OutlinedButton.icon(
-                        icon: _scanning
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(LucideIcons.search),
-                        label: Text(
-                          _scanning ? l.scanningForServer : l.scanForServer,
+                    if (!Api.usesEmbeddedStore) ...[
+                      SectionLabel(l.sectionServer),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          l.restaurantConnectionReady,
+                          style: T.small(),
                         ),
-                        onPressed: _scanning ? null : _scanServer,
                       ),
-                    ),
-                    ExpansionTile(
-                      title: Text(l.advancedConnection, style: T.small()),
-                      tilePadding: EdgeInsets.zero,
-                      childrenPadding: const EdgeInsets.only(bottom: 8),
-                      children: [
-                        _field(
-                          _serverUrl,
-                          l.serverUrlLabel,
-                          keyboard: TextInputType.url,
+                      SizedBox(
+                        height: T.minTouch,
+                        child: OutlinedButton.icon(
+                          icon: _scanning
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(LucideIcons.search),
+                          label: Text(
+                            _scanning ? l.scanningForServer : l.scanForServer,
+                          ),
+                          onPressed: _scanning ? null : _scanServer,
                         ),
-                        Text(l.currentlyUsing(Api.baseUrl), style: T.small()),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                      ),
+                      ExpansionTile(
+                        title: Text(l.advancedConnection, style: T.small()),
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(bottom: 8),
+                        children: [
+                          _field(
+                            _serverUrl,
+                            l.serverUrlLabel,
+                            keyboard: TextInputType.url,
+                          ),
+                          Text(l.currentlyUsing(Api.baseUrl), style: T.small()),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     // Staff-app QR: employees scan it off this screen to
                     // open the web ordering app. Host = the configured
                     // store URL (LAN-reachable), same rule as table QRs.
@@ -361,24 +370,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(l.staffAppQrLabel, style: T.small()),
                     ),
-                    Center(
-                      child: Container(
-                        color: Colors.white,
-                        padding: const EdgeInsets.all(12),
-                        child: QrImageView(
-                          data: '${Api.baseUrl}/staff-app',
-                          size: 200,
+                    if (_staffAppUrl != null)
+                      Center(
+                        child: Container(
+                          color: Colors.white,
+                          padding: const EdgeInsets.all(12),
+                          child: QrImageView(data: _staffAppUrl!, size: 200),
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8, bottom: 8),
-                      child: Text(
-                        '${Api.baseUrl}/staff-app',
-                        style: T.small(),
-                        textAlign: TextAlign.center,
+                    if (_staffAppUrl != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 8),
+                        child: Text(
+                          _staffAppUrl!,
+                          style: T.small(),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                    ),
+                    if (_portalLoaded && _staffAppUrl == null)
+                      Text(l.staffAppNeedsWifi, style: T.small()),
                     const SizedBox(height: 16),
                     // Owner reporting-portal QR: the owner scans it to open
                     // the cloud reporting portal (their reports) on a phone.

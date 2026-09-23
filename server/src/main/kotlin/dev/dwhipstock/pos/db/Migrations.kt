@@ -1,5 +1,6 @@
 package dev.dwhipstock.pos.db
 
+import dev.dwhipstock.pos.StoreAssets
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -55,6 +56,11 @@ object Migrations {
 
     /** List *.sql under resources/migrations — works from a classes dir or a fat jar. */
     private fun discover(): List<Script> {
+        StoreAssets.list(DIR)?.let { files ->
+            return scripts(files.filter { it.endsWith(".sql") }.toSet()) {
+                StoreAssets.readText("$DIR/$it")
+            }
+        }
         val loader = Thread.currentThread().contextClassLoader
         val names = mutableSetOf<String>()
         for (url in loader.getResources(DIR)) {
@@ -70,10 +76,14 @@ object Migrations {
                 }
             }
         }
+        return scripts(names) { loader.getResource("$DIR/$it")!!.readText() }
+    }
+
+    private fun scripts(names: Set<String>, read: (String) -> String): List<Script> {
         val scripts = names.map { file ->
             val version = file.substringBefore('_').toIntOrNull()
                 ?: error("migration file '$file' must start with a number (e.g. 002_add_x.sql)")
-            Script(version, file, loader.getResource("$DIR/$file")!!.readText())
+            Script(version, file, read(file))
         }
         scripts.groupBy { it.version }.forEach { (v, group) ->
             require(group.size == 1) { "duplicate migration version $v: ${group.map { it.name }}" }
