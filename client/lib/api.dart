@@ -20,6 +20,24 @@ class Api {
   static bool get usesEmbeddedStore => !kIsWeb && Platform.isAndroid;
   static const embeddedStoreUrl = 'http://127.0.0.1:8080';
 
+  /// The POS itself uses loopback, but a QR scanned by another phone must not.
+  /// The embedded store reports its current LAN origin through /cloud/info.
+  static String? phoneQrBaseUrl(String? value) {
+    final uri = Uri.tryParse(value?.trim() ?? '');
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.host == 'localhost' ||
+        uri.host.startsWith('127.') ||
+        uri.host == '0.0.0.0' ||
+        uri.host == '10.0.2.2' ||
+        uri.host == '::1') {
+      return null;
+    }
+    return uri.origin;
+  }
+
   static const _storage = FlutterSecureStorage();
   static const _storageTimeout = Duration(seconds: 2);
 

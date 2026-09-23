@@ -709,6 +709,10 @@ class L {
     'Les clients scannent avec leur téléphone mobile (même Wi-Fi que le magasin)',
     'Guests scan with a phone on the venue Wi-Fi',
   );
+  String get tableQrNeedsWifi => _t(
+    'Connectez la tablette au Wi-Fi pour afficher un code QR utilisable.',
+    'Connect the tablet to Wi-Fi to show a scannable QR code.',
+  );
   String get showQrCode => _t('Afficher le code QR', 'Show QR code');
   String get printQrCode => _t('Imprimer le code QR', 'Print QR code');
   String get slipSentToPrinter => _t(

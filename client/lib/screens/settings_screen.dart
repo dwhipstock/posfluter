@@ -65,7 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _portalUrl = info['portalUrl'] as String?;
-        final storeUrl = info['storeUrl'] as String?;
+        final storeUrl = Api.phoneQrBaseUrl(info['storeUrl'] as String?);
         _staffAppUrl = Api.usesEmbeddedStore
             ? (storeUrl == null ? null : '$storeUrl/staff-app')
             : '${Api.baseUrl}/staff-app';

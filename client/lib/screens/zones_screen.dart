@@ -787,18 +787,32 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
 
   /// The scan-to-order URL for a table, mirroring the server's menuPathFor():
   /// readable /m/{zoneId}/{number} when the label ends in digits, else the
-  /// opaque /m/{tableId}. Host = the configured store base URL, which is the
-  /// LAN address guests' phones can actually reach — never localhost.
-  static String _menuUrl(Zone zone, TableInfo table) {
+  /// opaque /m/{tableId}. Use the LAN origin, not the tablet-only API origin.
+  static String _menuUrl(Zone zone, TableInfo table, String storeBaseUrl) {
     final n = RegExp(r'(\d+)$').firstMatch(table.label)?.group(1);
     final path = n != null ? '/m/${zone.id}/$n' : '/m/${table.id}';
-    return '${Api.baseUrl}$path';
+    return '$storeBaseUrl$path';
   }
 
   /// On-screen stand-in for the printed QR slip: long-press a table → show its
   /// scan-to-order QR big enough for a guest to scan straight off the tablet.
-  void _showTableQr(Zone zone, TableInfo table, L l) {
-    final url = _menuUrl(zone, table);
+  Future<void> _showTableQr(Zone zone, TableInfo table, L l) async {
+    String? storeBaseUrl;
+    try {
+      storeBaseUrl = Api.usesEmbeddedStore
+          ? Api.phoneQrBaseUrl((await Api.cloudInfo())['storeUrl'] as String?)
+          : Api.phoneQrBaseUrl(Api.baseUrl);
+    } catch (_) {
+      // A QR with a guessed or tablet-only address would be worse than none.
+    }
+    if (!mounted) return;
+    if (storeBaseUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.tableQrNeedsWifi)),
+      );
+      return;
+    }
+    final url = _menuUrl(zone, table, storeBaseUrl);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
