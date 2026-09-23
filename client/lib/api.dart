@@ -311,16 +311,20 @@ class Api {
   static Future<http.Response> _send(
     Future<http.Response> Function() run, {
     Duration timeout = _requestTimeout,
+    String operation = 'request',
   }) async {
     try {
       final res = await run().timeout(timeout);
-      ConnectionMonitor.instance.reportSuccess();
+      ConnectionMonitor.instance.reportSuccess(operation: operation);
       return res;
     } catch (e) {
       if (e is SocketException ||
           e is TimeoutException ||
           e is http.ClientException) {
-        ConnectionMonitor.instance.reportFailure();
+        ConnectionMonitor.instance.reportFailure(
+          operation: operation,
+          error: e,
+        );
       }
       rethrow;
     }
@@ -374,6 +378,7 @@ class Api {
             body: jsonEncode({'pin': pin}),
           ),
           timeout: const Duration(seconds: 4),
+          operation: 'POST /login',
         );
         _throwOnError(res);
         json = jsonDecode(utf8.decode(res.bodyBytes));
@@ -423,6 +428,7 @@ class Api {
       try {
         final res = await _send(
           () => http.get(Uri.parse('$baseUrl$path'), headers: _headers),
+          operation: 'GET $path',
         );
         // 5xx = server alive but hiccuped; give it another chance before surfacing
         // an error. 4xx (auth, not-found) throws immediately.
@@ -451,6 +457,7 @@ class Api {
         headers: _headers,
         body: jsonEncode(body ?? {}),
       ),
+      operation: 'POST $path',
     );
     _throwOnError(res);
     return jsonDecode(utf8.decode(res.bodyBytes));
@@ -463,6 +470,7 @@ class Api {
         headers: _headers,
         body: jsonEncode(body),
       ),
+      operation: 'PATCH $path',
     );
     _throwOnError(res);
     return jsonDecode(utf8.decode(res.bodyBytes));
@@ -475,6 +483,7 @@ class Api {
         headers: _headers,
         body: jsonEncode(body),
       ),
+      operation: 'PUT $path',
     );
     _throwOnError(res);
     return jsonDecode(utf8.decode(res.bodyBytes));
@@ -483,6 +492,7 @@ class Api {
   static Future<dynamic> _delete(String path) async {
     final res = await _send(
       () => http.delete(Uri.parse('$baseUrl$path'), headers: _headers),
+      operation: 'DELETE $path',
     );
     _throwOnError(res);
     return jsonDecode(utf8.decode(res.bodyBytes));

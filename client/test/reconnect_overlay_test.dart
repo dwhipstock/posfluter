@@ -33,6 +33,7 @@ void main() {
   setUp(() {
     ConnectionMonitor.instance.debugReset();
     ConnectionMonitor.findRestaurant = null;
+    ConnectionMonitor.confirmReachable = () async => false;
   });
 
   tearDown(() {
@@ -40,6 +41,7 @@ void main() {
     ReconnectingOverlay.debugDropPostFrameSync = false;
     ReconnectingOverlay.onEscape = null;
     ConnectionMonitor.findRestaurant = null;
+    ConnectionMonitor.confirmReachable = null;
     ConnectionMonitor.instance.debugReset();
   });
 
@@ -61,6 +63,23 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await finish(tester);
   });
+
+  testWidgets(
+    'failed requests do not block the app when health still answers',
+    (tester) async {
+      ConnectionMonitor.confirmReachable = () async => true;
+      await tester.pumpWidget(app());
+      ReconnectingOverlay.attach(navKey);
+
+      goOffline();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(ConnectionMonitor.instance.offline, isFalse);
+      await finish(tester);
+    },
+  );
 
   testWidgets('barrier blocks taps while offline', (tester) async {
     var taps = 0;

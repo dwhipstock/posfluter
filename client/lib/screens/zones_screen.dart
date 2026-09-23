@@ -42,6 +42,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   /// Selected room on the floor plan; null until the first load picks zone #1.
   String? _zoneId;
   bool _busy = false;
+  bool _zonesRequestInFlight = false;
 
   /// Last successful zones payload. A FutureBuilder snapshot DROPS its data
   /// when a newer future completes with an error, so without this a single
@@ -53,7 +54,8 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   void initState() {
     super.initState();
     _loadAlertConfig();
-    _zones = _fetchZones();
+    _zonesRequestInFlight = true;
+    _zones = _fetchZonesSerialized();
     // occupancy/pending badges change from customer phones and other flows —
     // poll like the tables screen does, else the grid goes stale. TODO: push/SSE
     _poll = Timer.periodic(const Duration(seconds: 5), (_) => _reload());
@@ -75,6 +77,14 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     return zones;
   }
 
+  Future<List<Zone>> _fetchZonesSerialized() async {
+    try {
+      return await _fetchZones();
+    } finally {
+      _zonesRequestInFlight = false;
+    }
+  }
+
   Future<void> _loadAlertConfig() async {
     try {
       _alerts.configure(await Api.alertConfig());
@@ -90,9 +100,10 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   // periodic timer. The screen then only refreshed on a global rebuild (e.g. the
   // language toggle) — that was the "stale zones" bug.
   void _reload() {
-    if (!mounted) return;
+    if (!mounted || _zonesRequestInFlight) return;
+    _zonesRequestInFlight = true;
     setState(() {
-      _zones = _fetchZones();
+      _zones = _fetchZonesSerialized();
     });
   }
 

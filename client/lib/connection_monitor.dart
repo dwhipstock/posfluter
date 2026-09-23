@@ -10,8 +10,9 @@ import 'i18n.dart';
 ///
 /// Transport failures (socket / timeout / client) count; HTTP error statuses
 /// do NOT — a 4xx/5xx proves the server is alive. After two consecutive
-/// failures the monitor goes offline and probes GET /health every 3s (one
-/// timer, ticks skipped while a probe is in flight — no pile-up). The first
+/// failures the monitor confirms the outage with GET /health before going
+/// offline, then probes every 3s (one timer, ticks skipped while a probe is in
+/// flight — no pile-up). The first
 /// successful probe (or any successful API call) flips it back online and
 /// notifies listeners, so screens with their own polls refresh right away.
 class ConnectionMonitor extends ChangeNotifier {
@@ -26,10 +27,17 @@ class ConnectionMonitor extends ChangeNotifier {
   /// callback so this low-level monitor does not own discovery or navigation.
   static Future<bool> Function()? findRestaurant;
 
+  /// Test seam for the threshold confirmation. Production uses [Api.probeHealth]
+  /// when this is null.
+  @visibleForTesting
+  static Future<bool> Function()? confirmReachable;
+
   int _consecutiveFailures = 0;
   bool _offline = false;
   Timer? _probeTimer;
   bool _probing = false;
+  bool _confirmingOffline = false;
+  int _successVersion = 0;
   int _suppressCount = 0;
   int _reconnectCount = 0;
 
@@ -51,21 +59,71 @@ class ConnectionMonitor extends ChangeNotifier {
     _probeTimer = null;
     _offline = false;
     _probing = false;
+    _confirmingOffline = false;
     _consecutiveFailures = 0;
     _suppressCount = 0;
+    _successVersion = 0;
   }
 
   /// Called by [Api] after any completed HTTP exchange.
-  void reportSuccess() {
+  void reportSuccess({String operation = 'request'}) {
+    _successVersion++;
+    if (_consecutiveFailures > 0 || _offline) {
+      debugPrint(
+        '[connection] success operation=$operation '
+        'previousFailures=$_consecutiveFailures offline=$_offline',
+      );
+    }
     _consecutiveFailures = 0;
     if (_offline) _goOnline();
   }
 
   /// Called by [Api] on a transport-level failure (never on HTTP statuses).
-  void reportFailure() {
+  void reportFailure({String operation = 'request', Object? error}) {
     if (_offline) return;
     _consecutiveFailures++;
-    if (_consecutiveFailures >= _failureThreshold) _goOffline();
+    debugPrint(
+      '[connection] transport failure operation=$operation '
+      'count=$_consecutiveFailures error=${error.runtimeType}: $error',
+    );
+    if (_consecutiveFailures >= _failureThreshold && !_confirmingOffline) {
+      unawaited(_confirmOutage());
+    }
+  }
+
+  /// A retrying GET can contribute two transport errors even while the store is
+  /// healthy (for example, two discarded Wi-Fi responses). Never turn those
+  /// attempts into a global, input-blocking outage without a separate health
+  /// request agreeing. A successful API response while this check is in flight
+  /// also vetoes its stale result.
+  Future<void> _confirmOutage() async {
+    _confirmingOffline = true;
+    final successVersion = _successVersion;
+    debugPrint(
+      '[connection] confirming restaurant reachability '
+      'after $_consecutiveFailures failures',
+    );
+    try {
+      final check = confirmReachable;
+      final reachable = check != null
+          ? await check()
+          : await Api.probeHealth(Api.baseUrl, timeout: _probeTimeout);
+      if (reachable) {
+        debugPrint(
+          '[connection] health confirmation succeeded; staying online',
+        );
+        reportSuccess(operation: 'GET /health confirmation');
+      } else if (!_offline &&
+          successVersion == _successVersion &&
+          _consecutiveFailures >= _failureThreshold) {
+        debugPrint('[connection] health confirmation failed; going offline');
+        _goOffline();
+      } else {
+        debugPrint('[connection] ignored stale failed health confirmation');
+      }
+    } finally {
+      _confirmingOffline = false;
+    }
   }
 
   /// Counted (not boolean) so overlapping screen lifecycles — new route's
@@ -93,6 +151,7 @@ class ConnectionMonitor extends ChangeNotifier {
     _probeTimer?.cancel();
     _probeTimer = null;
     _reconnectCount++;
+    debugPrint('[connection] restaurant reachable; overlay can clear');
     notifyListeners();
   }
 
