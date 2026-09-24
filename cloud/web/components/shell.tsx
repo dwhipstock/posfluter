@@ -10,7 +10,7 @@ import { useMe } from "@/lib/hooks";
 import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { LangEraToggle } from "@/components/lang-toggle";
-import { BarcodeMark } from "@/components/brand-mark";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/utils";
 
 const NAV: { href: string; labelKey: MsgKey; icon: typeof LayoutGrid }[] = [
@@ -30,7 +30,7 @@ function isActive(pathname: string, href: string) {
 }
 
 function Wordmark() {
-  return <BarcodeMark />;
+  return <BrandMark />;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {

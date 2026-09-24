@@ -1,16 +1,29 @@
-export function BarcodeMark({ compact = false }: { compact?: boolean }) {
-  const bars = [1, 2, 1, 3, 1, 2, 3, 1, 2];
+import Image from "next/image";
 
+export function BrandMark({ compact = false, large = false }: { compact?: boolean; large?: boolean }) {
+  if (large) {
+    return (
+      <Image
+        src="/copper-lantern-logo.png"
+        alt="The Copper Lantern Pub"
+        width={192}
+        height={192}
+        unoptimized
+        className="rounded-full"
+        priority
+      />
+    );
+  }
   return (
     <span className="inline-flex items-center gap-2" aria-label="Copper Lantern Manager">
-      <span
-        aria-hidden="true"
-        className="flex h-6 items-stretch gap-px rounded-sm bg-white px-1.5 py-1 shadow-sm"
-      >
-        {bars.map((width, index) => (
-          <span key={index} className="bg-accent" style={{ width }} />
-        ))}
-      </span>
+      <Image
+        src="/copper-lantern-logo.png"
+        alt=""
+        width={36}
+        height={36}
+        unoptimized
+        className="shrink-0 rounded-full"
+      />
       <span className="flex flex-col leading-none">
         <span className="text-sm font-bold uppercase tracking-[0.16em]">Copper Lantern</span>
         {!compact && (
