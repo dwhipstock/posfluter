@@ -6,6 +6,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
@@ -23,6 +24,31 @@ import kotlin.test.assertTrue
 class StaffAppTotpTest {
 
     private fun tempDb() = Files.createTempDirectory("pos-test").resolve("pos.db").toString()
+
+    @Test
+    fun demoBypassKeepsPinCheckAndPreservesTotpForMfaOnBuilds() {
+        val db = tempDb()
+        testApplication {
+            application { module(dbPath = db) }
+            val secret = post("/staff-app/login", """{"pin":"9999"}""").obj()["secret"]!!.jsonPrimitive.content
+            assertEquals(HttpStatusCode.OK,
+                post("/staff-app/totp", """{"pin":"9999","code":"${Totp.code(secret)}"}""").status)
+        }
+        testApplication {
+            application { module(dbPath = db, staffAppMfaRequired = false) }
+            val login = post("/staff-app/login", """{"pin":"9999"}""").obj()
+            assertEquals("ok", login["status"]!!.jsonPrimitive.content)
+            assertTrue(login["user"]!!.jsonObject["token"]!!.jsonPrimitive.content.isNotEmpty())
+            assertTrue(login["secret"]?.jsonPrimitive?.contentOrNull == null)
+            assertEquals(HttpStatusCode.Unauthorized,
+                post("/staff-app/login", """{"pin":"0000"}""").status)
+        }
+        testApplication {
+            application { module(dbPath = db) }
+            assertEquals("totp",
+                post("/staff-app/login", """{"pin":"9999"}""").obj()["status"]!!.jsonPrimitive.content)
+        }
+    }
 
     @Test
     fun enrollThenTrustedDeviceThenReenrollWhenUntrusted() = testApplication {

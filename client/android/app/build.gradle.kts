@@ -14,6 +14,11 @@ val stageEmbeddedStoreSources by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/embeddedStoreSources"))
 }
 
+// Demo-only assets are not packaged in an ordinary product build. The local
+// staff-app MFA bypass cannot be toggled from the app or a runtime settings UI.
+val posDemoBuild = providers.environmentVariable("POS_DEMO_BUILD")
+    .map { it.equals("true", ignoreCase = true) }.getOrElse(false)
+
 val sqliteJdbcNative by configurations.creating
 val stageSqliteNative by tasks.registering(Sync::class) {
     from({ zipTree(sqliteJdbcNative.singleFile) }) {
@@ -74,6 +79,7 @@ android {
     }
 
     sourceSets.getByName("main").assets.srcDir("../../../server/src/main/resources")
+    if (posDemoBuild) sourceSets.getByName("main").assets.srcDir("src/demo/assets")
     sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/sqliteJni").get().asFile)
 }
 

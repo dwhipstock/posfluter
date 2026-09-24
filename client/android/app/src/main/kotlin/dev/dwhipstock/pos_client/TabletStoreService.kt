@@ -76,6 +76,17 @@ class TabletStoreService : Service() {
             if (cloudFile.exists() && !cloudReady && !isolatedTest) {
                 Log.w("TabletStore", "Cloud sync disabled: store identity or provisioning is incomplete")
             }
+            // The asset exists only in an explicitly built demo APK. Ordinary
+            // product builds omit it and always require staff-app MFA.
+            val demoSettings = runCatching {
+                Properties().apply {
+                    assets.open("copperlantern-demo.properties").use(::load)
+                }
+            }.getOrNull()
+            val staffAppMfaRequired = demoSettings
+                ?.getProperty("staff.app.mfa.required")
+                ?.trim()?.toBooleanStrictOrNull() ?: true
+            if (!staffAppMfaRequired) Log.w("TabletStore", "Demo build: staff-app MFA bypass enabled")
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = 8080) {
                 module(
                     dbPath = dbFile.absolutePath,
@@ -90,6 +101,7 @@ class TabletStoreService : Service() {
                     cloudSyncApiKey = if (cloudReady) cloud.getProperty("cloud.apiKey") else null,
                     reportingPortalUrl = if (cloudReady) cloud.getProperty("portal.url") else null,
                     physicalPrinterEnabled = !isolatedTest,
+                    staffAppMfaRequired = staffAppMfaRequired,
                 )
             }.start(wait = true)
         } catch (error: Throwable) {

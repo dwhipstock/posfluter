@@ -30,7 +30,10 @@ import java.util.UUID
  * is capped at [MAX_SESSIONS_PER_USER], evicting only the oldest beyond the cap.
  * Failed attempts are rate-limited terminal-wide (see [LoginRateLimiter]).
  */
-class AuthService(private val settings: SettingsRepository? = null) {
+class AuthService(
+    private val settings: SettingsRepository? = null,
+    private val staffAppMfaRequired: Boolean = true,
+) {
 
     companion object {
         private const val BCRYPT_COST = 10 // 4-digit PINs: the rate limit is the real defense
@@ -147,6 +150,14 @@ class AuthService(private val settings: SettingsRepository? = null) {
         val user = activeUserByPin(pin)
         if (user == null) { rateLimiter.recordFailure(); return@transaction null }
         val uid = user[Users.id]
+
+        // Only an explicitly packaged demo build may set this false. Keep the
+        // PIN check, rate limit, and normal session expiry; leave enrolled TOTP
+        // data intact so a later MFA-on build requires it at the next login.
+        if (!staffAppMfaRequired) {
+            rateLimiter.recordSuccess()
+            return@transaction StaffAppBegin("ok", user = issueSession(user))
+        }
 
         // A still-trusted device completes the login now (PIN only). Clearing the
         // failure counter is correct HERE because authentication is complete.

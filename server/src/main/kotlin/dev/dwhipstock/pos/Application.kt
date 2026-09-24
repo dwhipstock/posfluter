@@ -74,6 +74,7 @@ fun Application.module(
     publicUrl: String? = System.getenv("POS_PUBLIC_URL"),
     reportingPortalUrl: String? = System.getenv("REPORTING_PORTAL_URL"),
     physicalPrinterEnabled: Boolean = true,
+    staffAppMfaRequired: Boolean = true,
 ) {
     initDatabase(dbPath)
     // discover i18n message catalogs now so missing-key warnings surface at
@@ -128,7 +129,7 @@ fun Application.module(
     log.info("Customers scan: $publicBaseUrl/m/{zone}/{n} (e.g. /m/lower/8; /m/{tableId} still works)  — table slips: $publicBaseUrl/slips")
     val checkService = CheckService(config)
     val shiftService = ShiftService(config)
-    val authService = AuthService(settingsRepo)
+    val authService = AuthService(settingsRepo, staffAppMfaRequired)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
 
     // Cloud sync (CONTRACT.md): outbox pusher + catalog puller. Never constructed
