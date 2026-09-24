@@ -45,7 +45,7 @@ services:
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env.local}"
       COOKIE_SECURE: "false"
       VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
-      VENUE_TZ: "${VENUE_TZ:-America/Toronto}"
+      VENUE_TZ: "${VENUE_TZ:-America/New_York}"
     ports:
       - "8081:8081"
     depends_on:

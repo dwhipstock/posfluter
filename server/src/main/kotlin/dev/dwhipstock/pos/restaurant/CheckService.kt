@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.restaurant
 
+import dev.dwhipstock.pos.sdk.VenueClock
+
 import dev.dwhipstock.pos.base.GrantsRepo
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
@@ -156,7 +158,7 @@ class CheckService(private val config: CustomerConfig) {
             it[Checks.tableId] = tableId
             it[status] = "OPEN"
             it[openedBy] = userId
-            it[openedAt] = LocalDateTime.now()
+            it[openedAt] = VenueClock.now()
         }.value
 
         Outbox.write("check.opened", "check", checkId.toString(), buildJsonObject {
@@ -184,7 +186,7 @@ class CheckService(private val config: CustomerConfig) {
             it[CheckLines.qty] = qty
             it[unitPriceCents] = variant[ItemVariants.priceCents]
             it[CheckLines.note] = note
-            it[createdAt] = LocalDateTime.now()
+            it[createdAt] = VenueClock.now()
         }.value
 
         Outbox.write("check.line_added", "check", checkId.toString(), buildJsonObject {
@@ -219,7 +221,7 @@ class CheckService(private val config: CustomerConfig) {
             it[CheckLines.qty] = qty
             it[CheckLines.unitPriceCents] = unitPriceCents
             it[CheckLines.note] = note
-            it[createdAt] = LocalDateTime.now()
+            it[createdAt] = VenueClock.now()
         }.value
 
         Outbox.write("check.line_open_added", "check", checkId.toString(), buildJsonObject {
@@ -259,7 +261,7 @@ class CheckService(private val config: CustomerConfig) {
                 it[unitPriceCents] = variant[ItemVariants.priceCents]
                 it[note] = line.note
                 it[status] = "PENDING"
-                it[createdAt] = LocalDateTime.now()
+                it[createdAt] = VenueClock.now()
             }.value
             Outbox.write("check.pending_line_submitted", "check", check.id.toString(), buildJsonObject {
                 put("checkId", check.id)
@@ -530,7 +532,7 @@ class CheckService(private val config: CustomerConfig) {
             it[groupNumber] = number
             it[BillGroups.includesCorkage] = includesCorkage
             it[BillGroups.fixedAmountCents] = fixedAmountCents
-            it[createdAt] = LocalDateTime.now()
+            it[createdAt] = VenueClock.now()
         }.value
 
     private fun splitGroups(checkId: Int): List<ResultRow> =
@@ -661,7 +663,7 @@ class CheckService(private val config: CustomerConfig) {
             it[roundingAdjustmentCents] = rounding.cents
             it[changeCents] = change.cents
             it[billGroupId] = groupId
-            it[createdAt] = LocalDateTime.now()
+            it[createdAt] = VenueClock.now()
         }.value
         Outbox.write(eventType, "check", checkId.toString(), buildJsonObject {
             put("checkId", checkId)
@@ -702,7 +704,7 @@ class CheckService(private val config: CustomerConfig) {
         }
 
         val shift = currentOpenShiftId() // null = closed outside any shift (allowed; report skips it)
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         Checks.update({ Checks.id eq checkId }) {
             it[status] = "CLOSED"
             it[closedAt] = now
@@ -800,7 +802,7 @@ class CheckService(private val config: CustomerConfig) {
             tableLabel = "${table[DiningTables.nameOverride] ?: table[DiningTables.label]} · " +
                 "${group[BillGroups.groupNumber]}/${groups.size}",
             openedAt = check[Checks.openedAt],
-            closedAt = check[Checks.closedAt] ?: LocalDateTime.now(),
+            closedAt = check[Checks.closedAt] ?: VenueClock.now(),
             items = items,
             fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
             grandTotal = Money(group[BillGroups.lockedTotalCents] ?: totals.grandTotal.cents),
@@ -872,7 +874,7 @@ class CheckService(private val config: CustomerConfig) {
             checkId = checkId,
             tableLabel = table[DiningTables.nameOverride] ?: table[DiningTables.label],
             openedAt = check[Checks.openedAt],
-            closedAt = check[Checks.closedAt] ?: LocalDateTime.now(),
+            closedAt = check[Checks.closedAt] ?: VenueClock.now(),
             items = items,
             fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
             grandTotal = Money(check[Checks.lockedGrandTotalCents] ?: totals.grandTotal.cents),
@@ -902,7 +904,7 @@ class CheckService(private val config: CustomerConfig) {
         }
 
         val shift = currentOpenShiftId()
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         // TOTAL_LOCKED (tender initiated, no money confirmed): the locked totals
         // are what the screen showed — live math would re-price a settings change
         // and re-floor a split. Only an OPEN void computes fresh.
@@ -991,7 +993,7 @@ class CheckService(private val config: CustomerConfig) {
         val refundNet = refundGross - refundTax
 
         val shift = currentOpenShiftId()
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         val refundId = Refunds.insertAndGetId {
             it[Refunds.checkId] = checkId
             it[shiftId] = shift
@@ -1203,7 +1205,7 @@ class CheckService(private val config: CustomerConfig) {
         }
         Checks.update({ Checks.id eq sourceCheckId }) {
             it[status] = "MERGED"
-            it[closedAt] = LocalDateTime.now()
+            it[closedAt] = VenueClock.now()
         }
         Outbox.write("check.merged", "check", destCheckId.toString(), buildJsonObject {
             put("sourceCheckId", sourceCheckId)
@@ -1428,7 +1430,7 @@ class CheckService(private val config: CustomerConfig) {
         if (liveLines > 0L) return
         Checks.update({ Checks.id eq checkId }) {
             it[status] = "CANCELLED"
-            it[closedAt] = LocalDateTime.now()
+            it[closedAt] = VenueClock.now()
         }
         Outbox.write("check.cancelled", "check", checkId.toString(), buildJsonObject {
             put("checkId", checkId)

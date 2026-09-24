@@ -33,7 +33,7 @@ COPY --from=build /home/gradle/project/build/libs/pos-server-all.jar /app/pos-se
 # so they survive container restarts. Owned by the unprivileged runtime user.
 RUN mkdir -p /data /data/receipts /data/bills /data/photos && chown -R pos:pos /data
 USER pos
-ENV TZ=America/Toronto
+ENV TZ=America/New_York
 # Heap cap, overridable per deployment: container-per-venue on a small instance
 # runs several of these JVMs side by side (M8), so venues set e.g. POS_XMX=224m.
 ENV POS_XMX=512m

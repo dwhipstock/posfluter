@@ -34,7 +34,7 @@ services:
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env}"
       COOKIE_SECURE: "true"
       VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
-      VENUE_TZ: "America/Toronto"
+      VENUE_TZ: "America/New_York"
       PUBLIC_BASE_DOMAIN: "${PUBLIC_BASE_DOMAIN:-lostmindllc.com}"
     depends_on:
       db:
@@ -47,7 +47,7 @@ services:
       start_period: 30s
 
   web:
-    image: "${REGISTRY:?set REGISTRY in .env}/pos-cloud-web:${IMAGE_TAG:?set IMAGE_TAG in .env}"
+    image: "${REGISTRY:?set REGISTRY in .env}/pos-cloud-web:${WEB_IMAGE_TAG:-${IMAGE_TAG:?set IMAGE_TAG in .env}}"
     restart: unless-stopped
     environment:
       API_ORIGIN: "http://api:8081"
@@ -76,7 +76,7 @@ services:
       CLOUD_SYNC_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env}"
       CLOUD_SYNC_INTERVAL_SECONDS: "10"
       REPORTING_PORTAL_URL: "https://${DOMAIN:?set DOMAIN in .env}"
-      TZ: America/Toronto
+      TZ: America/New_York
     volumes:
       - manager_storedata:/data
     depends_on:

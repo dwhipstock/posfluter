@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.api
 
+import dev.dwhipstock.pos.sdk.VenueClock
+
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
@@ -161,7 +163,7 @@ fun Route.catalogRoutes() {
             val openLines = openCheckLineCount(CheckLines.itemId eq itemId)
             if (openLines > 0) throw ConflictException(
                 "item $itemId is on $openLines open check line(s)", "item_in_use")
-            val now = LocalDateTime.now()
+            val now = VenueClock.now()
             Items.update({ Items.id eq itemId }) {
                 it[active] = false
                 it[deletedAt] = now
@@ -247,7 +249,7 @@ fun Route.catalogRoutes() {
             if (liveSiblings <= 1) throw ConflictException(
                 "cannot delete the last size of $itemId; delete the item instead", "last_variant")
             ItemVariants.update({ ItemVariants.id eq variantId }) {
-                it[deletedAt] = LocalDateTime.now()
+                it[deletedAt] = VenueClock.now()
             }
             Outbox.write("item.variant_deleted", "item", itemId, buildJsonObject {
                 put("itemId", itemId)

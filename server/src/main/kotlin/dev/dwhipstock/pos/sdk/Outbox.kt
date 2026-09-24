@@ -19,7 +19,7 @@ object Outbox {
             it[SyncOutbox.aggregateType] = aggregateType
             it[SyncOutbox.aggregateId] = aggregateId
             it[SyncOutbox.payload] = payload.toString()
-            it[createdAt] = LocalDateTime.now()
+            it[createdAt] = VenueClock.now()
         }
     }
 }

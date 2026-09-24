@@ -19,7 +19,7 @@ Hard rules this contract encodes:
   version, and redistributes. The store always converges to the cloud's state.
 - **All money is integer cents.** All timestamps are venue-local ISO-8601
   `LocalDateTime` strings without zone (`2026-07-11T18:02:11`); the venue's
-  IANA timezone lives on the cloud `venues` row (America/Toronto) and is display
+  IANA timezone lives on the cloud `venues` row (America/New_York) and is display
   metadata only — bucketing by day/hour uses the naive timestamps as-is.
 
 ## 1. Event push (store → cloud)
@@ -298,7 +298,7 @@ locked out.
 ## 6. Cloud identifiers
 
 Bootstrap (idempotent, from cloud env): tenant `copperlantern`, venue `main`
-(display "The Copper Lantern Pub", tz `America/Toronto`), one store API key
+(display "The Copper Lantern Pub", tz `America/New_York`), one store API key
 (`STORE_API_KEY`), one portal admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, TOTP
 enrolled on first login). Every cloud row and every cloud query is scoped by
 `tenant_id`; the API key resolves to (tenant, venue) server-side.

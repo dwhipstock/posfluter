@@ -22,6 +22,11 @@ container is stopped. The tablet connects to the existing cloud ingest and
 owner portal asynchronously. Additional independent tablet uploads and
 combined reporting remain Milestone 2.
 
+Business timestamps are recorded in the venue's `America/New_York` timezone,
+independent of the tablet's Android timezone. The cloud portal's date presets
+use the same timezone. Existing timestamp strings remain unchanged when this
+policy is deployed; historical corrections require a separate reconciliation.
+
 ## On-tablet delivery milestones
 
 1. **Self-contained POS tablet with existing cloud connection:** package the

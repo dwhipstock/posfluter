@@ -1067,6 +1067,11 @@ class Api {
   static Future<ShiftReport> xReport() async =>
       ShiftReport.fromJson(await _get('/shifts/current/report'));
 
+  static Future<DateTime> venueToday() async {
+    final response = await _get('/reports/today');
+    return DateTime.parse(response['date'] as String);
+  }
+
   /// X-report layout over closed-at dates, inclusive (YYYY-MM-DD).
   static Future<ShiftReport> rangeReport(String from, String to) async =>
       ShiftReport.fromJson(await _get('/reports/range?from=$from&to=$to'));

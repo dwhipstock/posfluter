@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.restaurant
 
+import dev.dwhipstock.pos.sdk.VenueClock
+
 import dev.dwhipstock.pos.base.GrantsRepo
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Permissions
@@ -59,7 +61,7 @@ class ShiftService(private val config: CustomerConfig) {
     fun openShift(userId: String, openingFloatCents: Long): ShiftView = transaction {
         require(openingFloatCents >= 0) { "float must be >= 0" }
         if (currentOpenShiftId() != null) throw ConflictException("a shift is already open", "shift_already_open")
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         val id = Shifts.insertAndGetId {
             it[status] = "OPEN"
             it[openedAt] = now
@@ -94,7 +96,7 @@ class ShiftService(private val config: CustomerConfig) {
         val shift = currentOpenShiftId()
             ?: throw ConflictException("no open shift to post a cash movement to", "no_open_shift")
 
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         val id = CashMovements.insertAndGetId {
             it[shiftId] = shift
             it[CashMovements.direction] = dir
@@ -177,7 +179,7 @@ class ShiftService(private val config: CustomerConfig) {
         val shift = Shifts.selectAll().where { Shifts.status eq "OPEN" }.firstOrNull()
             ?: throw ConflictException("no open shift", "no_open_shift")
         val report = buildReport(shift, closingCountCents)
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         Shifts.update({ Shifts.id eq shift[Shifts.id].value }) {
             it[status] = "CLOSED"
             it[closedAt] = now

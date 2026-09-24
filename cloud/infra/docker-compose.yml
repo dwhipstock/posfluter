@@ -37,7 +37,7 @@ services:
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env}"
       COOKIE_SECURE: "true"
       VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
-      VENUE_TZ: "America/Toronto"
+      VENUE_TZ: "America/New_York"
       # Base domain for cloud-hosted venue stores (<venue>.<this>); pairing
       # URLs and heartbeat public-host validation key off it (M8).
       PUBLIC_BASE_DOMAIN: "${BASE_DOMAIN:-}"

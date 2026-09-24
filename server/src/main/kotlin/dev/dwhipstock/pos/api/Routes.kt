@@ -13,6 +13,7 @@ import dev.dwhipstock.pos.restaurant.NotFoundException
 import dev.dwhipstock.pos.restaurant.TenderView
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.TenderType
+import dev.dwhipstock.pos.sdk.VenueClock
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -294,6 +295,10 @@ fun Route.shiftRoutes(shiftService: dev.dwhipstock.pos.restaurant.ShiftService, 
     }
 
     get("/shifts/current/report") { call.respond(shiftService.xReport()) }
+
+    // Tablet date presets must use the venue's business day, not Android's
+    // timezone (which may reflect the tablet's physical location).
+    get("/reports/today") { call.respond(mapOf("date" to VenueClock.now().toLocalDate().toString())) }
 
     /** X-report layout over closed-at dates (?from=YYYY-MM-DD&to=YYYY-MM-DD, inclusive). */
     get("/reports/range") {

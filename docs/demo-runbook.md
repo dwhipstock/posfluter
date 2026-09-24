@@ -7,4 +7,4 @@
 5. Exercise cash, generic card, and bank-transfer tenders. Uploaded photos and generated receipts are runtime data and must not be committed.
 6. Stop the stack with `scripts/demo-down.sh`.
 
-The sample venue is The Copper Lantern Pub in Toronto, configured for `America/Toronto` and CAD.
+The sample venue is The Copper Lantern Pub, configured for US Eastern time (`America/New_York`) and CAD.

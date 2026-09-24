@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.base
 
+import dev.dwhipstock.pos.sdk.VenueClock
+
 import at.favre.lib.crypto.bcrypt.BCrypt
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.i18n.Messages
@@ -108,7 +110,7 @@ class AuthService(
      * new session out of the eviction set.)
      */
     private fun issueSession(user: ResultRow, deviceId: String? = null): AuthUser {
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         val uid = user[Users.id]
         val live = Sessions.selectAll()
             .where { (Sessions.userId eq uid) and Sessions.revokedAt.isNull() }
@@ -179,7 +181,7 @@ class AuthService(
             StaffTotp.insert {
                 it[userId] = uid
                 it[StaffTotp.secret] = s
-                it[createdAt] = LocalDateTime.now()
+                it[createdAt] = VenueClock.now()
             }
         }
         StaffAppBegin("enroll",
@@ -209,10 +211,10 @@ class AuthService(
         rateLimiter.recordSuccess()
         StaffTotp.update({ StaffTotp.userId eq uid }) {
             it[StaffTotp.lastStep] = step // replay guard: this 30s window can't be reused
-            if (row[StaffTotp.activatedAt] == null) it[activatedAt] = LocalDateTime.now()
+            if (row[StaffTotp.activatedAt] == null) it[activatedAt] = VenueClock.now()
         }
         val authUser = issueSession(user)
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         val expires = now.plusDays(TRUST_DAYS)
         val devToken = UUID.randomUUID().toString()
         TrustedDevices.insert {
@@ -229,8 +231,8 @@ class AuthService(
         val row = TrustedDevices.selectAll()
             .where { (TrustedDevices.token eq token) and (TrustedDevices.userId eq userId) }
             .firstOrNull() ?: return false
-        if (!row[TrustedDevices.expiresAt].isAfter(LocalDateTime.now())) return false
-        TrustedDevices.update({ TrustedDevices.token eq token }) { it[lastUsedAt] = LocalDateTime.now() }
+        if (!row[TrustedDevices.expiresAt].isAfter(VenueClock.now())) return false
+        TrustedDevices.update({ TrustedDevices.token eq token }) { it[lastUsedAt] = VenueClock.now() }
         return true
     }
 
@@ -270,7 +272,7 @@ class AuthService(
                 }
                 .firstOrNull() ?: return@transaction null
 
-            val now = LocalDateTime.now()
+            val now = VenueClock.now()
             val absolute = row[Sessions.expiresAt] ?: row[Sessions.createdAt].plusHours(ABSOLUTE_HOURS)
             val lastUsed = row[Sessions.lastUsedAt] ?: row[Sessions.createdAt]
             if (now.isAfter(absolute) || now.isAfter(lastUsed.plusMinutes(idleMinutes()))) {
@@ -283,16 +285,16 @@ class AuthService(
         // Both writes are safe to lose: an unrevoked expired session still answers
         // null here on every later call, and a missed touch is the next one's job.
         if (expired) runCatching {
-            transaction { Sessions.update({ Sessions.token eq token }) { it[revokedAt] = LocalDateTime.now() } }
+            transaction { Sessions.update({ Sessions.token eq token }) { it[revokedAt] = VenueClock.now() } }
         } else if (user != null && touchDue) runCatching {
-            transaction { Sessions.update({ Sessions.token eq token }) { it[lastUsedAt] = LocalDateTime.now() } }
+            transaction { Sessions.update({ Sessions.token eq token }) { it[lastUsedAt] = VenueClock.now() } }
         }
         return user
     }
 
     fun logout(token: String) = transaction {
         val user = me(token) ?: return@transaction
-        Sessions.update({ Sessions.token eq token }) { it[revokedAt] = LocalDateTime.now() }
+        Sessions.update({ Sessions.token eq token }) { it[revokedAt] = VenueClock.now() }
         Outbox.write("auth.logout", "user", user.userId, buildJsonObject { put("userId", user.userId) })
     }
 

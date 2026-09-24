@@ -54,7 +54,7 @@ object TestSupport {
         adminPassword = null,
         storeApiKey = null,
         venueName = "Test Pub",
-        venueTz = "America/Toronto",
+        venueTz = "America/New_York",
     )
 
     private var initialized = false
@@ -109,7 +109,7 @@ fun seedTenant(tenantId: String, venueId: String = "main", venueName: String = "
         it[Venues.tenantId] = tenantId
         it[id] = venueId
         it[name] = venueName
-        it[timezone] = "America/Toronto"
+        it[timezone] = "America/New_York"
     }
 }
 

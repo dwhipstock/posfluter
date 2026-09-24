@@ -18,7 +18,7 @@ data class CloudConfig(
     val storeApiKey: String? = env("STORE_API_KEY"),
     val cookieSecure: Boolean = env("COOKIE_SECURE")?.toBoolean() ?: false,
     val venueName: String = env("VENUE_NAME") ?: "The Copper Lantern Pub",
-    val venueTz: String = env("VENUE_TZ") ?: "America/Toronto",
+    val venueTz: String = env("VENUE_TZ") ?: "America/New_York",
     // Base domain for cloud-hosted venue stores (<subdomain>.<this>); unset = no
     // public store URLs are minted or accepted (pure on-prem deployment).
     val publicBaseDomain: String? = env("PUBLIC_BASE_DOMAIN"),

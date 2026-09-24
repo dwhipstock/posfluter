@@ -1,19 +1,24 @@
 export type DateRange = { from: string; to: string };
 
-const pad = (n: number) => String(n).padStart(2, "0");
-
-export function toISODate(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+// This single-venue portal reports in the venue's business timezone, not the
+// browser's timezone. Keep in sync with VENUE_TZ on the API and store.
+export const VENUE_TIME_ZONE = "America/New_York";
 
 export function todayISO(): string {
-  return toISODate(new Date());
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: VENUE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return toISODate(d);
+  const d = new Date(`${todayISO()}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
 }
 
 // Labels are looked up by key (preset_<key>) in the i18n layer — keep this
@@ -26,8 +31,8 @@ export const PRESETS: { key: string; range: () => DateRange }[] = [
   {
     key: "month",
     range: () => {
-      const d = new Date();
-      return { from: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`, to: todayISO() };
+      const today = todayISO();
+      return { from: `${today.slice(0, 7)}-01`, to: today };
     },
   },
 ];

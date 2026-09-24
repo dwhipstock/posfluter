@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.sync
 
+import dev.dwhipstock.pos.sdk.VenueClock
+
 import dev.dwhipstock.pos.api.allCategoriesJson
 import dev.dwhipstock.pos.api.allLiveItemsJson
 import dev.dwhipstock.pos.api.categorySnapshotJson
@@ -308,7 +310,7 @@ class CloudSync(
             if (!exists) return
             Items.update({ Items.id eq id }) {
                 it[active] = false
-                it[deletedAt] = LocalDateTime.now()
+                it[deletedAt] = VenueClock.now()
             }
             writeCloudEcho("item.deleted", "item", id) {
                 put("itemId", id)
@@ -332,7 +334,7 @@ class CloudSync(
                 d.str("abbrev")?.let { v -> it[abbrev] = v }
                 d.bool("isAlcohol")?.let { v -> it[isAlcohol] = v }
                 it[active] = if (deleted) false else d.bool("active") ?: true
-                it[deletedAt] = if (deleted) LocalDateTime.now() else null
+                it[deletedAt] = if (deleted) VenueClock.now() else null
             }
         } else {
             Items.insert {
@@ -343,7 +345,7 @@ class CloudSync(
                 it[abbrev] = (d.str("abbrev") ?: id).take(4)
                 it[isAlcohol] = d.bool("isAlcohol") ?: false
                 it[active] = if (deleted) false else d.bool("active") ?: true
-                if (deleted) it[deletedAt] = LocalDateTime.now()
+                if (deleted) it[deletedAt] = VenueClock.now()
             }
         }
         applyVariants(id, change)
@@ -368,7 +370,7 @@ class CloudSync(
                     v.str("labelEn")?.let { s -> it[labelEn] = s }
                     v.long("priceCents")?.let { s -> it[priceCents] = s }
                     v.int("sortOrder")?.let { s -> it[sortOrder] = s }
-                    it[deletedAt] = if (deleted) LocalDateTime.now() else null
+                    it[deletedAt] = if (deleted) VenueClock.now() else null
                 }
             } else {
                 ItemVariants.insert {
@@ -378,7 +380,7 @@ class CloudSync(
                     it[labelEn] = v.str("labelEn") ?: vid
                     it[priceCents] = v.long("priceCents") ?: 0L
                     it[sortOrder] = v.int("sortOrder") ?: 0
-                    if (deleted) it[deletedAt] = LocalDateTime.now()
+                    if (deleted) it[deletedAt] = VenueClock.now()
                 }
             }
         }
@@ -387,7 +389,7 @@ class CloudSync(
         ItemVariants.update({
             (ItemVariants.itemId eq itemId) and ItemVariants.deletedAt.isNull() and
                 (ItemVariants.id notInList snapshotIds)
-        }) { it[deletedAt] = LocalDateTime.now() }
+        }) { it[deletedAt] = VenueClock.now() }
     }
 
     private fun applyItemPhoto(change: CatalogChange, photos: Map<String, FetchedPhoto?>) {
@@ -422,7 +424,7 @@ class CloudSync(
         if (change.op == "delete" || d.bool("deleted") == true) {
             if (exists) Users.update({ Users.id eq id }) {
                 it[active] = false
-                it[deletedAt] = LocalDateTime.now()
+                it[deletedAt] = VenueClock.now()
             }
             GrantsRepo.applyStaffOverrides(id, buildJsonObject {})
             revokeAccess(id) // a deleted staff's live session/devices must not outlive them
@@ -467,7 +469,7 @@ class CloudSync(
      *  afresh rather than slide back in PIN-only on a pre-deactivation device. */
     private fun revokeAccess(userId: String) {
         Sessions.update({ (Sessions.userId eq userId) and Sessions.revokedAt.isNull() }) {
-            it[revokedAt] = LocalDateTime.now()
+            it[revokedAt] = VenueClock.now()
         }
         TrustedDevices.deleteWhere { TrustedDevices.userId eq userId }
     }

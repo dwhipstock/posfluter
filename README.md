@@ -2,7 +2,7 @@
 
 An independent, offline-first point-of-sale demo for a fictional Canadian pub. The store terminal is Flutter, the local service is Kotlin/Ktor with SQLite, and the optional owner portal uses a Kotlin/PostgreSQL API with a Next.js frontend.
 
-The sample venue uses English by default with complete French localization, CAD prices, Gregorian dates, and the `America/Toronto` timezone. Payment examples are cash, a generic card terminal, and manual bank transfer. The demo makes no jurisdiction-specific tax assumption.
+The sample venue uses English by default with complete French localization, CAD prices, Gregorian dates, and the `America/New_York` (US Eastern) timezone. Payment examples are cash, a generic card terminal, and manual bank transfer. The demo makes no jurisdiction-specific tax assumption.
 
 No real venue records, customer photographs, credentials, local databases, build output, or production configuration are included.
 
