@@ -103,10 +103,11 @@ class TableOpsTest {
         assertEquals(2, lines.size)
         val amberAle = lines.single { it["itemId"]!!.jsonPrimitive.content == "amber-ale" }
         assertEquals("no ice", amberAle["note"]!!.jsonPrimitive.content)
-        assertEquals(875L, amberAle["unitPriceCents"]!!.jsonPrimitive.long)
+        assertEquals(795L, amberAle["unitPriceCents"]!!.jsonPrimitive.long)
         // corkage bottles sum: 1 + 2
         assertEquals(3, merged["corkageBottles"]!!.jsonPrimitive.int)
-        assertEquals(10075L, merged["grandTotalCents"]!!.jsonPrimitive.long)
+        // 2 × 7.95 + 7.50 + 3 × 25 corkage = 98.40, + GST 4.92 + QST 9.8154 → 9.82
+        assertEquals(11314L, merged["grandTotalCents"]!!.jsonPrimitive.long)
 
         // source closed as MERGED, its table is free, and it refuses further edits
         assertEquals("MERGED", c.check(source)["status"]!!.jsonPrimitive.content)
@@ -176,8 +177,8 @@ class TableOpsTest {
             .single { it["itemId"] == null || it["itemId"]!!.jsonPrimitive.contentOrNull == null }
         assertEquals("Birthday cake", open["nameEn"]!!.jsonPrimitive.content)
         assertEquals("Birthday cake", open["nameFr"]!!.jsonPrimitive.content)
-        // totals through the pipeline: 110 + 350
-        assertEquals(35875L, view["grandTotalCents"]!!.jsonPrimitive.long)
+        // totals through the pipeline: 7.95 + 350 = 357.95, + GST 17.8975 → 17.90 + QST 35.7055 → 35.71
+        assertEquals(41156L, view["grandTotalCents"]!!.jsonPrimitive.long)
 
         // guards: blank name / zero price
         assertEquals(HttpStatusCode.BadRequest,
@@ -189,10 +190,10 @@ class TableOpsTest {
         val bill = json.parseToJsonElement(c.post("/checks/$checkId/bill").bodyAsText())
             .jsonObject["text"]!!.jsonPrimitive.content
         assertTrue("Birthday cake" in bill)
-        assertTrue("358.75" in bill)
+        assertTrue("411.56" in bill && "357.95" in bill)
 
         // …and on the final receipt after a normal tender + finalize
-        c.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":35875}""")
+        c.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":41156}""")
         c.post("/checks/$checkId/finalize")
         val receipt = json.parseToJsonElement(c.get("/checks/$checkId/receipt").bodyAsText())
             .jsonObject["text"]!!.jsonPrimitive.content

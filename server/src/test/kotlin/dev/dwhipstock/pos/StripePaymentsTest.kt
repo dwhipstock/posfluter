@@ -108,7 +108,7 @@ class StripePaymentsTest {
 
     private suspend fun HttpResponse.obj(): JsonObject = json.parseToJsonElement(bodyAsText()).jsonObject
 
-    /** Manager session with an open shift and a $22.50 check on [table]. */
+    /** Manager session with an open shift and a $23.28 check on [table] ($20.25 + GST 1.01 + QST 2.02). */
     private suspend fun ApplicationTestBuilder.checkOf(table: String = "t5-5"): Pair<HttpClient, Int> {
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":10000,"managerPin":"1234"}""")
@@ -169,7 +169,7 @@ class StripePaymentsTest {
         assertEquals(HttpStatusCode.Conflict, res.status)
         assertEquals("stripe_not_configured", res.obj()["code"]!!.jsonPrimitive.content)
         assertEquals(HttpStatusCode.Conflict, c.postJson("/stripe/connection-token").status)
-        c.payCash(id, 2250)
+        c.payCash(id, 2330)
         assertTrue(fake.calls.isEmpty(), "no Stripe traffic without a key")
     }
 
@@ -185,7 +185,7 @@ class StripePaymentsTest {
         assertEquals(false, status["available"]!!.jsonPrimitive.content.toBoolean())
         assertEquals("stripe_live_key_refused", status["reason"]!!.jsonPrimitive.content)
         assertEquals("stripe_live_key_refused", c.postJson("/checks/$id/stripe/intents").obj()["code"]!!.jsonPrimitive.content)
-        c.payCash(id, 2250)
+        c.payCash(id, 2330)
         assertTrue(fake.calls.isEmpty())
     }
 
@@ -233,11 +233,11 @@ class StripePaymentsTest {
         application { module(dbPath = tempDb(), stripeConfig = testKey, stripeHttp = fake) }
         val (c, id) = checkOf()
         val intent = c.intent(id)
-        assertEquals(2250L, intent["amountCents"]!!.jsonPrimitive.long)
+        assertEquals(2328L, intent["amountCents"]!!.jsonPrimitive.long)
         assertEquals("CAD", intent["currency"]!!.jsonPrimitive.content)
         assertEquals("pi_1_secret_x", intent["clientSecret"]!!.jsonPrimitive.content)
         val create = fake.callsTo("/v1/payment_intents").single()
-        assertEquals("2250", create.params["amount"])
+        assertEquals("2328", create.params["amount"])
         assertEquals("cad", create.params["currency"])
         assertEquals("card_present", create.params["payment_method_types[]"])
         assertEquals("manual", create.params["capture_method"])
@@ -264,7 +264,7 @@ class StripePaymentsTest {
         assertEquals(HttpStatusCode.Conflict, c.postJson("/stripe/connection-token").status)
         assertTrue(fake.callsTo("/v1/payment_intents").isEmpty())
         assertTrue(fake.callsTo("/v1/terminal").isEmpty(), "no location or token for a non-CAD account")
-        c.payCash(id, 2250)
+        c.payCash(id, 2330)
     }
 
     @Test
@@ -282,7 +282,7 @@ class StripePaymentsTest {
         val body = res.obj()
         val tender = body["tender"]!!.jsonObject
         assertEquals("STRIPE", tender["type"]!!.jsonPrimitive.content)
-        assertEquals(2250L, tender["amountAppliedCents"]!!.jsonPrimitive.long)
+        assertEquals(2328L, tender["amountAppliedCents"]!!.jsonPrimitive.long)
         assertEquals(0L, body["check"]!!.jsonObject["outstandingCents"]!!.jsonPrimitive.long)
         assertEquals("succeeded", fake.status(pi))
         val capture = fake.callsTo("/v1/payment_intents/$pi/capture").single()
@@ -323,9 +323,9 @@ class StripePaymentsTest {
         val err = res.obj()
         assertEquals("stripe_declined", err["code"]!!.jsonPrimitive.content)
         assertEquals("insufficient_funds", err["declineCode"]!!.jsonPrimitive.content)
-        assertEquals(2250L, c.get("/checks/$id").obj()["outstandingCents"]!!.jsonPrimitive.long)
+        assertEquals(2328L, c.get("/checks/$id").obj()["outstandingCents"]!!.jsonPrimitive.long)
         assertEquals(HttpStatusCode.OK, c.postJson("/stripe/payments/$pid/cancel").status)
-        c.payCash(id, 2250)
+        c.payCash(id, 2330)
     }
 
     @Test
@@ -348,7 +348,7 @@ class StripePaymentsTest {
         assertEquals(HttpStatusCode.ServiceUnavailable, c.postJson("/checks/$id/stripe/intents").status)
 
         // …and the sale finishes in cash
-        c.payCash(id, 2250)
+        c.payCash(id, 2330)
         assertEquals("CLOSED", c.get("/checks/$id").obj()["status"]!!.jsonPrimitive.content)
     }
 
@@ -361,7 +361,7 @@ class StripePaymentsTest {
         assertEquals(HttpStatusCode.OK, status.status)
         assertEquals(false, status.obj()["available"]!!.jsonPrimitive.content.toBoolean())
         assertEquals("stripe_unavailable", status.obj()["reason"]!!.jsonPrimitive.content)
-        c.payCash(id, 2250)
+        c.payCash(id, 2330)
     }
 
     @Test
@@ -378,7 +378,7 @@ class StripePaymentsTest {
         assertEquals("CANCELED", res.obj()["status"]!!.jsonPrimitive.content)
         assertEquals("canceled", fake.status(pi))
         assertEquals(HttpStatusCode.Conflict, c.postJson("/stripe/payments/$pid/confirm").status)
-        c.payCash(id, 2250)
+        c.payCash(id, 2330)
     }
 
     @Test
@@ -389,7 +389,7 @@ class StripePaymentsTest {
         val intent = c.intent(id)
         val pi = intent["paymentIntentId"]!!.jsonPrimitive.content
         fake.authorize(pi)
-        c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2250}""")
+        c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2330}""")
         val res = c.postJson("/stripe/payments/${intent["paymentId"]!!.jsonPrimitive.content}/confirm")
         assertEquals(HttpStatusCode.Conflict, res.status)
         assertEquals("stripe_amount_exceeds_due", res.obj()["code"]!!.jsonPrimitive.content)
@@ -415,7 +415,7 @@ class StripePaymentsTest {
         val (c, id) = checkOf()
         val pi = c.paidByStripe(fake, id)
         val info = c.get("/checks/$id/refunds").obj()
-        assertEquals(2250L, info["stripeRefundableCents"]!!.jsonPrimitive.long)
+        assertEquals(2328L, info["stripeRefundableCents"]!!.jsonPrimitive.long)
 
         val res = c.postJson("/checks/$id/refund",
             """{"amountCents":1000,"tenderType":"STRIPE","reason":"wrong item","managerPin":"1234"}""")
@@ -428,7 +428,7 @@ class StripePaymentsTest {
         val row = transaction { Refunds.selectAll().where { Refunds.checkId eq id }.single() }
         assertEquals(pi, row[Refunds.stripePaymentIntentId])
         assertTrue(row[Refunds.stripeRefundId]!!.startsWith("re_"))
-        assertEquals(1250L, c.get("/checks/$id/refunds").obj()["stripeRefundableCents"]!!.jsonPrimitive.long)
+        assertEquals(1328L, c.get("/checks/$id/refunds").obj()["stripeRefundableCents"]!!.jsonPrimitive.long)
         assertTrue(outboxPayloads().any { "\"refundId\"" in it && "\"STRIPE\"" in it && "stripeRefundId" in it })
 
         // more than is left on the card → refused before Stripe is called
@@ -439,7 +439,7 @@ class StripePaymentsTest {
 
         // the rest, in full
         assertEquals(HttpStatusCode.Created, c.postJson("/checks/$id/refund",
-            """{"amountCents":1250,"tenderType":"STRIPE","reason":"rest","managerPin":"1234"}""").status)
+            """{"amountCents":1328,"tenderType":"STRIPE","reason":"rest","managerPin":"1234"}""").status)
         assertEquals(0L, c.get("/checks/$id/refunds").obj()["refundableCents"]!!.jsonPrimitive.long)
     }
 
@@ -451,7 +451,7 @@ class StripePaymentsTest {
         c.paidByStripe(fake, id)
         fake.failOn = { if (it.path == "/v1/refunds") ConnectException("network is unreachable") else null }
         val res = c.postJson("/checks/$id/refund",
-            """{"amountCents":2250,"tenderType":"STRIPE","reason":"returned","managerPin":"1234"}""")
+            """{"amountCents":2328,"tenderType":"STRIPE","reason":"returned","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.ServiceUnavailable, res.status)
         assertEquals("stripe_unavailable", res.obj()["code"]!!.jsonPrimitive.content)
         assertEquals(0L, c.get("/checks/$id/refunds").obj()["refundedCents"]!!.jsonPrimitive.long)
@@ -459,7 +459,7 @@ class StripePaymentsTest {
         assertTrue(outboxPayloads().none { "\"refundId\"" in it })
         // a cash refund of the same check still works (existing rules)
         assertEquals(HttpStatusCode.Created, c.postJson("/checks/$id/refund",
-            """{"amountCents":2250,"tenderType":"CASH","reason":"returned","managerPin":"1234"}""").status)
+            """{"amountCents":2328,"tenderType":"CASH","reason":"returned","managerPin":"1234"}""").status)
     }
 
     @Test
@@ -467,7 +467,7 @@ class StripePaymentsTest {
         val fake = FakeStripe()
         application { module(dbPath = tempDb(), stripeConfig = testKey, stripeHttp = fake) }
         val (c, id) = checkOf()
-        c.payCash(id, 2250)
+        c.payCash(id, 2330)
         val res = c.postJson("/checks/$id/refund",
             """{"amountCents":500,"tenderType":"STRIPE","reason":"x","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Conflict, res.status)
@@ -479,7 +479,7 @@ class StripePaymentsTest {
     fun `STRIPE cannot be confirmed by hand through the generic electronic tender path`() = testApplication {
         application { module(dbPath = tempDb(), stripeConfig = testKey, stripeHttp = FakeStripe()) }
         val (c, id) = checkOf()
-        val res = c.postJson("/checks/$id/tenders/confirm", """{"type":"STRIPE","amountCents":2250}""")
+        val res = c.postJson("/checks/$id/tenders/confirm", """{"type":"STRIPE","amountCents":2328}""")
         assertEquals(HttpStatusCode.Conflict, res.status)
         assertEquals(0L, c.get("/checks/$id").obj()["paidCents"]!!.jsonPrimitive.long)
     }

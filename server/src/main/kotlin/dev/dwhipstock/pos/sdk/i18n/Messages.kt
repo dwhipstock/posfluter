@@ -41,6 +41,11 @@ enum class MessageKey(val id: String) {
     RECEIPT_TOTAL("receipt.total"),
     /** {0} = sales-tax rate percent. */
     RECEIPT_TAX_INCLUDED("receipt.tax_included"),
+    RECEIPT_SUBTOTAL("receipt.subtotal"),
+    /** {0} = tax name ("GST/TPS"), {1} = rate percent ("9.975"). */
+    RECEIPT_TAX_LINE("receipt.tax_line"),
+    /** {0} = tax name, {1} = the venue's registration number for it. */
+    RECEIPT_TAX_REGISTRATION("receipt.tax_registration"),
     RECEIPT_ROUNDING("receipt.rounding"),
     RECEIPT_CHANGE("receipt.change"),
     RECEIPT_BILL_BANNER("receipt.bill_banner"),

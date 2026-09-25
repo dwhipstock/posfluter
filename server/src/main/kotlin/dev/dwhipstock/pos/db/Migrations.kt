@@ -31,6 +31,7 @@ object Migrations {
         Script(UtcTimestampMigration.VERSION, UtcTimestampMigration.NAME, "") { UtcTimestampMigration.run(this) },
         Script(TableTokenMigration.VERSION, TableTokenMigration.NAME, "") { TableTokenMigration.run(this) },
         Script(MenuCategoryMigration.VERSION, MenuCategoryMigration.NAME, "") { MenuCategoryMigration.run(this) },
+        Script(MenuPriceMigration.VERSION, MenuPriceMigration.NAME, "") { MenuPriceMigration.run(this) },
     )
 
     /** [through] is a test seam: stop after that version to build an older database. */

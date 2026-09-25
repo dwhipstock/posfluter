@@ -149,8 +149,8 @@ object MenuCategoryMigration {
         put("sortOrder", c.sortOrder); put("deleted", deleted)
     }
 
-    /** Same shape as CatalogSnapshots.itemSnapshotJson (CONTRACT.md §2), frozen here. */
-    private fun itemJson(tx: Transaction, itemId: String): JsonObject {
+    /** Same shape as CatalogSnapshots.itemSnapshotJson (CONTRACT.md §2), frozen here (037 reuses it). */
+    internal fun itemJson(tx: Transaction, itemId: String): JsonObject {
         val variants = mutableListOf<JsonObject>()
         tx.exec(
             "SELECT id, label_fr, label_en, price_cents, sort_order, deleted_at FROM item_variants " +

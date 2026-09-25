@@ -62,7 +62,7 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.Created, opened.status)
         val checkId = json.parseToJsonElement(opened.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.int
 
-        // add: Lantern House Lager tower $450 + Robust Porter bottle $550
+        // add: Lantern House Lager pitcher $20.25 + Robust Porter $7.95
         c.post("/checks/$checkId/lines") {
             contentType(ContentType.Application.Json)
             setBody("""{"itemId":"lantern-lager","variantId":"lantern-lager:pitcher","qty":1}""")
@@ -72,15 +72,20 @@ class ApplicationTest {
             setBody("""{"itemId":"porter-can","variantId":"porter-can:regular","qty":1,"note":"Je ne veux pas de glace."}""")
         }.let { assertEquals(HttpStatusCode.Created, it.status) }
 
-        // 1 brought-in bottle → $200 corkage
+        // 1 brought-in bottle → $25 corkage
         c.post("/checks/$checkId/corkage") {
             contentType(ContentType.Application.Json)
             setBody("""{"bottles":1}""")
         }.let { assertEquals(HttpStatusCode.OK, it.status) }
 
-        // subtotal: 450 + 550 + 200 = $1200, tax included ≈ $78.50 hidden
+        // subtotal: 20.25 + 7.95 + 25.00 corkage = $53.20; GST 5% = 2.66,
+        // QST 9.975% = 5.3067 → 5.31; total $61.17
         val check = json.parseToJsonElement(c.get("/checks/$checkId").bodyAsText()).jsonObject
-        assertEquals(5625L, check["grandTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(5320L, check["subtotalCents"]!!.jsonPrimitive.long)
+        val taxes = check["taxes"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("GST", "QST"), taxes.map { it["code"]!!.jsonPrimitive.content })
+        assertEquals(listOf(266L, 531L), taxes.map { it["amountCents"]!!.jsonPrimitive.long })
+        assertEquals(6117L, check["grandTotalCents"]!!.jsonPrimitive.long)
         assertEquals(0L, check["taxIncludedCents"]!!.jsonPrimitive.long)
 
         // Put $30 on the generic card terminal; totals lock at initiation.
@@ -99,20 +104,21 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.Created, confirmed.status)
         val afterCard = json.parseToJsonElement(confirmed.bodyAsText()).jsonObject["check"]!!.jsonObject
         assertEquals(3000L, afterCard["paidCents"]!!.jsonPrimitive.long)
-        assertEquals(2625L, afterCard["outstandingCents"]!!.jsonPrimitive.long)
+        assertEquals(3117L, afterCard["outstandingCents"]!!.jsonPrimitive.long)
 
         // finalize refused while outstanding
         assertEquals(HttpStatusCode.Conflict, c.post("/checks/$checkId/finalize").status)
 
-        // Cash settles the remaining $26.25 and returns $3.75 change.
+        // Cash settles the remaining $31.17 (due rounds to $31.15) and returns $3.85 change.
         val tendered = c.post("/checks/$checkId/tenders") {
             contentType(ContentType.Application.Json)
-            setBody("""{"type":"CASH","amountTenderedCents":3000}""")
+            setBody("""{"type":"CASH","amountTenderedCents":3500}""")
         }
         assertEquals(HttpStatusCode.Created, tendered.status)
         val tender = json.parseToJsonElement(tendered.bodyAsText()).jsonObject["tender"]!!.jsonObject
-        assertEquals(375L, tender["changeCents"]!!.jsonPrimitive.long)
-        assertEquals(2625L, tender["amountAppliedCents"]!!.jsonPrimitive.long)
+        assertEquals(385L, tender["changeCents"]!!.jsonPrimitive.long)
+        assertEquals(-2L, tender["roundingAdjustmentCents"]!!.jsonPrimitive.long)
+        assertEquals(3117L, tender["amountAppliedCents"]!!.jsonPrimitive.long)
 
         val closed = c.post("/checks/$checkId/finalize")
         assertEquals(HttpStatusCode.OK, closed.status)
@@ -130,9 +136,16 @@ class ApplicationTest {
         assertEquals(1, receiptText.lines().count { it.startsWith("Lantern House Lager") })
         assertTrue("Je ne veux pas de glace." in receiptText)
         assertTrue("Corkage" in receiptText)
-        assertTrue("Total" in receiptText && "56.25" in receiptText)
+        // itemised taxes: subtotal, each tax with its rate, total, registration numbers
+        val kv = receiptText.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
+        assertTrue("Subtotal | 53.20" in kv, receiptText)
+        assertTrue("GST/TPS 5% | 2.66" in kv, receiptText)
+        assertTrue("QST/TVQ 9.975% | 5.31" in kv, receiptText)
+        assertTrue("Total | 61.17" in kv, receiptText)
+        assertTrue("GST/TPS no. 123456789 RT0001" in receiptText)
+        assertTrue("QST/TVQ no. 1234567890 TQ0001" in receiptText)
         assertTrue("2026" in receiptText)          // four-digit year
-        assertTrue("impôt" !in receiptText)          // tax hidden for CopperLantern
+        assertTrue("included" !in receiptText)       // no inclusive-tax line
         assertTrue("Card" in receiptText && "Cash" in receiptText)
         assertTrue("Change" in receiptText)
 

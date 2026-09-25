@@ -70,7 +70,7 @@ class SplitCheckTest {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
         val (checkId, amberAle, lanternLager) = setUpCheck(c)
-        c.postJson("/checks/$checkId/corkage", """{"bottles":1}""") // $200, defaults to group 1
+        c.postJson("/checks/$checkId/corkage", """{"bottles":1}""") // $25, defaults to group 1
 
         // create a 2-group split; everything starts unassigned
         val created = json.parseToJsonElement(
@@ -89,10 +89,22 @@ class SplitCheckTest {
             c.postJson("/checks/$checkId/split/groups/$g2/lines", """{"lineId":$lanternLager,"qty":1}""")
                 .bodyAsText()).jsonObject
 
-        // per-group totals from the server pipeline: g1 = 2×110 + 200 corkage, g2 = 110 + 100
-        assertEquals(4250L, assigned.groupTotal(1))
-        assertEquals(1700L, assigned.groupTotal(2))
+        // per-group pre-tax from the pipeline: g1 = 2×7.95 + 25 corkage = 40.90,
+        // g2 = 7.95 + 7.50 = 15.45. Tax is check-level: GST 5% of 56.35 = 2.8175 → 2.82,
+        // QST 9.975% = 5.6209 → 5.62, shared by pre-tax (largest remainder):
+        // g1 GST 2.05 + QST 4.08 = 47.03, g2 GST 0.77 + QST 1.54 = 17.76
+        assertEquals(4703L, assigned.groupTotal(1))
+        assertEquals(1776L, assigned.groupTotal(2))
         assertTrue(assigned.split()["unassigned"]!!.jsonArray.isEmpty())
+        fun JsonObject.groupTaxes(number: Int) = groups().first { it["number"]!!.jsonPrimitive.int == number }["taxes"]!!
+            .jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long }
+        assertEquals(listOf(205L, 408L), assigned.groupTaxes(1))
+        assertEquals(listOf(77L, 154L), assigned.groupTaxes(2))
+        // the groups add up exactly to the check: same total, same taxes as one bill
+        val whole = assigned["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long }
+        assertEquals(listOf(282L, 562L), whole)
+        assertEquals(assigned["grandTotalCents"]!!.jsonPrimitive.long, assigned.groupTotal(1) + assigned.groupTotal(2))
+        assertEquals(whole, assigned.groupTaxes(1).zip(assigned.groupTaxes(2)) { a, b -> a + b })
 
         // per-group provisional bill: only g1's items + its own total
         val bill = json.parseToJsonElement(
@@ -101,21 +113,22 @@ class SplitCheckTest {
         assertTrue("CUSTOMER BILL" in bill)
         assertTrue("Copper Amber Ale" in bill || "Ale ambrée" in bill)
         assertTrue("Lantern House Lager" !in bill && "Lager de la Lanterne" !in bill, "group 1 bill must not show group 2's items")
-        assertTrue("42.50" in bill, "group bill total is the group's own")
+        assertTrue("47.03" in bill, "group bill total is the group's own")
+        assertTrue("GST/TPS 5%" in bill && "2.05" in bill, "group bill itemises its share of the taxes")
 
         // pay g1 → check locks, g2 still owes; finalize refused until every group covered
         val t1 = c.postJson("/checks/$checkId/tenders",
-            """{"type":"CASH","amountTenderedCents":4250,"groupId":$g1}""")
+            """{"type":"CASH","amountTenderedCents":4705,"groupId":$g1}""")
         assertEquals(HttpStatusCode.Created, t1.status)
         val afterT1 = c.check(checkId)
         assertEquals("TOTAL_LOCKED", afterT1["status"]!!.jsonPrimitive.content)
         assertEquals(0L, afterT1.groupOutstanding(1))
-        assertEquals(1700L, afterT1.groupOutstanding(2))
+        assertEquals(1776L, afterT1.groupOutstanding(2))
         assertEquals(HttpStatusCode.Conflict, c.post("/checks/$checkId/finalize").status)
 
         // pay g2 → all groups covered → finalize closes the check
         c.postJson("/checks/$checkId/tenders",
-            """{"type":"CASH","amountTenderedCents":1700,"groupId":$g2}""")
+            """{"type":"CASH","amountTenderedCents":1775,"groupId":$g2}""")
         assertEquals(HttpStatusCode.OK, c.post("/checks/$checkId/finalize").status)
         assertEquals("CLOSED", c.check(checkId)["status"]!!.jsonPrimitive.content)
 
@@ -230,7 +243,8 @@ class SplitCheckTest {
     fun evenSplitFloorsSharesRemainderToGroup1AndRoundsPerGroupCash() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
-        val (checkId, _, _) = setUpCheck(c) // total $34.50
+        // 31.35 pre-tax + GST 1.5675 → 1.57 + QST 3.1272 → 3.13 = $36.05
+        val (checkId, _, _) = setUpCheck(c)
 
         val created = json.parseToJsonElement(
             c.postJson("/checks/$checkId/split", """{"groups":3,"even":true}""").bodyAsText()).jsonObject
@@ -238,24 +252,49 @@ class SplitCheckTest {
         // money-only split: no line assignment, so no unassigned pool (the client
         // gates Pay on the pool being empty)
         assertTrue(created.split()["unassigned"]!!.jsonArray.isEmpty())
-        assertEquals(1150L, created.groupTotal(1))
-        assertEquals(1150L, created.groupTotal(2))
-        assertEquals(1150L, created.groupTotal(3))
+        // floor(3605 / 3) = 1201 each, the 2-cent remainder to group 1
+        assertEquals(1203L, created.groupTotal(1))
+        assertEquals(1201L, created.groupTotal(2))
+        assertEquals(1201L, created.groupTotal(3))
+        assertEquals(created["grandTotalCents"]!!.jsonPrimitive.long, (1..3).sumOf { created.groupTotal(it) })
+        // each share carries its part of the check's taxes; the parts add back up
+        val shareTaxes = (1..3).map { n ->
+            created.groups().first { it["number"]!!.jsonPrimitive.int == n }["taxes"]!!.jsonArray
+                .map { it.jsonObject["amountCents"]!!.jsonPrimitive.long }
+        }
+        assertEquals(listOf(listOf(53L, 105L), listOf(52L, 104L), listOf(52L, 104L)), shareTaxes)
+        assertEquals(listOf(157L, 313L), shareTaxes.reduce { a, b -> a.zip(b) { x, y -> x + y } })
 
         // by-item edits don't apply to a money-only split
         val assign = c.postJson(
             "/checks/$checkId/split/groups/${created.groupId(1)}/lines", """{"lineId":1,"qty":1}""")
         assertEquals("even_split", errorCode(assign))
 
-        // Each equal share is already on a five-cent boundary.
-        for (n in 1..3) {
+        // each group's cash due rounds to the nickel on its own: 12.03 → 12.05, 12.01 → 12.00
+        for ((n, cash, rounding) in listOf(Triple(1, 1205L, 2L), Triple(2, 1200L, -1L), Triple(3, 1200L, -1L))) {
             val res = c.postJson("/checks/$checkId/tenders",
-                """{"type":"CASH","amountTenderedCents":1150,"groupId":${created.groupId(n)}}""")
+                """{"type":"CASH","amountTenderedCents":$cash,"groupId":${created.groupId(n)}}""")
             assertEquals(HttpStatusCode.Created, res.status, "group $n cash settles its share")
             val tender = json.parseToJsonElement(res.bodyAsText()).jsonObject["tender"]!!.jsonObject
-            assertEquals(0L, tender["roundingAdjustmentCents"]!!.jsonPrimitive.long)
+            assertEquals(rounding, tender["roundingAdjustmentCents"]!!.jsonPrimitive.long)
         }
         assertEquals(HttpStatusCode.OK, c.post("/checks/$checkId/finalize").status)
         assertEquals("CLOSED", c.check(checkId)["status"]!!.jsonPrimitive.content)
+    }
+
+    /** Even shares are cut from the total at split time; a basket edited since can't lock them. */
+    @Test
+    fun evenSplitRefusesToLockSharesTheBasketNoLongerAddsUpTo() = testApplication {
+        application { module(dbPath = tempDb()) }
+        val c = loginClient()
+        val (checkId, _, _) = setUpCheck(c)
+        val created = json.parseToJsonElement(
+            c.postJson("/checks/$checkId/split", """{"groups":2,"even":true}""").bodyAsText()).jsonObject
+        c.postJson("/checks/$checkId/lines", """{"itemId":"poutine","variantId":"poutine:regular","qty":1}""")
+        val res = c.postJson("/checks/$checkId/tenders",
+            """{"type":"CASH","amountTenderedCents":5000,"groupId":${created.groupId(1)}}""")
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        assertEquals("split_stale", errorCode(res))
+        assertEquals("OPEN", c.check(checkId)["status"]!!.jsonPrimitive.content)
     }
 }
