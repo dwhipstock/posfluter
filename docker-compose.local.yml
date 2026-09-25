@@ -53,6 +53,8 @@ services:
       STORE_API_KEYS: "plateau=${STORE_API_KEY_PLATEAU:-}"
       STORES: "vieux-port=Copper Lantern — Vieux-Port,plateau=Copper Lantern — Plateau"
       COOKIE_SECURE: "false"
+      # local demo only: set TOTP_REQUIRED=false in .env.local to skip MFA enrollment
+      TOTP_REQUIRED: "${TOTP_REQUIRED:-true}"
       VENUE_NAME: "${VENUE_NAME:-Copper Lantern}"
       VENUE_TZ: "${VENUE_TZ:-America/New_York}"
     ports:
