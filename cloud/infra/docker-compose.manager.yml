@@ -32,9 +32,12 @@ services:
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}"
       TOTP_REQUIRED: "${TOTP_REQUIRED:-true}"
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env}"
+      # extra stores: "<venueId>=<key>,…"; the tenant's stores: "<venueId>=<name>,…" (first = primary)
+      STORE_API_KEYS: "${STORE_API_KEYS:-}"
+      STORES: "${STORES:-}"
       COOKIE_SECURE: "true"
-      VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
-      VENUE_TZ: "America/New_York"
+      VENUE_NAME: "${VENUE_NAME:-Copper Lantern}"
+      VENUE_TZ: "${VENUE_TZ:-America/New_York}"
       PUBLIC_BASE_DOMAIN: "${PUBLIC_BASE_DOMAIN:-lostmindllc.com}"
     depends_on:
       db:
