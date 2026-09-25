@@ -16,7 +16,7 @@ const notoSans = Noto_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "The Copper Lantern Pub",
+  title: "Copper Lantern",
   description: "Owner portal",
 };
 

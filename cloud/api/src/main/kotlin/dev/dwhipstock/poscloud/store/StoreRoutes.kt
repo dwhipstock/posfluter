@@ -123,6 +123,9 @@ data class HeartbeatRequest(
     val installId: String? = null, val lanBaseUrl: String,
     /** The store's device-registry summary (M8); the cloud mirrors it for the portal. */
     val devices: List<HeartbeatDevice>? = null,
+    /** Optional (CONTRACT §8): shown on the portal's Devices page when present. */
+    val appVersion: String? = null,
+    val contractVersion: Int? = null,
 )
 
 @Serializable
@@ -280,6 +283,9 @@ fun Route.storeRoutes(config: CloudConfig) {
                 // NULL rather than overloading the column with a public origin.
                 it[storeLanUrl] = lanBase
                 it[storeSeenAt] = now
+                // what this beat reports (an older store sends neither → cleared)
+                it[storeAppVersion] = req.appVersion?.trim()?.take(40)?.takeIf { v -> v.isNotEmpty() }
+                it[storeContractVersion] = req.contractVersion
             }
             // Mirror the store's device registry for the portal. revoke_requested_at is
             // portal intent and deliberately not touched here; `revoked` is store truth.

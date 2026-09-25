@@ -65,6 +65,9 @@ object Venues : Table("venues") {
     // /staff-app redirect to the in-store staff ordering app.
     val storeLanUrl = text("store_lan_url").nullable()
     val storeSeenAt = timestampWithTimeZone("store_seen_at").nullable()
+    // optional versions the store reports on its heartbeat (015); NULL = not reported
+    val storeAppVersion = text("store_app_version").nullable()
+    val storeContractVersion = integer("store_contract_version").nullable()
     // hostname label of the venue's cloud-hosted store container (008); NULL = on-prem
     val subdomain = text("subdomain").nullable()
     override val primaryKey = PrimaryKey(tenantId, id)

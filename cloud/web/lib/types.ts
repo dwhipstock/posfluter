@@ -351,3 +351,29 @@ export interface PairedDevice {
 export interface DevicesResponse {
   devices: PairedDevice[];
 }
+
+/** Heartbeat liveness: online < 60 s, stale up to 10 min, offline beyond or never. */
+export type StoreLinkStatus = "online" | "stale" | "offline";
+
+// GET /v1/devices (?venue=) — each in-scope store's POS, from its heartbeat.
+export interface StorePos {
+  venueId: string;
+  venueName: string;
+  status: StoreLinkStatus;
+  lastSeenAt: string | null;
+  /** Seconds since the last heartbeat when the server answered; null = never. */
+  secondsSinceSeen: number | null;
+  lanUrl: string | null;
+  publicUrl: string | null;
+  installId: string | null;
+  appVersion: string | null;
+  contractVersion: number | null;
+  /** The store's device registry, as its heartbeat mirrors it. */
+  devices: PairedDevice[];
+}
+
+export interface StorePosResponse {
+  stores: StorePos[];
+  onlineSeconds: number;
+  staleMinutes: number;
+}

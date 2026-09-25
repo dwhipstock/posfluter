@@ -375,6 +375,42 @@ export const messages = {
     "Ordre d'annulation envoyé — La machine confirmera dans quelques secondes.",
     "Revoke requested — the store confirms within a few seconds."
   ),
+  // store POS (heartbeat) — each store's own POS, synced with its store key
+  devices_stores_title: m("Caisses des magasins", "Store POS"),
+  devices_stores_sub: m(
+    "La caisse de chaque magasin se synchronise avec sa clé de magasin et signale sa présence toutes les quelques secondes.",
+    "Each store’s POS syncs with its store key and checks in every few seconds."
+  ),
+  devices_pos_online: m("En ligne", "Online"),
+  devices_pos_stale: m("En retard", "Delayed"),
+  devices_pos_offline: m("Hors ligne", "Offline"),
+  devices_pos_never: m("Aucune synchronisation reçue pour l’instant", "No check-in received yet"),
+  devices_pos_never_hint: m(
+    "Ce magasin n’a pas encore contacté le nuage. Vérifiez la connexion Internet de la caisse et sa clé de magasin.",
+    "This store hasn’t reached the cloud yet. Check the POS’s internet connection and its store key."
+  ),
+  devices_pos_seen_sec: m("il y a {n} s", "{n}s ago"),
+  devices_pos_lan: m("Adresse réseau local", "LAN address"),
+  devices_pos_public: m("Adresse publique", "Public address"),
+  devices_pos_install: m("Installation", "Install"),
+  devices_pos_version: m("Version", "Version"),
+  devices_pos_contract: m("contrat v{n}", "contract v{n}"),
+  devices_pos_none_reported: m("Non signalé", "Not reported"),
+  devices_pos_devices: m("Terminaux associés à ce magasin", "Terminals on this store"),
+  devices_pos_devices_none: m(
+    "Aucun terminal supplémentaire — la caisse du magasin suffit.",
+    "No extra terminals — the store’s own POS is all that’s needed."
+  ),
+  devices_pos_empty: m("Aucun magasin dans cette vue.", "No stores in this view."),
+  devices_extra_title: m("Associer un terminal supplémentaire", "Pair an extra terminal"),
+  devices_extra_optional: m("Facultatif", "Optional"),
+  devices_extra_sub: m(
+    "Seulement pour ajouter un autre terminal à un magasin. La caisse de chaque magasin est déjà connectée — rien à associer.",
+    "Only to add another terminal to a store. Each store’s POS is already connected — nothing to pair."
+  ),
+  devices_extra_show: m("Associer un terminal", "Pair a terminal"),
+  devices_extra_hide: m("Masquer", "Hide"),
+  devices_extra_store: m("Magasin", "Store"),
 
   // ── menu (read-only: each store's tablet owns its menu) ───────────────
   menu_title: m("Menu", "Menu"),
