@@ -243,6 +243,10 @@ class TableShape extends StatelessWidget {
 
   /// Third line when the table is tall enough (time open).
   final String? detail;
+
+  /// The subtitle is nice-to-have (seat count): dropped on small tables so
+  /// the label never gets squeezed.
+  final bool subtitleOptional;
   final bool selected;
   const TableShape({
     super.key,
@@ -251,8 +255,12 @@ class TableShape extends StatelessWidget {
     this.statusColor,
     this.subtitle,
     this.detail,
+    this.subtitleOptional = false,
     this.selected = false,
   });
+
+  /// Below this (px) a table shows its label only, plus any money line.
+  static const compactSize = 64.0;
 
   BorderRadius get _radius => switch (table.shape) {
     'ROUND' => BorderRadius.circular(999),
@@ -287,7 +295,9 @@ class TableShape extends StatelessWidget {
           textAlign: TextAlign.center,
           style: T.text(size: labelSize, weight: FontWeight.w700, color: ink),
         ),
-        if (subtitle != null && h > 36)
+        if (subtitle != null &&
+            h > 36 &&
+            !(subtitleOptional && math.min(w, h) < compactSize))
           Text(
             subtitle!,
             maxLines: 1,
@@ -352,22 +362,21 @@ class TableShape extends StatelessWidget {
             ),
           // VIP: the name_override already replaces the label; the star makes
           // "why is this table called Alex Morgan" legible at a glance
+          // corner markers sit on the shape's bounding-box corners, outside
+          // the text area (a round table's corners are outside the circle),
+          // so they never cover the label at any size
           if (table.isVip)
-            Positioned(
-              left: 5,
-              top: 5,
-              child: Icon(
-                LucideIcons.star,
-                size: 12,
-                color: onFill ?? T.attention,
-              ),
+            const Positioned(
+              left: -7,
+              top: -7,
+              child: _CornerMarker(LucideIcons.star, color: T.attention),
             ),
           // sub-table: same physical spot as its parent, independent bill
           if (table.parentTableId != null)
-            Positioned(
-              left: 5,
-              bottom: 5,
-              child: Icon(LucideIcons.link, size: 11, color: inkMuted),
+            const Positioned(
+              left: -7,
+              bottom: -7,
+              child: _CornerMarker(LucideIcons.link, color: T.textMuted),
             ),
         ],
       ),
@@ -376,4 +385,23 @@ class TableShape extends StatelessWidget {
     // a slow gold breathing glow around the whole table, not just the badge
     return pending ? PulsingGlow(radius: _radius, child: box) : box;
   }
+}
+
+/// Small disc on a table corner (VIP star, sub-table link).
+class _CornerMarker extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  const _CornerMarker(this.icon, {required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 20,
+    height: 20,
+    decoration: BoxDecoration(
+      color: T.surface,
+      shape: BoxShape.circle,
+      border: Border.all(color: T.border),
+    ),
+    child: Icon(icon, size: 11, color: color),
+  );
 }

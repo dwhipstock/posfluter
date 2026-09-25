@@ -852,6 +852,9 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                     ? cad(t.openCheckTotalCents ?? 0)
                     : l.seatsShort(t.seats),
                 detail: _openedFor(t, now, l),
+                // seat count is the only optional line: small free tables
+                // show just their label
+                subtitleOptional: t.openCheckId == null,
               ),
             ),
           ),

@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:pos_client/api.dart';
 import 'package:pos_client/design/tokens.dart';
 import 'package:pos_client/i18n.dart';
@@ -183,6 +184,29 @@ Future<void> _shoot(
   FlutterError.onError = reportError;
 }
 
+/// Seat counts pluralise, small one-seat bar tables drop the seat line, and
+/// no corner marker (sub-table link) covers any text.
+Future<void> Function(WidgetTester) _checkTableLabels({
+  required String many,
+  required String one,
+}) => (tester) async {
+  expect(find.text(many), findsWidgets);
+  expect(find.textContaining('1 seats'), findsNothing);
+  expect(find.text(one), findsNothing); // U-2…U-7 are too small for it
+  final links = find.byIcon(LucideIcons.link);
+  expect(links, findsWidgets);
+  final texts = find
+      .byType(Text)
+      .evaluate()
+      .map((e) => tester.getRect(find.byWidget(e.widget)));
+  for (final link in links.evaluate()) {
+    final r = tester.getRect(find.byWidget(link.widget));
+    for (final t in texts) {
+      expect(r.overlaps(t), isFalse, reason: 'link icon $r overlaps text $t');
+    }
+  }
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -219,12 +243,23 @@ void main() {
   });
 
   testWidgets('floor', (tester) async {
-    await _shoot(tester, 'floor', const ZonesScreen(), expectText: 'U-1');
+    await _shoot(
+      tester,
+      'floor',
+      const ZonesScreen(),
+      expectText: 'U-1',
+      act: _checkTableLabels(many: '4 seats', one: '1 seat'),
+    );
   });
 
   testWidgets('floor (French)', (tester) async {
     Prefs.instance.lang = 'fr';
-    await _shoot(tester, 'floor-fr', const ZonesScreen());
+    await _shoot(
+      tester,
+      'floor-fr',
+      const ZonesScreen(),
+      act: _checkTableLabels(many: '4 places', one: '1 place'),
+    );
   });
 
   testWidgets('check', (tester) async {

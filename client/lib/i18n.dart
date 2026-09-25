@@ -195,7 +195,9 @@ class L {
   String get free => _t('gratuit', 'Free');
 
   // floor plan
-  String seatsShort(int n) => _t('$n sièges', '$n seats');
+  String seatsShort(int n) => en
+      ? (n == 1 ? '1 seat' : '$n seats')
+      : (n <= 1 ? '$n place' : '$n places');
   String get emptyZoneOnboarding => _t(
     'Il n\'y a aucune table dans cette zone.\\nAppuyez sur l\'icône en forme de crayon pour organiser la disposition des tables.',
     'No tables in this zone yet.\nTap the pencil to build the layout.',
