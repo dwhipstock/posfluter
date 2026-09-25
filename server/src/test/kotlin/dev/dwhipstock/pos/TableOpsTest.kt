@@ -146,7 +146,7 @@ class TableOpsTest {
         assertEquals("clear_split_first", errorCode(c.postJson("/checks/$src/merge", """{"intoCheckId":$split}""")))
 
         // pending QR lines must be resolved first
-        val qr = json.parseToJsonElement(client.postJson("/tables/t5-5/pending-lines",
+        val qr = json.parseToJsonElement(client.postJson("${customerPath("t5-5")}/pending-lines",
             """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}]}""").bodyAsText())
             .jsonObject["id"]!!.jsonPrimitive.int
         assertEquals("pending_lines_unresolved", errorCode(c.postJson("/checks/$qr/move", """{"tableId":"t1"}""")))

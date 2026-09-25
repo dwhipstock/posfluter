@@ -95,7 +95,7 @@ class BillPrintTest {
         val c = loginClient()
 
         // customer scan-to-order leaves a pending line on the auto-opened check
-        val checkId = json.parseToJsonElement(client.postJson("/tables/t5-5/pending-lines",
+        val checkId = json.parseToJsonElement(client.postJson("${customerPath("t5-5")}/pending-lines",
             """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}]}""").bodyAsText())
             .jsonObject["id"]!!.jsonPrimitive.int
 

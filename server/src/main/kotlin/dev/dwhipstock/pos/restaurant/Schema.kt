@@ -20,7 +20,7 @@ object Zones : Table("zones") {
     val status = varchar("status", 10).default("OPEN") // OPEN | CLOSED (temporarily closed)
     // Table-label prefix (018): U/O/B/L. Every table in the zone is labelled
     // "{prefix}-{n}", so labels can't drift out of their zone (no B1 in Lower)
-    // and the readable menu URL /m/{zone}/{n} is derivable from what staff see.
+    // (Customer links use the table's random token, not these labels: 033.)
     val labelPrefix = varchar("label_prefix", 8).default("")
     override val primaryKey = PrimaryKey(id)
 }
@@ -43,6 +43,8 @@ object DiningTables : Table("dining_tables") {
     val seats = integer("seats").default(4)
     // soft delete: closed checks reference table ids forever (FK RESTRICT)
     val deletedAt = utcTimestamp("deleted_at").nullable()
+    // unguessable customer link /m/t/{token} (033); unique, rotatable, never synced
+    val publicToken = varchar("public_token", 32).nullable().clientDefault { TableTokens.newToken() }
     override val primaryKey = PrimaryKey(id)
 }
 

@@ -48,9 +48,9 @@ class PendingAlertsTest {
         assertTrue(tableOnZones(c, "t6")["oldestPendingAt"] is JsonNull)
 
         // customer submits two QR orders
-        client.postJson("/tables/t6/pending-lines",
+        client.postJson("${customerPath("t6")}/pending-lines",
             """{"lines":[{"itemId":"amber-ale","variantId":"amber-ale:pint","qty":1}]}""")
-        client.postJson("/tables/t6/pending-lines",
+        client.postJson("${customerPath("t6")}/pending-lines",
             """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}]}""")
 
         val withPending = tableOnZones(c, "t6")

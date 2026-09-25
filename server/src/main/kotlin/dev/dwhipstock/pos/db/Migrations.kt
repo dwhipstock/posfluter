@@ -29,6 +29,7 @@ object Migrations {
     /** Kotlin-only steps, interleaved with the SQL scripts by version. */
     private val codeMigrations = listOf(
         Script(UtcTimestampMigration.VERSION, UtcTimestampMigration.NAME, "") { UtcTimestampMigration.run(this) },
+        Script(TableTokenMigration.VERSION, TableTokenMigration.NAME, "") { TableTokenMigration.run(this) },
     )
 
     fun run(db: Database) {

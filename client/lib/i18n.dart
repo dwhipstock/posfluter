@@ -741,6 +741,17 @@ class L {
   );
   String get showQrCode => _t('Afficher le code QR', 'Show QR code');
   String get printQrCode => _t('Imprimer le code QR', 'Print QR code');
+  String get regenerateTableLink =>
+      _t('Régénérer le lien de la table', 'Regenerate table link');
+  String regenerateTableLinkConfirm(String label) => _t(
+    'Créer un nouveau lien pour $label ? Les codes QR déjà imprimés pour cette table cesseront de fonctionner; réimprimez sa fiche.',
+    'Create a new link for $label? QR slips already printed for this table stop working; reprint its slip.',
+  );
+  String get regenerate => _t('Régénérer', 'Regenerate');
+  String get tableLinkRegenerated => _t(
+    'Nouveau lien créé. Réimprimez la fiche QR de cette table.',
+    'New link created. Reprint this table\'s QR slip.',
+  );
   String get slipSentToPrinter => _t(
     'L\'étiquette QR a été envoyée à l\'imprimeur.',
     'QR slip sent to the printer',

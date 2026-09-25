@@ -9,6 +9,7 @@ import dev.dwhipstock.pos.restaurant.DiningTables
 import dev.dwhipstock.pos.restaurant.NotFoundException
 import dev.dwhipstock.pos.restaurant.Zones
 import dev.dwhipstock.pos.sdk.Outbox
+import dev.dwhipstock.pos.restaurant.TableTokens
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -341,5 +342,6 @@ private fun tableManagementDto(tableId: String): TableDto {
         width = row[DiningTables.width], height = row[DiningTables.height],
         rotation = row[DiningTables.rotation], shape = row[DiningTables.shape],
         seats = row[DiningTables.seats],
+        menuPath = row[DiningTables.publicToken]?.let(TableTokens::menuPath),
     )
 }

@@ -90,14 +90,14 @@ class ZoneStatusTest {
         val c = loginClient()
 
         // menu serves normally while open, headed with the selected store's name
-        val open = client.get("/m/t3")
+        val open = client.get(customerPath("t3"))
         assertEquals(HttpStatusCode.OK, open.status)
         assertTrue("<title>Copper Lantern — Vieux-Port — Order Online</title>" in open.bodyAsText())
 
         c.patchJson("/zones/outside/status", """{"status":"CLOSED","managerPin":"1234"}""")
 
         // customer scan on a closed-zone table → 200 with a calm banner (FR + EN), not a 4xx
-        val menu = client.get("/m/t3")
+        val menu = client.get(customerPath("t3"))
         assertEquals(HttpStatusCode.OK, menu.status)
         val body = menu.bodyAsText()
         assertTrue("Cette zone est temporairement fermée." in body, "missing French closed banner")
@@ -105,13 +105,13 @@ class ZoneStatusTest {
         assertTrue("<title>Copper Lantern — Vieux-Port</title>" in body, "closed page titled with the store")
 
         // the raw QR-order endpoint refuses (machine surface) with zone_closed
-        val pend = client.postJson("/tables/t3/pending-lines",
+        val pend = client.postJson("${customerPath("t3")}/pending-lines",
             """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}]}""")
         assertEquals(HttpStatusCode.Conflict, pend.status)
         assertEquals("zone_closed",
             json.parseToJsonElement(pend.bodyAsText()).jsonObject["code"]!!.jsonPrimitive.content)
 
         // slips are physical objects — still printable for a closed zone
-        assertEquals(HttpStatusCode.OK, client.get("/tables/t3/slip").status)
+        assertEquals(HttpStatusCode.OK, client.get("/tables/t3/slip?ticket=${c.slipTicket()}").status)
     }
 }

@@ -185,7 +185,7 @@ class FloorPlanTest {
 
         // gone from the floor plan, the customer page, and new-check opening
         assertNull(table(c.get("/zones").bodyAsText(), "outside", "t4"))
-        assertEquals(HttpStatusCode.NotFound, c.get("/m/t4").status)
+        assertEquals(HttpStatusCode.NotFound, c.get(customerPath("t4")).status)
         assertEquals(HttpStatusCode.NotFound, c.get("/tables/t4/qr").status)
         assertEquals(HttpStatusCode.NotFound, c.post("/tables/t4/checks").status)
         assertTrue(outboxEvents("table.removed").any { it.contains("\"t4\"") })

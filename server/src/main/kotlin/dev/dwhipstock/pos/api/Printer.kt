@@ -7,6 +7,7 @@ import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.NetworkThermalPrinter
 import dev.dwhipstock.pos.sdk.PrintLine
 import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.restaurant.TableTokens
 import dev.dwhipstock.pos.restaurant.ConflictException
 import dev.dwhipstock.pos.base.SettingsRepository
 import dev.dwhipstock.pos.sdk.GuestWifi
@@ -197,14 +198,13 @@ internal fun wifiSlipLines(venueName: String, wifi: GuestWifi): List<PrintLine> 
 
 /**
  * The one place a table's "scan to order" slip is assembled: logo, table label,
- * zone, and the QR whose payload is built SERVER-SIDE from [menuPathFor] so the
- * printed code always matches the on-screen one. Shared by the single-table and
+ * zone, and the QR of the table's tokenised link ([TableTokens.menuPath]), the
+ * same path the on-screen QR shows. Shared by the single-table and
  * print-all endpoints. [row] must be a DiningTables⨝Zones join row.
  */
 private fun slipLines(row: ResultRow, config: CustomerConfig, wifi: GuestWifi?): List<PrintLine> {
     val label = row[DiningTables.nameOverride] ?: row[DiningTables.label]
-    val url = config.publicBaseUrl +
-        menuPathFor(row[DiningTables.zoneId], row[DiningTables.label], row[DiningTables.id])
+    val url = config.publicBaseUrl + TableTokens.menuPath(row[DiningTables.publicToken]!!)
     return tableSlipLines(config.displayName, label, "${row[Zones.nameFr]} / ${row[Zones.nameEn]}", url, wifi)
 }
 

@@ -71,7 +71,7 @@ class DevicePairingTest {
             Json.parseToJsonElement(deniedLogin.bodyAsText()).jsonObject["code"]!!.jsonPrimitive.content)
         // …but customer-facing routes stay open
         assertEquals(HttpStatusCode.OK, client.get("/items").status)
-        assertEquals(HttpStatusCode.OK, client.get("/m/t5").status)
+        assertEquals(HttpStatusCode.OK, client.get(customerPath("t5")).status)
 
         // a bad code is refused; the good one pairs exactly once
         assertEquals(HttpStatusCode.NotFound, pair("WRONG").status)
