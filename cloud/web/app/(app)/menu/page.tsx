@@ -108,7 +108,7 @@ function priceRange(items: MenuItem[]): string {
 function ItemRow({ row }: { row: MergedItem }) {
   const t = useT();
   const { name, nameAlt } = useI18n();
-  const { combined, venues } = useStores();
+  const { combined, venues, nameOf, colorOf } = useStores();
   const { item, copies } = row;
   // an item on every store's menu needs no tag; a store-specific one names its store(s)
   const storeSpecific = combined && copies.length < venues.length;
@@ -118,13 +118,26 @@ function ItemRow({ row }: { row: MergedItem }) {
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-1.5">
           <span className="truncate text-sm font-medium">{name(item.nameFr, item.nameEn)}</span>
-          {item.isAlcohol && <Wine className="h-3 w-3 shrink-0 text-neutral-300" />}
+          {item.isAlcohol && <Wine className="h-3 w-3 shrink-0 text-neutral-400" />}
           {copies.every((c) => !c.active) && <Badge variant="outline">{t("menu_off")}</Badge>}
           {storeSpecific && copies.map((c) => <StoreTag key={c.venueId} venueId={c.venueId} />)}
         </span>
         <span className="block truncate text-xs text-neutral-500">{nameAlt(item.nameFr, item.nameEn)}</span>
       </span>
-      <span className="shrink-0 text-sm font-medium tabular-nums">{priceRange(copies)}</span>
+      {combined && copies.length > 1 ? (
+        // "All stores": each store's own price (and whether it is on its menu)
+        <span className="flex shrink-0 flex-col items-end gap-0.5">
+          {copies.map((c) => (
+            <span key={c.venueId} className="inline-flex items-center gap-1.5 text-xs tabular-nums text-neutral-600">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: colorOf(c.venueId) }} />
+              {nameOf(c.venueId)}
+              <span className={c.active ? "font-medium text-ink" : "text-neutral-500 line-through"}>{priceRange([c])}</span>
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="shrink-0 text-sm font-medium tabular-nums">{priceRange(copies)}</span>
+      )}
     </div>
   );
 }

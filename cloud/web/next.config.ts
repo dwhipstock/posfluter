@@ -7,6 +7,8 @@ const API_ORIGIN = process.env.API_ORIGIN ?? "http://localhost:8081";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // the dev-only "N" badge sat over the sidebar footer; prod never shows it
+  devIndicators: false,
   // stray lockfiles above the repo otherwise hijack the tracing root
   outputFileTracingRoot: __dirname,
   async rewrites() {

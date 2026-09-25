@@ -42,15 +42,15 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {REPORTS.map(({ href, titleKey, descKey, icon: Icon }) => (
           <Link key={href} href={storeHref(href)} className="group">
-            <Card className="flex items-center gap-4 p-4 transition-colors group-hover:border-accent/50">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink text-white">
+            <Card className="flex items-center gap-4 p-4 transition-colors group-hover:border-navy/40 group-hover:shadow-raised">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-navy text-white">
                 <Icon className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold">{t(titleKey)}</div>
                 <div className="truncate text-xs text-neutral-500">{t(descKey)}</div>
               </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-neutral-300 transition-colors group-hover:text-accent" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400 transition-colors group-hover:text-accent" />
             </Card>
           </Link>
         ))}

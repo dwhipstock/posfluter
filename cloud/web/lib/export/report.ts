@@ -1,19 +1,20 @@
 "use client";
 
 // Per-page glue: assembles the parts of an ExportDoc that every report shares
-// — venue, locale-aware range label, filename stem, and a "generated at"
-// stamp — from the same hooks the page already uses. A report page spreads the
-// result and adds its own title / notes / kpis / sections.
+// — scope (one store or all stores), locale-aware range label, filename stem,
+// and a "generated at" stamp — from the same hooks the page already uses. A
+// report page spreads the result and adds its own title / notes / kpis /
+// sections; `withStore` adds the Store column to a list in "All stores".
 
 import { useCallback } from "react";
 import { useMe, useRange } from "@/lib/hooks";
-import { useStores } from "@/lib/store";
+import { shortStoreName, slugify, useStores } from "@/lib/store";
 import { useI18n, useFmt, useT } from "@/lib/i18n/context";
-import type { ExportDoc } from "./doc";
+import { col, type Col, type ExportDoc, type Section } from "./doc";
 
 export type DocMeta = Pick<
   ExportDoc,
-  "filenameBase" | "venue" | "rangeLabel" | "generatedLabel" | "locale"
+  "filenameBase" | "venue" | "scopeLabel" | "rangeLabel" | "generatedLabel" | "locale"
 >;
 
 // Local wall-clock "now" as a naive ISO string, so the export fmt (which never
@@ -32,20 +33,51 @@ export function useExportMeta() {
   const t = useT();
   const me = useMe();
   const range = useRange();
-  const { store } = useStores();
+  const { store, venues } = useStores();
   // the picked store, else the group across all its stores
-  const venue = store?.name ?? (me.data ? `${me.data.tenantName} · ${t("store_all")}` : "");
+  const venue = store?.name ?? me.data?.tenantName ?? "";
+  const scopeLabel = store
+    ? t("scope_single", { store: shortStoreName(store.name) })
+    : t("scope_all_n", { n: venues.length });
+  const storeSlug = store ? slugify(shortStoreName(store.name)) : "all-stores";
   return useCallback(
     (slug: string): DocMeta => {
       const iso = nowNaiveISO();
       return {
-        filenameBase: `${slug}_${store?.id ?? "all-stores"}_${range.from}_${range.to}`,
+        filenameBase: `${slug}_${storeSlug}_${range.from}_${range.to}`,
         venue,
+        scopeLabel,
         rangeLabel: fmt.rangeLabel(range),
         generatedLabel: t("export_generated", { when: `${fmt.dayYear(iso)} ${fmt.time(iso)}` }),
         locale,
       };
     },
-    [locale, fmt, t, venue, store?.id, range]
+    [locale, fmt, t, venue, scopeLabel, storeSlug, range]
   );
+}
+
+/**
+ * Export helpers bound to the current scope. In "All stores" every list gets a
+ * leading Store column, and `byStore` builds the per-store section; with one
+ * store picked both are no-ops (the store is in the header and filename).
+ */
+export function useStoreExport() {
+  const t = useT();
+  const { combined, nameOf } = useStores();
+  return {
+    combined,
+    withStore: <R extends { venueId: string }>(columns: Col<R>[]): Col<R>[] =>
+      combined ? [col.text<R>(t("col_store"), (r) => nameOf(r.venueId), { width: 16 }), ...columns] : columns,
+    byStore: <R extends { venueId: string }>(columns: Col<R>[], rows: R[], total?: Section["total"]): Section[] =>
+      combined
+        ? [
+            {
+              title: t("store_breakdown_title"),
+              columns: [col.text<R>(t("col_store"), (r) => nameOf(r.venueId), { width: 18 }), ...columns],
+              rows,
+              total,
+            },
+          ]
+        : [],
+  };
 }

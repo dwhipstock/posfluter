@@ -4,14 +4,15 @@ import { Fragment, Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Search } from "lucide-react";
 import { useApi, useRange } from "@/lib/hooks";
+import { scopeApiPath, useStoreId } from "@/lib/store";
 import { get } from "@/lib/api";
 import { CAD } from "@/lib/format";
 import { useI18n, useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import type { JournalReport, JournalRow } from "@/lib/types";
 import { ExportMenu } from "@/components/export-menu";
-import { useExportMeta } from "@/lib/export/report";
-import { col, type ExportDoc } from "@/lib/export/doc";
+import { useExportMeta, useStoreExport } from "@/lib/export/report";
+import { col, Int, Money, T, type ExportDoc } from "@/lib/export/doc";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
-import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
+import { StoreSplit, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -40,7 +41,9 @@ function JournalPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const range = useRange();
+  const storeId = useStoreId();
   const meta = useExportMeta();
+  const storeExport = useStoreExport();
 
   const q = searchParams.get("q") ?? "";
   const page = Math.max(0, Number(searchParams.get("page") ?? "0") || 0);
@@ -83,13 +86,29 @@ function JournalPage() {
       `/v1/reports/journal?from=${range.from}&to=${range.to}` +
       `&limit=${Math.max(data.total, 1)}&offset=0` +
       (q ? `&q=${encodeURIComponent(q)}` : "");
-    const all = await get<JournalReport>(allKey);
+    // scoped like the page: a picked store exports only that store
+    const all = await get<JournalReport>(scopeApiPath(allKey, storeId));
     return {
       ...meta("journal"),
       reportTitle: t("journal_title"),
       sections: [
+        ...storeExport.byStore<JournalReport["byVenue"][number]>(
+          [
+            col.int(t("journal_closed_n"), (r) => r.closedCount),
+            col.int(t("exc_voids"), (r) => r.voidCount),
+            col.money(t("col_total_short"), (r) => r.closedCents),
+          ],
+          all.byVenue,
+          [
+            T(t("col_total")),
+            Int(all.byVenue.reduce((n, r) => n + r.closedCount, 0)),
+            Int(all.byVenue.reduce((n, r) => n + r.voidCount, 0)),
+            Money(all.byVenue.reduce((n, r) => n + r.closedCents, 0)),
+          ]
+        ),
         {
-          columns: [
+          title: t("journal_title"),
+          columns: storeExport.withStore([
             col.text<JournalRow>(t("col_check"), (r) => `#${r.checkId}`),
             col.text<JournalRow>(t("col_status"), (r) =>
               r.status === "VOID" ? t("badge_void") : t("badge_closed")
@@ -100,7 +119,7 @@ function JournalPage() {
               r.tenderTypes.map((tt) => t(`tender_${tt}` as MsgKey)).join(" · ") || "—"
             ),
             col.money<JournalRow>(t("col_total_short"), (r) => r.grandTotalCents),
-          ],
+          ]),
           rows: all.rows,
         },
       ],
@@ -116,7 +135,17 @@ function JournalPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
-      <StoreBreakdown />
+      {data && (
+        <StoreSplit
+          rows={data.byVenue}
+          sub={t("journal_by_store_sub")}
+          cols={[
+            { key: "closed", label: t("journal_closed_n"), value: (r) => r.closedCount, format: String },
+            { key: "voids", label: t("exc_voids"), value: (r) => r.voidCount, format: String },
+            { key: "total", label: t("col_total_short"), value: (r) => r.closedCents, format: CAD, strong: true },
+          ]}
+        />
+      )}
 
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />

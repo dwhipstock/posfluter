@@ -1,19 +1,19 @@
 "use client";
 
 // The "Export ▾" control on every report. A tiny hand-rolled dropdown (no menu
-// lib in the tree) offering PDF and Excel. Both generators are code-split and
+// lib in the tree) offering PDF, Excel and CSV. The generators are code-split and
 // only fetched when the owner actually exports — the ~1MB of pdfmake/exceljs and
 // the embedded Unicode font never load with the page.
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Download, FileText, Loader2, Sheet } from "lucide-react";
+import { ChevronDown, Download, FileSpreadsheet, FileText, Loader2, Sheet } from "lucide-react";
 import { useT } from "@/lib/i18n/context";
 import { toastError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { ExportDoc } from "@/lib/export/doc";
 
-type Kind = "pdf" | "xlsx";
+type Kind = "pdf" | "xlsx" | "csv";
 
 export function ExportMenu({
   build,
@@ -54,6 +54,9 @@ export function ExportMenu({
       if (kind === "pdf") {
         const { downloadPdf } = await import("@/lib/export/pdf");
         await downloadPdf(doc);
+      } else if (kind === "csv") {
+        const { downloadCsv } = await import("@/lib/export/csv");
+        await downloadCsv(doc);
       } else {
         const { downloadXlsx } = await import("@/lib/export/xlsx");
         await downloadXlsx(doc, t("export_kpi_sheet"));
@@ -84,7 +87,7 @@ export function ExportMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+          className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-neutral-200 bg-surface py-1 shadow-raised"
         >
           <MenuItem
             icon={busy === "pdf" ? <Spinner /> : <FileText />}
@@ -96,6 +99,12 @@ export function ExportMenu({
             icon={busy === "xlsx" ? <Spinner /> : <Sheet />}
             label={t("export_excel")}
             onClick={() => run("xlsx")}
+            disabled={busy !== null}
+          />
+          <MenuItem
+            icon={busy === "csv" ? <Spinner /> : <FileSpreadsheet />}
+            label={t("export_csv")}
+            onClick={() => run("csv")}
             disabled={busy !== null}
           />
         </div>

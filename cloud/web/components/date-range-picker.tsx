@@ -34,7 +34,7 @@ export function DateRangePicker() {
         "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
         active
           ? "border-accent bg-accent text-white"
-          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-ink"
+          : "border-neutral-200 bg-surface text-neutral-600 hover:border-neutral-300 hover:text-ink"
       )}
     >
       {label}
@@ -59,7 +59,7 @@ export function DateRangePicker() {
             value={range.from}
             max={range.to}
             onChange={(e) => e.target.value && apply({ from: e.target.value, to: range.to })}
-            className="h-9 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-accent/25"
+            className="h-9 rounded-lg border border-neutral-200 bg-surface px-2.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-accent/25"
           />
           <span className="text-xs text-neutral-400">{t("to")}</span>
           <input
@@ -67,7 +67,7 @@ export function DateRangePicker() {
             value={range.to}
             min={range.from}
             onChange={(e) => e.target.value && apply({ from: range.from, to: e.target.value })}
-            className="h-9 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-accent/25"
+            className="h-9 rounded-lg border border-neutral-200 bg-surface px-2.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-accent/25"
           />
         </div>
       )}

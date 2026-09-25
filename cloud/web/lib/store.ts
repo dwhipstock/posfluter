@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { get } from "./api";
 import type { Venue, VenuesResponse } from "./types";
+import { STORE_SERIES } from "./theme";
 
 // The store picker lives in the URL (?store=<venueId>) so every view is
 // linkable. No param = "All stores": the same page, combined across the
@@ -55,20 +56,36 @@ export function useStores(): {
   /** True in "All stores" mode with more than one store — show per-store labels/breakdowns. */
   combined: boolean;
   nameOf: (venueId: string) => string;
+  /** The store's fixed chart colour (its position in the tenant's list, never its rank). */
+  colorOf: (venueId: string) => string;
 } {
   const storeId = useStoreId();
   const { data } = useVenues();
   return useMemo(() => {
     const venues = data?.venues ?? [];
     const byId = new Map(venues.map((v) => [v.id, v]));
+    const index = new Map(venues.map((v, i) => [v.id, i]));
     return {
       venues,
       storeId,
       store: storeId ? byId.get(storeId) ?? null : null,
       combined: !storeId && venues.length > 1,
       nameOf: (id: string) => shortStoreName(byId.get(id)?.name ?? id),
+      colorOf: (id: string) => STORE_SERIES[(index.get(id) ?? 0) % STORE_SERIES.length],
     };
   }, [data, storeId]);
+}
+
+/** "Copper Lantern — Plateau" → "plateau": a filename-safe slug. */
+export function slugify(name: string): string {
+  return (
+    name
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "store"
+  );
 }
 
 /** "Copper Lantern — Plateau" → "Plateau": the part that tells stores apart. */

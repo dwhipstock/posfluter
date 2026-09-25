@@ -39,12 +39,38 @@ export interface ConfirmResponse {
   backupCodes: string[];
 }
 
+export interface VenueDayRow {
+  venueId: string;
+  grossCents: number;
+  netCents: number;
+  taxCents: number;
+  checkCount: number;
+}
+
 export interface DayRow {
   date: string;
   grossCents: number;
   netCents: number;
   taxCents: number;
   checkCount: number;
+  /** The same day per in-scope store (zeros included). */
+  byVenue: VenueDayRow[];
+}
+
+/** One store's totals in the items / categories / hourly / tables reports. */
+export interface VenueTotalRow {
+  venueId: string;
+  venueName: string;
+  grossCents: number;
+  checkCount: number;
+  qty: number;
+}
+
+/** One store's share of an item or category (stores that sold none are left out). */
+export interface VenueQtyRow {
+  venueId: string;
+  qty: number;
+  revenueCents: number;
 }
 
 export interface Summary {
@@ -82,7 +108,7 @@ export interface PaymentRow {
 export interface PaymentsReport {
   rows: PaymentRow[];
   totalCents: number;
-  byVenue: { venueId: string; totalCents: number; rows: PaymentRow[] }[];
+  byVenue: { venueId: string; venueName: string; totalCents: number; rows: PaymentRow[] }[];
 }
 
 export interface ItemReportRow {
@@ -94,20 +120,24 @@ export interface ItemReportRow {
   categoryNameEn: string | null;
   qty: number;
   revenueCents: number;
+  byVenue: VenueQtyRow[];
 }
 
 export interface ItemsReport {
   rows: ItemReportRow[];
+  byVenue: VenueTotalRow[];
 }
 
 export interface HourlyRow {
   hour: number;
   grossCents: number;
   checkCount: number;
+  byVenue: { venueId: string; grossCents: number; checkCount: number }[];
 }
 
 export interface HourlyReport {
   rows: HourlyRow[];
+  byVenue: VenueTotalRow[];
 }
 
 export interface ZoneRow {
@@ -132,6 +162,7 @@ export interface ZoneTableRow {
 export interface TablesReport {
   byZone: ZoneRow[];
   byTable: ZoneTableRow[];
+  byVenue: VenueTotalRow[];
 }
 
 export interface VoidRow {
@@ -149,6 +180,7 @@ export interface ExceptionsReport {
   voidCount: number;
   voidAmountCents: number;
   corkageCents: number;
+  byVenue: { venueId: string; venueName: string; voidCount: number; voidAmountCents: number; corkageCents: number }[];
 }
 
 export interface RefundReasonRow {
@@ -180,6 +212,14 @@ export interface RefundsReport {
   byReason: RefundReasonRow[];
   byTender: { type: TenderType; amountCents: number; count: number }[];
   rows: RefundListRow[];
+  byVenue: {
+    venueId: string;
+    venueName: string;
+    count: number;
+    grossCents: number;
+    netCents: number;
+    taxCents: number;
+  }[];
 }
 
 export interface CashMovementRow {
@@ -199,6 +239,15 @@ export interface CashMovementsReport {
   inCount: number;
   outCount: number;
   rows: CashMovementRow[];
+  byVenue: {
+    venueId: string;
+    venueName: string;
+    paidInCents: number;
+    paidOutCents: number;
+    netCents: number;
+    inCount: number;
+    outCount: number;
+  }[];
 }
 
 export interface TenderBreakdownRow {
@@ -228,6 +277,15 @@ export interface Shift {
 
 export interface ShiftsReport {
   rows: Shift[];
+  byVenue: {
+    venueId: string;
+    venueName: string;
+    shiftCount: number;
+    openCount: number;
+    revenueCents: number;
+    transactionCount: number;
+    overShortCents: number;
+  }[];
 }
 
 export interface JournalLine {
@@ -254,6 +312,8 @@ export interface JournalRow {
 export interface JournalReport {
   total: number;
   rows: JournalRow[];
+  /** Per store over the whole filtered range (not just the page). */
+  byVenue: { venueId: string; venueName: string; closedCount: number; voidCount: number; closedCents: number }[];
 }
 
 export interface MenuVariant {

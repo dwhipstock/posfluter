@@ -3,17 +3,17 @@
 import { Suspense } from "react";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD } from "@/lib/format";
+import { CAD, CADSigned } from "@/lib/format";
 import { useT, useFmt } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
-import { useExportMeta } from "@/lib/export/report";
-import { col, type ExportDoc } from "@/lib/export/doc";
+import { useExportMeta, useStoreExport } from "@/lib/export/report";
+import { col, Int, Money, T, type ExportDoc } from "@/lib/export/doc";
 import type { CashMovementRow, CashMovementsReport } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Kpi } from "@/components/kpi";
 import { PageHeader } from "@/components/page-header";
-import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
+import { StoreSplit, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -30,6 +30,7 @@ function CashMovementsPage() {
   const fmt = useFmt();
   const range = useRange();
   const meta = useExportMeta();
+  const storeExport = useStoreExport();
   const { data, error, isLoading, mutate } = useApi<CashMovementsReport>(
     reportKey("/v1/reports/cash-movements", range)
   );
@@ -46,8 +47,19 @@ function CashMovementsPage() {
         { label: t("cash_net"), value: CAD(data.netCents) },
       ],
       sections: [
+        ...storeExport.byStore<CashMovementsReport["byVenue"][number]>(
+          [
+            col.money(t("cash_paid_in"), (r) => r.paidInCents),
+            col.money(t("cash_paid_out"), (r) => r.paidOutCents),
+            col.money(t("cash_net"), (r) => r.netCents),
+            col.int(t("cash_movements_n"), (r) => r.inCount + r.outCount),
+          ],
+          data.byVenue,
+          [T(t("col_total")), Money(data.paidInCents), Money(data.paidOutCents), Money(data.netCents), Int(data.inCount + data.outCount)]
+        ),
         {
-          columns: [
+          title: t("cash_title"),
+          columns: storeExport.withStore([
             col.text<CashMovementRow>(t("col_time"), (r) => (r.createdAt ? fmt.dateTime(r.createdAt) : "—")),
             col.text<CashMovementRow>(t("col_direction"), (r) =>
               r.direction === "IN" ? t("cash_in_label") : t("cash_out_label")
@@ -57,7 +69,7 @@ function CashMovementsPage() {
             col.money<CashMovementRow>(t("col_amount"), (r) =>
               r.direction === "IN" ? r.amountCents : -r.amountCents
             ),
-          ],
+          ]),
           rows: data.rows,
         },
       ],
@@ -73,7 +85,18 @@ function CashMovementsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
-      <StoreBreakdown />
+      {data && (
+        <StoreSplit
+          rows={data.byVenue}
+          title={t("cash_by_store")}
+          cols={[
+            { key: "in", label: t("cash_paid_in"), value: (r) => r.paidInCents, format: CAD },
+            { key: "out", label: t("cash_paid_out"), value: (r) => r.paidOutCents, format: CAD },
+            { key: "net", label: t("cash_net"), value: (r) => r.netCents, format: CADSigned, strong: true },
+            { key: "n", label: t("cash_movements_n"), value: (r) => r.inCount + r.outCount, format: String, hide: "sm" },
+          ]}
+        />
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("cash_paid_in")} value={data && CAD(data.paidInCents)} loading={isLoading} />

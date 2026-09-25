@@ -1,17 +1,22 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
-import { Noto_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { LocaleProvider } from "@/lib/i18n/context";
 import type { Locale } from "@/lib/i18n/messages";
+import { BRAND } from "@/lib/theme";
 
-// Latin subset of Noto Sans: covers English and French (accents included), so
-// both locales render from one face; the system sans in globals.css is the
-// fallback while it loads.
-const notoSans = Noto_Sans({
-  subsets: ["latin"],
-  variable: "--font-french",
+// Inter, the tablet's face, bundled from app/fonts (a Latin subset: English and
+// French, accents included). No font CDN is called, at build time or run time.
+const inter = localFont({
+  src: [
+    { path: "./fonts/Inter-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/Inter-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/Inter-SemiBold.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/Inter-Bold.woff2", weight: "700", style: "normal" },
+  ],
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -21,7 +26,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#17263A",
+  themeColor: BRAND.navy,
   width: "device-width",
   initialScale: 1,
 };
@@ -34,7 +39,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale: Locale = store.get("locale")?.value === "fr" ? "fr" : "en";
 
   return (
-    <html lang={locale} className={notoSans.variable}>
+    <html lang={locale} className={inter.variable}>
       <body>
         <LocaleProvider initialLocale={locale}>
           {children}

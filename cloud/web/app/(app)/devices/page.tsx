@@ -382,7 +382,7 @@ function PairForm({ venue }: { venue: Venue }) {
 
       {code && (
         <div className="space-y-2">
-          <div className="rounded-xl bg-ink px-4 py-6 text-center">
+          <div className="rounded-xl bg-navy px-4 py-6 text-center">
             <div className="font-mono text-4xl font-bold tracking-[0.18em] text-white md:text-5xl">{code.code}</div>
             {code.url && <p className="mt-3 break-all font-mono text-xs text-neutral-400">{code.url}</p>}
           </div>
