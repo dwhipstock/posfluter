@@ -188,7 +188,7 @@ export const messages = {
   col_date: m("date", "Date"),
   col_gross: m("Total", "Gross"),
   col_net: m("filet", "Net"),
-  col_vat: m("VAT", "VAT"),
+  col_vat: m("Taxe", "Tax"),
   col_checks: m("facture", "Checks"),
   col_total: m("Total", "Total"),
   vat_empty: m("Il n'y a pas de vente pendant cette période.", "No sales in this range"),
