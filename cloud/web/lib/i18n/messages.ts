@@ -112,6 +112,15 @@ export const messages = {
     "J'ai essayé trop de fois. Attendez un moment et réessayez.",
     "Too many attempts. Wait a moment and try again."
   ),
+  // shown on /login after the session ends on its own
+  login_signed_out_idle: m(
+    "Déconnecté après {n} minutes d’inactivité",
+    "Signed out after {n} minutes of inactivity"
+  ),
+  login_signed_out_expired: m(
+    "Votre session a expiré. Veuillez vous reconnecter.",
+    "Your session has expired. Please sign in again."
+  ),
 
   // ── date range ────────────────────────────────────────────────────────
   preset_today: m("aujourd'hui", "Today"),

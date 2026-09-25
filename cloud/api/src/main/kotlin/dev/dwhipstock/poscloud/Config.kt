@@ -20,6 +20,10 @@ data class CloudConfig(
     val storeApiKey: String? = env("STORE_API_KEY"),
     val storeApiKeys: Map<String, String> = parsePairs(env("STORE_API_KEYS")),
     val cookieSecure: Boolean = env("COOKIE_SECURE")?.toBoolean() ?: false,
+    // Portal sessions: signed out after this long with no user activity (background
+    // polls don't count), and never live past the absolute cap regardless of activity.
+    val sessionIdleMinutes: Long = env("PORTAL_SESSION_IDLE_MINUTES")?.toLongOrNull()?.takeIf { it > 0 } ?: 60,
+    val sessionMaxHours: Long = env("PORTAL_SESSION_MAX_HOURS")?.toLongOrNull()?.takeIf { it > 0 } ?: 12,
     // The group (tenant) name shown in the portal; synced onto the tenant row at boot.
     val venueName: String = env("VENUE_NAME") ?: "Copper Lantern",
     val venueTz: String = env("VENUE_TZ") ?: "America/New_York",
