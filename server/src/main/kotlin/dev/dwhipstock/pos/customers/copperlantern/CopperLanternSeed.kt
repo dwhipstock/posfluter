@@ -45,6 +45,17 @@ object CopperLanternSeed {
         val label: String? = null,
     )
 
+    /** Shared menu categories in display order: id, French, English. */
+    val sharedCategories: List<Array<String>> = listOf(
+        arrayOf("beer-cider", "Bières et cidres", "Beer & Cider"),
+        arrayOf("wine", "Vins", "Wine"),
+        arrayOf("cocktails", "Cocktails", "Cocktails"),
+        arrayOf("starters", "Entrées", "Starters"),
+        arrayOf("burgers-sandwiches", "Burgers et sandwichs", "Burgers & Sandwiches"),
+        arrayOf("mains-salads", "Plats et salades", "Mains & Salads"),
+        arrayOf("desserts", "Desserts", "Desserts"),
+    )
+
     private fun one(cents: Long) = listOf(Variant("regular", "Régulier", "Regular", cents))
     private fun pour(glass: Long, bottle: Long) = listOf(
         Variant("glass", "Verre", "Glass", glass), Variant("bottle", "Bouteille", "Bottle", bottle))
@@ -55,33 +66,33 @@ object CopperLanternSeed {
         SeedItem(id, fr, en, dfr, den, category, abbrev, alcohol, one(cents))
 
     private val menu = listOf(
-        SeedItem("lantern-lager", "Lager de la Lanterne", "Lantern House Lager", "Lager vive et maltée brassée en Ontario.", "Crisp, malty lager brewed in Ontario.", "draft-beer", "LL", true, beer(825, 2250)),
-        SeedItem("amber-ale", "Ale ambrée", "Copper Amber Ale", "Ale ambrée aux notes de caramel et de noix.", "Amber ale with caramel and toasted-nut notes.", "draft-beer", "AA", true, beer(875, 2400)),
-        SeedItem("north-ipa", "IPA du Nord", "North Trail IPA", "IPA houblonnée aux arômes d'agrumes et de pin.", "Hop-forward IPA with citrus and pine.", "draft-beer", "NI", true, beer(925, 2550)),
-        SeedItem("maple-stout", "Stout à l'érable", "Maple Oat Stout", "Stout crémeux à l'avoine avec une touche d'érable.", "Creamy oatmeal stout with a hint of maple.", "draft-beer", "MS", true, beer(950, 2650)),
-        SeedItem("wheat-beer", "Blanche aux agrumes", "Citrus Wheat", "Bière de blé légère, orange et coriandre.", "Light wheat beer with orange and coriander.", "draft-beer", "CW", true, beer(850, 2350)),
-        item("canadian-lager", "Lager canadienne", "Canadian Lager", "Lager légère et rafraîchissante.", "Clean, refreshing pale lager.", "bottles-cans", "CL", true, 725),
-        item("pilsner-can", "Pilsner en canette", "Pilsner Can", "Pilsner sèche et herbacée.", "Dry, herbal pilsner.", "bottles-cans", "PC", true, 775),
-        item("porter-can", "Porter robuste", "Robust Porter", "Porter torréfié au cacao.", "Roasty porter with cocoa notes.", "craft-beer", "RP", true, 875),
-        item("hazy-ipa", "IPA voilée locale", "Local Hazy IPA", "IPA juteuse brassée à Toronto.", "Juicy IPA brewed in Toronto.", "craft-beer", "HI", true, 925),
-        item("saison", "Saison fermière", "Farmhouse Saison", "Saison sèche, poivrée et effervescente.", "Dry, peppery and lively farmhouse ale.", "craft-beer", "FS", true, 900),
-        item("belgian-blonde", "Blonde belge", "Belgian Blonde", "Blonde importée, fruitée et douce.", "Fruity, smooth imported blonde ale.", "imported-beer", "BB", true, 975),
-        item("irish-stout", "Stout irlandais", "Irish Stout", "Stout sec importé au col crémeux.", "Imported dry stout with a creamy head.", "imported-beer", "IS", true, 950),
-        item("mexican-lager", "Lager mexicaine", "Mexican Lager", "Lager légère servie avec lime.", "Light lager served with lime.", "imported-beer", "ML", true, 875),
-        item("dry-cider", "Cidre sec", "Ontario Dry Cider", "Cidre de pommes ontariennes, vif et sec.", "Crisp dry cider made with Ontario apples.", "cider-na", "DC", true, 875),
-        item("berry-cider", "Cidre aux petits fruits", "Berry Cider", "Cidre demi-sec aux petits fruits.", "Off-dry cider with mixed berries.", "cider-na", "BC", true, 900),
-        item("na-lager", "Lager sans alcool", "Non-Alcoholic Lager", "Lager maltée à moins de 0,5 %.", "Malty lager with less than 0.5% alcohol.", "cider-na", "NA", false, 650),
-        item("hop-water", "Eau houblonnée", "Sparkling Hop Water", "Eau pétillante houblonnée sans alcool.", "Alcohol-free sparkling water infused with hops.", "cider-na", "HW", false, 550),
+        SeedItem("lantern-lager", "Lager de la Lanterne", "Lantern House Lager", "Lager vive et maltée brassée en Ontario.", "Crisp, malty lager brewed in Ontario.", "beer-cider", "LL", true, beer(825, 2250)),
+        SeedItem("amber-ale", "Ale ambrée", "Copper Amber Ale", "Ale ambrée aux notes de caramel et de noix.", "Amber ale with caramel and toasted-nut notes.", "beer-cider", "AA", true, beer(875, 2400)),
+        SeedItem("north-ipa", "IPA du Nord", "North Trail IPA", "IPA houblonnée aux arômes d'agrumes et de pin.", "Hop-forward IPA with citrus and pine.", "beer-cider", "NI", true, beer(925, 2550)),
+        SeedItem("maple-stout", "Stout à l'érable", "Maple Oat Stout", "Stout crémeux à l'avoine avec une touche d'érable.", "Creamy oatmeal stout with a hint of maple.", "beer-cider", "MS", true, beer(950, 2650)),
+        SeedItem("wheat-beer", "Blanche aux agrumes", "Citrus Wheat", "Bière de blé légère, orange et coriandre.", "Light wheat beer with orange and coriander.", "beer-cider", "CW", true, beer(850, 2350)),
+        item("canadian-lager", "Lager canadienne", "Canadian Lager", "Lager légère et rafraîchissante.", "Clean, refreshing pale lager.", "beer-cider", "CL", true, 725),
+        item("pilsner-can", "Pilsner en canette", "Pilsner Can", "Pilsner sèche et herbacée.", "Dry, herbal pilsner.", "beer-cider", "PC", true, 775),
+        item("porter-can", "Porter robuste", "Robust Porter", "Porter torréfié au cacao.", "Roasty porter with cocoa notes.", "beer-cider", "RP", true, 875),
+        item("hazy-ipa", "IPA voilée locale", "Local Hazy IPA", "IPA juteuse brassée à Toronto.", "Juicy IPA brewed in Toronto.", "beer-cider", "HI", true, 925),
+        item("saison", "Saison fermière", "Farmhouse Saison", "Saison sèche, poivrée et effervescente.", "Dry, peppery and lively farmhouse ale.", "beer-cider", "FS", true, 900),
+        item("belgian-blonde", "Blonde belge", "Belgian Blonde", "Blonde importée, fruitée et douce.", "Fruity, smooth imported blonde ale.", "beer-cider", "BB", true, 975),
+        item("irish-stout", "Stout irlandais", "Irish Stout", "Stout sec importé au col crémeux.", "Imported dry stout with a creamy head.", "beer-cider", "IS", true, 950),
+        item("mexican-lager", "Lager mexicaine", "Mexican Lager", "Lager légère servie avec lime.", "Light lager served with lime.", "beer-cider", "ML", true, 875),
+        item("dry-cider", "Cidre sec", "Ontario Dry Cider", "Cidre de pommes ontariennes, vif et sec.", "Crisp dry cider made with Ontario apples.", "beer-cider", "DC", true, 875),
+        item("berry-cider", "Cidre aux petits fruits", "Berry Cider", "Cidre demi-sec aux petits fruits.", "Off-dry cider with mixed berries.", "beer-cider", "BC", true, 900),
+        item("na-lager", "Lager sans alcool", "Non-Alcoholic Lager", "Lager maltée à moins de 0,5 %.", "Malty lager with less than 0.5% alcohol.", "beer-cider", "NA", false, 650),
+        item("hop-water", "Eau houblonnée", "Sparkling Hop Water", "Eau pétillante houblonnée sans alcool.", "Alcohol-free sparkling water infused with hops.", "beer-cider", "HW", false, 550),
 
-        SeedItem("pinot-noir", "Pinot noir de Niagara", "Niagara Pinot Noir", "Rouge léger, cerise et épices.", "Light red with cherry and spice.", "red-wine", "PN", true, pour(1250, 4800)),
-        SeedItem("cab-merlot", "Cabernet-merlot", "Ontario Cabernet Merlot", "Rouge souple, mûre et cèdre.", "Smooth red with blackberry and cedar.", "red-wine", "CM", true, pour(1150, 4400)),
-        SeedItem("malbec", "Malbec argentin", "Argentinian Malbec", "Rouge corsé aux notes de prune.", "Full-bodied red with plum notes.", "red-wine", "MB", true, pour(1300, 5000)),
-        SeedItem("riesling", "Riesling de Niagara", "Niagara Riesling", "Blanc vif, pomme et agrumes.", "Bright white with apple and citrus.", "white-wine", "RI", true, pour(1100, 4200)),
-        SeedItem("chardonnay", "Chardonnay boisé", "Oaked Chardonnay", "Blanc rond, poire et vanille.", "Round white with pear and vanilla.", "white-wine", "CH", true, pour(1200, 4600)),
-        SeedItem("sauvignon-blanc", "Sauvignon blanc", "Sauvignon Blanc", "Blanc sec, herbacé et citronné.", "Dry white with herbs and lemon.", "white-wine", "SB", true, pour(1250, 4800)),
-        SeedItem("rose", "Rosé de la péninsule", "Peninsula Rosé", "Rosé sec aux notes de fraise.", "Dry rosé with strawberry notes.", "rose-sparkling", "RO", true, pour(1150, 4400)),
-        SeedItem("sparkling", "Brut de Niagara", "Niagara Brut", "Bulles fines, pomme verte et brioche.", "Fine bubbles with green apple and brioche.", "rose-sparkling", "BR", true, pour(1400, 5400)),
-        SeedItem("icewine", "Vin de glace", "Ontario Icewine", "Vin de dessert riche aux notes d'abricot.", "Rich dessert wine with apricot notes.", "rose-sparkling", "IW", true, listOf(Variant("2oz", "Verre 2 oz", "2 oz glass", 1650), Variant("375ml", "Bouteille 375 ml", "375 ml bottle", 7200))),
+        SeedItem("pinot-noir", "Pinot noir de Niagara", "Niagara Pinot Noir", "Rouge léger, cerise et épices.", "Light red with cherry and spice.", "wine", "PN", true, pour(1250, 4800)),
+        SeedItem("cab-merlot", "Cabernet-merlot", "Ontario Cabernet Merlot", "Rouge souple, mûre et cèdre.", "Smooth red with blackberry and cedar.", "wine", "CM", true, pour(1150, 4400)),
+        SeedItem("malbec", "Malbec argentin", "Argentinian Malbec", "Rouge corsé aux notes de prune.", "Full-bodied red with plum notes.", "wine", "MB", true, pour(1300, 5000)),
+        SeedItem("riesling", "Riesling de Niagara", "Niagara Riesling", "Blanc vif, pomme et agrumes.", "Bright white with apple and citrus.", "wine", "RI", true, pour(1100, 4200)),
+        SeedItem("chardonnay", "Chardonnay boisé", "Oaked Chardonnay", "Blanc rond, poire et vanille.", "Round white with pear and vanilla.", "wine", "CH", true, pour(1200, 4600)),
+        SeedItem("sauvignon-blanc", "Sauvignon blanc", "Sauvignon Blanc", "Blanc sec, herbacé et citronné.", "Dry white with herbs and lemon.", "wine", "SB", true, pour(1250, 4800)),
+        SeedItem("rose", "Rosé de la péninsule", "Peninsula Rosé", "Rosé sec aux notes de fraise.", "Dry rosé with strawberry notes.", "wine", "RO", true, pour(1150, 4400)),
+        SeedItem("sparkling", "Brut de Niagara", "Niagara Brut", "Bulles fines, pomme verte et brioche.", "Fine bubbles with green apple and brioche.", "wine", "BR", true, pour(1400, 5400)),
+        SeedItem("icewine", "Vin de glace", "Ontario Icewine", "Vin de dessert riche aux notes d'abricot.", "Rich dessert wine with apricot notes.", "wine", "IW", true, listOf(Variant("2oz", "Verre 2 oz", "2 oz glass", 1650), Variant("375ml", "Bouteille 375 ml", "375 ml bottle", 7200))),
 
         item("copper-old-fashioned", "Old fashioned cuivré", "Copper Old Fashioned", "Whisky canadien, érable, amers et orange.", "Canadian whisky, maple, bitters and orange.", "cocktails", "OF", true, 1550),
         item("lantern-mule", "Mule de la Lanterne", "Lantern Mule", "Vodka, bière de gingembre, lime et canneberge.", "Vodka, ginger beer, lime and cranberry.", "cocktails", "LM", true, 1450),
@@ -92,35 +103,35 @@ object CopperLanternSeed {
         item("dark-stormy", "Dark and Stormy", "Dark and Stormy", "Rhum brun, gingembre et lime.", "Dark rum, ginger beer and lime.", "cocktails", "DS", true, 1450),
         item("zero-gimlet", "Gimlet sans alcool", "Zero-Proof Gimlet", "Botanique sans alcool, lime et romarin.", "Alcohol-free botanical spirit, lime and rosemary.", "cocktails", "ZG", false, 950),
 
-        item("pretzel", "Bretzel géant", "Giant Pub Pretzel", "Bretzel chaud, moutarde à la bière et fromage.", "Warm pretzel with beer mustard and cheese dip.", "appetizers", "PR", false, 1350),
-        item("wings", "Ailes de poulet", "Chicken Wings", "Une livre d'ailes avec sauce au choix.", "One pound of wings with your choice of sauce.", "appetizers", "WG", false, 1850),
-        item("nachos", "Nachos de la maison", "Loaded Pub Nachos", "Fromage, haricots, jalapeños, salsa et crème sure.", "Cheese, beans, jalapeños, salsa and sour cream.", "appetizers", "NC", false, 1950),
-        item("calamari", "Calmars croustillants", "Crispy Calamari", "Calmars frits, citron et aïoli.", "Fried calamari with lemon and aioli.", "appetizers", "CA", false, 1850),
-        item("spinach-dip", "Trempette épinards-artichauts", "Spinach Artichoke Dip", "Trempette chaude avec croustilles de pita.", "Hot dip served with pita chips.", "appetizers", "SD", false, 1650),
-        item("poutine", "Poutine classique", "Classic Poutine", "Frites, fromage en grains et sauce brune.", "Fries, cheese curds and savoury gravy.", "appetizers", "PO", false, 1450),
+        item("pretzel", "Bretzel géant", "Giant Pub Pretzel", "Bretzel chaud, moutarde à la bière et fromage.", "Warm pretzel with beer mustard and cheese dip.", "starters", "PR", false, 1350),
+        item("wings", "Ailes de poulet", "Chicken Wings", "Une livre d'ailes avec sauce au choix.", "One pound of wings with your choice of sauce.", "starters", "WG", false, 1850),
+        item("nachos", "Nachos de la maison", "Loaded Pub Nachos", "Fromage, haricots, jalapeños, salsa et crème sure.", "Cheese, beans, jalapeños, salsa and sour cream.", "starters", "NC", false, 1950),
+        item("calamari", "Calmars croustillants", "Crispy Calamari", "Calmars frits, citron et aïoli.", "Fried calamari with lemon and aioli.", "starters", "CA", false, 1850),
+        item("spinach-dip", "Trempette épinards-artichauts", "Spinach Artichoke Dip", "Trempette chaude avec croustilles de pita.", "Hot dip served with pita chips.", "starters", "SD", false, 1650),
+        item("poutine", "Poutine classique", "Classic Poutine", "Frites, fromage en grains et sauce brune.", "Fries, cheese curds and savoury gravy.", "starters", "PO", false, 1450),
         item("lantern-burger", "Burger de la Lanterne", "Copper Lantern Burger", "Bœuf, cheddar, bacon, oignons et sauce maison.", "Beef, cheddar, bacon, onions and house sauce.", "burgers-sandwiches", "LB", false, 2150),
         item("mushroom-burger", "Burger aux champignons", "Mushroom Swiss Burger", "Bœuf, champignons, suisse et aïoli.", "Beef, mushrooms, Swiss cheese and aioli.", "burgers-sandwiches", "MB", false, 2200),
         item("veggie-burger", "Burger végétarien", "Garden Veggie Burger", "Galette végétale, avocat et légumes marinés.", "Plant-based patty, avocado and pickled vegetables.", "burgers-sandwiches", "VB", false, 1950),
         item("club", "Club au poulet", "Grilled Chicken Club", "Poulet grillé, bacon, tomate et laitue.", "Grilled chicken, bacon, tomato and lettuce.", "burgers-sandwiches", "GC", false, 2050),
         item("reuben", "Reuben montréalais", "Montreal Reuben", "Viande fumée, suisse, choucroute et sauce russe.", "Smoked meat, Swiss cheese, sauerkraut and Russian dressing.", "burgers-sandwiches", "RE", false, 2150),
         item("fish-sandwich", "Sandwich au poisson", "Crispy Fish Sandwich", "Aiglefin pané, salade de chou et tartare.", "Battered haddock, slaw and tartar sauce.", "burgers-sandwiches", "FS", false, 1950),
-        item("fish-chips", "Poisson-frites", "Beer-Battered Fish and Chips", "Aiglefin, frites, salade de chou et tartare.", "Haddock, fries, slaw and tartar sauce.", "mains", "FC", false, 2250),
-        item("steak-frites", "Steak-frites", "Steak Frites", "Bavette grillée, beurre aux herbes et frites.", "Grilled flank steak, herb butter and fries.", "mains", "SF", false, 2950),
-        item("shepherd-pie", "Pâté chinois", "Shepherd's Pie", "Bœuf braisé, légumes et purée de pommes de terre.", "Braised beef, vegetables and mashed potato.", "mains", "SP", false, 2150),
-        item("mac-cheese", "Macaroni au fromage", "Three-Cheese Mac", "Macaroni crémeux gratiné avec chapelure.", "Creamy baked macaroni with three cheeses.", "mains", "MC", false, 1850),
-        item("salmon", "Saumon à l'érable", "Maple-Glazed Salmon", "Saumon, riz sauvage et légumes de saison.", "Salmon, wild rice and seasonal vegetables.", "mains", "SA", false, 2750),
-        item("chicken-pot-pie", "Pâté au poulet", "Chicken Pot Pie", "Poulet, légumes et pâte feuilletée.", "Chicken and vegetables under puff pastry.", "mains", "CP", false, 2050),
-        item("caesar-salad", "Salade César", "Caesar Salad", "Romaine, parmesan, croûtons et vinaigrette César.", "Romaine, parmesan, croutons and Caesar dressing.", "salads-vegetarian", "CS", false, 1450),
-        item("harvest-salad", "Salade des récoltes", "Ontario Harvest Salad", "Verdure, pommes, courge, noix et chèvre.", "Greens, apples, squash, walnuts and goat cheese.", "salads-vegetarian", "HS", false, 1650),
-        item("falafel-bowl", "Bol de falafels", "Falafel Grain Bowl", "Falafels, quinoa, houmous et légumes.", "Falafel, quinoa, hummus and vegetables.", "salads-vegetarian", "FB", false, 1850),
-        item("cauliflower", "Chou-fleur rôti", "Roasted Cauliflower Steak", "Chou-fleur, lentilles, tahini et fines herbes.", "Cauliflower, lentils, tahini and herbs.", "salads-vegetarian", "RC", false, 1950),
+        item("fish-chips", "Poisson-frites", "Beer-Battered Fish and Chips", "Aiglefin, frites, salade de chou et tartare.", "Haddock, fries, slaw and tartar sauce.", "mains-salads", "FC", false, 2250),
+        item("steak-frites", "Steak-frites", "Steak Frites", "Bavette grillée, beurre aux herbes et frites.", "Grilled flank steak, herb butter and fries.", "mains-salads", "SF", false, 2950),
+        item("shepherd-pie", "Pâté chinois", "Shepherd's Pie", "Bœuf braisé, légumes et purée de pommes de terre.", "Braised beef, vegetables and mashed potato.", "mains-salads", "SP", false, 2150),
+        item("mac-cheese", "Macaroni au fromage", "Three-Cheese Mac", "Macaroni crémeux gratiné avec chapelure.", "Creamy baked macaroni with three cheeses.", "mains-salads", "MC", false, 1850),
+        item("salmon", "Saumon à l'érable", "Maple-Glazed Salmon", "Saumon, riz sauvage et légumes de saison.", "Salmon, wild rice and seasonal vegetables.", "mains-salads", "SA", false, 2750),
+        item("chicken-pot-pie", "Pâté au poulet", "Chicken Pot Pie", "Poulet, légumes et pâte feuilletée.", "Chicken and vegetables under puff pastry.", "mains-salads", "CP", false, 2050),
+        item("caesar-salad", "Salade César", "Caesar Salad", "Romaine, parmesan, croûtons et vinaigrette César.", "Romaine, parmesan, croutons and Caesar dressing.", "mains-salads", "CS", false, 1450),
+        item("harvest-salad", "Salade des récoltes", "Ontario Harvest Salad", "Verdure, pommes, courge, noix et chèvre.", "Greens, apples, squash, walnuts and goat cheese.", "mains-salads", "HS", false, 1650),
+        item("falafel-bowl", "Bol de falafels", "Falafel Grain Bowl", "Falafels, quinoa, houmous et légumes.", "Falafel, quinoa, hummus and vegetables.", "mains-salads", "FB", false, 1850),
+        item("cauliflower", "Chou-fleur rôti", "Roasted Cauliflower Steak", "Chou-fleur, lentilles, tahini et fines herbes.", "Cauliflower, lentils, tahini and herbs.", "mains-salads", "RC", false, 1950),
         item("sticky-pudding", "Pouding au caramel", "Sticky Toffee Pudding", "Gâteau aux dattes, caramel et crème glacée.", "Date cake, toffee sauce and ice cream.", "desserts", "ST", false, 950),
         item("cheesecake", "Gâteau au fromage", "Maple Cheesecake", "Gâteau au fromage à l'érable et noix de pacane.", "Maple cheesecake with toasted pecans.", "desserts", "CK", false, 950),
         item("brownie", "Brownie au stout", "Stout Brownie", "Brownie chaud, sauce chocolat et crème glacée.", "Warm brownie with chocolate sauce and ice cream.", "desserts", "BR", false, 900),
-        item("late-fries", "Frites de nuit", "Late-Night Fries", "Panier de frites avec aïoli maison.", "Basket of fries with house aioli.", "late-night", "LF", false, 850),
-        item("mini-burgers", "Mini-burgers", "Midnight Sliders", "Trois mini-burgers au cheddar et cornichons.", "Three cheddar sliders with pickles.", "late-night", "SL", false, 1450),
-        item("grilled-cheese", "Fromage grillé", "Grilled Cheese", "Cheddar vieilli sur pain au levain.", "Aged cheddar on sourdough.", "late-night", "GR", false, 1150),
-        item("onion-rings", "Rondelles d'oignon", "Onion Rings", "Rondelles croustillantes et sauce barbecue.", "Crisp onion rings with barbecue sauce.", "late-night", "OR", false, 1050),
+        item("late-fries", "Frites de nuit", "Late-Night Fries", "Panier de frites avec aïoli maison.", "Basket of fries with house aioli.", "starters", "LF", false, 850),
+        item("mini-burgers", "Mini-burgers", "Midnight Sliders", "Trois mini-burgers au cheddar et cornichons.", "Three cheddar sliders with pickles.", "starters", "SL", false, 1450),
+        item("grilled-cheese", "Fromage grillé", "Grilled Cheese", "Cheddar vieilli sur pain au levain.", "Aged cheddar on sourdough.", "starters", "GR", false, 1150),
+        item("onion-rings", "Rondelles d'oignon", "Onion Rings", "Rondelles croustillantes et sauce barbecue.", "Crisp onion rings with barbecue sauce.", "starters", "OR", false, 1050),
     )
 
     // Stable internal IDs preserve API compatibility; only fictional pub labels are shown.
@@ -225,7 +236,13 @@ object CopperLanternSeed {
         val zones = if (plateau) zones + listOf(plateauZone) else zones
         val tables = if (plateau) tables + plateauTables else tables
         val floorObjects = if (plateau) floorObjects + plateauObjects else floorObjects
-        // the shared categories come from migration 005; Plateau adds its own after them
+        // the 7 shared categories (migration 034 already folded 005's residue
+        // into them, so these are no-ops there); Plateau adds its own after them
+        sharedCategories.forEachIndexed { i, c ->
+            Categories.insertIgnore {
+                it[Categories.id] = c[0]; it[sortOrder] = i; it[nameFr] = c[1]; it[nameEn] = c[2]
+            }
+        }
         if (plateau) {
             val next = (Categories.selectAll().maxOfOrNull { it[Categories.sortOrder] } ?: -1) + 1
             plateauCategories.forEachIndexed { i, c ->
