@@ -160,13 +160,13 @@ and refund events carry only the tender type `STRIPE` and the Stripe
 PaymentIntent / refund ids.
 
 On startup (in the background, never gating anything) the store reads the
-Stripe account and charges in the **account's default currency**. A Canadian
-account charges CAD, matching the store. If an account in another currency is
-used, the store logs a warning and still charges, for the same number of cents
-with no conversion (test mode only); the payment screen then shows the currency
-code. Unless `STRIPE_LOCATION_ID` is set, the store reuses a Terminal Location
-tagged with its store id, or creates one (idempotently) with a fictional
-Montréal address for a CA account. Its id is kept locally in `sync_state`.
+Stripe account. The store sells in CAD, so the account must be a **Canadian
+(CAD) account**: any other default currency disables Stripe, logged as
+`Stripe: DISABLED — the Stripe account's currency is …`, and the Pay screen
+shows "Stripe is off: the Stripe account is not in CAD". Unless
+`STRIPE_LOCATION_ID` is set, the store reuses a Terminal Location tagged with
+its store id, or creates one (idempotently) with a fictional Montréal address.
+Its id is kept locally in `sync_state`.
 
 ### Taking a payment
 

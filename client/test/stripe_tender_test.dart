@@ -10,7 +10,10 @@ import 'package:http/testing.dart';
 import 'package:pos_client/api.dart';
 import 'package:pos_client/design/tokens.dart';
 import 'package:pos_client/i18n.dart';
+import 'package:mek_stripe_terminal/mek_stripe_terminal.dart'
+    show TerminalExceptionCode;
 import 'package:pos_client/payments/card_reader.dart';
+import 'package:pos_client/payments/stripe_log.dart';
 import 'package:pos_client/screens/stripe_payment_screen.dart';
 import 'package:pos_client/screens/tender_screen.dart';
 
@@ -23,8 +26,9 @@ Map<String, dynamic> _checkJson() => jsonDecode(
 );
 
 class _FakeReader implements CardReader {
-  _FakeReader({this.holdCollect = false});
+  _FakeReader({this.holdCollect = false, this.prepareError});
   final bool holdCollect;
+  final CardReaderException? prepareError;
   final _hold = Completer<void>();
   bool canceled = false;
   int collects = 0;
@@ -33,7 +37,10 @@ class _FakeReader implements CardReader {
   Future<void> prepare(
     String locationId,
     void Function(ReaderPhase) onPhase,
-  ) async => onPhase(ReaderPhase.connecting);
+  ) async {
+    onPhase(ReaderPhase.connecting);
+    if (prepareError != null) throw prepareError!;
+  }
 
   @override
   Future<void> collect(
@@ -63,6 +70,51 @@ const _available = StripeStatus(
 );
 
 void main() {
+  test('only network codes read as "can\'t reach Stripe"', () {
+    CardReaderError m(TerminalExceptionCode c) =>
+        StripeTerminalReader.mapTerminalCode(c);
+    expect(
+      m(TerminalExceptionCode.locationServicesDisabled),
+      CardReaderError.locationOff,
+    );
+    expect(
+      m(TerminalExceptionCode.bluetoothDisabled),
+      CardReaderError.bluetoothOff,
+    );
+    expect(
+      m(TerminalExceptionCode.bluetoothPermissionDenied),
+      CardReaderError.permissionDenied,
+    );
+    expect(
+      m(TerminalExceptionCode.stripeApiConnectionError),
+      CardReaderError.offline,
+    );
+    expect(
+      m(TerminalExceptionCode.notConnectedToInternet),
+      CardReaderError.offline,
+    );
+    expect(
+      m(TerminalExceptionCode.connectionTokenProviderError),
+      CardReaderError.tokenFailed,
+    );
+    expect(m(TerminalExceptionCode.stripeApiError), CardReaderError.stripeApi);
+    expect(m(TerminalExceptionCode.unknown), CardReaderError.readerFailed);
+    expect(
+      m(TerminalExceptionCode.declinedByStripeApi),
+      CardReaderError.declined,
+    );
+  });
+
+  test('log lines never carry secrets', () {
+    final line = scrubStripe(
+      'token pst_test_abcDEF123 secret pi_3Ab_secret_XyZ key sk_test_51Hxyz',
+    );
+    expect(line, isNot(contains('abcDEF123')));
+    expect(line, isNot(contains('XyZ')));
+    expect(line, isNot(contains('51Hxyz')));
+    expect(line, contains('pi_3Ab_secret_***'));
+  });
+
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -249,6 +301,50 @@ void main() {
       onPop?.call(popped);
       return posts;
     }
+
+    testWidgets(
+      'device Location off → precise message, code, settings button',
+      (tester) async {
+        final posts = await run(
+          tester,
+          _FakeReader(
+            prepareError: const CardReaderException(
+              CardReaderError.locationOff,
+              'locationServicesDisabled',
+            ),
+          ),
+          act: (tester) async {
+            expect(
+              find.text('Device Location is off. Turn it on, then try again.'),
+              findsOneWidget,
+            );
+            expect(find.text('Code: locationServicesDisabled'), findsOneWidget);
+            expect(find.text('Open Location settings'), findsOneWidget);
+            expect(find.textContaining("can't reach Stripe"), findsNothing);
+          },
+        );
+        expect(posts, isEmpty, reason: 'no PaymentIntent without a reader');
+      },
+    );
+
+    testWidgets('Bluetooth off → Bluetooth settings button', (tester) async {
+      await run(
+        tester,
+        _FakeReader(
+          prepareError: const CardReaderException(
+            CardReaderError.bluetoothOff,
+            'bluetoothDisabled',
+          ),
+        ),
+        act: (tester) async {
+          expect(
+            find.text('Bluetooth is off. Turn it on, then try again.'),
+            findsOneWidget,
+          );
+          expect(find.text('Open Bluetooth settings'), findsOneWidget);
+        },
+      );
+    });
 
     testWidgets('approved → tender returned', (tester) async {
       Object? result;

@@ -17,8 +17,8 @@ import kotlin.test.assertTrue
  *
  *   STRIPE_KEY=sk_test_... ./gradlew test --tests '*StripeSmokeTest*'
  *
- * Creates a Terminal connection token and a card_present PaymentIntent in the
- * account's own currency (works for any account country), then cancels it. No
+ * Checks the account is in CAD (what the store requires), creates a Terminal
+ * connection token and a CAD card_present PaymentIntent, then cancels it. No
  * money moves; nothing is left open. The key is never printed.
  */
 class StripeSmokeTest {
@@ -30,6 +30,8 @@ class StripeSmokeTest {
 
         val account = stripe.account()
         val currency = assertNotNull(account.str("default_currency"), "account has a default currency")
+        // the store only takes Stripe payments on a CAD account
+        assertEquals("cad", currency, "the Stripe test account must be Canadian (CAD)")
         println("Stripe smoke: account country=${account.str("country")} currency=$currency")
 
         val token = stripe.connectionToken(null)

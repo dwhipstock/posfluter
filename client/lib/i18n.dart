@@ -371,10 +371,6 @@ class L {
     'MODE TEST — lecteur simulé, aucun argent réel',
     'TEST MODE — simulated reader, no real money',
   );
-  String chargedInCurrency(String code) => _t(
-    'Facturé en $code (devise du compte Stripe de test)',
-    'Charged in $code (the Stripe test account currency)',
-  );
   String get stripePreparing =>
       _t('Préparation du paiement…', 'Preparing the payment…');
   String get stripePermissions => _t(
@@ -421,6 +417,10 @@ class L {
       'Stripe : aucun emplacement Terminal (réglez STRIPE_LOCATION_ID)',
       'Stripe: no Terminal location (set STRIPE_LOCATION_ID)',
     ),
+    'stripe_currency_mismatch' => _t(
+      'Stripe désactivé : le compte Stripe n\'est pas en CAD',
+      'Stripe is off: the Stripe account is not in CAD',
+    ),
     _ => _t(
       'La carte (Stripe) est indisponible pour le moment',
       'Card (Stripe) is unavailable right now',
@@ -454,26 +454,45 @@ class L {
   /// Friendly text for a reader-side failure kind (see CardReaderError).
   String stripeReaderError(String kind) => switch (kind) {
     'offline' => _t(
-      'Stripe est injoignable (Internet ?).',
-      'Can\'t reach Stripe (internet?).',
+      'Stripe est injoignable depuis la tablette (réseau).',
+      'The tablet can\'t reach Stripe (network).',
+    ),
+    'tokenFailed' => _t(
+      'Le magasin n\'a pas pu obtenir de jeton de connexion Stripe.',
+      'The store couldn\'t get a Stripe connection token.',
+    ),
+    'stripeApi' => _t(
+      'Stripe a refusé la demande du lecteur.',
+      'Stripe refused the reader request.',
     ),
     'permissionDenied' => _t(
-      'Autorisation Bluetooth/position refusée : la carte (Stripe) est désactivée.',
-      'Bluetooth/location permission was denied, so Card (Stripe) is disabled.',
+      'Autorisation « Position » ou « Appareils à proximité » refusée pour l\'application.',
+      'The app\'s Location or Nearby devices permission was denied.',
+    ),
+    'locationOff' => _t(
+      'La localisation de l\'appareil est désactivée. Activez-la, puis réessayez.',
+      'Device Location is off. Turn it on, then try again.',
+    ),
+    'bluetoothOff' => _t(
+      'Le Bluetooth est désactivé. Activez-le, puis réessayez.',
+      'Bluetooth is off. Turn it on, then try again.',
     ),
     'unsupported' => _t(
       'La carte (Stripe) fonctionne sur la tablette Android seulement.',
       'Card (Stripe) works on the Android tablet only.',
     ),
-    'servicesOff' => _t(
-      'Activez le Bluetooth et la localisation, puis réessayez.',
-      'Turn on Bluetooth and Location, then try again.',
-    ),
     _ => _t(
-      'Le lecteur de carte n\'a pas répondu.',
-      'The card reader didn\'t respond.',
+      'Le lecteur de carte (simulé) a échoué.',
+      'The card reader (simulated) failed.',
     ),
   };
+  String get openLocationSettings =>
+      _t('Ouvrir les réglages de localisation', 'Open Location settings');
+  String get openBluetoothSettings =>
+      _t('Ouvrir les réglages Bluetooth', 'Open Bluetooth settings');
+  String get openAppSettings =>
+      _t('Ouvrir les autorisations de l\'application', 'Open app permissions');
+  String errorCode(String code) => _t('Code : $code', 'Code: $code');
 
   // table ops: move / merge
   String get moveMerge => _t('Déplacer/fusionner des factures', 'Move / merge');
@@ -1306,6 +1325,9 @@ class L {
     ),
     'stripe_location_required' => stripeUnavailableHint(
       'stripe_location_required',
+    ),
+    'stripe_currency_mismatch' => stripeUnavailableHint(
+      'stripe_currency_mismatch',
     ),
     'stripe_error' => _t(
       'Stripe a refusé la demande. Rien n\'a été facturé.',
