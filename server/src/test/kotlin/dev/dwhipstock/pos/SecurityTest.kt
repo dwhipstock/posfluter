@@ -3,6 +3,7 @@ package dev.dwhipstock.pos
 import dev.dwhipstock.pos.base.LoginRateLimiter
 import dev.dwhipstock.pos.base.RateLimitException
 import dev.dwhipstock.pos.base.Sessions
+import dev.dwhipstock.pos.sdk.VenueClock
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -13,7 +14,6 @@ import org.jetbrains.exposed.sql.update
 import java.nio.file.Files
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -77,14 +77,14 @@ class SecurityTest {
         assertEquals(HttpStatusCode.OK, manager.get("/me").status)
 
         // simulate 31 idle minutes → sliding expiry → 401
-        transaction { Sessions.update { it[lastUsedAt] = LocalDateTime.now().minusMinutes(31) } }
+        transaction { Sessions.update { it[lastUsedAt] = VenueClock.now().minusMinutes(31) } }
         assertEquals(HttpStatusCode.Unauthorized, manager.get("/me").status)
 
         // fresh login, then simulate an ancient session → absolute expiry
         val manager2 = loginClient()
         transaction {
             Sessions.update({ Sessions.revokedAt.isNull() }) {
-                it[expiresAt] = LocalDateTime.now().minusMinutes(1)
+                it[expiresAt] = VenueClock.now().minusMinutes(1)
             }
         }
         assertEquals(HttpStatusCode.Unauthorized, manager2.get("/me").status)
