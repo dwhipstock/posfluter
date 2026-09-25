@@ -44,8 +44,8 @@ data class MenuResponse(val categories: List<MenuCategoryDto>, val items: List<M
 fun Route.menuRoutes() {
 
     get("/menu") {
-        val scope = dev.dwhipstock.poscloud.portalVenueScope(call)
-        call.respond(transaction { menuOf(listOf(scope)) })
+        val venues = dev.dwhipstock.poscloud.portalScopes(call).second // one store, or all of them
+        call.respond(transaction { menuOf(venues.map { it.scope }) })
     }
 
     get("/menu/items/{id}/photo") {

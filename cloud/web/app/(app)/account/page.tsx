@@ -51,7 +51,7 @@ export default function AccountPage() {
             <>
               <InfoRow label={t("account_name")} value={me.data.displayName} />
               <InfoRow label={t("account_email")} value={me.data.email} />
-              <InfoRow label={t("account_venue")} value={me.data.venueName} />
+              <InfoRow label={t("account_venue")} value={me.data.tenantName} />
             </>
           ) : (
             <p className="text-sm text-neutral-500">{t("account_not_signed_in")}</p>

@@ -307,19 +307,23 @@ fun Route.storeRoutes(config: CloudConfig) {
 }
 
 /**
- * PUBLIC (no store key): the current in-store staff-app base URL for the single
- * venue, if a store has heartbeated recently. The portal's /staff-app route reads
- * this and 302-redirects staff phones to <base>/staff-app. Single-venue
- * assumption (like the catalog's menuScope) — returns the freshest live venue. A
- * stale/absent heartbeat → 404 (`store_offline`) so the portal shows an offline
- * page instead of bouncing phones to a dead IP. Only a private LAN address is
- * exposed, which is meaningless off the venue network.
+ * PUBLIC (no store key): the current in-store staff-app base URL, if a store has
+ * heartbeated recently. The portal's /staff-app route reads this and
+ * 302-redirects staff phones to <base>/staff-app. `?venue=<id>` picks one store
+ * (a multi-store group prints one QR per store); without it the freshest live
+ * store answers. A stale/absent heartbeat → 404 (`store_offline`) so the portal
+ * shows an offline page instead of bouncing phones to a dead IP. Only a private
+ * LAN address is exposed, which is meaningless off the venue network.
  */
 fun Route.staffEndpointRoute() {
     get("/staff-endpoint") {
+        val venue = call.request.queryParameters["venue"]?.takeIf { it.isNotBlank() }
         val fresh = transaction {
             Venues.selectAll()
-                .where { Venues.storeLanUrl.isNotNull() and Venues.storeSeenAt.isNotNull() }
+                .where {
+                    val live = Venues.storeLanUrl.isNotNull() and Venues.storeSeenAt.isNotNull()
+                    if (venue != null) live and (Venues.id eq venue) else live
+                }
                 .map { Triple(it[Venues.tenantId], it[Venues.storeLanUrl]!!, it[Venues.storeSeenAt]!!) }
         }.filter { java.time.Duration.between(it.third, dev.dwhipstock.poscloud.CloudTime.now()).toMinutes() <= STORE_FRESH_MINUTES }
             // only ON-PREM stores (private-LAN base) participate: cloud-hosted venues

@@ -41,6 +41,20 @@ export const messages = {
   col_status: m("statut", "Status"),
 
   // ── nav ───────────────────────────────────────────────────────────────
+  // ── store picker (every page: all stores combined, or one store) ─────
+  store_all: m("Tous les magasins", "All stores"),
+  store_label: m("Magasin", "Store"),
+  col_store: m("Magasin", "Store"),
+  store_breakdown_title: m("Par magasin", "By store"),
+  store_breakdown_sub: m(
+    "Chaque magasin selon ses propres journées d’affaires",
+    "Each store over its own business days"
+  ),
+  store_pick_hint: m(
+    "Choisissez un magasin dans l’en-tête pour jumeler un terminal.",
+    "Pick a store in the header to pair a terminal."
+  ),
+
   nav_dashboard: m("Tableau de bord", "Dashboard"),
   nav_reports: m("rapport", "Reports"),
   nav_menu: m("menu", "Menu"),

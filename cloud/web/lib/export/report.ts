@@ -7,6 +7,7 @@
 
 import { useCallback } from "react";
 import { useMe, useRange } from "@/lib/hooks";
+import { useStores } from "@/lib/store";
 import { useI18n, useFmt, useT } from "@/lib/i18n/context";
 import type { ExportDoc } from "./doc";
 
@@ -31,17 +32,20 @@ export function useExportMeta() {
   const t = useT();
   const me = useMe();
   const range = useRange();
+  const { store } = useStores();
+  // the picked store, else the group across all its stores
+  const venue = store?.name ?? (me.data ? `${me.data.tenantName} · ${t("store_all")}` : "");
   return useCallback(
     (slug: string): DocMeta => {
       const iso = nowNaiveISO();
       return {
-        filenameBase: `${slug}_${range.from}_${range.to}`,
-        venue: me.data?.venueName ?? "",
+        filenameBase: `${slug}_${store?.id ?? "all-stores"}_${range.from}_${range.to}`,
+        venue,
         rangeLabel: fmt.rangeLabel(range),
         generatedLabel: t("export_generated", { when: `${fmt.dayYear(iso)} ${fmt.time(iso)}` }),
         locale,
       };
     },
-    [locale, fmt, t, me.data?.venueName, range]
+    [locale, fmt, t, venue, store?.id, range]
   );
 }

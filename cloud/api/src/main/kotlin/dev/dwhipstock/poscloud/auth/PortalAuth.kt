@@ -183,7 +183,8 @@ private data class OkResponse(val ok: Boolean = true)
 private data class ConfirmResponse(val ok: Boolean = true, val backupCodes: List<String>)
 
 @Serializable
-private data class MeResponse(val email: String, val displayName: String, val venueName: String)
+/** venueName = the tenant's first store (kept for older portals); tenantName = the group. */
+private data class MeResponse(val email: String, val displayName: String, val venueName: String, val tenantName: String)
 
 fun Route.authRoutes(config: CloudConfig) {
 
@@ -277,7 +278,12 @@ fun Route.authRoutes(config: CloudConfig) {
     get("/auth/me") {
         val principal = requirePortal(call)
         val venueName = transaction { venueNameOf(principal.tenantId) } ?: config.venueName
-        call.respond(MeResponse(principal.email, principal.displayName, venueName))
+        val tenantName = transaction {
+            dev.dwhipstock.poscloud.db.Tenants.selectAll()
+                .where { dev.dwhipstock.poscloud.db.Tenants.id eq principal.tenantId }
+                .firstOrNull()?.get(dev.dwhipstock.poscloud.db.Tenants.name)
+        } ?: venueName
+        call.respond(MeResponse(principal.email, principal.displayName, venueName, tenantName))
     }
 }
 

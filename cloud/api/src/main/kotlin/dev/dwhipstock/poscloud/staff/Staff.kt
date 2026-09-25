@@ -73,8 +73,8 @@ data class StaffListResponse(
 
 fun Route.staffRoutes() {
     get("/staff") {
-        val scope = portalVenueScope(call)
-        call.respond(transaction { staffList(listOf(scope)) })
+        val venues = dev.dwhipstock.poscloud.portalScopes(call).second // one store, or all of them
+        call.respond(transaction { staffList(venues.map { it.scope }) })
     }
 }
 

@@ -4,7 +4,28 @@
 export interface Me {
   email: string;
   displayName: string;
+  /** The tenant's first store; prefer tenantName for the group. */
   venueName: string;
+  tenantName: string;
+}
+
+/** One store's headline figures (the per-store comparison in "All stores"). */
+export interface VenueSummaryRow {
+  venueId: string;
+  venueName: string;
+  grossCents: number;
+  netCents: number;
+  vatCents: number;
+  checkCount: number;
+  avgCheckCents: number;
+  voidCount: number;
+  refundAmountCents: number;
+}
+
+export interface ByVenueReport {
+  venues: VenueSummaryRow[];
+  grossCents: number;
+  checkCount: number;
 }
 
 export type LoginResponse =
@@ -39,12 +60,15 @@ export interface Summary {
   corkageCents: number;
   serviceChargeCents: number;
   byDay: DayRow[];
+  /** One row per in-scope store. */
+  byVenue: VenueSummaryRow[];
 }
 
 export interface VatReport {
   ratePercent: number;
   rows: DayRow[];
   totals: { grossCents: number; netCents: number; vatCents: number; checkCount: number };
+  byVenue: VenueSummaryRow[];
 }
 
 export type TenderType = "CASH" | "CARD" | "BANK_TRANSFER";
@@ -58,6 +82,7 @@ export interface PaymentRow {
 export interface PaymentsReport {
   rows: PaymentRow[];
   totalCents: number;
+  byVenue: { venueId: string; totalCents: number; rows: PaymentRow[] }[];
 }
 
 export interface ItemReportRow {
@@ -91,6 +116,7 @@ export interface ZoneRow {
   zoneNameEn: string;
   grossCents: number;
   checkCount: number;
+  venueId: string;
 }
 
 export interface ZoneTableRow {
@@ -100,6 +126,7 @@ export interface ZoneTableRow {
   tableLabel: string;
   grossCents: number;
   checkCount: number;
+  venueId: string;
 }
 
 export interface TablesReport {
@@ -114,6 +141,7 @@ export interface VoidRow {
   amountCents: number;
   reason: string;
   voidedBy: string;
+  venueId: string;
 }
 
 export interface ExceptionsReport {
@@ -141,6 +169,7 @@ export interface RefundListRow {
   grossCents: number;
   netCents: number;
   vatCents: number;
+  venueId: string;
 }
 
 export interface RefundsReport {
@@ -160,6 +189,7 @@ export interface CashMovementRow {
   amountCents: number;
   reason: string | null;
   user: string | null;
+  venueId: string;
 }
 
 export interface CashMovementsReport {
@@ -193,6 +223,7 @@ export interface Shift {
   expectedCashCents: number | null;
   closingCountCents: number | null;
   overShortCents: number | null;
+  venueId: string;
 }
 
 export interface ShiftsReport {
@@ -217,6 +248,7 @@ export interface JournalRow {
   taxIncludedCents: number;
   tenderTypes: TenderType[];
   lines: JournalLine[];
+  venueId: string;
 }
 
 export interface JournalReport {

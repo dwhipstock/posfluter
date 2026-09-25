@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
+import { StoreBreakdown } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -81,6 +82,7 @@ function VatPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
+      <StoreBreakdown />
 
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-neutral-100 px-5 py-3">

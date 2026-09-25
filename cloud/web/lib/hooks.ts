@@ -4,10 +4,19 @@ import useSWR, { type SWRConfiguration } from "swr";
 import { useSearchParams } from "next/navigation";
 import { get } from "./api";
 import { rangeFromParams, type DateRange } from "./range";
+import { scopeApiPath, useStoreId } from "./store";
 import type { Me } from "./types";
 
+/**
+ * Data hook for portal pages. Store-scoped routes (reports, menu, staff)
+ * automatically follow the header's store picker: `?store=<id>` in the page
+ * URL becomes `venue=<id>` on the API call; no store = all stores combined.
+ * Callers must sit under <Suspense> (useSearchParams) — the app shell does that.
+ */
 export function useApi<T>(key: string | null, config?: SWRConfiguration<T>) {
-  return useSWR<T>(key, (k: string) => get<T>(k), { keepPreviousData: true, ...config });
+  const storeId = useStoreId();
+  const scoped = key === null ? null : scopeApiPath(key, storeId);
+  return useSWR<T>(scoped, (k: string) => get<T>(k), { keepPreviousData: true, ...config });
 }
 
 export function useMe() {

@@ -21,9 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/states";
+import { useStoreId } from "@/lib/store";
 
 type T = (key: MsgKey, vars?: Record<string, string | number>) => string;
 
@@ -46,10 +46,12 @@ function lastSeenLabel(t: T, fmt: Fmt, lastSeenAt: string | null): string {
 export default function DevicesPage() {
   const t = useT();
   const { data, error, isLoading, mutate } = useApi<VenuesResponse>("/v1/venues");
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  // the header's store picker: one store, or every store's terminals in turn
+  const storeId = useStoreId();
 
-  const venues = data?.venues ?? [];
-  const venue = venues.find((v) => v.id === pickedId) ?? venues[0] ?? null;
+  const all = data?.venues ?? [];
+  const shown = storeId ? all.filter((v) => v.id === storeId) : all;
+  const venue = shown[0] ?? null;
 
   return (
     <div className="space-y-4">
@@ -68,28 +70,13 @@ export default function DevicesPage() {
           <EmptyState title={t("devices_no_venues")} />
         </Card>
       ) : (
-        <>
-          {venues.length > 1 && (
-            <div className="flex items-center gap-3">
-              <Label className="shrink-0">{t("devices_venue")}</Label>
-              <Select value={venue.id} onValueChange={setPickedId}>
-                <SelectTrigger className="md:w-72">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {venues.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <PairCard key={`pair-${venue.id}`} venue={venue} />
-          <DeviceList key={`devices-${venue.id}`} venue={venue} />
-        </>
+        shown.map((v) => (
+          <section key={v.id} className="space-y-4">
+            {shown.length > 1 && <h2 className="pt-2 text-sm font-semibold text-neutral-600">{v.name}</h2>}
+            <PairCard key={`pair-${v.id}`} venue={v} />
+            <DeviceList key={`devices-${v.id}`} venue={v} />
+          </section>
+        ))
       )}
     </div>
   );

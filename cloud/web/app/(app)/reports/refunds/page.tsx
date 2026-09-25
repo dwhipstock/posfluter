@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Kpi } from "@/components/kpi";
 import { PageHeader } from "@/components/page-header";
+import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -83,6 +84,7 @@ function RefundsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.count === 0} />}
       />
       <DateRangePicker />
+      <StoreBreakdown />
 
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("ref_count")} value={data && String(data.count)} loading={isLoading} />
@@ -151,8 +153,13 @@ function RefundsPage() {
               </TableHeader>
               <TableBody>
                 {data.rows.map((r) => (
-                  <TableRow key={r.refundId}>
-                    <TableCell className="font-medium">{r.checkId ? `#${r.checkId}` : "—"}</TableCell>
+                  <TableRow key={`${r.venueId}/${r.refundId}`}>
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-1.5">
+                        {r.checkId ? `#${r.checkId}` : "—"}
+                        <StoreTag venueId={r.venueId} />
+                      </span>
+                    </TableCell>
                     <TableCell className="whitespace-nowrap text-xs text-neutral-500">
                       {r.createdAt ? fmt.dateTime(r.createdAt) : "—"}
                     </TableCell>

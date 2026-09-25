@@ -1,7 +1,8 @@
 export type DateRange = { from: string; to: string };
 
-// This single-venue portal reports in the venue's business timezone, not the
-// browser's timezone. Keep in sync with VENUE_TZ on the API and store.
+// Date presets pick calendar dates in the stores' business timezone (not the
+// browser's). The API reads each date over each store's own business day, so
+// stores in other zones still line up; keep in sync with the stores' VENUE_TZ.
 export const VENUE_TIME_ZONE = "America/New_York";
 
 export function todayISO(): string {

@@ -6,6 +6,8 @@ import { useApi } from "@/lib/hooks";
 import { CAD } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/context";
 import type { MenuItem, MenuResponse } from "@/lib/types";
+import { useStores } from "@/lib/store";
+import { StoreTag } from "@/components/store-breakdown";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,7 +32,7 @@ export default function MenuPage() {
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((c) => ({
         category: c,
-        items: (byCat.get(c.id) ?? []).sort((a, b) => a.nameEn.localeCompare(b.nameEn)),
+        items: mergeAcrossStores(byCat.get(c.id) ?? []).sort((a, b) => a.item.nameEn.localeCompare(b.item.nameEn)),
       }));
   }, [data]);
 
@@ -59,8 +61,8 @@ export default function MenuPage() {
               </div>
               {items.length > 0 ? (
                 <div className="divide-y divide-neutral-100">
-                  {items.map((item) => (
-                    <ItemRow key={`${item.venueId}/${item.id}`} item={item} />
+                  {items.map((row) => (
+                    <ItemRow key={row.item.id} row={row} />
                   ))}
                 </div>
               ) : (
@@ -78,29 +80,51 @@ export default function MenuPage() {
   );
 }
 
-function priceRange(item: MenuItem): string {
-  const prices = item.variants.map((v) => v.priceCents);
+/** One menu row; in "All stores" the same item id at several stores is one row. */
+interface MergedItem {
+  item: MenuItem;
+  /** Every store's copy of the item (a single entry when one store is picked). */
+  copies: MenuItem[];
+}
+
+function mergeAcrossStores(items: MenuItem[]): MergedItem[] {
+  const byId = new Map<string, MergedItem>();
+  for (const item of items) {
+    const row = byId.get(item.id);
+    if (row) row.copies.push(item);
+    else byId.set(item.id, { item, copies: [item] });
+  }
+  return [...byId.values()];
+}
+
+function priceRange(items: MenuItem[]): string {
+  const prices = items.flatMap((i) => i.variants.map((v) => v.priceCents));
   if (prices.length === 0) return "—";
   const min = Math.min(...prices);
   const max = Math.max(...prices);
   return min === max ? CAD(min) : `${CAD(min)}–${CAD(max)}`;
 }
 
-function ItemRow({ item }: { item: MenuItem }) {
+function ItemRow({ row }: { row: MergedItem }) {
   const t = useT();
   const { name, nameAlt } = useI18n();
+  const { combined, venues } = useStores();
+  const { item, copies } = row;
+  // an item on every store's menu needs no tag; a store-specific one names its store(s)
+  const storeSpecific = combined && copies.length < venues.length;
   return (
     <div className="flex w-full items-center gap-3 px-4 py-2.5">
       <Thumb item={item} />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
+        <span className="flex flex-wrap items-center gap-1.5">
           <span className="truncate text-sm font-medium">{name(item.nameFr, item.nameEn)}</span>
           {item.isAlcohol && <Wine className="h-3 w-3 shrink-0 text-neutral-300" />}
-          {!item.active && <Badge variant="outline">{t("menu_off")}</Badge>}
+          {copies.every((c) => !c.active) && <Badge variant="outline">{t("menu_off")}</Badge>}
+          {storeSpecific && copies.map((c) => <StoreTag key={c.venueId} venueId={c.venueId} />)}
         </span>
         <span className="block truncate text-xs text-neutral-500">{nameAlt(item.nameFr, item.nameEn)}</span>
       </span>
-      <span className="shrink-0 text-sm font-medium tabular-nums">{priceRange(item)}</span>
+      <span className="shrink-0 text-sm font-medium tabular-nums">{priceRange(copies)}</span>
     </div>
   );
 }

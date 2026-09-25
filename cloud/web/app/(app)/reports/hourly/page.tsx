@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
+import { StoreBreakdown } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,6 +66,7 @@ function HourlyPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || !hasSales} />}
       />
       <DateRangePicker />
+      <StoreBreakdown />
 
       <Card>
         <CardHeader>
