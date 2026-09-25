@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:permission_handler/permission_handler.dart'
+    show openAppSettings;
 
 import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
 import '../payments/card_reader.dart';
+import '../payments/stripe_log.dart';
 
 enum _Stage {
   starting,
@@ -52,6 +55,8 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
   _Stage _stage = _Stage.starting;
   StripeIntent? _intent;
   String? _message; // friendly text for declined / failed
+  String? _code; // SDK / store error code, small print
+  String? _settings; // location | bluetooth | app: settings button to show
   bool _leaving = false;
   late SimulatedTestCard _card = widget.simulatedCard;
 
@@ -78,7 +83,13 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
     setState(() {
       _stage = _Stage.starting;
       _message = null;
+      _code = null;
+      _settings = null;
     });
+    stripeLog(
+      'payment start: check #${widget.checkId}'
+      '${widget.groupId == null ? '' : ' group ${widget.groupId}'} amount=${widget.amountCents ?? 'due'} location=${widget.locationId}',
+    );
     try {
       // reader first: a reader that can't connect never creates a PaymentIntent
       await widget.reader.prepare(widget.locationId, _phase);
@@ -88,12 +99,17 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
         amountCents: widget.amountCents,
         groupId: widget.groupId,
       );
+      stripeLog(
+        'store PaymentIntent ${_intent!.paymentIntentId} '
+        '${_intent!.amountCents} ${_intent!.currency} (payment ${_intent!.paymentId})',
+      );
       if (_leaving) return;
       if (mounted) setState(() {}); // show the amount + currency
       await widget.reader.collect(_intent!.clientSecret, _card, _phase);
       if (_leaving) return;
       _phase(ReaderPhase.processing);
       final result = await Api.confirmStripePayment(_intent!.paymentId);
+      stripeLog('store confirm ok: tender #${result.tender.id}');
       if (!mounted) return;
       setState(() => _stage = _Stage.approved);
       await Future<void>.delayed(const Duration(milliseconds: 900));
@@ -103,19 +119,35 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
       if (e.kind == CardReaderError.declined) {
         await _declined(l);
       } else {
-        _fail(l.stripeReaderError(e.kind.name));
+        _fail(
+          l.stripeReaderError(e.kind.name),
+          code: e.code,
+          settings: e.settings,
+        );
       }
     } on ApiException catch (e) {
+      stripeLog(
+        'store error: code=${e.code} decline=${e.declineCode} message=${e.message}',
+        warn: true,
+      );
       if (_leaving) return;
       if (e.code == 'stripe_declined') {
-        _show(_Stage.declined, l.stripeDeclineMessage(e.declineCode));
+        _show(
+          _Stage.declined,
+          l.stripeDeclineMessage(e.declineCode),
+          code: e.declineCode,
+        );
       } else {
-        _fail(e.toString());
+        _fail(e.toString(), code: e.code);
       }
     } on SessionExpiredException {
       return;
     } catch (e) {
-      if (!_leaving) _fail(l.stripeReaderError('offline'));
+      // not a Stripe network failure: the local store call itself failed
+      stripeLog('unexpected: ${e.runtimeType}: $e', warn: true);
+      if (!_leaving) {
+        _fail(l.apiError('internal')!, code: e.runtimeType.toString());
+      }
     }
   }
 
@@ -133,13 +165,16 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
     _show(_Stage.declined, l.stripeDeclineMessage(code));
   }
 
-  void _fail(String message) => _show(_Stage.failed, message);
+  void _fail(String message, {String? code, String? settings}) =>
+      _show(_Stage.failed, message, code: code, settings: settings);
 
-  void _show(_Stage stage, String message) {
+  void _show(_Stage stage, String message, {String? code, String? settings}) {
     if (!mounted) return;
     setState(() {
       _stage = stage;
       _message = message;
+      _code = code;
+      _settings = settings;
     });
   }
 
@@ -204,15 +239,6 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
                       textAlign: TextAlign.center,
                       style: T.price(size: 44, weight: FontWeight.w700),
                     ),
-                    if (intent.currency.toUpperCase() != 'CAD')
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          l.chargedInCurrency(intent.currency),
-                          textAlign: TextAlign.center,
-                          style: T.small(color: T.attention),
-                        ),
-                      ),
                     const SizedBox(height: 24),
                   ],
                   PosPanel(
@@ -249,6 +275,15 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
                             textAlign: TextAlign.center,
                             style: T.small(),
                           ),
+                          if (_code != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              l.errorCode(_code!),
+                              key: const ValueKey('stripe-error-code'),
+                              textAlign: TextAlign.center,
+                              style: T.small().copyWith(fontSize: 12),
+                            ),
+                          ],
                         ],
                       ],
                     ),
@@ -263,6 +298,32 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
                         icon: const Icon(LucideIcons.refreshCw),
                         label: Text(l.retry),
                         onPressed: _leaving ? null : _run,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (_stage == _Stage.failed && _settings != null) ...[
+                    SizedBox(
+                      height: T.minTouch,
+                      child: FilledButton.icon(
+                        key: const ValueKey('stripe-open-settings'),
+                        icon: Icon(switch (_settings) {
+                          'location' => LucideIcons.mapPin,
+                          'bluetooth' => LucideIcons.bluetooth,
+                          _ => LucideIcons.settings,
+                        }),
+                        label: Text(switch (_settings) {
+                          'location' => l.openLocationSettings,
+                          'bluetooth' => l.openBluetoothSettings,
+                          _ => l.openAppSettings,
+                        }),
+                        onPressed: () {
+                          if (_settings == 'app') {
+                            openAppSettings();
+                          } else {
+                            openDeviceSettings(_settings!);
+                          }
+                        },
                       ),
                     ),
                     const SizedBox(height: 8),

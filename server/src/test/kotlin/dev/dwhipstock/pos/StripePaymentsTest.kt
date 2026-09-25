@@ -251,14 +251,20 @@ class StripePaymentsTest {
     }
 
     @Test
-    fun `US account - charged in the account currency with a US location`() = testApplication {
-        val fake = FakeStripe(country = "US", currency = "usd")
+    fun `account not in CAD - Stripe disabled with a reason, cash unaffected`() = testApplication {
+        val fake = FakeStripe(country = "XX", currency = "xyz")
         application { module(dbPath = tempDb(), stripeConfig = testKey, stripeHttp = fake) }
         val (c, id) = checkOf()
-        assertEquals("USD", c.get("/stripe/status").obj()["currency"]!!.jsonPrimitive.content)
-        assertEquals("USD", c.intent(id)["currency"]!!.jsonPrimitive.content)
-        assertEquals("usd", fake.callsTo("/v1/payment_intents").single().params["currency"])
-        assertEquals("US", fake.calls.single { it.path == "/v1/terminal/locations" && it.method == "POST" }.params["address[country]"])
+        val status = c.get("/stripe/status").obj()
+        assertEquals(false, status["available"]!!.jsonPrimitive.content.toBoolean())
+        assertEquals("stripe_currency_mismatch", status["reason"]!!.jsonPrimitive.content)
+        val res = c.postJson("/checks/$id/stripe/intents")
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        assertEquals("stripe_currency_mismatch", res.obj()["code"]!!.jsonPrimitive.content)
+        assertEquals(HttpStatusCode.Conflict, c.postJson("/stripe/connection-token").status)
+        assertTrue(fake.callsTo("/v1/payment_intents").isEmpty())
+        assertTrue(fake.callsTo("/v1/terminal").isEmpty(), "no location or token for a non-CAD account")
+        c.payCash(id, 2250)
     }
 
     @Test

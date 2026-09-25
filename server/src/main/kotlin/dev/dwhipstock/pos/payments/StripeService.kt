@@ -106,17 +106,9 @@ class StripeService(
         private const val ACCOUNT_TTL_MS = 10 * 60_000L
         private const val FAILURE_BACKOFF_MS = 10_000L
 
-        /**
-         * Fictional addresses for an auto-created Terminal Location, valid for the
-         * account's country. Any other country: set STRIPE_LOCATION_ID.
-         */
-        fun demoAddress(country: String?): List<Pair<String, String>>? = when (country?.uppercase()) {
-            "CA" -> listOf("line1" to "100 Rue de la Commune Ouest", "city" to "Montréal",
-                "state" to "QC", "postal_code" to "H2Y 2C6", "country" to "CA")
-            "US" -> listOf("line1" to "100 Demo Street", "city" to "Springfield",
-                "state" to "IL", "postal_code" to "62701", "country" to "US")
-            else -> null
-        }
+        /** Fictional Montréal address for an auto-created Terminal Location. */
+        val DEMO_ADDRESS = listOf("line1" to "100 Rue de la Commune Ouest", "city" to "Montréal",
+            "state" to "QC", "postal_code" to "H2Y 2C6", "country" to "CA")
     }
 
     private val client: StripeClient? =
@@ -173,23 +165,34 @@ class StripeService(
 
     private fun ensureAccount(): Account {
         val c = requireClient()
-        account?.takeIf { System.currentTimeMillis() - it.fetchedAt < ACCOUNT_TTL_MS }?.let { return it }
+        account?.takeIf { System.currentTimeMillis() - it.fetchedAt < ACCOUNT_TTL_MS }
+            ?.let { requireVenueCurrency(it); return it }
         // offline: don't hammer (or wait on) Stripe on every tender-screen open
         lastFailure?.takeIf { System.currentTimeMillis() - lastFailureAt < FAILURE_BACKOFF_MS }?.let { cached ->
-            account?.let { return it }
+            account?.let { requireVenueCurrency(it); return it }
             throw cached
         }
         val a = remember { c.account() }
         val currency = a.str("default_currency")?.lowercase() ?: VENUE_CURRENCY
         val acct = Account(a.str("id") ?: "acct", a.str("country"), currency, System.currentTimeMillis())
-        if (currency != VENUE_CURRENCY && !warnedCurrency) {
-            warnedCurrency = true
-            log.warn("Stripe account currency is ${currency.uppercase()} but the store sells in " +
-                "${VENUE_CURRENCY.uppercase()}: TEST-MODE demo only — card payments are charged in " +
-                "${currency.uppercase()} for the same number of cents (no conversion).")
-        }
         account = acct
-        return acct
+        return acct.also(::requireVenueCurrency)
+    }
+
+    /**
+     * The store sells in CAD: an account in any other currency disables Stripe
+     * (logged once, reported by /stripe/status), never a converted charge.
+     */
+    private fun requireVenueCurrency(acct: Account) {
+        if (acct.currency == VENUE_CURRENCY) return
+        if (!warnedCurrency) {
+            warnedCurrency = true
+            log.warn("Stripe: DISABLED — the Stripe account's currency is ${acct.currency.uppercase()} " +
+                "(country ${acct.country}), but the store sells in ${VENUE_CURRENCY.uppercase()}. " +
+                "Use a Canadian (CAD) Stripe account.")
+        }
+        throw StripeException(409, "stripe_currency_mismatch",
+            "Stripe account currency ${acct.currency.uppercase()} is not ${VENUE_CURRENCY.uppercase()}")
     }
 
     /**
@@ -208,9 +211,7 @@ class StripeService(
             .firstOrNull { it["metadata"]?.jsonObject?.str("pos_store") == storeKey }
             ?.str("id")
         val id = existing ?: run {
-            val address = demoAddress(acct.country)
-                ?: throw StripeException(409, "stripe_location_required",
-                    "no demo address for account country ${acct.country}; set STRIPE_LOCATION_ID")
+            val address = DEMO_ADDRESS
             val params = listOf("display_name" to "$storeName (POS test)", "metadata[pos_store]" to storeKey) +
                 address.map { (k, v) -> "address[$k]" to v }
             remember { c.createLocation(params, "pos-location-$storeKey-${acct.id}") }.str("id")
