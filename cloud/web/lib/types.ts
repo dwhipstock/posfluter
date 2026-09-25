@@ -1,5 +1,5 @@
-// Shapes from cloud/API.md. All money integer cents; all timestamps
-// venue-local naive ISO strings.
+// Shapes from cloud/API.md. All money integer cents; all timestamps ISO-8601
+// instants carrying the venue's offset (the leading wall clock is venue-local).
 
 export interface Me {
   email: string;

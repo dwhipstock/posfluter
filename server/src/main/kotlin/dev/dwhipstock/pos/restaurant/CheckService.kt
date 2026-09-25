@@ -62,7 +62,6 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
-import java.time.LocalDateTime
 
 /**
  * API errors carry a machine code; the client translates. The message is
@@ -801,8 +800,8 @@ class CheckService(private val config: CustomerConfig) {
             checkId = checkId,
             tableLabel = "${table[DiningTables.nameOverride] ?: table[DiningTables.label]} · " +
                 "${group[BillGroups.groupNumber]}/${groups.size}",
-            openedAt = check[Checks.openedAt],
-            closedAt = check[Checks.closedAt] ?: VenueClock.now(),
+            openedAt = VenueClock.local(check[Checks.openedAt]),
+            closedAt = VenueClock.local(check[Checks.closedAt] ?: VenueClock.now()),
             items = items,
             fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
             grandTotal = Money(group[BillGroups.lockedTotalCents] ?: totals.grandTotal.cents),
@@ -873,8 +872,8 @@ class CheckService(private val config: CustomerConfig) {
         return Receipt(
             checkId = checkId,
             tableLabel = table[DiningTables.nameOverride] ?: table[DiningTables.label],
-            openedAt = check[Checks.openedAt],
-            closedAt = check[Checks.closedAt] ?: VenueClock.now(),
+            openedAt = VenueClock.local(check[Checks.openedAt]),
+            closedAt = VenueClock.local(check[Checks.closedAt] ?: VenueClock.now()),
             items = items,
             fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
             grandTotal = Money(check[Checks.lockedGrandTotalCents] ?: totals.grandTotal.cents),
@@ -929,8 +928,8 @@ class CheckService(private val config: CustomerConfig) {
             put("zoneNameFr", tz[Zones.nameFr])
             put("zoneNameEn", tz[Zones.nameEn])
             shift?.let { s -> put("shiftId", s) }
-            put("openedAt", check[Checks.openedAt].toString())
-            put("voidedAt", now.toString())
+            put("openedAt", VenueClock.iso(check[Checks.openedAt]))
+            put("voidedAt", VenueClock.iso(now))
             put("amountCents", voidAmount)
             put("taxIncludedCents", voidTax)
         })
@@ -1025,7 +1024,7 @@ class CheckService(private val config: CustomerConfig) {
             put("zoneId", tz?.get(Zones.id))
             put("zoneNameFr", tz?.get(Zones.nameFr))
             put("zoneNameEn", tz?.get(Zones.nameEn))
-            put("createdAt", now.toString())
+            put("createdAt", VenueClock.iso(now))
             linesJson?.let { put("lines", it) }
         })
 
@@ -1052,7 +1051,7 @@ class CheckService(private val config: CustomerConfig) {
                 ClosedCheckSummary(
                     id = id,
                     tableLabel = tz?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] } ?: "?",
-                    closedAt = row[Checks.closedAt]?.toString() ?: "",
+                    closedAt = row[Checks.closedAt]?.let(VenueClock::iso) ?: "",
                     grandTotalCents = grand,
                     refundedCents = refunded,
                     refundableCents = grand - refunded,
@@ -1109,13 +1108,13 @@ class CheckService(private val config: CustomerConfig) {
         tenderType = r[Refunds.tenderType],
         reason = r[Refunds.reason],
         refundedBy = r[Refunds.refundedBy],
-        createdAt = r[Refunds.createdAt].toString(),
+        createdAt = VenueClock.iso(r[Refunds.createdAt]),
     )
 
     /** 42-col refund slip, same virtual printer as receipts. Language follows the check owner. */
     private fun renderRefundSlip(
         check: ResultRow, refundId: Int, gross: Long, net: Long, tax: Long,
-        tt: TenderType, reason: String, now: LocalDateTime,
+        tt: TenderType, reason: String, now: java.time.Instant,
     ): String {
         val policy = receiptPolicyFor(check)
         val locale = policy.locale
@@ -1136,7 +1135,7 @@ class CheckService(private val config: CustomerConfig) {
                 msg(REFUND_REF_BILL) + " #" + check[Checks.id].value,
                 msg(REFUND_NUMBER) + " #" + refundId,
             ))
-            add(PrintLine.KeyValue(msg(SLIP_TIME), policy.formatDate(now)))
+            add(PrintLine.KeyValue(msg(SLIP_TIME), policy.formatDate(VenueClock.local(now))))
             add(PrintLine.Divider)
             add(PrintLine.KeyValue(msg(REFUND_TOTAL), Money(gross).format(), emphasized = true))
             if (policy.showVat && vatRate != null) {
@@ -1253,7 +1252,7 @@ class CheckService(private val config: CustomerConfig) {
             .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING") }
             .orderBy(CheckLines.createdAt)
             .limit(1)
-            .firstOrNull()?.get(CheckLines.createdAt)?.toString()
+            .firstOrNull()?.get(CheckLines.createdAt)?.let(VenueClock::iso)
     }
 
     // --- internals ---
@@ -1287,7 +1286,7 @@ class CheckService(private val config: CustomerConfig) {
      * cloud's sales reports need, so it never joins back into store internals.
      * [check] is the pre-close row (TOTAL_LOCKED, locked totals stamped).
      */
-    private fun closedCheckPayload(check: ResultRow, shift: Int?, closedAt: LocalDateTime): JsonObject {
+    private fun closedCheckPayload(check: ResultRow, shift: Int?, closedAt: java.time.Instant): JsonObject {
         val checkId = check[Checks.id].value
         val tz = tableZoneRowOrNull(check[Checks.tableId])
         // fees as assessed at lock time (021) — live settings must not re-price a
@@ -1348,8 +1347,8 @@ class CheckService(private val config: CustomerConfig) {
             put("zoneNameFr", tz?.get(Zones.nameFr))
             put("zoneNameEn", tz?.get(Zones.nameEn))
             shift?.let { s -> put("shiftId", s) }
-            put("openedAt", check[Checks.openedAt].toString())
-            put("closedAt", closedAt.toString())
+            put("openedAt", VenueClock.iso(check[Checks.openedAt]))
+            put("closedAt", VenueClock.iso(closedAt))
             put("openedBy", check[Checks.openedBy])
             put("grandTotalCents", check[Checks.lockedGrandTotalCents]!!)
             put("taxIncludedCents", check[Checks.lockedTaxIncludedCents]!!)
@@ -1620,7 +1619,7 @@ class CheckService(private val config: CustomerConfig) {
             id = checkId,
             tableId = check[Checks.tableId],
             status = check[Checks.status],
-            openedAt = check[Checks.openedAt].toString(),
+            openedAt = VenueClock.iso(check[Checks.openedAt]),
             corkageBottles = check[Checks.corkageBottles],
             lines = lines,
             pendingLines = pendingLines,

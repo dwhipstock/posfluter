@@ -22,7 +22,6 @@ import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.nio.file.Files
-import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -127,8 +126,8 @@ class ReportBackfillTest {
                 it[tableId] = "ghost-table" // no matching DiningTables row
                 it[status] = "CLOSED"
                 it[openedBy] = "u1"
-                it[openedAt] = LocalDateTime.of(2026, 1, 1, 18, 0)
-                it[closedAt] = LocalDateTime.of(2026, 1, 1, 19, 0)
+                it[openedAt] = java.time.Instant.parse("2026-01-01T23:00:00Z")
+                it[closedAt] = java.time.Instant.parse("2026-01-02T00:00:00Z")
                 it[lockedGrandTotalCents] = 5000
                 it[lockedTaxIncludedCents] = 327
                 it[lockedFeesJson] = "[]"

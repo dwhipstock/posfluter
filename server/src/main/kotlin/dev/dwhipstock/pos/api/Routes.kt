@@ -298,7 +298,7 @@ fun Route.shiftRoutes(shiftService: dev.dwhipstock.pos.restaurant.ShiftService, 
 
     // Tablet date presets must use the venue's business day, not Android's
     // timezone (which may reflect the tablet's physical location).
-    get("/reports/today") { call.respond(mapOf("date" to VenueClock.now().toLocalDate().toString())) }
+    get("/reports/today") { call.respond(mapOf("date" to VenueClock.today().toString())) }
 
     /** X-report layout over closed-at dates (?from=YYYY-MM-DD&to=YYYY-MM-DD, inclusive). */
     get("/reports/range") {

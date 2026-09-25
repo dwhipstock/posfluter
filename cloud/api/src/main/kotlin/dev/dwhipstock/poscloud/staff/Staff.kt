@@ -22,7 +22,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.upsert
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 /**
  * Staff as the portal sees them: a READ-ONLY projection of what each store
@@ -128,7 +128,7 @@ object StaffProjection {
             it[role] = staff.str("role") ?: "SERVER"
             it[active] = !deleted && (staff.bool("active") ?: true)
             it[StoreStaff.deleted] = deleted
-            it[updatedAt] = LocalDateTime.now()
+            it[updatedAt] = dev.dwhipstock.poscloud.CloudTime.now()
         }
         StaffGrants.deleteWhere {
             (StaffGrants.tenantId eq scope.tenantId) and (StaffGrants.venueId eq scope.venueId) and

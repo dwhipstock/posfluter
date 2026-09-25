@@ -6,7 +6,7 @@ import { post, del } from "@/lib/api";
 import { toast, toastError } from "@/lib/toast";
 import { useApi } from "@/lib/hooks";
 import { useFmt, useT } from "@/lib/i18n/context";
-import { naiveWallMs, type Fmt } from "@/lib/i18n/format";
+import type { Fmt } from "@/lib/i18n/format";
 import type { MsgKey } from "@/lib/i18n/messages";
 import type {
   DevicesResponse,
@@ -25,38 +25,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/states";
 
-// ── naive venue-local time helpers ──────────────────────────────────────
-// API timestamps are naive venue-local ISO strings; never route them through
-// Date parsing (lib/i18n/format.ts has the same rule). To diff against "now"
-// we put both wall clocks on the same UTC-frame axis. naiveWallMs is the shared
-// slicer from lib/i18n/format.ts; nowWallMs is page-local (needs the timezone).
-
-function nowWallMs(timeZone: string): number {
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date());
-    const g = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
-    return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute"), g("second"));
-  } catch {
-    // Unknown zone — fall back to the browser's wall clock.
-    const d = new Date();
-    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
-  }
-}
-
 type T = (key: MsgKey, vars?: Record<string, string | number>) => string;
 
-function lastSeenLabel(t: T, fmt: Fmt, lastSeenAt: string | null, timezone: string): string {
+// API timestamps are instants carrying the venue offset: Date.parse gives the
+// exact instant for diffs, and the leading wall clock is venue-local for display.
+function lastSeenLabel(t: T, fmt: Fmt, lastSeenAt: string | null): string {
   if (!lastSeenAt) return t("devices_seen_never");
-  const diffMin = Math.floor((nowWallMs(timezone) - naiveWallMs(lastSeenAt)) / 60_000);
+  const diffMin = Math.floor((Date.now() - Date.parse(lastSeenAt)) / 60_000);
   let when: string;
   if (diffMin < 1) when = t("devices_seen_just_now");
   else if (diffMin < 60) when = t("devices_seen_min", { n: diffMin });
@@ -127,7 +102,7 @@ const CODE_TTL_MS = 15 * 60_000;
 interface ActiveCode {
   code: string;
   url: string | null;
-  /** Browser-clock expiry; derived once from the server's venue-local expiresAt. */
+  /** Browser-clock expiry; derived once from the server's expiresAt instant. */
   expiryEpochMs: number;
 }
 
@@ -145,8 +120,8 @@ function PairCard({ venue }: { venue: Venue }) {
         label.trim() ? { label: label.trim() } : {}
       );
       // Trust the server's expiry when it lands inside a sane window; if the
-      // timezone math disagrees wildly, fall back to the fixed 15-minute TTL.
-      const raw = naiveWallMs(res.expiresAt) - nowWallMs(venue.timezone);
+      // clocks disagree wildly, fall back to the fixed 15-minute TTL.
+      const raw = Date.parse(res.expiresAt) - Date.now();
       const remaining = raw > 0 && raw <= CODE_TTL_MS + 60_000 ? raw : CODE_TTL_MS;
       setCode({ code: res.code, url: res.url, expiryEpochMs: Date.now() + remaining });
     } catch (err) {
@@ -286,7 +261,7 @@ function DeviceList({ venue }: { venue: Venue }) {
                     {status === "revoked" && <Badge variant="destructive">{t("devices_status_revoked")}</Badge>}
                   </div>
                   <span className="text-xs text-neutral-500">
-                    {lastSeenLabel(t, fmt, d.lastSeenAt, venue.timezone)}
+                    {lastSeenLabel(t, fmt, d.lastSeenAt)}
                     {d.pairedAt && <> · {t("devices_paired_on", { date: fmt.dayYear(d.pairedAt) })}</>}
                   </span>
                 </div>

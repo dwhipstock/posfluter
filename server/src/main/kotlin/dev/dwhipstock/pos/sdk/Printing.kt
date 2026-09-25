@@ -4,7 +4,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
-import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
@@ -92,7 +91,7 @@ sealed interface PrinterAdapter {
         private fun spool(dir: String, job: PrintJob): File {
             val text = renderText(job.lines)
             val d = File(dir).apply { mkdirs() }
-            val stamp = VenueClock.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+            val stamp = VenueClock.local(VenueClock.now()).format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
             val file = File(d, "${job.checkId}-$stamp.txt")
             file.writeText(text)
             return file

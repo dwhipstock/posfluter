@@ -1,14 +1,63 @@
 package dev.dwhipstock.pos.sdk
 
 import java.time.Clock
+import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
-/** Venue wall time for the store's timezone-less business timestamps.
- * Never use the Android device's timezone for checks, shifts, or outbox events.
+/**
+ * Business time for the store. Every timestamp is stored as a UTC [Instant];
+ * the venue's IANA zone (persisted in `venue_settings.timezone`, seeded from
+ * `VENUE_TZ`) is applied only to DISPLAY, business-day grouping and reports.
+ * Never use the device's (e.g. Android's) default timezone for either.
  */
 object VenueClock {
-    val zone: ZoneId = ZoneId.of(System.getenv("VENUE_TZ")?.takeIf { it.isNotBlank() } ?: "America/New_York")
+    const val DEFAULT_ZONE = "America/New_York"
 
-    fun now(clock: Clock = Clock.systemUTC()): LocalDateTime = LocalDateTime.ofInstant(clock.instant(), zone)
+    /** The zone `VENUE_TZ` asks for (or the default) — seeds a new store's settings row. */
+    fun configuredZone(): ZoneId =
+        runCatching { ZoneId.of(System.getenv("VENUE_TZ")?.takeIf { it.isNotBlank() } ?: DEFAULT_ZONE) }
+            .getOrDefault(ZoneId.of(DEFAULT_ZONE))
+
+    /** The venue zone in force; set from the settings row at startup ([use]). */
+    @Volatile
+    var zone: ZoneId = configuredZone()
+        private set
+
+    fun use(zoneId: ZoneId) {
+        zone = zoneId
+    }
+
+    /** The current instant. Stored as-is; convert with [local]/[iso] only for people. */
+    fun now(clock: Clock = Clock.systemUTC()): Instant = clock.instant()
+
+    /** Venue wall time of [instant] — for receipts, day grouping and display. */
+    fun local(instant: Instant): LocalDateTime = LocalDateTime.ofInstant(instant, zone)
+
+    fun today(clock: Clock = Clock.systemUTC()): LocalDate = LocalDate.ofInstant(clock.instant(), zone)
+
+    /** The instant a venue business day starts (its midnight, DST-aware). */
+    fun startOfDay(date: LocalDate): Instant = date.atStartOfDay(zone).toInstant()
+
+    /**
+     * Wire/API form: ISO-8601 with the venue's offset at that instant, e.g.
+     * `2026-07-11T18:02:11.000-04:00`. It is an unambiguous instant AND its
+     * leading wall-clock part is venue-local, so clients can show it as-is.
+     */
+    fun iso(instant: Instant): String = OffsetDateTime.ofInstant(instant, zone).format(WIRE)
+
+    val WIRE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+
+    /**
+     * Interpret a zone-less wall time in [zoneId]. For the repeated hour when
+     * clocks fall back, the EARLIER instant (the first occurrence, daylight
+     * time) is chosen; a wall time inside the spring-forward gap moves forward
+     * by the gap. Deterministic, and identical to the cloud migration's rule.
+     */
+    fun fromLocal(local: LocalDateTime, zoneId: ZoneId = zone): Instant =
+        ZonedDateTime.ofLocal(local, zoneId, null).withEarlierOffsetAtOverlap().toInstant()
 }

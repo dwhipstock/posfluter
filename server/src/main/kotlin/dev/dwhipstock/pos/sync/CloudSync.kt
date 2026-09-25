@@ -7,6 +7,7 @@ import dev.dwhipstock.pos.db.SyncOutbox
 import dev.dwhipstock.pos.db.SyncState
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.PhotoStore
+import dev.dwhipstock.pos.sdk.VenueClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -122,7 +123,7 @@ class CloudSync(
                             eventType = row[SyncOutbox.eventType],
                             aggregateType = row[SyncOutbox.aggregateType],
                             aggregateId = row[SyncOutbox.aggregateId],
-                            createdAt = row[SyncOutbox.createdAt].toString(),
+                            createdAt = VenueClock.iso(row[SyncOutbox.createdAt]),
                             payload = parsePayload(row[SyncOutbox.payload]),
                         )
                     }

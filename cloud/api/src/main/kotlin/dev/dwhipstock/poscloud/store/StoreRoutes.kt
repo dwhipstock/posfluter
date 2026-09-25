@@ -38,7 +38,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.upsert
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 private const val MAX_PHOTO_BYTES = 2 * 1024 * 1024
 private val ALLOWED_PHOTO_TYPES = setOf("image/jpeg", "image/png")
@@ -95,7 +95,7 @@ fun requireStore(call: ApplicationCall): Scope {
         val hash = sha256Hex(key)
         val row = StoreApiKeys.selectAll().where { StoreApiKeys.keySha256 eq hash }.firstOrNull()
             ?: throw UnauthorizedException("unknown api key", "bad_api_key")
-        StoreApiKeys.update({ StoreApiKeys.keySha256 eq hash }) { it[lastSeenAt] = LocalDateTime.now() }
+        StoreApiKeys.update({ StoreApiKeys.keySha256 eq hash }) { it[lastSeenAt] = dev.dwhipstock.poscloud.CloudTime.now() }
         Scope(row[StoreApiKeys.tenantId], row[StoreApiKeys.venueId])
     }
 }
@@ -151,6 +151,7 @@ fun Route.storeRoutes(config: CloudConfig) {
         var duplicates = 0
         transaction {
             requireKnownInstall(scope, req.installId)
+            val zone = dev.dwhipstock.poscloud.CloudTime.venueZone(scope.tenantId, scope.venueId)
             for (event in req.events.sortedBy { it.seq }) {
                 val inserted = Events.insertIgnore {
                     it[tenantId] = scope.tenantId
@@ -161,14 +162,14 @@ fun Route.storeRoutes(config: CloudConfig) {
                     it[aggregateId] = event.aggregateId
                     it[payload] = event.payload.toString()
                     it[storeSeq] = event.seq
-                    it[storeCreatedAt] = parseCreatedAt(event.createdAt)
-                    it[receivedAt] = LocalDateTime.now()
+                    it[storeCreatedAt] = parseCreatedAt(event.createdAt, zone)
+                    it[receivedAt] = dev.dwhipstock.poscloud.CloudTime.now()
                 }.insertedCount
                 if (inserted == 0) {
                     duplicates++
                 } else {
                     accepted++
-                    Projections.apply(scope, event)
+                    Projections.apply(scope, event, zone)
                 }
             }
         }
@@ -244,12 +245,13 @@ fun Route.storeRoutes(config: CloudConfig) {
                 sanePublicBaseUrl(req.lanBaseUrl, venue[Venues.subdomain], config.publicBaseDomain) != null
             if (!accepted) throw BadRequestException(
                 "lanBaseUrl must be a private LAN origin or this venue's public base", "bad_lan_url")
+            val zone = dev.dwhipstock.poscloud.CloudTime.zone(venue[Venues.timezone])
             val known = venue[Venues.storeInstallId]
             if (req.installId != null && known != null && known != req.installId)
                 throw ConflictException(
                     "store install id does not match this venue's recorded store database",
                     "install_mismatch")
-            val now = LocalDateTime.now()
+            val now = dev.dwhipstock.poscloud.CloudTime.now()
             Venues.update({ (Venues.tenantId eq scope.tenantId) and (Venues.id eq scope.venueId) }) {
                 // store_lan_url is the /staff-app redirect target and means "a private-LAN
                 // origin" — only an on-prem store populates it. A cloud venue is reached
@@ -266,8 +268,8 @@ fun Route.storeRoutes(config: CloudConfig) {
                     it[venueId] = scope.venueId
                     it[deviceId] = device.id
                     it[name] = device.name
-                    it[pairedAt] = device.pairedAt?.let { p -> runCatching { LocalDateTime.parse(p) }.getOrNull() }
-                    it[lastSeenAt] = device.lastSeenAt?.let { s -> runCatching { LocalDateTime.parse(s) }.getOrNull() }
+                    it[pairedAt] = dev.dwhipstock.poscloud.CloudTime.parse(device.pairedAt, zone)
+                    it[lastSeenAt] = dev.dwhipstock.poscloud.CloudTime.parse(device.lastSeenAt, zone)
                     it[revoked] = device.revoked
                     it[updatedAt] = now
                 }
@@ -291,7 +293,7 @@ fun Route.storeRoutes(config: CloudConfig) {
             throw NotFoundException("unknown or expired pairing code", "bad_pairing_code")
         val label = transaction {
             val hash = dev.dwhipstock.poscloud.auth.sha256Hex(normalized)
-            val now = LocalDateTime.now()
+            val now = dev.dwhipstock.poscloud.CloudTime.now()
             val updated = PairingCodes.update({
                 (PairingCodes.codeSha256 eq hash) and
                     (PairingCodes.tenantId eq scope.tenantId) and (PairingCodes.venueId eq scope.venueId) and
@@ -319,7 +321,7 @@ fun Route.staffEndpointRoute() {
             Venues.selectAll()
                 .where { Venues.storeLanUrl.isNotNull() and Venues.storeSeenAt.isNotNull() }
                 .map { Triple(it[Venues.tenantId], it[Venues.storeLanUrl]!!, it[Venues.storeSeenAt]!!) }
-        }.filter { java.time.Duration.between(it.third, LocalDateTime.now()).toMinutes() <= STORE_FRESH_MINUTES }
+        }.filter { java.time.Duration.between(it.third, dev.dwhipstock.poscloud.CloudTime.now()).toMinutes() <= STORE_FRESH_MINUTES }
             // only ON-PREM stores (private-LAN base) participate: cloud-hosted venues
             // report their public host and are reached directly at it, never via this
             // single-tenant redirect — and must not trip its one-live-tenant guard
@@ -334,7 +336,8 @@ fun Route.staffEndpointRoute() {
             else "multiple live tenants; cannot resolve staff endpoint without tenant context",
             "store_offline")
         val newest = fresh.maxByOrNull { it.third }!!
-        call.respond(StaffEndpointResponse(base = newest.second, seenAt = newest.third.toString()))
+        call.respond(StaffEndpointResponse(base = newest.second,
+            seenAt = dev.dwhipstock.poscloud.CloudTime.iso(newest.third, java.time.ZoneOffset.UTC)))
     }
 }
 
@@ -362,8 +365,8 @@ private fun requireKnownInstall(scope: Scope, installId: String?) {
 
 // a malformed timestamp must not wedge the sync loop in a 400-retry cycle;
 // receive time is an honest fallback for an audit column
-private fun parseCreatedAt(value: String): LocalDateTime =
-    runCatching { LocalDateTime.parse(value) }.getOrElse { LocalDateTime.now() }
+private fun parseCreatedAt(value: String, zone: java.time.ZoneId): OffsetDateTime =
+    dev.dwhipstock.poscloud.CloudTime.parse(value, zone) ?: dev.dwhipstock.poscloud.CloudTime.now()
 
 suspend fun receivePhoto(call: ApplicationCall): Pair<ByteArray, String> {
     var bytes: ByteArray? = null
@@ -411,7 +414,7 @@ fun storePhoto(scope: Scope, itemId: String, bytes: ByteArray, contentType: Stri
         it[content] = bytes
         it[ItemPhotos.contentType] = contentType
         it[ItemPhotos.version] = version
-        it[updatedAt] = LocalDateTime.now()
+        it[updatedAt] = dev.dwhipstock.poscloud.CloudTime.now()
     }
     CatalogItems.update({
         (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and

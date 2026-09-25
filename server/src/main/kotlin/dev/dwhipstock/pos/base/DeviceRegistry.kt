@@ -14,7 +14,6 @@ import org.jetbrains.exposed.sql.update
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.Instant
-import java.time.LocalDateTime
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -124,8 +123,8 @@ object DeviceRegistry {
             DeviceSummary(
                 id = it[Devices.id],
                 name = it[Devices.name],
-                pairedAt = it[Devices.pairedAt].toString(),
-                lastSeenAt = it[Devices.lastSeenAt]?.toString(),
+                pairedAt = VenueClock.iso(it[Devices.pairedAt]),
+                lastSeenAt = it[Devices.lastSeenAt]?.let(VenueClock::iso),
                 revoked = it[Devices.revokedAt] != null,
             )
         }

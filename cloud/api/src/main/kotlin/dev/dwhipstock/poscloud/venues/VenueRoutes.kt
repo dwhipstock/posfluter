@@ -31,7 +31,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.security.SecureRandom
 import java.time.Duration
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 /**
  * Venue directory + terminal pairing + device registry (M8).
@@ -110,9 +110,9 @@ fun Route.venueRoutes(config: CloudConfig) {
         val code = StringBuilder().apply {
             repeat(PAIRING_CODE_LENGTH) { append(CODE_ALPHABET[random.nextInt(CODE_ALPHABET.length)]) }
         }.toString()
-        val now = LocalDateTime.now()
+        val now = dev.dwhipstock.poscloud.CloudTime.now()
         val expiresAt = now.plus(CODE_TTL)
-        val url = transaction {
+        val (url, zone) = transaction {
             // hygiene: long-expired codes have no forensic value beyond a day
             PairingCodes.deleteWhere { PairingCodes.expiresAt less now.minusDays(1) }
             PairingCodes.insert {
@@ -124,11 +124,11 @@ fun Route.venueRoutes(config: CloudConfig) {
                 it[createdAt] = now
                 it[PairingCodes.expiresAt] = expiresAt
             }
-            venueRow(scope).let { publicStoreUrl(it, config) }
+            venueRow(scope).let { publicStoreUrl(it, config) to dev.dwhipstock.poscloud.CloudTime.zone(it[Venues.timezone]) }
         }
         call.respond(HttpStatusCode.Created, PairingCodeResponse(
             code = "${code.take(4)}-${code.drop(4)}",
-            expiresAt = expiresAt.toString(),
+            expiresAt = dev.dwhipstock.poscloud.CloudTime.iso(expiresAt, zone),
             url = url,
         ))
     }
@@ -137,13 +137,15 @@ fun Route.venueRoutes(config: CloudConfig) {
     get("/venues/{venueId}/devices") {
         val scope = portalVenueScope(call)
         val devices = transaction {
+            val zone = dev.dwhipstock.poscloud.CloudTime.venueZone(scope.tenantId, scope.venueId)
+            fun iso(t: java.time.OffsetDateTime?) = t?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, zone) }
             Devices.selectAll().where {
                 (Devices.tenantId eq scope.tenantId) and (Devices.venueId eq scope.venueId)
             }.orderBy(Devices.name).map {
                 DeviceDto(
                     it[Devices.deviceId], it[Devices.name],
-                    it[Devices.pairedAt]?.toString(), it[Devices.lastSeenAt]?.toString(),
-                    it[Devices.revoked], it[Devices.revokeRequestedAt]?.toString(),
+                    iso(it[Devices.pairedAt]), iso(it[Devices.lastSeenAt]),
+                    it[Devices.revoked], iso(it[Devices.revokeRequestedAt]),
                 )
             }
         }
@@ -163,8 +165,8 @@ fun Route.venueRoutes(config: CloudConfig) {
                 (Devices.tenantId eq scope.tenantId) and (Devices.venueId eq scope.venueId) and
                     (Devices.deviceId eq deviceId)
             }) {
-                it[revokeRequestedAt] = LocalDateTime.now()
-                it[updatedAt] = LocalDateTime.now()
+                it[revokeRequestedAt] = dev.dwhipstock.poscloud.CloudTime.now()
+                it[updatedAt] = dev.dwhipstock.poscloud.CloudTime.now()
             }
             if (updated == 0) throw NotFoundException("no device '$deviceId' at this venue", "bad_device")
             Catalog.appendChange(scope, "device_revocation", deviceId, "upsert",
@@ -214,7 +216,7 @@ private fun venueDto(row: org.jetbrains.exposed.sql.ResultRow, config: CloudConf
         timezone = row[Venues.timezone],
         subdomain = row[Venues.subdomain],
         storeUrl = publicStoreUrl(row, config),
-        storeOnline = seenAt != null && Duration.between(seenAt, LocalDateTime.now()) <= STORE_FRESH,
-        storeSeenAt = seenAt?.toString(),
+        storeOnline = seenAt != null && Duration.between(seenAt, dev.dwhipstock.poscloud.CloudTime.now()) <= STORE_FRESH,
+        storeSeenAt = seenAt?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, dev.dwhipstock.poscloud.CloudTime.zone(row[Venues.timezone])) },
     )
 }

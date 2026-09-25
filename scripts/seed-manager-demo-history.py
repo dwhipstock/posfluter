@@ -60,8 +60,12 @@ def q(value: str | None) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+VENUE_TZ = "America/New_York"
+
+
 def ts(value: dt.datetime) -> str:
-    return q(value.isoformat(sep=" ", timespec="seconds"))
+    # columns are timestamptz: a venue wall time must name its zone explicitly
+    return f"({q(value.isoformat(sep=' ', timespec='seconds'))}::timestamp AT TIME ZONE {q(VENUE_TZ)})"
 
 
 def main() -> None:

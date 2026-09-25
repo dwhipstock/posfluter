@@ -19,7 +19,6 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
-import java.time.LocalDateTime
 import java.util.UUID
 
 /**
@@ -125,7 +124,7 @@ class AuthService(
             it[Sessions.token] = token
             it[userId] = uid
             it[createdAt] = now
-            it[expiresAt] = now.plusHours(ABSOLUTE_HOURS)
+            it[expiresAt] = now.plus(java.time.Duration.ofHours(ABSOLUTE_HOURS))
             it[lastUsedAt] = now
             it[Sessions.deviceId] = deviceId // paired terminal (M8); null = staff-app phone
         }
@@ -215,7 +214,7 @@ class AuthService(
         }
         val authUser = issueSession(user)
         val now = VenueClock.now()
-        val expires = now.plusDays(TRUST_DAYS)
+        val expires = now.plus(java.time.Duration.ofDays(TRUST_DAYS))
         val devToken = UUID.randomUUID().toString()
         TrustedDevices.insert {
             it[token] = devToken
@@ -223,7 +222,7 @@ class AuthService(
             it[createdAt] = now
             it[expiresAt] = expires
         }
-        StaffAppSession(authUser, devToken, expires.toString())
+        StaffAppSession(authUser, devToken, VenueClock.iso(expires))
     }
 
     /** True if [token] is a live (unexpired) trusted device for [userId]; touches it. */
@@ -273,9 +272,9 @@ class AuthService(
                 .firstOrNull() ?: return@transaction null
 
             val now = VenueClock.now()
-            val absolute = row[Sessions.expiresAt] ?: row[Sessions.createdAt].plusHours(ABSOLUTE_HOURS)
+            val absolute = row[Sessions.expiresAt] ?: row[Sessions.createdAt].plus(java.time.Duration.ofHours(ABSOLUTE_HOURS))
             val lastUsed = row[Sessions.lastUsedAt] ?: row[Sessions.createdAt]
-            if (now.isAfter(absolute) || now.isAfter(lastUsed.plusMinutes(idleMinutes()))) {
+            if (now.isAfter(absolute) || now.isAfter(lastUsed.plus(java.time.Duration.ofMinutes(idleMinutes())))) {
                 expired = true
                 return@transaction null // → 401 → client re-login
             }

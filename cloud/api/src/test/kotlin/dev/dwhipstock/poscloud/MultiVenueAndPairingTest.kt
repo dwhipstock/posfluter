@@ -19,7 +19,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.junit.Before
 import org.junit.Test
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -130,7 +130,7 @@ class MultiVenueAndPairingTest {
         transaction {
             CatalogChanges.insert {
                 it[tenantId] = "copperlantern"; it[venueId] = "main"; it[kind] = "item"
-                it[entityId] = "x"; it[op] = "upsert"; it[data] = "{}"; it[createdAt] = LocalDateTime.now()
+                it[entityId] = "x"; it[op] = "upsert"; it[data] = "{}"; it[createdAt] = dev.dwhipstock.poscloud.CloudTime.now()
             }
         }
         assertEquals(0, feed(keyA).size)
@@ -201,7 +201,7 @@ class MultiVenueAndPairingTest {
 
         val code = mintCode("main")
         transaction {
-            PairingCodes.update { it[expiresAt] = LocalDateTime.now().minusMinutes(1) }
+            PairingCodes.update { it[expiresAt] = dev.dwhipstock.poscloud.CloudTime.now().minusMinutes(1) }
         }
         assertEquals(HttpStatusCode.NotFound, claim(keyA, code).status)
     }

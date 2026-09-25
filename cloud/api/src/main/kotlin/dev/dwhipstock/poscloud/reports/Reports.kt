@@ -40,7 +40,11 @@ import java.time.ZoneId
 private val lenientJson = Json { ignoreUnknownKeys = true }
 private val log = LoggerFactory.getLogger("reports")
 
-private data class ReportCtx(val scope: Scope, val from: LocalDate, val to: LocalDate)
+private data class ReportCtx(val scope: Scope, val from: LocalDate, val to: LocalDate, val zone: ZoneId) {
+    /** [from, to] as instants: the venue's DST-aware midnights. */
+    val start get() = dev.dwhipstock.poscloud.CloudTime.startOfDay(from, zone)
+    val end get() = dev.dwhipstock.poscloud.CloudTime.startOfDay(to.plusDays(1), zone)
+}
 
 /** Session → tenant scope + inclusive venue-local date range (default today/today).
  *  Venue-aware since M8: ?venue=<id> picks the venue, default is the primary one. */
@@ -49,16 +53,19 @@ private fun reportCtx(call: ApplicationCall): ReportCtx {
     return transaction {
         val zone = venueZone(scope.tenantId, scope.venueId)
         val (from, to) = resolveRange(call, zone)
-        ReportCtx(scope, from, to)
+        ReportCtx(scope, from, to, zone)
     }
 }
 
-/** The venue's timezone (falls back to the system default), inside a transaction. */
+/** An instant as the API shows it: with the report venue's offset. */
+private fun iso(t: java.time.OffsetDateTime, ctx: ReportCtx): String = dev.dwhipstock.poscloud.CloudTime.iso(t, ctx.zone)
+
+/** The venue's timezone (never the server's), inside a transaction. */
 private fun venueZone(tenantId: String, venueId: String): ZoneId {
     val venue = Venues.selectAll().where {
         (Venues.tenantId eq tenantId) and (Venues.id eq venueId)
     }.first()
-    return runCatching { ZoneId.of(venue[Venues.timezone]) }.getOrDefault(ZoneId.systemDefault())
+    return dev.dwhipstock.poscloud.CloudTime.zone(venue[Venues.timezone])
 }
 
 /** ?from/?to (default today/today in [zone]); shared by reportCtx and /reports/by-venue
@@ -78,8 +85,8 @@ private fun parseDate(value: String): LocalDate =
 
 private fun SqlExpressionBuilder.inRange(ctx: ReportCtx): Op<Boolean> =
     (Checks.tenantId eq ctx.scope.tenantId) and (Checks.venueId eq ctx.scope.venueId) and
-        (Checks.closedAt greaterEq ctx.from.atStartOfDay()) and
-        (Checks.closedAt less ctx.to.plusDays(1).atStartOfDay())
+        (Checks.closedAt greaterEq ctx.start) and
+        (Checks.closedAt less ctx.end)
 
 private fun closedChecks(ctx: ReportCtx): List<ResultRow> =
     Checks.selectAll().where { inRange(ctx) and (Checks.status eq "CLOSED") }.toList()
@@ -98,8 +105,8 @@ private fun vat(row: ResultRow): Long = row[Checks.taxIncludedCents] ?: 0
 private fun refundsInRange(ctx: ReportCtx): List<ResultRow> =
     Refunds.selectAll().where {
         (Refunds.tenantId eq ctx.scope.tenantId) and (Refunds.venueId eq ctx.scope.venueId) and
-            (Refunds.createdAt greaterEq ctx.from.atStartOfDay()) and
-            (Refunds.createdAt less ctx.to.plusDays(1).atStartOfDay())
+            (Refunds.createdAt greaterEq ctx.start) and
+            (Refunds.createdAt less ctx.end)
     }.toList()
 
 private fun rGross(row: ResultRow): Long = row[Refunds.grossCents] ?: 0
@@ -127,9 +134,9 @@ data class DayRow(
     val vatCents: Long, val checkCount: Int)
 
 /** Per day: closed sales less refunds issued that day, so days sum to the totals. */
-private fun byDay(closed: List<ResultRow>, refunds: List<ResultRow>): List<DayRow> {
-    val closedByDay = closed.groupBy { it[Checks.closedAt]!!.toLocalDate() }
-    val refundByDay = refunds.groupBy { it[Refunds.createdAt]!!.toLocalDate() }
+private fun byDay(closed: List<ResultRow>, refunds: List<ResultRow>, zone: ZoneId): List<DayRow> {
+    val closedByDay = closed.groupBy { dev.dwhipstock.poscloud.CloudTime.localDate(it[Checks.closedAt]!!, zone) }
+    val refundByDay = refunds.groupBy { dev.dwhipstock.poscloud.CloudTime.localDate(it[Refunds.createdAt]!!, zone) }
     return (closedByDay.keys + refundByDay.keys).toSortedSet().map { date ->
         val crows = closedByDay[date].orEmpty()
         val rrows = refundByDay[date].orEmpty()
@@ -285,7 +292,7 @@ fun Route.reportRoutes() {
                 refundAmountCents = refunds.sumOf(::rGross),
                 corkageCents = closed.sumOf { it[Checks.corkageCents] ?: 0 },
                 serviceChargeCents = closed.sumOf { it[Checks.serviceChargeCents] ?: 0 },
-                byDay = byDay(closed, refunds),
+                byDay = byDay(closed, refunds, ctx.zone),
             )
         }
         call.respond(response)
@@ -305,9 +312,9 @@ fun Route.reportRoutes() {
             val rows = venues.map { v ->
                 // each venue interpreted in ITS OWN timezone, but the same shared
                 // range resolution/validation as every other report family
-                val zone = runCatching { ZoneId.of(v[Venues.timezone]) }.getOrDefault(ZoneId.systemDefault())
+                val zone = dev.dwhipstock.poscloud.CloudTime.zone(v[Venues.timezone])
                 val (from, to) = resolveRange(call, zone)
-                val ctx = ReportCtx(Scope(principal.tenantId, v[Venues.id]), from, to)
+                val ctx = ReportCtx(Scope(principal.tenantId, v[Venues.id]), from, to, zone)
                 val closed = closedChecks(ctx)
                 val refunds = refundsInRange(ctx)
                 VenueSummaryRow(
@@ -332,7 +339,7 @@ fun Route.reportRoutes() {
             val vatTotal = closed.sumOf(::vat) - refunds.sumOf(::rVat)
             VatResponse(
                 ratePercent = 13,
-                rows = byDay(closed, refunds),
+                rows = byDay(closed, refunds, ctx.zone),
                 totals = VatTotals(grossTotal, grossTotal - vatTotal, vatTotal, closed.size),
             )
         }
@@ -351,7 +358,7 @@ fun Route.reportRoutes() {
             }.sortedByDescending { it.amountCents }
             val rows = refunds.sortedByDescending { it[Refunds.createdAt] }.map { r ->
                 RefundListRow(
-                    r[Refunds.refundId], r[Refunds.checkId], r[Refunds.createdAt]?.toString(),
+                    r[Refunds.refundId], r[Refunds.checkId], r[Refunds.createdAt]?.let { t -> iso(t, ctx) },
                     r[Refunds.tableLabel], r[Refunds.tenderType], r[Refunds.reason],
                     rGross(r), rNet(r), rVat(r))
             }
@@ -368,8 +375,8 @@ fun Route.reportRoutes() {
             val movements = CashMovements.selectAll().where {
                 (CashMovements.tenantId eq ctx.scope.tenantId) and
                     (CashMovements.venueId eq ctx.scope.venueId) and
-                    (CashMovements.createdAt greaterEq ctx.from.atStartOfDay()) and
-                    (CashMovements.createdAt less ctx.to.plusDays(1).atStartOfDay())
+                    (CashMovements.createdAt greaterEq ctx.start) and
+                    (CashMovements.createdAt less ctx.end)
             }.toList()
             val ins = movements.filter { it[CashMovements.direction] == "IN" }
             val outs = movements.filter { it[CashMovements.direction] == "OUT" }
@@ -377,7 +384,7 @@ fun Route.reportRoutes() {
             val paidOut = outs.sumOf { it[CashMovements.amountCents] ?: 0 }
             val rows = movements.sortedByDescending { it[CashMovements.createdAt] }.map { m ->
                 CashMovementListRow(
-                    m[CashMovements.movementId], m[CashMovements.createdAt]?.toString(),
+                    m[CashMovements.movementId], m[CashMovements.createdAt]?.let { t -> iso(t, ctx) },
                     m[CashMovements.direction] ?: "", m[CashMovements.amountCents] ?: 0,
                     m[CashMovements.reason], m[CashMovements.createdBy])
             }
@@ -449,7 +456,7 @@ fun Route.reportRoutes() {
     get("/reports/hourly") {
         val ctx = reportCtx(call)
         val response = transaction {
-            val byHour = closedChecks(ctx).groupBy { it[Checks.closedAt]!!.hour }
+            val byHour = closedChecks(ctx).groupBy { dev.dwhipstock.poscloud.CloudTime.localHour(it[Checks.closedAt]!!, ctx.zone) }
             val rows = (0..23).map { hour ->
                 val group = byHour[hour].orEmpty()
                 HourRow(hour, group.sumOf(::gross), group.size)
@@ -489,7 +496,7 @@ fun Route.reportRoutes() {
             ExceptionsResponse(
                 voids = voids.map {
                     VoidRow(
-                        it[Checks.checkId], it[Checks.closedAt]?.toString(), it[Checks.tableLabel],
+                        it[Checks.checkId], it[Checks.closedAt]?.let { t -> iso(t, ctx) }, it[Checks.tableLabel],
                         gross(it), it[Checks.voidReason], it[Checks.voidedBy],
                     )
                 },
@@ -506,10 +513,10 @@ fun Route.reportRoutes() {
         val response = transaction {
             val rows = Shifts.selectAll().where {
                 (Shifts.tenantId eq ctx.scope.tenantId) and (Shifts.venueId eq ctx.scope.venueId) and
-                    (((Shifts.openedAt greaterEq ctx.from.atStartOfDay()) and
-                        (Shifts.openedAt less ctx.to.plusDays(1).atStartOfDay())) or
+                    (((Shifts.openedAt greaterEq ctx.start) and
+                        (Shifts.openedAt less ctx.end)) or
                         (Shifts.status eq "OPEN"))
-            }.orderBy(Shifts.shiftId, SortOrder.DESC).map(::shiftDto)
+            }.orderBy(Shifts.shiftId, SortOrder.DESC).map { shiftDto(it, ctx.zone) }
             ShiftsResponse(rows)
         }
         call.respond(response)
@@ -523,7 +530,7 @@ fun Route.reportRoutes() {
             Shifts.selectAll().where {
                 (Shifts.tenantId eq ctx.scope.tenantId) and (Shifts.venueId eq ctx.scope.venueId) and
                     (Shifts.shiftId eq id)
-            }.firstOrNull()?.let(::shiftDto)
+            }.firstOrNull()?.let { shiftDto(it, ctx.zone) }
         } ?: throw NotFoundException("shift $id not found")
         call.respond(response)
     }
@@ -568,7 +575,7 @@ fun Route.reportRoutes() {
                     JournalRow(
                         checkId = checkId,
                         status = check[Checks.status],
-                        closedAt = check[Checks.closedAt]?.toString(),
+                        closedAt = check[Checks.closedAt]?.let { t -> iso(t, ctx) },
                         tableLabel = check[Checks.tableLabel],
                         zoneNameEn = check[Checks.zoneNameEn],
                         grandTotalCents = gross(check),
@@ -609,11 +616,11 @@ private fun categoryNames(scope: Scope): Map<String, Pair<String, String>> =
         it[CatalogCategories.id] to (it[CatalogCategories.nameFr] to it[CatalogCategories.nameEn])
     }
 
-private fun shiftDto(row: ResultRow) = ShiftDto(
+private fun shiftDto(row: ResultRow, zone: ZoneId) = ShiftDto(
     shiftId = row[Shifts.shiftId],
     status = row[Shifts.status],
-    openedAt = row[Shifts.openedAt]?.toString(),
-    closedAt = row[Shifts.closedAt]?.toString(),
+    openedAt = row[Shifts.openedAt]?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, zone) },
+    closedAt = row[Shifts.closedAt]?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, zone) },
     openedBy = row[Shifts.openedBy],
     closedBy = row[Shifts.closedBy],
     openingFloatCents = row[Shifts.openingFloatCents],

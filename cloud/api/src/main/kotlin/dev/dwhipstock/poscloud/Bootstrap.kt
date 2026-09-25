@@ -17,7 +17,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 /**
  * Idempotent boot seed (CONTRACT §6): tenant 'copperlantern', venue 'main', plus the
@@ -32,7 +32,7 @@ object Bootstrap {
     private val log = LoggerFactory.getLogger(Bootstrap::class.java)
 
     fun run(config: CloudConfig): Unit = transaction {
-        val now = LocalDateTime.now()
+        val now = dev.dwhipstock.poscloud.CloudTime.now()
         Tenants.insertIgnore {
             it[id] = TENANT
             it[name] = config.venueName

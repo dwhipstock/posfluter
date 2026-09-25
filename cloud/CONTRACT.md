@@ -21,10 +21,24 @@ Hard rules this contract encodes:
   exception is **device revocations** (§4): the owner's remote lock for a lost
   terminal is the only data the store pulls down. Sync never blocks startup, a
   sale or a login — with no internet only sync pauses.
-- **All money is integer cents.** All timestamps are venue-local ISO-8601
-  `LocalDateTime` strings without zone (`2026-07-11T18:02:11`); the venue's
-  IANA timezone lives on the cloud `venues` row (America/New_York) and is display
-  metadata only — bucketing by day/hour uses the naive timestamps as-is.
+- **All money is integer cents.**
+- **Timestamps are instants (contract v2).** Every timestamp on the wire is an
+  ISO-8601 instant WITH an offset — the store sends its venue's offset at that
+  moment, e.g. `2026-07-11T18:02:11.123-04:00` (a `Z` form is equally valid).
+  Both sides store the UTC instant: the store as UTC text in SQLite, the cloud
+  as `timestamptz`. The venue's IANA zone lives in the store's
+  `venue_settings.timezone` (seeded once from `VENUE_TZ`) and on the cloud
+  `venues.timezone`; it is applied only for display, business-day grouping
+  (a day runs from the venue's midnight to the next, DST-aware — 23 or 25
+  hours on transition days) and hourly reports. Portal API responses carry the
+  venue's offset too, so the leading wall-clock part is venue-local.
+  *Legacy (v1):* a zone-less `2026-07-11T18:02:11` from an older store is read
+  as venue-local; in the repeated fall-back hour it resolves to the FIRST
+  occurrence (daylight time). Stored v1 rows were converted with the same rule
+  (store migration 031, cloud migration 013).
+
+Contract version: **2** (v1 → v2: zone-less venue-local timestamps became
+offset-carrying instants; sync became one-way).
 
 ## 1. Event push (store → cloud)
 
@@ -47,7 +61,7 @@ tenant+venue on the cloud; the store never sends tenant ids).
       "eventType": "check.closed",
       "aggregateType": "check",
       "aggregateId": "42",
-      "createdAt": "2026-07-11T18:02:11",
+      "createdAt": "2026-07-11T18:02:11.123-04:00",
       "payload": { }                  // JSON object, shapes below
     }
   ]
@@ -87,7 +101,7 @@ additive.
   "tableId": "l13", "tableLabel": "L-8",
   "zoneId": "lower", "zoneNameFr": "Zone inférieure", "zoneNameEn": "Lower",
   "shiftId": 7,                        // omitted if closed outside a shift
-  "openedAt": "2026-07-11T18:02:11", "closedAt": "2026-07-11T19:40:03",
+  "openedAt": "2026-07-11T18:02:11.000-04:00", "closedAt": "2026-07-11T19:40:03.000-04:00",
   "openedBy": "1234",
   "grandTotalCents": 53500,           // = checks.locked_grand_total_cents
   "taxIncludedCents": 6155,           // = checks.locked_tax_included_cents (store-computed)

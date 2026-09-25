@@ -4,7 +4,7 @@ import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.ItemVariants
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.javatime.datetime
+import dev.dwhipstock.pos.db.utcTimestamp
 
 /**
  * Restaurant add-on tier — stacks on POS Base, depends on it (never the reverse).
@@ -42,7 +42,7 @@ object DiningTables : Table("dining_tables") {
     val shape = varchar("shape", 10).default("SQUARE") // ROUND | SQUARE | RECT | BAR
     val seats = integer("seats").default(4)
     // soft delete: closed checks reference table ids forever (FK RESTRICT)
-    val deletedAt = datetime("deleted_at").nullable()
+    val deletedAt = utcTimestamp("deleted_at").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -73,8 +73,8 @@ object Checks : IntIdTable("checks") {
     val tableId = varchar("table_id", 64).references(DiningTables.id)
     val status = varchar("status", 20) // OPEN | TOTAL_LOCKED | CLOSED | VOID
     val openedBy = varchar("opened_by", 64)
-    val openedAt = datetime("opened_at")
-    val closedAt = datetime("closed_at").nullable()
+    val openedAt = utcTimestamp("opened_at")
+    val closedAt = utcTimestamp("closed_at").nullable()
     val corkageBottles = integer("corkage_bottles").default(0)
     // locked at first tender (stage 4); null while OPEN
     val lockedGrandTotalCents = long("locked_grand_total_cents").nullable()
@@ -100,7 +100,7 @@ object CheckLines : IntIdTable("check_lines") {
     // ACTIVE = on the bill. PENDING = customer-submitted via QR, awaiting staff
     // accept — excluded from totals and receipts until promoted.
     val status = varchar("status", 10).default("ACTIVE")
-    val createdAt = datetime("created_at")
+    val createdAt = utcTimestamp("created_at")
 }
 
 /**
@@ -115,7 +115,7 @@ object BillGroups : IntIdTable("bill_groups") {
     val includesCorkage = bool("includes_corkage").default(false) // exactly one group carries the check-level corkage fee
     val fixedAmountCents = long("fixed_amount_cents").nullable() // even-split (÷N) money-only group; null = by-item
     val lockedTotalCents = long("locked_total_cents").nullable() // stamped at first group tender, like checks.locked_grand_total_cents
-    val createdAt = datetime("created_at")
+    val createdAt = utcTimestamp("created_at")
 }
 
 /** qty of a check line allocated to a group. Quantities split across groups; lines are never cloned. */
@@ -144,7 +144,7 @@ object Refunds : IntIdTable("refunds") {
     // by-line refunds: [{lineId,qty,amountCents}]. NULL on a by-amount refund.
     val linesJson = text("lines_json").nullable()
     val refundedBy = varchar("refunded_by", 64) // the approving manager
-    val createdAt = datetime("created_at")
+    val createdAt = utcTimestamp("created_at")
 }
 
 /**
@@ -158,7 +158,7 @@ object CashMovements : IntIdTable("cash_movements") {
     val amountCents = long("amount_cents")
     val reason = varchar("reason", 300)
     val createdBy = varchar("created_by", 64) // the approving manager
-    val createdAt = datetime("created_at")
+    val createdAt = utcTimestamp("created_at")
 }
 
 /**
@@ -167,10 +167,10 @@ object CashMovements : IntIdTable("cash_movements") {
  */
 object Shifts : IntIdTable("shifts") {
     val status = varchar("status", 10) // OPEN | CLOSED
-    val openedAt = datetime("opened_at")
+    val openedAt = utcTimestamp("opened_at")
     val openedBy = varchar("opened_by", 64)
     val openingFloatCents = long("opening_float_cents")
-    val closedAt = datetime("closed_at").nullable()
+    val closedAt = utcTimestamp("closed_at").nullable()
     val closedBy = varchar("closed_by", 64).nullable()
     val closingCountCents = long("closing_count_cents").nullable()
     val expectedCashCents = long("expected_cash_cents").nullable()

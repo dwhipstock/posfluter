@@ -76,12 +76,22 @@ class Prefs extends ChangeNotifier {
     await _storage.write(key: 'pref_lang', value: lang);
   }
 
-  /// "2026-07-08T00:12:34" → "08/07/2026 00:12".
+  /// "2026-07-08T00:12:34.000-04:00" → "08/07/2026 00:12".
+  ///
+  /// The store sends instants with the VENUE's offset, so the leading wall
+  /// clock is already venue-local: show it as-is. Parsing into a DateTime would
+  /// convert to the device's timezone, which is not the venue's.
   String fmtDateTime(String iso) {
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return iso;
-    String p2(int n) => n.toString().padLeft(2, '0');
-    return '${fmtDate(dt)} ${p2(dt.hour)}:${p2(dt.minute)}';
+    final m = RegExp(
+      r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})',
+    ).firstMatch(iso.trim());
+    if (m == null) return iso;
+    final wall = DateTime(
+      int.parse(m[1]!),
+      int.parse(m[2]!),
+      int.parse(m[3]!),
+    );
+    return '${fmtDate(wall)} ${m[4]}:${m[5]}';
   }
 
   /// Date-only with the standard Gregorian year.

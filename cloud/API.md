@@ -1,7 +1,9 @@
 # Cloud portal API (cloud/api ⇄ cloud/web)
 
 REST surface the Next.js portal consumes. JSON everywhere; all money integer
-cents; dates `YYYY-MM-DD` (venue-local). In production Caddy serves the
+cents; dates `YYYY-MM-DD` (venue-local business days); timestamps are ISO-8601
+instants carrying the venue's offset (`2026-07-11T18:02:11.000-04:00`) — slice the
+leading wall clock for display, `Date.parse` for arithmetic. In production Caddy serves the
 portal at `/` and proxies `/v1/*` + `/health` to the API container, so the
 browser talks same-origin (no CORS). In dev, Next rewrites `/v1/*` →
 `http://localhost:8081`.

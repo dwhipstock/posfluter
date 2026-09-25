@@ -20,7 +20,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.upsert
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 /** (tenant, venue) resolved from a store API key or a portal session. */
 data class Scope(val tenantId: String, val venueId: String)
@@ -32,8 +32,9 @@ fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.longOrN
 fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
 fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 fun JsonObject.arr(key: String): JsonArray? = this[key] as? JsonArray
-fun JsonObject.dateTime(key: String): LocalDateTime? =
-    str(key)?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+/** A store-sent timestamp (offset or legacy zone-less venue-local) → instant; see CloudTime.parse. */
+fun JsonObject.instant(key: String, zone: java.time.ZoneId): java.time.OffsetDateTime? =
+    dev.dwhipstock.poscloud.CloudTime.parse(str(key), zone)
 
 /**
  * Display mirror of each store's catalog: full-snapshot upserts (CONTRACT §2)
@@ -114,7 +115,7 @@ object Catalog {
             it[CatalogChanges.entityId] = entityId
             it[CatalogChanges.op] = op
             it[CatalogChanges.data] = data.toString()
-            it[createdAt] = LocalDateTime.now()
+            it[createdAt] = dev.dwhipstock.poscloud.CloudTime.now()
         } get CatalogChanges.version
     }
 }

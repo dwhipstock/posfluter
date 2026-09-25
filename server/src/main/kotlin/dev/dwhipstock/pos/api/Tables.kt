@@ -22,7 +22,6 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
-import java.time.LocalDateTime
 
 /**
  * Floor-plan table management (M7): the in-app table editor. Geometry lives in

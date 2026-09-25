@@ -4,7 +4,6 @@ import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
@@ -77,7 +76,7 @@ class NetworkThermalPrinter(
     )
 
     @Volatile private var lastError: String? = null
-    @Volatile private var lastOkAt: LocalDateTime? = null
+    @Volatile private var lastOkAt: java.time.Instant? = null
 
     override fun print(job: PrintJob): String {
         val text = audit.print(job)      // spool file + receipt.printed outbox (in-txn, local, fast)
@@ -142,7 +141,7 @@ class NetworkThermalPrinter(
             configured = t.configured,
             online = t.configured && lastError == null && lastOkAt != null,
             lastError = lastError,
-            lastOkAt = lastOkAt?.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+            lastOkAt = lastOkAt?.let(VenueClock::iso),
         )
     }
 

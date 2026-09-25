@@ -31,10 +31,19 @@ read-only for menu and staff. The only thing a tablet pulls down is device
 revocations — the owner's remote lock for a lost terminal. No internet means
 only sync pauses; nothing on the tablet waits for it.
 
-Business timestamps are recorded in the venue's `America/New_York` timezone,
-independent of the tablet's Android timezone. The cloud portal's date presets
-use the same timezone. Existing timestamp strings remain unchanged when this
-policy is deployed; historical corrections require a separate reconciliation.
+## Time
+
+Every business timestamp is stored as a UTC instant together with the store's
+IANA zone: the tablet keeps the zone in `venue_settings.timezone` (seeded once
+from `VENUE_TZ`, `America/New_York` for both demo stores) and the cloud keeps
+it on each venue row (`timestamptz` columns). The zone is applied only to show
+a time, to group by business day (midnight to midnight in the store's zone,
+DST-aware) and to build reports — never the tablet's Android timezone or the
+server's. On the wire timestamps are ISO-8601 with the venue offset
+(`2026-11-01T01:30:00.000-04:00`), so the repeated hour when clocks fall back
+is unambiguous. Rows written before this change were zone-less venue-local
+times; both databases converted them once by reading them in their venue's
+zone, taking the first occurrence of the repeated fall-back hour.
 
 ## On-tablet delivery milestones
 
