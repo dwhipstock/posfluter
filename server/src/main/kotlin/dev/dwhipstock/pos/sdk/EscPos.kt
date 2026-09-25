@@ -97,11 +97,9 @@ object EscPos {
  * drawn with a French-capable font so French menu names render as real glyphs.
  */
 object ThermalReceiptRenderer {
-    private const val W = EscPos.DOTS_WIDTH
-    private const val MARGIN = 8
-    private const val CONTENT = W - MARGIN * 2
-    private const val BODY = 26      // body text px
-    private const val HEADER = 40    // emphasized header px (≈ double-height)
+    private const val W = ThermalLayout.WIDTH
+    private const val MARGIN = ThermalLayout.MARGIN
+    private const val BODY = 26      // body text px (blank/divider strip height)
     private const val LINE_PAD = 8   // vertical padding around each row
 
     // Resolved once: a font that can draw French + Latin + the $ sign. On the
@@ -109,7 +107,6 @@ object ThermalReceiptRenderer {
     // French; we still prefer a real Unicode family when the host exposes one.
     private val bodyFont: Font by lazy { resolveFrenchFont(BODY) }
     private val boldFont: Font by lazy { bodyFont.deriveFont(Font.BOLD) }
-    private val headerFont: Font by lazy { bodyFont.deriveFont(Font.BOLD, HEADER.toFloat()) }
 
     private fun resolveFrenchFont(size: Int): Font {
         val probe = "\$A5"
@@ -132,15 +129,37 @@ object ThermalReceiptRenderer {
     /** ESC/POS payload (init + raster + cut) for the whole receipt. */
     fun toEscPos(lines: List<PrintLine>): ByteArray = EscPos.receiptJob(renderImage(lines))
 
+    private fun font(style: ThermalLayout.Style, size: Float): Font =
+        (if (style.bold) boldFont else bodyFont).deriveFont(size)
+
+    /** Java2D widths for the shared [ThermalLayout]. */
+    private val measurer = ThermalLayout.TextMeasurer { text, style, size ->
+        scratch.getFontMetrics(font(style, size)).stringWidth(text).toFloat()
+    }
+    private val scratch by lazy { scratchGraphics() }
+
+    /** The fitted rows for [lines] — what [renderImage] draws. */
+    fun layout(lines: List<PrintLine>): List<ThermalLayout.Row> = ThermalLayout.layout(lines, measurer)
+
+    /** Width in dots of a laid-out text row (tests: every row must fit [ThermalLayout.CONTENT]). */
+    fun rowWidth(row: ThermalLayout.Row): Float = when (row) {
+        is ThermalLayout.Row.Text -> measurer.width(row.text, row.style, row.size)
+        is ThermalLayout.Row.Pair -> measurer.width(row.left, row.style, row.size) +
+            measurer.width("  ", row.style, row.size) + measurer.width(row.right, row.style, row.size)
+        is ThermalLayout.Row.Qr -> QR_SIZE.toFloat()
+        else -> 0f
+    }
+
     /**
-     * Lay the receipt out as a single tall bitmap. Each [PrintLine] becomes a
-     * full-width horizontal strip; strips stack top-to-bottom. Two passes:
-     * measure every strip's height, then draw into one image of the total.
+     * Lay the receipt out as a single tall bitmap: [ThermalLayout] fits every
+     * line to the paper width, then each row becomes a full-width horizontal
+     * strip stacked top-to-bottom (measure all, then draw into one image).
      */
     fun renderImage(lines: List<PrintLine>): BufferedImage {
-        val fm = scratchGraphics()
-        val strips = lines.map { measure(it, fm) }
-        val total = strips.sumOf { it.height } + MARGIN * 2
+        val rows = layout(lines)
+        val g0 = scratch
+        val heights = rows.map { height(it, g0) }
+        val total = heights.sum() + MARGIN * 2
         val img = BufferedImage(W, total.coerceAtLeast(1), BufferedImage.TYPE_INT_RGB)
         val g = img.createGraphics()
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
@@ -149,15 +168,13 @@ object ThermalReceiptRenderer {
         g.fillRect(0, 0, W, total)
         g.color = Color.BLACK
         var y = MARGIN
-        for ((line, strip) in lines.zip(strips)) {
-            draw(line, g, y, strip.height)
-            y += strip.height
+        for ((row, h) in rows.zip(heights)) {
+            draw(row, g, y, h)
+            y += h
         }
         g.dispose()
         return img
     }
-
-    private class Strip(val height: Int)
 
     private fun scratchGraphics() = BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics().also {
         it.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
@@ -170,44 +187,37 @@ object ThermalReceiptRenderer {
 
     private const val QR_SIZE = 360 // dots — big enough to scan off thermal paper
 
-    private fun measure(line: PrintLine, g: java.awt.Graphics2D): Strip = when (line) {
-        is PrintLine.Header -> Strip(rowHeight(headerFont, g))
-        is PrintLine.LogoPlaceholder -> Strip(rowHeight(headerFont, g))
-        is PrintLine.Text -> Strip(rowHeight(bodyFont, g))
-        is PrintLine.KeyValue -> Strip(rowHeight(if (line.emphasized) boldFont else bodyFont, g))
-        is PrintLine.QrCode -> Strip(QR_SIZE + LINE_PAD * 2 + (line.caption?.let { rowHeight(bodyFont, g) } ?: 0))
-        PrintLine.Divider -> Strip(BODY / 2 + LINE_PAD)
-        PrintLine.Blank -> Strip(BODY / 2)
+    private fun height(row: ThermalLayout.Row, g: java.awt.Graphics2D): Int = when (row) {
+        is ThermalLayout.Row.Text -> rowHeight(font(row.style, row.size), g)
+        is ThermalLayout.Row.Pair -> rowHeight(font(row.style, row.size), g)
+        is ThermalLayout.Row.Qr -> QR_SIZE + LINE_PAD * 2
+        ThermalLayout.Row.Divider -> BODY / 2 + LINE_PAD
+        ThermalLayout.Row.Blank -> BODY / 2
     }
 
-    private fun draw(line: PrintLine, g: java.awt.Graphics2D, top: Int, height: Int) {
-        when (line) {
-            is PrintLine.Header -> centered(g, line.text, headerFont, top)
-            is PrintLine.LogoPlaceholder -> centered(g, line.fallbackText, headerFont, top)
-            is PrintLine.Text -> when (line.align) {
-                Align.LEFT -> at(g, line.text, bodyFont, MARGIN, top)
-                Align.CENTER -> centered(g, line.text, bodyFont, top)
-                Align.RIGHT -> {
-                    val m = g.getFontMetrics(bodyFont)
-                    at(g, line.text, bodyFont, W - MARGIN - m.stringWidth(line.text), top)
+    private fun draw(row: ThermalLayout.Row, g: java.awt.Graphics2D, top: Int, height: Int) {
+        when (row) {
+            is ThermalLayout.Row.Text -> {
+                val f = font(row.style, row.size)
+                val w = g.getFontMetrics(f).stringWidth(row.text)
+                val x = when (row.align) {
+                    Align.LEFT -> MARGIN
+                    Align.CENTER -> ((W - w) / 2).coerceAtLeast(MARGIN)
+                    Align.RIGHT -> W - MARGIN - w
                 }
+                at(g, row.text, f, x, top)
             }
-            is PrintLine.KeyValue -> {
-                val f = if (line.emphasized) boldFont else bodyFont
+            is ThermalLayout.Row.Pair -> {
+                val f = font(row.style, row.size)
                 val m = g.getFontMetrics(f)
-                at(g, line.left, f, MARGIN, top)
-                at(g, line.right, f, W - MARGIN - m.stringWidth(line.right), top)
+                at(g, row.left, f, MARGIN, top)
+                at(g, row.right, f, W - MARGIN - m.stringWidth(row.right), top)
             }
-            is PrintLine.QrCode -> {
-                var yy = top + LINE_PAD
-                line.caption?.let {
-                    centered(g, it, bodyFont, yy)
-                    yy += g.getFontMetrics(bodyFont).let { m -> m.ascent + m.descent }
-                }
-                val qr = qrBitmap(line.data, QR_SIZE)
-                g.drawImage(qr, (W - qr.width) / 2, yy, null)
+            is ThermalLayout.Row.Qr -> {
+                val qr = qrBitmap(row.data, QR_SIZE)
+                g.drawImage(qr, (W - qr.width) / 2, top + LINE_PAD, null)
             }
-            PrintLine.Divider -> {
+            ThermalLayout.Row.Divider -> {
                 val yy = top + height / 2
                 // dashed rule ≈ the text printer's row of '-'
                 var x = MARGIN
@@ -216,7 +226,7 @@ object ThermalReceiptRenderer {
                     x += 14
                 }
             }
-            PrintLine.Blank -> { /* whitespace strip */ }
+            ThermalLayout.Row.Blank -> { /* whitespace strip */ }
         }
     }
 
@@ -236,26 +246,5 @@ object ThermalReceiptRenderer {
     private fun at(g: java.awt.Graphics2D, text: String, font: Font, x: Int, top: Int) {
         g.font = font
         g.drawString(text, x, top + g.getFontMetrics(font).ascent)
-    }
-
-    private fun centered(g: java.awt.Graphics2D, text: String, font: Font, top: Int) {
-        val f = fitted(g, text, font)
-        val m = g.getFontMetrics(f)
-        at(g, text, f, ((W - m.stringWidth(text)) / 2).coerceAtLeast(MARGIN), top)
-    }
-
-    private const val MIN_FIT = 14 // px: still legible on thermal paper
-
-    /**
-     * [font], shrunk just enough for [text] to fit the paper width (a long venue
-     * name or Wi-Fi password would otherwise run off the edge). Only ever
-     * smaller, so the row height measured with [font] still holds.
-     */
-    private fun fitted(g: java.awt.Graphics2D, text: String, font: Font): Font {
-        var f = font
-        while (g.getFontMetrics(f).stringWidth(text) > CONTENT && f.size > MIN_FIT) {
-            f = f.deriveFont(f.size2D - 2f)
-        }
-        return f
     }
 }

@@ -13,9 +13,12 @@ import java.time.format.DateTimeFormatter
  */
 @Serializable
 sealed interface PrintLine {
-    /** Emphasized centered text (shop name, Le projet de loi a été clôturé...). Thermal: double-width. */
+    /**
+     * Emphasized centered text (shop name, Le projet de loi a été clôturé...). Thermal: large bold.
+     * [exact]: never word-wrap (a Wi-Fi password) — it shrinks, then breaks between characters.
+     */
     @Serializable
-    data class Header(val text: String) : PrintLine
+    data class Header(val text: String, val exact: Boolean = false) : PrintLine
 
     @Serializable
     data class Text(val text: String, val align: Align = Align.LEFT) : PrintLine

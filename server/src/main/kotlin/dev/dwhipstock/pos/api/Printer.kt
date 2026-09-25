@@ -177,12 +177,12 @@ private fun bilingualLines(key: MessageKey): List<PrintLine> =
 private fun wifiJoinBlock(wifi: GuestWifi): List<PrintLine> = buildList {
     add(PrintLine.QrCode(wifi.qrPayload()))
     add(PrintLine.Text(bilingual(MessageKey.WIFI_NETWORK).joinToString(" / "), Align.CENTER))
-    add(PrintLine.Header(wifi.ssid))
+    add(PrintLine.Header(wifi.ssid, exact = true))
     if (wifi.security == WifiSecurity.NOPASS) {
         add(PrintLine.Text(bilingual(MessageKey.WIFI_NO_PASSWORD).joinToString(" / "), Align.CENTER))
     } else {
         add(PrintLine.Text(bilingual(MessageKey.WIFI_PASSWORD).joinToString(" / "), Align.CENTER))
-        add(PrintLine.Header(wifi.password))
+        add(PrintLine.Header(wifi.password, exact = true))
     }
 }
 
