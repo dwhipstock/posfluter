@@ -20,6 +20,9 @@ export interface VenueSummaryRow {
   avgCheckCents: number;
   voidCount: number;
   refundAmountCents: number;
+  /** GST / QST inside taxCents, as charged (0 for sales without a breakdown). */
+  gstCents: number;
+  qstCents: number;
 }
 
 export interface ByVenueReport {
@@ -45,6 +48,8 @@ export interface VenueDayRow {
   netCents: number;
   taxCents: number;
   checkCount: number;
+  gstCents: number;
+  qstCents: number;
 }
 
 export interface DayRow {
@@ -55,6 +60,8 @@ export interface DayRow {
   checkCount: number;
   /** The same day per in-scope store (zeros included). */
   byVenue: VenueDayRow[];
+  gstCents: number;
+  qstCents: number;
 }
 
 /** One store's totals in the items / categories / hourly / tables reports. */
@@ -90,10 +97,26 @@ export interface Summary {
   byVenue: VenueSummaryRow[];
 }
 
+/** One tax the in-range sales were charged, as the store labelled it. */
+export interface TaxRate {
+  code: string;
+  labelFr: string;
+  labelEn: string;
+  /** Decimal string, e.g. "9.975". */
+  ratePercent: string;
+}
+
 export interface TaxReport {
-  ratePercent: number;
+  rates: TaxRate[];
   rows: DayRow[];
-  totals: { grossCents: number; netCents: number; taxCents: number; checkCount: number };
+  totals: {
+    grossCents: number;
+    netCents: number;
+    taxCents: number;
+    gstCents: number;
+    qstCents: number;
+    checkCount: number;
+  };
   byVenue: VenueSummaryRow[];
 }
 
