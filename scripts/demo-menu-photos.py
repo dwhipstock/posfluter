@@ -6,8 +6,11 @@ metadata, downloads an 800px JPEG/PNG thumbnail, and uploads it through the
 store's normal manager-gated photo endpoint. Downloaded image binaries remain
 in the ignored local store data; only the generated attribution report is kept.
 
+Items that already have a photo are skipped, so re-runs only fill gaps; pass
+--force to replace every photo with the curated set.
+
 Usage:
-  STORE_URL=http://localhost:8080 python3 scripts/demo-menu-photos.py
+  STORE_URL=http://localhost:8080 python3 scripts/demo-menu-photos.py [--force]
 """
 
 from __future__ import annotations
@@ -111,27 +114,103 @@ SEARCH_TERMS = {
     "mini-burgers": "burger sliders plate photograph",
     "grilled-cheese": "grilled cheese sandwich photograph",
     "onion-rings": "onion rings basket photograph",
+    # Plateau-only: sushi & sake, then the Plateau specials.
+    "salmon-maki": "salmon maki sushi photograph",
+    "spicy-tuna-maki": "spicy tuna roll photograph",
+    "avocado-maki": "avocado maki photograph",
+    "salmon-nigiri": "salmon nigiri photograph",
+    "tuna-nigiri": "tuna nigiri photograph",
+    "scallop-nigiri": "scallop nigiri photograph",
+    "junmai-sake": "sake tokkuri cup photograph",
+    "sparkling-sake": "sparkling sake glass photograph",
+    "smoked-meat-poutine": "poutine meat gravy photograph",
+    "maple-miso-bowl": "salmon rice bowl photograph",
+    "bagel-board": "bagel lox cream cheese photograph",
+    "yuzu-sour": "sour cocktail egg white photograph",
 }
 
-# Hand-reviewed replacements for names where full-text search can rank a place,
-# label, painting, or other context above the actual dish. Exact Commons titles
-# also make the local demo visually stable across search-index changes.
+# Hand-reviewed exact Commons titles for every menu item. Each was eyeballed:
+# a generic dish or drink with no brand label, logo, packaging, signage or
+# faces, and no business named in the file title. Pinning every item keeps the
+# demo stable across search-index changes; search is only a fallback for items
+# added to the menu later.
 CURATED_TITLES = {
-    "lantern-lager": "Lager beer p.jpg",
-    "amber-ale": "Ekers Brewery Amber Ale.jpg",
-    "belgian-blonde": "TeKu beerglass with Belgian craft beer.png",
-    "mexican-lager": "Lager beer p.jpg",
-    "irish-stout": "Murphy's Irish Stout 5.jpg",
-    "hop-water": "IKEA elderflower flavor sparkling water.jpg",
-    "icewine": "Peller Estates Ice Wine.jpg",
-    "smoked-caesar": "Caesar cocktail.jpg",
+    "lantern-lager": "Pilstulpe.jpg",
+    "amber-ale": "British dimpled glass pint jug with ale.jpg",
+    "north-ipa": "IPA in a pint glass.jpeg",
+    "maple-stout": "Stout.jpg",
+    "wheat-beer": "Weizenbier.jpg",
+    "canadian-lager": "Lager.jpg",
+    "pilsner-can": "Vaso de cerveza.jpg",
+    "porter-can": "Porter (141611127).jpeg",
+    "hazy-ipa": "A glass of cloudy unfiltered beer- fascinating! (27798855532).jpg",
+    "saison": "Beer on the outdoor table - New Orleans May 2021.jpg",
+    "belgian-blonde": "Belgian beer glass.jpg",
+    "irish-stout": "Dark beer and light beer.jpg",
+    "mexican-lager": "Clara (Cerveza con limón) - Frutos secos.jpg",
+    "dry-cider": "Apple wine in a glass.jpg",
+    "berry-cider": "Raspberryade.jpg",
+    "na-lager": "Non-alcoholic beer in Haukilahti.jpg",
+    "hop-water": "Ginger beer & lime (5671445169).jpg",
+    "pinot-noir": "Pommard glass p1150456.jpg",
+    "cab-merlot": "Glass of red wine.jpg",
+    "malbec": "Red wine in glass.jpg",
+    "riesling": "Glass of white wine.jpg",
+    "chardonnay": "White Wine Glas.jpg",
+    "sauvignon-blanc": "Unidentified white wine in glass.jpg",
+    "rose": "Wine glass closeup.jpg",
+    "sparkling": "Sparkling wine in a flute.jpg",
+    "icewine": "A glass of Tokaji.jpg",
+    "copper-old-fashioned": "Old Fashioned.jpg",
+    "lantern-mule": "Moscow mule Cocktail im Kupferbecher.jpg",
+    "smoked-caesar": "Bloody Caesar.jpg",
+    "maple-sour": "Whiskey Sour.jpg",
+    "elderflower-gin": "Ramos Fizz.jpg",
     "espresso-martini": "Espresso Martini.jpg",
+    "dark-stormy": "Dark n Stormy.jpg",
+    "zero-gimlet": "Gimlet cocktail.jpg",
+    "pretzel": "Broccoli cheddar soup with a pretzel and mustard.jpg",
+    "wings": "Buffalo wings-01.jpg",
     "nachos": "Beef Nachos 01.jpg",
     "calamari": "Fried calamari.jpg",
+    "spinach-dip": "Spinach & artichoke dip.jpg",
+    "poutine": "Poutine! (422692736).jpg",
+    "lantern-burger": "Bacon Cheeseburger on plate.JPG",
+    "mushroom-burger": "Mmm...Swiss cheese burger with mushrooms (5305019054).jpg",
+    "veggie-burger": "Veggie burger (1).jpg",
+    "club": "Club-sandwich.jpg",
+    "reuben": "ReubenSandwichHalves.jpg",
     "fish-sandwich": "Fish sandwich.jpg",
+    "fish-chips": "Fish and chips in Helsinki.jpg",
+    "steak-frites": "Entrecôte.JPG",
+    "shepherd-pie": "ShepherdsPie.jpg",
+    "mac-cheese": "Original Mac n Cheese .jpg",
     "salmon": "Salmon dish.jpg",
-    "cauliflower": "Liat Portal for Foodie Disorder – Whole roasted cauliflower.jpg",
+    "chicken-pot-pie": "Chicken Pot Pie.jpg",
+    "caesar-salad": "Caesar salad (2).jpg",
+    "harvest-salad": "Rocket lettuce, Butternut squash, Beetroot, Green beans, whipped cream salad.jpg",
+    "falafel-bowl": "Bowl of falafel.jpg",
+    "cauliflower": "Plated roasted cauliflower 10.jpg",
+    "sticky-pudding": "StickyToffeePudding.jpg",
+    "cheesecake": "Plain cheesecake slice.jpg",
+    "brownie": "Brownie with ice cream.jpg",
     "late-fries": "French fries.jpg",
+    "mini-burgers": "Sliders and French fries.jpg",
+    "grilled-cheese": "Grilled cheese sandwich with roasted tomato soup.jpg",
+    "onion-rings": "OnionRings.JPG",
+    # Plateau-only
+    "salmon-maki": "Salmon sushi.jpg",
+    "spicy-tuna-maki": "Crunchy Spicy Tuna, big eye tuna, shiso panko, togarashi ($21) (32807112472).jpg",
+    "avocado-maki": "Avocado maki rolls - Makis de aguacate (5123466252).jpg",
+    "salmon-nigiri": "Salmon nigiri sushi.jpg",
+    "tuna-nigiri": "Tuna nigiri.png",
+    "scallop-nigiri": "Hokkaido hotatekai nigiri.jpg",
+    "junmai-sake": "Tokkuri sake and takowasa.JPG",
+    "sparkling-sake": "Verre Champagne.jpg",
+    "smoked-meat-poutine": "Poutine with pulled pork makes everything better (8515637447).jpg",
+    "maple-miso-bowl": "Poke Bowl in Loviisa.jpg",
+    "bagel-board": "Montréal bagel with lox.jpg",
+    "yuzu-sour": "Pisco Sour 2.jpg",
 }
 
 
@@ -186,19 +265,25 @@ def source_from_page(page: dict):
 
 
 def curated_sources():
-    params = urllib.parse.urlencode(
-        {
-            "action": "query",
-            "format": "json",
-            "formatversion": "2",
-            "titles": "|".join(f"File:{title}" for title in CURATED_TITLES.values()),
-            "prop": "imageinfo",
-            "iiprop": "url|mime|extmetadata",
-            "iiurlwidth": "800",
-        }
-    )
-    pages = get_json(f"{COMMONS_API}?{params}").get("query", {}).get("pages", [])
-    return {source["title"]: source for page in pages if (source := source_from_page(page))}
+    # Commons caps a titles query at 50 and long lists overflow the URL, so
+    # look the curated titles up in small batches.
+    titles = sorted(set(CURATED_TITLES.values()))
+    sources = {}
+    for start in range(0, len(titles), 15):
+        params = urllib.parse.urlencode(
+            {
+                "action": "query",
+                "format": "json",
+                "formatversion": "2",
+                "titles": "|".join(f"File:{title}" for title in titles[start:start + 15]),
+                "prop": "imageinfo",
+                "iiprop": "url|mime|extmetadata",
+                "iiurlwidth": "800",
+            }
+        )
+        pages = get_json(f"{COMMONS_API}?{params}").get("query", {}).get("pages", [])
+        sources.update({source["title"]: source for page in pages if (source := source_from_page(page))})
+    return sources
 
 
 def candidates(term: str):
@@ -262,7 +347,26 @@ def upload(item_id: str, source: dict):
             raise RuntimeError(f"upload returned HTTP {response.status}")
 
 
-def write_report(rows: list[dict]):
+def credit_line(row: dict) -> str:
+    creator = row["credit"] or row["artist"]
+    creator = creator.replace("|", "\\|").replace("\n", " ")
+    title = row["title"].replace("|", "\\|")
+    license_link = f'[{row["license"]}]({row["license_url"]})' if row["license_url"] else row["license"]
+    return f'| {row["item_name"]} | [{title}]({row["page"]}) | {creator} | {license_link} |'
+
+
+def existing_credit_lines() -> dict[str, str]:
+    """Credit rows already in the report, keyed by menu item name."""
+    if not REPORT.exists():
+        return {}
+    rows = {}
+    for line in REPORT.read_text(encoding="utf-8").splitlines():
+        if match := re.match(r"\| (.+?) \| \[", line):
+            rows[match.group(1)] = line
+    return rows
+
+
+def write_report(lines_by_item: dict[str, str]):
     lines = [
         "# Demo menu photo credits",
         "",
@@ -272,25 +376,17 @@ def write_report(rows: list[dict]):
         "",
         "| Menu item | Image | Creator/credit | License |",
         "|---|---|---|---|",
+        *lines_by_item.values(),
+        "",
+        "Generated by `scripts/demo-menu-photos.py` from Wikimedia Commons machine-readable metadata.",
+        "",
     ]
-    for row in rows:
-        creator = row["credit"] or row["artist"]
-        creator = creator.replace("|", "\\|").replace("\n", " ")
-        title = row["title"].replace("|", "\\|")
-        license_link = f'[{row["license"]}]({row["license_url"]})' if row["license_url"] else row["license"]
-        lines.append(f'| {row["item_name"]} | [{title}]({row["page"]}) | {creator} | {license_link} |')
-    lines.extend(
-        [
-            "",
-            "Generated by `scripts/demo-menu-photos.py` from Wikimedia Commons machine-readable metadata.",
-            "",
-        ]
-    )
     REPORT.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> int:
     global SESSION_TOKEN
+    force = "--force" in sys.argv[1:]
     login_body = json.dumps({"pin": MANAGER_PIN}).encode()
     with request(
         f"{STORE_URL}/login", login_body, {"Content-Type": "application/json"}
@@ -300,11 +396,21 @@ def main() -> int:
     items = get_json(f"{STORE_URL}/items")
     curated = curated_sources()
     used: set[str] = set()
-    credits: list[dict] = []
+    previous = existing_credit_lines()
+    # This store's menu first, in menu order; rows for items only on another
+    # store's menu are kept after it so one report covers every store.
+    report: dict[str, str] = {}
+    uploaded = skipped = 0
     failures: list[str] = []
 
     for index, item in enumerate(items, 1):
         item_id = item["id"]
+        if item.get("photoVersion") is not None and not force:
+            skipped += 1
+            if item["nameEn"] in previous:
+                report[item["nameEn"]] = previous[item["nameEn"]]
+            print(f'[{index:02}/{len(items)}] {item["nameEn"]}: already has a photo, skipped (--force replaces it)')
+            continue
         term = SEARCH_TERMS.get(item_id, f'{item["nameEn"]} food drink photograph')
         try:
             curated_title = CURATED_TITLES.get(item_id)
@@ -319,15 +425,18 @@ def main() -> int:
             upload(item_id, source)
             used.add(source["page"])
             source.update(item_id=item_id, item_name=item["nameEn"])
-            credits.append(source)
+            report[item["nameEn"]] = credit_line(source)
+            uploaded += 1
             print(f'[{index:02}/{len(items)}] {item["nameEn"]}: {source["title"]}')
         except (OSError, ValueError, RuntimeError, urllib.error.URLError) as error:
             failures.append(f"{item_id}: {error}")
             print(f'[{index:02}/{len(items)}] {item["nameEn"]}: FAILED ({error})', file=sys.stderr)
         time.sleep(0.65)
 
-    write_report(credits)
-    print(f"\nUploaded {len(credits)}/{len(items)} photos; credits: {REPORT}")
+    for name, line in previous.items():
+        report.setdefault(name, line)
+    write_report(report)
+    print(f"\nUploaded {uploaded}, skipped {skipped} that had photos, of {len(items)} items; credits: {REPORT}")
     if failures:
         print("Failures:\n  " + "\n  ".join(failures), file=sys.stderr)
         return 1
