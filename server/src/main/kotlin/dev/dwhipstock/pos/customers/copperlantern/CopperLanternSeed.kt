@@ -1,6 +1,8 @@
 package dev.dwhipstock.pos.customers.copperlantern
 
 import dev.dwhipstock.pos.base.AuthService
+import dev.dwhipstock.pos.base.Categories
+import dev.dwhipstock.pos.base.VenueSettings
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Users
@@ -11,11 +13,18 @@ import dev.dwhipstock.pos.sdk.Outbox
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.batchInsert
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 
-/** Fictional Canadian pub demo data. All prices are CAD cents. */
+/**
+ * Fictional Canadian pub demo data. All prices are CAD cents. Both stores share
+ * the pub menu and floor plan; Plateau adds a Sushi Bar zone, a sushi category
+ * (maki, nigiri, sake) and a few Plateau-only specials ([CopperLanternVenue]).
+ */
 object CopperLanternSeed {
     private data class Variant(val key: String, val fr: String, val en: String, val cents: Long)
     private data class SeedItem(
@@ -164,14 +173,72 @@ object CopperLanternSeed {
         SeedObject("lower-pillar-2", "lower", "PILLAR", 865, 360, 65, 65),
     )
 
+    // ---- Plateau-only additions ----
+    private val plateauCategories = listOf(
+        arrayOf("sushi", "Sushis et saké", "Sushi & Sake"),
+        arrayOf("plateau-specials", "Spécialités du Plateau", "Plateau Specials"),
+    )
+    private fun sake(carafe: Long, bottle: Long) = listOf(
+        Variant("carafe", "Carafe 180 ml", "180 ml carafe", carafe), Variant("bottle", "Bouteille 720 ml", "720 ml bottle", bottle))
+    private val plateauMenu = listOf(
+        item("salmon-maki", "Maki au saumon", "Salmon Maki", "Six morceaux, saumon et concombre.", "Six pieces, salmon and cucumber.", "sushi", "SM", false, 1150),
+        item("spicy-tuna-maki", "Maki au thon épicé", "Spicy Tuna Maki", "Six morceaux, thon, mayo épicée et ciboulette.", "Six pieces, tuna, spicy mayo and chives.", "sushi", "TM", false, 1250),
+        item("avocado-maki", "Maki avocat-concombre", "Avocado Cucumber Maki", "Six morceaux végétariens.", "Six vegetarian pieces.", "sushi", "AM", false, 950),
+        item("salmon-nigiri", "Nigiri au saumon", "Salmon Nigiri", "Deux morceaux sur riz vinaigré.", "Two pieces on seasoned rice.", "sushi", "SN", false, 850),
+        item("tuna-nigiri", "Nigiri au thon", "Tuna Nigiri", "Deux morceaux sur riz vinaigré.", "Two pieces on seasoned rice.", "sushi", "TN", false, 950),
+        item("scallop-nigiri", "Nigiri aux pétoncles", "Scallop Nigiri", "Deux morceaux, pétoncles et zeste de lime.", "Two pieces, scallop and lime zest.", "sushi", "NS", false, 1050),
+        SeedItem("junmai-sake", "Saké junmai", "Junmai Sake", "Saké sec et rond, servi froid ou tiède.", "Dry, round sake served cold or warm.", "sushi", "JS", true, sake(1400, 5200)),
+        item("sparkling-sake", "Saké pétillant", "Sparkling Sake", "Bouteille de 300 ml, légèrement sucrée.", "300 ml bottle, lightly sweet.", "sushi", "SS", true, 1800),
+        item("smoked-meat-poutine", "Poutine à la viande fumée", "Smoked Meat Poutine", "Frites, fromage en grains, sauce et viande fumée.", "Fries, cheese curds, gravy and smoked meat.", "plateau-specials", "VP", false, 1850),
+        item("maple-miso-bowl", "Bol saumon érable-miso", "Maple Miso Salmon Bowl", "Saumon laqué, riz, edamame et chou mariné.", "Glazed salmon, rice, edamame and pickled cabbage.", "plateau-specials", "MM", false, 2250),
+        item("bagel-board", "Planche de bagels du Plateau", "Plateau Bagel Board", "Bagels, fromage à la crème, saumon fumé et câpres.", "Bagels, cream cheese, smoked salmon and capers.", "plateau-specials", "BG", false, 1650),
+        item("yuzu-sour", "Sour au yuzu", "Yuzu Lantern Sour", "Gin, yuzu, citron et blanc d'œuf.", "Gin, yuzu, lemon and egg white.", "plateau-specials", "YS", true, 1550),
+    )
+    private val plateauZone = arrayOf("sushi", "Bar à sushis", "Sushi Bar", "S")
+    private val plateauTables = (1..8).map { n ->
+        SeedTable("s$n", "sushi", "S-$n", n, 60 + (n - 1) * 110, 145, 65, 65, "ROUND", 1)
+    } + listOf(
+        SeedTable("s9", "sushi", "S-9", 9, 120, 400, 180, 110, "RECT", 4),
+        SeedTable("s10", "sushi", "S-10", 10, 420, 400, 180, 110, "RECT", 4),
+        SeedTable("s11", "sushi", "S-11", 11, 720, 400, 180, 110, "RECT", 4),
+    )
+    private val plateauObjects = listOf(
+        SeedObject("sushi-counter", "sushi", "BAR_FRONT", 40, 30, 920, 80, "Sushi Counter"),
+    )
+
+    /** Item ids on [venue]'s seeded menu (the shared menu plus its additions). */
+    fun menuItemIds(venue: CopperLanternVenue): List<String> = menuFor(venue).map { it.id }
+
+    private fun menuFor(venue: CopperLanternVenue) =
+        if (venue == CopperLanternVenue.PLATEAU) menu + plateauMenu else menu
+
     /** Empty-mode stores (POS_SEED=none): one manager so the owner can sign in and set up. */
     fun seedBootstrapManagerIfNoStaff() = transaction {
         if (Users.selectAll().count() > 0) return@transaction
         Users.insert { it[id] = "manager"; it[name] = "Manager"; it[role] = "MANAGER"; it[pin] = AuthService.hashPin("1234"); it[languageCode] = "en" }
     }
 
-    fun seedIfEmpty() = transaction {
+    fun seedIfEmpty(venue: CopperLanternVenue = CopperLanternVenue.VIEUX_PORT) = transaction {
         if (Users.selectAll().count() > 0) return@transaction
+        val plateau = venue == CopperLanternVenue.PLATEAU
+        val menu = menuFor(venue)
+        val zones = if (plateau) zones + listOf(plateauZone) else zones
+        val tables = if (plateau) tables + plateauTables else tables
+        val floorObjects = if (plateau) floorObjects + plateauObjects else floorObjects
+        // the shared categories come from migration 005; Plateau adds its own after them
+        if (plateau) {
+            val next = (Categories.selectAll().maxOfOrNull { it[Categories.sortOrder] } ?: -1) + 1
+            plateauCategories.forEachIndexed { i, c ->
+                Categories.insertIgnore {
+                    it[Categories.id] = c[0]; it[sortOrder] = next + i; it[nameFr] = c[1]; it[nameEn] = c[2]
+                }
+            }
+        }
+        // a fresh store's receipt header names its own location (owner-editable later)
+        VenueSettings.update({ VenueSettings.id eq 1 }) {
+            it[venueAddress] = venue.address
+            it[venuePhone] = venue.phone
+        }
         Items.batchInsert(menu) { m ->
             this[Items.id] = m.id; this[Items.nameFr] = m.nameFr; this[Items.nameEn] = m.nameEn
             this[Items.descriptionFr] = m.descriptionFr; this[Items.descriptionEn] = m.descriptionEn

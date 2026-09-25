@@ -23,6 +23,7 @@ import dev.dwhipstock.pos.base.SettingsRepository
 import dev.dwhipstock.pos.restaurant.ShiftService
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternConfig
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternSeed
+import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.sdk.FilesystemPhotoStore
@@ -70,6 +71,8 @@ fun Application.module(
     requireDeviceTokenOverride: Boolean? = null,
     pairingTransport: dev.dwhipstock.pos.sync.CloudTransport? = null,
     seedMode: String = System.getenv("POS_SEED") ?: "copperlantern",
+    // which store this is (POS_VENUE=vieux-port|plateau): display name + first-boot seed
+    venue: CopperLanternVenue = CopperLanternVenue.fromEnv(),
     cloudSyncUrl: String? = System.getenv("CLOUD_SYNC_URL"),
     cloudSyncApiKey: String? = System.getenv("CLOUD_SYNC_API_KEY"),
     publicUrl: String? = System.getenv("POS_PUBLIC_URL"),
@@ -90,7 +93,7 @@ fun Application.module(
     // also wipes that residue. Gate = no install_id yet: once a store has synced,
     // its data is never touched here again.
     if (seedMode != "none") {
-        CopperLanternSeed.seedIfEmpty()
+        CopperLanternSeed.seedIfEmpty(venue)
     } else {
         wipeMigrationSeedResidueIfNeverSynced()
         // nobody could ever sign in to an empty store (staff no longer arrive
@@ -103,8 +106,7 @@ fun Application.module(
     // seed the default role→grant matrix (CONTRACT §7) if absent — covers existing
     // stores too (migration 024 only creates the table). Cloud edits override it.
     dev.dwhipstock.pos.base.GrantsRepo.seedDefaultRoleGrantsIfEmpty()
-    // Customer tier wired statically for the single-tenant embedded deployment.
-    // TODO: config registry when a second customer exists.
+    // Customer tier: Copper Lantern, the store picked by POS_VENUE.
     // POS_PUBLIC_URL wins; otherwise auto-detect the LAN address so printed
     // table QRs work out of the box at the venue.
     val publicBaseUrl = publicUrl
@@ -124,6 +126,7 @@ fun Application.module(
         },
     )
     val config = CopperLanternConfig(
+        venue = venue,
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,
@@ -131,6 +134,7 @@ fun Application.module(
             publicUrl ?: detectLanIpv4()?.let { "http://$it:8080" } ?: publicBaseUrl
         },
     )
+    log.info("Store: ${venue.displayName} (POS_VENUE=${venue.id})")
     log.info("Customers scan: $publicBaseUrl/m/{zone}/{n} (e.g. /m/lower/8; /m/{tableId} still works)  — table slips: $publicBaseUrl/slips")
     val checkService = CheckService(config)
     val shiftService = ShiftService(config)

@@ -88,3 +88,6 @@ server/data/
 
 # Internal working notes — private, never in git (kept out of any published/demo repo)
 _handoff/
+
+# Local two-store demo runtime (Plateau desktop store DB, logs, pid)
+.demo/
