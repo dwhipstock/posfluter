@@ -178,7 +178,7 @@ data class RefundRequest(
     val amountCents: Long? = null,
     /** Refund specific lines/quantities (by-line refund). Takes precedence over [amountCents]. */
     val lines: List<dev.dwhipstock.pos.restaurant.RefundLineRequest>? = null,
-    val tenderType: String = "CASH", // CASH | CARD | BANK_TRANSFER
+    val tenderType: String = "CASH", // CASH | CARD | BANK_TRANSFER | STRIPE
     val reason: String,
     val managerPin: String? = null,
 )
@@ -410,7 +410,12 @@ fun Route.shiftRoutes(shiftService: dev.dwhipstock.pos.restaurant.ShiftService, 
     }
 }
 
-fun Route.posRoutes(checkService: CheckService, auth: dev.dwhipstock.pos.base.AuthService, photos: dev.dwhipstock.pos.sdk.PhotoStore) {
+fun Route.posRoutes(
+    checkService: CheckService,
+    auth: dev.dwhipstock.pos.base.AuthService,
+    photos: dev.dwhipstock.pos.sdk.PhotoStore,
+    stripe: dev.dwhipstock.pos.payments.StripeService? = null,
+) {
 
     post("/checks/{id}/pending-lines/{lineId}/accept") {
         call.respond(checkService.acceptPendingLine(checkId(call), lineIdParam(call)))
@@ -678,6 +683,12 @@ fun Route.posRoutes(checkService: CheckService, auth: dev.dwhipstock.pos.base.Au
     post("/checks/{id}/refund") {
         val req = call.receive<RefundRequest>()
         val approverId = requireGrant(auth, call, Permissions.REFUND, req.managerPin)
+        // back to the Stripe card: refunded AT Stripe first, recorded only if Stripe did it
+        if (req.tenderType == TenderType.STRIPE.name && stripe != null) {
+            val id = checkId(call)
+            call.respond(HttpStatusCode.Created, onIo { stripe.refund(id, req.amountCents, req.lines, req.reason, approverId) })
+            return@post
+        }
         call.respond(HttpStatusCode.Created, checkService.refundCheck(
             checkId(call), req.amountCents, req.lines, req.tenderType, req.reason, approverId))
     }

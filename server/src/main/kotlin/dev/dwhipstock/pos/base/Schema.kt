@@ -54,7 +54,7 @@ object ItemVariants : Table("item_variants") {
  */
 object Tenders : IntIdTable("tenders") {
     val transactionId = integer("transaction_id")
-    val type = varchar("type", 20) // CASH | CARD | BANK_TRANSFER
+    val type = varchar("type", 20) // CASH | CARD | BANK_TRANSFER | STRIPE
     val amountTenderedCents = long("amount_tendered_cents")
     val amountAppliedCents = long("amount_applied_cents")
     val roundingAdjustmentCents = long("rounding_adjustment_cents").default(0)
@@ -63,6 +63,8 @@ object Tenders : IntIdTable("tenders") {
     // base never references the add-on tiers. NULL = whole-transaction tender.
     val billGroupId = integer("bill_group_id").nullable()
     val createdAt = utcTimestamp("created_at")
+    // STRIPE tenders only (035): the PaymentIntent this tender settled
+    val stripePaymentIntentId = varchar("stripe_payment_intent_id", 64).nullable()
 }
 
 object Users : Table("users") {

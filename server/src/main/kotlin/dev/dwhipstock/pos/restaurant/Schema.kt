@@ -141,12 +141,34 @@ object Refunds : IntIdTable("refunds") {
     val grossCents = long("gross_cents")
     val netCents = long("net_cents")
     val taxCents = long("tax_cents")
-    val tenderType = varchar("tender_type", 20) // CASH | CARD | BANK_TRANSFER (no card refunds)
+    val tenderType = varchar("tender_type", 20) // CASH | CARD | BANK_TRANSFER | STRIPE
     val reason = varchar("reason", 300)
     // by-line refunds: [{lineId,qty,amountCents}]. NULL on a by-amount refund.
     val linesJson = text("lines_json").nullable()
     val refundedBy = varchar("refunded_by", 64) // the approving manager
     val createdAt = utcTimestamp("created_at")
+    // STRIPE refunds only (035): written after Stripe confirmed the refund
+    val stripePaymentIntentId = varchar("stripe_payment_intent_id", 64).nullable()
+    val stripeRefundId = varchar("stripe_refund_id", 64).nullable()
+}
+
+/**
+ * One PaymentIntent the store created at Stripe for a check (or bill group).
+ * status: CREATING → CREATED → CAPTURED → RECORDED, or CANCELED / FAILED.
+ * Only RECORDED has a tender row. [publicId] is the id the client holds.
+ */
+object StripePayments : IntIdTable("stripe_payments") {
+    val publicId = varchar("public_id", 40)
+    val checkId = integer("check_id")
+    val billGroupId = integer("bill_group_id").nullable()
+    val amountCents = long("amount_cents")
+    val currency = varchar("currency", 3)
+    val paymentIntentId = varchar("payment_intent_id", 64).nullable()
+    val status = varchar("status", 20)
+    val tenderId = integer("tender_id").nullable()
+    val lastError = varchar("last_error", 300).nullable()
+    val createdAt = utcTimestamp("created_at")
+    val updatedAt = utcTimestamp("updated_at")
 }
 
 /**

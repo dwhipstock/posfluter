@@ -87,6 +87,15 @@ zone, taking the first occurrence of the repeated fall-back hour.
 
 Venue policy is isolated in a typed configuration. The included configuration is fictional: CAD minor units, Gregorian dates, English/French content, generic tenders, and no preset tax rule. Menu, staff, settings, receipts, and uploaded photos remain venue-scoped.
 
+The one tender that needs the internet is the optional **Card (Stripe)**
+(Stripe Terminal, test mode, simulated reader; `payments/StripeService.kt`,
+setup in `docs/demo-runbook.md`). It is off without an `sk_test_` key, is
+never contacted at startup or sign-in, and every failure records nothing: the
+check stays payable by cash or any other tender. Card payments authorize on
+the reader and are captured by the store (`capture_method=manual`) right
+before the STRIPE tender is recorded; refunds are made at Stripe first and
+refused when Stripe is unreachable. The secret key stays on the store.
+
 Secrets and runtime data are never source artifacts. Local databases, environment files, receipt/bill spools, uploads, caches, and build directories are ignored.
 
 ## First-tablet operation

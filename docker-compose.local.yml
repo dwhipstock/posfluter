@@ -108,6 +108,9 @@ services:
       CLOUD_SYNC_URL: "http://api:8081"
       CLOUD_SYNC_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env.local}"
       CLOUD_SYNC_INTERVAL_SECONDS: "10"
+      # optional "Card (Stripe)" tender, TEST MODE only: sk_test_… (anything else is refused)
+      STRIPE_KEY: "${STRIPE_KEY:-}"
+      STRIPE_LOCATION_ID: "${STRIPE_LOCATION_ID:-}"
       # Owner reporting portal (the `web` service on :3000) as reached from a phone
       # on the LAN. The sync host above (api:8081) is compose-internal and NOT
       # scannable, so this overrides the derived Reports QR. Set by scripts/demo-up.sh.

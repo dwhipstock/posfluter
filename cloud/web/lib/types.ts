@@ -71,7 +71,7 @@ export interface VatReport {
   byVenue: VenueSummaryRow[];
 }
 
-export type TenderType = "CASH" | "CARD" | "BANK_TRANSFER";
+export type TenderType = "CASH" | "CARD" | "BANK_TRANSFER" | "STRIPE";
 
 export interface PaymentRow {
   type: TenderType;

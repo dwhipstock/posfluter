@@ -66,7 +66,7 @@ today/today). A check belongs to the day of its `closedAt`.
   (`vatCents` = Σ store-computed `taxIncludedCents`; `netCents` = gross − vat.)
 - `GET /v1/reports/payments` →
   `{ "rows": [ { "type": "CASH", "amountCents": 0, "count": 0 } ], "totalCents": 0 }`
-  (type ∈ CASH | CARD | BANK_TRANSFER; amount = Σ amountApplied.)
+  (type ∈ CASH | CARD | BANK_TRANSFER | STRIPE; amount = Σ amountApplied.)
 - `GET /v1/reports/items` →
   `{ "rows": [ { "itemId", "nameFr", "nameEn", "categoryId", "categoryNameFr",
      "categoryNameEn", "qty", "revenueCents" } ] }` sorted by revenue desc.

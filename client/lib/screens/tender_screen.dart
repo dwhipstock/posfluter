@@ -6,7 +6,9 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../payments/card_reader.dart';
 import 'receipt_screen.dart';
+import 'stripe_payment_screen.dart';
 
 /// Split-tender payment. Three big method tiles across the top, outstanding
 /// prominent, quick-amount strip + numpad for cash. The check closes (and the
@@ -19,7 +21,20 @@ import 'receipt_screen.dart';
 class TenderScreen extends StatefulWidget {
   final Check check;
   final int? groupId;
-  const TenderScreen({super.key, required this.check, this.groupId});
+
+  /// Test seams for the optional "Card (Stripe)" tender. Defaults: the store's
+  /// /stripe/status, the Stripe Terminal SDK, and "Android only".
+  final Future<StripeStatus> Function()? stripeStatus;
+  final CardReader? cardReader;
+  final bool? cardReaderSupported;
+  const TenderScreen({
+    super.key,
+    required this.check,
+    this.groupId,
+    this.stripeStatus,
+    this.cardReader,
+    this.cardReaderSupported,
+  });
 
   @override
   State<TenderScreen> createState() => _TenderScreenState();
@@ -32,15 +47,56 @@ class _TenderScreenState extends State<TenderScreen> {
   TenderInstructions? _instructions;
   bool _busy = false;
 
+  /// null while loading (and when the store has no Stripe key: not shown).
+  StripeStatus? _stripe;
+  SimulatedTestCard _simCard = SimulatedTestCard.approved;
+
+  bool get _readerSupported =>
+      widget.cardReaderSupported ?? StripeTerminalReader.supported;
+
+  /// "Card (Stripe)" is shown only on a store with a Stripe key configured.
+  bool get _stripeShown => _stripe?.configured == true;
+
+  /// Why it is greyed out, or null when it can be used.
+  String? get _stripeBlocked {
+    final st = _stripe;
+    if (st == null || !st.configured) return 'stripe_not_configured';
+    if (!_readerSupported) return 'stripe_unsupported';
+    if (StripeTerminalReader.permissionDenied) {
+      return 'stripe_permission_denied';
+    }
+    if (!st.available || st.locationId == null) {
+      return st.reason ?? 'stripe_unavailable';
+    }
+    return null;
+  }
+
   BillGroup? get _group => widget.groupId == null
       ? null
       : _check.split?.groups.where((g) => g.id == widget.groupId).firstOrNull;
   int get _due => _group?.outstandingCents ?? _check.outstandingCents;
   int? get _entryCAD => _entry.isEmpty ? null : int.parse(_entry);
 
+  /// Never awaited by anything else on this screen: cash is usable at once,
+  /// and a slow or offline Stripe just leaves the option greyed out.
+  Future<void> _loadStripe() async {
+    StripeStatus st;
+    try {
+      st = await (widget.stripeStatus ?? Api.stripeStatus)();
+    } catch (_) {
+      st = StripeStatus.off;
+    }
+    if (!mounted) return;
+    setState(() {
+      _stripe = st;
+      if (_method == 'STRIPE' && _stripeBlocked != null) _method = 'CASH';
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadStripe();
     // Recovery: a check already fully paid but still TOTAL_LOCKED (e.g. finalize
     // was interrupted after the last tender, or the app died between the two) has
     // no balance left to tender. Close it directly instead of stranding it — the
@@ -138,6 +194,54 @@ class _TenderScreenState extends State<TenderScreen> {
       }
     }
   });
+
+  /// Card (Stripe): run the reader flow on its own screen. It pops with the
+  /// recorded tender, or null when cancelled/failed (nothing recorded).
+  Future<void> _payStripe() async {
+    final st = _stripe;
+    if (_busy || st == null || _stripeBlocked != null) return;
+    final amount = _entryCAD == null ? null : _entryCAD! * 100;
+    final result = await Navigator.of(context).push<TenderResult>(
+      MaterialPageRoute(
+        builder: (_) => StripePaymentScreen(
+          checkId: _check.id,
+          groupId: widget.groupId,
+          amountCents: amount,
+          locationId: st.locationId!,
+          simulatedCard: _simCard,
+          reader: widget.cardReader ?? StripeTerminalReader.instance,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result == null) {
+      // cancelled or failed: nothing recorded — refresh (totals may have locked)
+      // and re-check Stripe (a denied permission greys it out)
+      try {
+        final fresh = await Api.getCheck(_check.id);
+        if (mounted) setState(() => _check = fresh);
+      } catch (_) {}
+      if (mounted) setState(() {});
+      return;
+    }
+    await _guard(() async {
+      setState(() {
+        _check = result.check;
+        _entry = '';
+      });
+      if (result.check.outstandingCents == 0) {
+        await _finishCheck();
+      } else if (_due == 0) {
+        if (mounted) Navigator.pop(context, false); // group settled, others owe
+      } else if (mounted) {
+        _toast(
+          L
+              .of(context)
+              .receivedToast(cad(result.tender.amountAppliedCents), cad(_due)),
+        );
+      }
+    });
+  }
 
   Future<void> _finishCheck() async {
     await Api.finalizeCheck(_check.id);
@@ -280,11 +384,43 @@ class _TenderScreenState extends State<TenderScreen> {
                       LucideIcons.landmark,
                       l.bankTransfer,
                     ),
+                    if (_stripeShown) ...[
+                      const SizedBox(width: 8),
+                      _methodTile(
+                        'STRIPE',
+                        LucideIcons.nfc,
+                        l.cardStripe,
+                        enabled: _stripeBlocked == null,
+                      ),
+                    ],
                   ],
                 ),
+                if (_stripeShown && _stripeBlocked != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          LucideIcons.wifiOff,
+                          size: 16,
+                          color: T.textMuted,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            l.stripeUnavailableHint(_stripeBlocked),
+                            key: const ValueKey('stripe-hint'),
+                            style: T.small(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 20),
                 if (_method == 'CASH')
                   _cashSection(l)
+                else if (_method == 'STRIPE')
+                  _stripeSection(l)
                 else
                   _electronicSection(_method, l),
               ],
@@ -295,34 +431,100 @@ class _TenderScreenState extends State<TenderScreen> {
     );
   }
 
-  Widget _methodTile(String value, IconData icon, String label) {
-    final selected = _method == value;
+  Widget _methodTile(
+    String value,
+    IconData icon,
+    String label, {
+    bool enabled = true,
+  }) {
+    final selected = enabled && _method == value;
+    final fg = !enabled
+        ? T.textMuted.withValues(alpha: .55)
+        : selected
+        ? T.primary
+        : T.textPrimary;
     return Expanded(
       child: SizedBox(
         height: 72,
-        child: PosPanel(
-          color: selected ? T.surfaceAlt : T.surface,
-          borderColor: selected ? T.primary : T.border,
-          onTap: () => setState(() {
-            _method = value;
-            _instructions = null;
-          }),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 24, color: selected ? T.primary : T.textMuted),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: T.small(
-                  color: selected ? T.primary : T.textPrimary,
-                  weight: FontWeight.w600,
+        child: Opacity(
+          opacity: enabled ? 1 : .7,
+          child: PosPanel(
+            key: ValueKey('tender-tile-$value'),
+            color: !enabled
+                ? T.background
+                : selected
+                ? T.surfaceAlt
+                : T.surface,
+            borderColor: selected ? T.primary : T.border,
+            onTap: enabled
+                ? () => setState(() {
+                    _method = value;
+                    _instructions = null;
+                  })
+                : null,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 24,
+                  color: selected ? T.primary : (enabled ? T.textMuted : fg),
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.small(color: fg, weight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _stripeSection(L l) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _entryDisplay(l, hint: l.amountHint(cad(_due))),
+        const SizedBox(height: 8),
+        AmountPad(onKey: _numpadKey),
+        const SizedBox(height: 12),
+        Text(l.simulatedCardLabel, style: T.small()),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final c in SimulatedTestCard.values)
+              ChoiceChip(
+                label: Text(switch (c) {
+                  SimulatedTestCard.approved => l.simApproved,
+                  SimulatedTestCard.declined => l.simDeclined,
+                  SimulatedTestCard.insufficientFunds => l.simInsufficient,
+                }),
+                selected: _simCard == c,
+                onSelected: (_) => setState(() => _simCard = c),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: T.minTouch,
+          child: FilledButton.icon(
+            key: const ValueKey('stripe-charge'),
+            style: FilledButton.styleFrom(
+              backgroundColor: T.accent,
+              foregroundColor: T.onAccent,
+            ),
+            icon: const Icon(LucideIcons.nfc),
+            label: Text(l.chargeCardStripe),
+            onPressed: _busy || _stripeBlocked != null ? null : _payStripe,
+          ),
+        ),
+      ],
     );
   }
 
@@ -333,7 +535,9 @@ class _TenderScreenState extends State<TenderScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(hint, style: T.small()),
+          // long French hints wrap instead of overflowing the amount
+          Flexible(child: Text(hint, style: T.small())),
+          const SizedBox(width: 12),
           Text(
             _entryCAD == null ? '—' : cad(_entryCAD! * 100),
             style: T.price(size: 26, weight: FontWeight.w600),

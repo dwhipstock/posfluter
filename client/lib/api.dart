@@ -584,13 +584,14 @@ class Api {
     }
     if (res.statusCode >= 400) {
       String message = 'HTTP ${res.statusCode}';
-      String? code;
+      String? code, declineCode;
       try {
         final body = jsonDecode(utf8.decode(res.bodyBytes));
         message = body['error'] ?? message;
         code = body['code'];
+        declineCode = body['declineCode'];
       } catch (_) {}
-      throw ApiException(message, code);
+      throw ApiException(message, code, declineCode);
     }
   }
 
@@ -1097,6 +1098,87 @@ class Api {
     );
   }
 
+  // --- Stripe: optional "Card (Stripe)" tender (test mode, simulated reader) --
+  // These calls wait on Stripe (through the store), so they never feed the
+  // ConnectionMonitor: a slow or offline Stripe must not look like the local
+  // store dropping out, and must never raise the reconnecting overlay.
+
+  static Future<dynamic> _stripeCall(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final res =
+        await (method == 'GET'
+                ? http.get(uri, headers: _headers)
+                : http.post(
+                    uri,
+                    headers: _headers,
+                    body: jsonEncode(body ?? {}),
+                  ))
+            .timeout(timeout);
+    _throwOnError(res);
+    return jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  /// Whether "Card (Stripe)" can be offered now. Any failure → unavailable.
+  static Future<StripeStatus> stripeStatus() async {
+    try {
+      return StripeStatus.fromJson(
+        await _stripeCall(
+          'GET',
+          '/stripe/status',
+          timeout: const Duration(seconds: 12),
+        ),
+      );
+    } on ApiException catch (e) {
+      // an older store without Stripe routes answers 404: not configured
+      if (e.code == null || e.code == 'not_found') return StripeStatus.off;
+      return StripeStatus.unavailable(e.code);
+    } on SessionExpiredException {
+      rethrow;
+    } catch (_) {
+      return StripeStatus.unavailable('stripe_unavailable');
+    }
+  }
+
+  /// Terminal SDK connection token (fetched by the SDK when it needs one).
+  static Future<String> stripeConnectionToken() async =>
+      (await _stripeCall('POST', '/stripe/connection-token'))['secret'];
+
+  /// A card_present PaymentIntent for the amount due (or [amountCents]).
+  static Future<StripeIntent> createStripeIntent(
+    int checkId, {
+    int? amountCents,
+    int? groupId,
+  }) async => StripeIntent.fromJson(
+    await _stripeCall(
+      'POST',
+      '/checks/$checkId/stripe/intents',
+      body: {'amountCents': ?amountCents, 'groupId': ?groupId},
+    ),
+  );
+
+  /// Capture the authorized card payment and record the tender.
+  static Future<TenderResult> confirmStripePayment(String paymentId) async {
+    final json = await _stripeCall(
+      'POST',
+      '/stripe/payments/$paymentId/confirm',
+      timeout: const Duration(seconds: 45),
+    );
+    return TenderResult(
+      Tender.fromJson(json['tender']),
+      Check.fromJson(json['check']),
+    );
+  }
+
+  /// Release the PaymentIntent; nothing is recorded. Best-effort.
+  static Future<void> cancelStripePayment(String paymentId) async {
+    await _stripeCall('POST', '/stripe/payments/$paymentId/cancel');
+  }
+
   static Future<String> receiptText(int checkId) async =>
       (await _get('/checks/$checkId/receipt'))['text'];
 
@@ -1173,7 +1255,9 @@ class Api {
       RefundInfo.fromJson(await _get('/checks/$checkId/refunds'));
 
   /// Refund by amount ([amountCents]) or by line ([lines] = [{lineId,qty}]).
-  /// [tenderType] is CASH | CARD | BANK_TRANSFER. Returns the refund + slip.
+  /// [tenderType] is CASH | CARD | BANK_TRANSFER | STRIPE (STRIPE refunds the
+  /// card at Stripe first; refused if Stripe can't be reached). Returns the
+  /// refund + slip.
   static Future<RefundResult> refundCheck(
     int checkId, {
     int? amountCents,
@@ -1220,15 +1304,18 @@ class Api {
 class ApiException implements Exception {
   final String message; // server's english debug message (logs/debug only)
   final String? code; // machine code, translated client-side
-  ApiException(this.message, [this.code]);
+  final String?
+  declineCode; // Stripe card decline reason (stripe_declined only)
+  ApiException(this.message, [this.code, this.declineCode]);
 
   /// User-facing text: the localized copy for [code], or — for an unknown or
   /// missing code — a clean generic message. The raw server [message] (internal
   /// ids, "HTTP 409", etc.) is never shown to end users; use it only for logs.
   @override
-  String toString() =>
-      L(Prefs.instance.isEn).apiError(code) ??
-      L(Prefs.instance.isEn).apiError('internal')!;
+  String toString() => code == 'stripe_declined'
+      ? L(Prefs.instance.isEn).stripeDeclineMessage(declineCode)
+      : L(Prefs.instance.isEn).apiError(code) ??
+            L(Prefs.instance.isEn).apiError('internal')!;
 }
 
 /// 401 — session missing/expired; UI should return to the login screen.
@@ -2075,19 +2162,24 @@ class RefundView {
 class RefundInfo {
   final int checkId, grandTotalCents, refundedCents, refundableCents;
   final List<RefundView> refunds;
+
+  /// Still refundable to a Stripe card on this check (0 = no Stripe tender).
+  final int stripeRefundableCents;
   RefundInfo(
     this.checkId,
     this.grandTotalCents,
     this.refundedCents,
     this.refundableCents,
-    this.refunds,
-  );
+    this.refunds, {
+    this.stripeRefundableCents = 0,
+  });
   factory RefundInfo.fromJson(Map<String, dynamic> j) => RefundInfo(
     j['checkId'],
     j['grandTotalCents'],
     j['refundedCents'],
     j['refundableCents'],
     (j['refunds'] as List).map((r) => RefundView.fromJson(r)).toList(),
+    stripeRefundableCents: j['stripeRefundableCents'] ?? 0,
   );
 }
 
@@ -2169,4 +2261,57 @@ class TenderResult {
   final Tender tender;
   final Check check;
   TenderResult(this.tender, this.check);
+}
+
+/// GET /stripe/status. [configured] false → the option is not shown at all;
+/// configured but not [available] → shown greyed out with a hint ([reason]).
+class StripeStatus {
+  final bool configured, available;
+  final String? reason, currency, locationId;
+  const StripeStatus({
+    required this.configured,
+    required this.available,
+    this.reason,
+    this.currency,
+    this.locationId,
+  });
+  static const off = StripeStatus(
+    configured: false,
+    available: false,
+    reason: 'stripe_not_configured',
+  );
+  factory StripeStatus.unavailable(String? reason) => StripeStatus(
+    configured: true,
+    available: false,
+    reason: reason ?? 'stripe_unavailable',
+  );
+  factory StripeStatus.fromJson(Map<String, dynamic> j) => StripeStatus(
+    configured: j['configured'] == true,
+    available: j['available'] == true,
+    reason: j['reason'],
+    currency: j['currency'],
+    locationId: j['locationId'],
+  );
+}
+
+class StripeIntent {
+  final String paymentId, paymentIntentId, clientSecret, currency;
+  final String? locationId;
+  final int amountCents;
+  StripeIntent(
+    this.paymentId,
+    this.paymentIntentId,
+    this.clientSecret,
+    this.amountCents,
+    this.currency,
+    this.locationId,
+  );
+  factory StripeIntent.fromJson(Map<String, dynamic> j) => StripeIntent(
+    j['paymentId'],
+    j['paymentIntentId'],
+    j['clientSecret'],
+    j['amountCents'],
+    j['currency'],
+    j['locationId'],
+  );
 }

@@ -10,6 +10,7 @@ import android.os.IBinder
 import android.util.Log
 import dev.dwhipstock.pos.module
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
+import dev.dwhipstock.pos.sdk.StripeConfig
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import java.io.File
@@ -90,6 +91,7 @@ class TabletStoreService : Service() {
                 ?.trim()?.toBooleanStrictOrNull() ?: true
             if (!staffAppMfaRequired) Log.w("TabletStore", "Demo build: staff-app MFA bypass enabled")
             val receiptPrintMode = readReceiptPrintMode()
+            val stripeConfig = readStripeConfig()
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = 8080) {
                 module(
                     dbPath = dbFile.absolutePath,
@@ -106,6 +108,7 @@ class TabletStoreService : Service() {
                     physicalPrinterEnabled = !isolatedTest,
                     staffAppMfaRequired = staffAppMfaRequired,
                     receiptPrintMode = receiptPrintMode,
+                    stripeConfig = stripeConfig,
                 )
             }.start(wait = true)
         } catch (error: Throwable) {
@@ -127,6 +130,20 @@ class TabletStoreService : Service() {
         }.getOrElse { ReceiptPrintMode.Resolved(ReceiptPrintMode.PAPER, "default", it.message) }
         resolved.warning?.let { Log.w("TabletStore", "Receipt printing config ignored: $it") }
         Log.i("TabletStore", "Receipt printing: ${resolved.mode.wire} (${resolved.source})")
+        return resolved
+    }
+
+    /**
+     * Optional "Card (Stripe)" tender, TEST MODE only: `stripe.secretKey=sk_test_…`
+     * (and optional `stripe.locationId`) in the same external store.properties
+     * (scripts/tablet-stripe-config.sh). Anything but an sk_test_ key is refused.
+     * Missing/bad → Stripe off; never fails startup; the key is never logged.
+     */
+    private fun readStripeConfig(): StripeConfig.Resolved {
+        val resolved = runCatching {
+            StripeConfig.fromFile(getExternalFilesDir(null)?.let { File(it, "store.properties") })
+        }.getOrElse { StripeConfig.OFF }
+        Log.i("TabletStore", resolved.describe())
         return resolved
     }
 

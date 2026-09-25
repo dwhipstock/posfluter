@@ -377,7 +377,13 @@ class _RefundScreenState extends State<RefundScreen> {
         Wrap(
           spacing: 8,
           children: [
-            for (final t in const ['CASH', 'CARD', 'BANK_TRANSFER'])
+            for (final t in [
+              'CASH',
+              'CARD',
+              'BANK_TRANSFER',
+              // back to the Stripe card: only when this bill was paid that way
+              if (info.stripeRefundableCents > 0) 'STRIPE',
+            ])
               ChoiceChip(
                 label: Text(_tenderLabel(l, t)),
                 selected: _tender == t,
@@ -439,6 +445,7 @@ class _RefundScreenState extends State<RefundScreen> {
     'CASH' => l.cash,
     'CARD' => l.card,
     'BANK_TRANSFER' => l.bankTransfer,
+    'STRIPE' => l.cardStripe,
     _ => t,
   };
 

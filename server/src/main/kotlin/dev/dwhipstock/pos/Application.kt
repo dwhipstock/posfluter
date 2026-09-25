@@ -34,6 +34,11 @@ import dev.dwhipstock.pos.sdk.PrinterAdapter
 import dev.dwhipstock.pos.sdk.NetworkThermalPrinter
 import dev.dwhipstock.pos.sdk.PrinterTarget
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
+import dev.dwhipstock.pos.sdk.StripeConfig
+import dev.dwhipstock.pos.payments.StripeException
+import dev.dwhipstock.pos.payments.StripeHttp
+import dev.dwhipstock.pos.payments.StripeService
+import dev.dwhipstock.pos.api.stripeRoutes
 import dev.dwhipstock.pos.api.printerRoutes
 import dev.dwhipstock.pos.restaurant.BadRequestException
 import dev.dwhipstock.pos.restaurant.ConflictException
@@ -85,6 +90,12 @@ fun Application.module(
     // print.receipts=paper|digital (POS_PRINT_RECEIPTS / POS_CONFIG_FILE; the
     // tablet passes its store.properties). Local config only, never the network.
     receiptPrintMode: ReceiptPrintMode.Resolved = ReceiptPrintMode.fromEnv(),
+    // Optional Stripe card tender, TEST MODE only (STRIPE_KEY / stripe.secretKey;
+    // the tablet passes its store.properties). No key or a non-sk_test_ key →
+    // disabled. Never contacted at startup on the request path.
+    stripeConfig: StripeConfig.Resolved = StripeConfig.fromEnv(),
+    // test seam: a fake Stripe HTTP layer
+    stripeHttp: StripeHttp? = null,
 ) {
     initDatabase(dbPath)
     // discover i18n message catalogs now so missing-key warnings surface at
@@ -150,6 +161,9 @@ fun Application.module(
     log.info("Store: ${venue.displayName} (POS_VENUE=${venue.id})")
     log.info("Customers scan: $publicBaseUrl/m/t/{token} (a random link per table, on its QR slip; a manager can regenerate it)  — print slips from the tablet")
     val checkService = CheckService(config)
+    // background account lookup only; a missing key or no internet changes nothing else
+    val stripeService = StripeService(stripeConfig, checkService, venue.id, venue.displayName, stripeHttp)
+        .also { it.start() }
     val shiftService = ShiftService(config)
     val authService = AuthService(settingsRepo, staffAppMfaRequired)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
@@ -220,6 +234,13 @@ fun Application.module(
                 mapOf("error" to (cause.message ?: "manager approval required"),
                     "code" to "manager_approval_required"))
         }
+        exception<StripeException> { call, cause ->
+            call.respond(HttpStatusCode.fromValue(cause.status), buildMap {
+                put("error", cause.message ?: "stripe error")
+                put("code", cause.code)
+                cause.declineCode?.let { put("declineCode", it) }
+            })
+        }
         exception<RateLimitException> { call, cause ->
             call.response.header(HttpHeaders.RetryAfter, cause.retryAfterSeconds.toString())
             call.respond(HttpStatusCode.TooManyRequests,
@@ -269,7 +290,8 @@ fun Application.module(
         authRoutes(authService)
         staffAdminRoutes(authService)
         pairingRoutes(pairingService)
-        posRoutes(checkService, authService, photoStore)
+        posRoutes(checkService, authService, photoStore, stripeService)
+        stripeRoutes(stripeService)
         tableRoutes(authService)
         floorObjectRoutes(authService)
         zoneManagementRoutes(authService)
