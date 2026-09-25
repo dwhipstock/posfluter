@@ -19,7 +19,7 @@ services:
       CLOUD_SYNC_API_KEY: "${CLOUD_SYNC_API_KEY:?set CLOUD_SYNC_API_KEY in .env.edge}"
       CLOUD_SYNC_INTERVAL_SECONDS: "10"
       REPORTING_PORTAL_URL: "https://copperlantern-manager.lostmindllc.com"
-      TZ: America/Toronto
+      TZ: America/New_York
     volumes:
       - storedata:/data
     ports:

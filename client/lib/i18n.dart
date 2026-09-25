@@ -637,6 +637,16 @@ class L {
       _t('Recherche du restaurant…', 'Finding your restaurant…');
   String get findingRestaurant =>
       _t('Recherche du restaurant…', 'Finding your restaurant…');
+  String get startingThisTablet =>
+      _t('Démarrage de cette tablette…', 'Starting this tablet…');
+  String get tabletStoreFailed => _t(
+    'Le service local de cette tablette n’a pas démarré.',
+    'This tablet’s local store did not start.',
+  );
+  String get staffAppNeedsWifi => _t(
+    'Connectez la tablette au Wi-Fi pour afficher le code du personnel.',
+    'Connect this tablet to Wi-Fi to show the staff app code.',
+  );
   String get restaurantUnavailable => _t(
     'Restaurant indisponible sur ce réseau Wi-Fi.',
     'Restaurant is not available on this Wi-Fi',
@@ -698,6 +708,10 @@ class L {
   String get tableQrHint => _t(
     'Les clients scannent avec leur téléphone mobile (même Wi-Fi que le magasin)',
     'Guests scan with a phone on the venue Wi-Fi',
+  );
+  String get tableQrNeedsWifi => _t(
+    'Connectez la tablette au Wi-Fi pour afficher un code QR utilisable.',
+    'Connect the tablet to Wi-Fi to show a scannable QR code.',
   );
   String get showQrCode => _t('Afficher le code QR', 'Show QR code');
   String get printQrCode => _t('Imprimer le code QR', 'Print QR code');
@@ -813,7 +827,7 @@ class L {
   String get moveRoomLeft => _t('se déplacer vers la gauche', 'Move left');
   String get moveRoomRight => _t('aller à droite', 'Move right');
   String get roomNameFrField =>
-      _t('Nom de la zone (thaïlandais)', 'Room name (French)');
+      _t('Nom de la zone (français)', 'Room name (French)');
   String get roomNameEnField =>
       _t('Nom de la zone (anglais)', 'Room name (English)');
 

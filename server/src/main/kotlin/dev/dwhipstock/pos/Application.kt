@@ -39,7 +39,6 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
-import io.ktor.server.netty.*
 import io.ktor.server.plugins.calllogging.*
 import io.ktor.server.plugins.compression.*
 import io.ktor.server.plugins.contentnegotiation.*
@@ -48,10 +47,6 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-
-fun main() {
-    embeddedServer(Netty, port = 8080, host = "0.0.0.0", module = Application::module).start(wait = true)
-}
 
 /**
  * Primary non-loopback IPv4 — the address venue phones can reach when the
@@ -74,6 +69,12 @@ fun Application.module(
     requireDeviceTokenOverride: Boolean? = null,
     pairingTransport: dev.dwhipstock.pos.sync.CloudTransport? = null,
     seedMode: String = System.getenv("POS_SEED") ?: "copperlantern",
+    cloudSyncUrl: String? = System.getenv("CLOUD_SYNC_URL"),
+    cloudSyncApiKey: String? = System.getenv("CLOUD_SYNC_API_KEY"),
+    publicUrl: String? = System.getenv("POS_PUBLIC_URL"),
+    reportingPortalUrl: String? = System.getenv("REPORTING_PORTAL_URL"),
+    physicalPrinterEnabled: Boolean = true,
+    staffAppMfaRequired: Boolean = true,
 ) {
     initDatabase(dbPath)
     // discover i18n message catalogs now so missing-key warnings surface at
@@ -101,7 +102,7 @@ fun Application.module(
     // TODO: config registry when a second customer exists.
     // POS_PUBLIC_URL wins; otherwise auto-detect the LAN address so printed
     // table QRs work out of the box at the venue.
-    val publicBaseUrl = System.getenv("POS_PUBLIC_URL")
+    val publicBaseUrl = publicUrl
         ?: detectLanIpv4()?.let { "http://$it:8080" }
         ?: "http://192.168.1.100:8080"
     val settingsRepo = SettingsRepository()
@@ -112,23 +113,29 @@ fun Application.module(
     // an offline printer never blocks or rolls back a sale.
     val thermalPrinter = NetworkThermalPrinter(
         audit = PrinterAdapter.VirtualPrinter(receiptsDir, billsDir),
-        target = { settingsRepo.get().let { PrinterTarget(it.printerIp, it.printerPort) } },
+        target = {
+            if (physicalPrinterEnabled) settingsRepo.get().let { PrinterTarget(it.printerIp, it.printerPort) }
+            else PrinterTarget("", 9100)
+        },
     )
     val config = CopperLanternConfig(
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,
+        publicUrlProvider = {
+            publicUrl ?: detectLanIpv4()?.let { "http://$it:8080" } ?: publicBaseUrl
+        },
     )
     log.info("Customers scan: $publicBaseUrl/m/{zone}/{n} (e.g. /m/lower/8; /m/{tableId} still works)  — table slips: $publicBaseUrl/slips")
     val checkService = CheckService(config)
     val shiftService = ShiftService(config)
-    val authService = AuthService(settingsRepo)
+    val authService = AuthService(settingsRepo, staffAppMfaRequired)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
 
     // Cloud sync (CONTRACT.md): outbox pusher + catalog puller. Never constructed
     // unless both env vars are set — offline-first stays the default (and tests).
-    val syncUrl = System.getenv("CLOUD_SYNC_URL")
-    val syncKey = System.getenv("CLOUD_SYNC_API_KEY")
+    val syncUrl = cloudSyncUrl
+    val syncKey = cloudSyncApiKey
     var pairingService: PairingService? = pairingTransport?.let { PairingService(it) }
     if (!syncUrl.isNullOrBlank() && !syncKey.isNullOrBlank()) {
         val interval = System.getenv("CLOUD_SYNC_INTERVAL_SECONDS")?.toLongOrNull() ?: 10L
@@ -136,7 +143,7 @@ fun Application.module(
         // (airplane-mode dev) — the heartbeat is skipped rather than reporting the
         // fake QR fallback, so the portal shows "offline" instead of a dead IP.
         val lanBaseUrlProvider: () -> String? = {
-            System.getenv("POS_PUBLIC_URL")?.takeIf { it.isNotBlank() }
+            publicUrl?.takeIf { it.isNotBlank() }
                 ?: detectLanIpv4()?.let { "http://$it:8080" }
         }
         val transport = HttpCloudTransport(syncUrl, syncKey)
@@ -223,8 +230,7 @@ fun Application.module(
         // inside and drives the gated ordering API with the returned bearer token.
         // Read once — the resource is baked into the jar, and re-reading the
         // 50KB file per request showed up as the slowest route in the logs.
-        val staffAppHtml = Thread.currentThread().contextClassLoader
-            .getResource("staff-app.html")!!.readText()
+        val staffAppHtml = StoreAssets.readText("staff-app.html")
         get("/staff-app") {
             call.respondText(staffAppHtml, ContentType.Text.Html)
         }
@@ -247,9 +253,12 @@ fun Application.module(
         // the owner portal is a separate LAN service on :3000) that derivation is
         // an unreachable URL, so an explicit REPORTING_PORTAL_URL wins when set.
         // Unset/blank → derive from CLOUD_SYNC_URL exactly as before.
-        val portalUrl = System.getenv("REPORTING_PORTAL_URL")?.takeIf { it.isNotBlank() }
+        val portalUrl = reportingPortalUrl?.takeIf { it.isNotBlank() }
             ?: portalUrlFrom(syncUrl)
-        cloudRoutes(portalUrl)
+        cloudRoutes(portalUrl) {
+            publicUrl?.takeIf { it.isNotBlank() }
+                ?: detectLanIpv4()?.let { "http://$it:8080" }
+        }
     }
 }
 

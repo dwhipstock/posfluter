@@ -298,10 +298,6 @@ fun requireManagerSession(call: ApplicationCall) {
 private fun qrDataUri(payload: String): String {
     val matrix = com.google.zxing.MultiFormatWriter()
         .encode(payload, com.google.zxing.BarcodeFormat.QR_CODE, 240, 240)
-    val png = java.io.ByteArrayOutputStream().use { out ->
-        javax.imageio.ImageIO.write(
-            com.google.zxing.client.j2se.MatrixToImageWriter.toBufferedImage(matrix), "png", out)
-        out.toByteArray()
-    }
+    val png = dev.dwhipstock.pos.sdk.QrPng.encode(matrix)
     return "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(png)
 }

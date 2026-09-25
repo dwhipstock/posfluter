@@ -15,6 +15,29 @@ import 'i18n.dart';
 class Api {
   Api._();
 
+  /// Android hosts its own store. Desktop/web builds retain LAN discovery for
+  /// development; an Android tablet never silently falls back to a Mac.
+  static bool get usesEmbeddedStore => !kIsWeb && Platform.isAndroid;
+  static const embeddedStoreUrl = 'http://127.0.0.1:8080';
+
+  /// The POS itself uses loopback, but a QR scanned by another phone must not.
+  /// The embedded store reports its current LAN origin through /cloud/info.
+  static String? phoneQrBaseUrl(String? value) {
+    final uri = Uri.tryParse(value?.trim() ?? '');
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.host == 'localhost' ||
+        uri.host.startsWith('127.') ||
+        uri.host == '0.0.0.0' ||
+        uri.host == '10.0.2.2' ||
+        uri.host == '::1') {
+      return null;
+    }
+    return uri.origin;
+  }
+
   static const _storage = FlutterSecureStorage();
   static const _storageTimeout = Duration(seconds: 2);
 
@@ -59,6 +82,7 @@ class Api {
   }
 
   static String get baseUrl {
+    if (usesEmbeddedStore) return embeddedStoreUrl;
     if (_override != null && _override!.isNotEmpty) return _override!;
     if (_discovered != null && _discovered!.isNotEmpty) return _discovered!;
     if (_envServerUrl.isNotEmpty) return _envServerUrl;
@@ -718,8 +742,11 @@ class Api {
   /// Owner reporting-portal URL, derived server-side from the store's cloud
   /// config (never hardcoded here). Null when cloud sync isn't configured — the
   /// settings screen hides the QR in that case.
+  static Future<Map<String, dynamic>> cloudInfo() async =>
+      (await _get('/cloud/info')) as Map<String, dynamic>;
+
   static Future<String?> cloudPortalUrl() async =>
-      (await _get('/cloud/info'))['portalUrl'] as String?;
+      (await cloudInfo())['portalUrl'] as String?;
 
   static Future<void> changePin(String currentPin, String newPin) async =>
       _patch('/me/pin', {'currentPin': currentPin, 'newPin': newPin});
@@ -1039,6 +1066,11 @@ class Api {
 
   static Future<ShiftReport> xReport() async =>
       ShiftReport.fromJson(await _get('/shifts/current/report'));
+
+  static Future<DateTime> venueToday() async {
+    final response = await _get('/reports/today');
+    return DateTime.parse(response['date'] as String);
+  }
 
   /// X-report layout over closed-at dates, inclusive (YYYY-MM-DD).
   static Future<ShiftReport> rangeReport(String from, String to) async =>

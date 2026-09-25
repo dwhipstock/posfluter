@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.base
 
+import dev.dwhipstock.pos.sdk.VenueClock
+
 import at.favre.lib.crypto.bcrypt.BCrypt
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.i18n.Messages
@@ -30,7 +32,10 @@ import java.util.UUID
  * is capped at [MAX_SESSIONS_PER_USER], evicting only the oldest beyond the cap.
  * Failed attempts are rate-limited terminal-wide (see [LoginRateLimiter]).
  */
-class AuthService(private val settings: SettingsRepository? = null) {
+class AuthService(
+    private val settings: SettingsRepository? = null,
+    private val staffAppMfaRequired: Boolean = true,
+) {
 
     companion object {
         private const val BCRYPT_COST = 10 // 4-digit PINs: the rate limit is the real defense
@@ -105,7 +110,7 @@ class AuthService(private val settings: SettingsRepository? = null) {
      * new session out of the eviction set.)
      */
     private fun issueSession(user: ResultRow, deviceId: String? = null): AuthUser {
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         val uid = user[Users.id]
         val live = Sessions.selectAll()
             .where { (Sessions.userId eq uid) and Sessions.revokedAt.isNull() }
@@ -148,6 +153,14 @@ class AuthService(private val settings: SettingsRepository? = null) {
         if (user == null) { rateLimiter.recordFailure(); return@transaction null }
         val uid = user[Users.id]
 
+        // Only an explicitly packaged demo build may set this false. Keep the
+        // PIN check, rate limit, and normal session expiry; leave enrolled TOTP
+        // data intact so a later MFA-on build requires it at the next login.
+        if (!staffAppMfaRequired) {
+            rateLimiter.recordSuccess()
+            return@transaction StaffAppBegin("ok", user = issueSession(user))
+        }
+
         // A still-trusted device completes the login now (PIN only). Clearing the
         // failure counter is correct HERE because authentication is complete.
         if (deviceTokens.any { consumeTrustedDevice(uid, it) }) {
@@ -168,7 +181,7 @@ class AuthService(private val settings: SettingsRepository? = null) {
             StaffTotp.insert {
                 it[userId] = uid
                 it[StaffTotp.secret] = s
-                it[createdAt] = LocalDateTime.now()
+                it[createdAt] = VenueClock.now()
             }
         }
         StaffAppBegin("enroll",
@@ -198,10 +211,10 @@ class AuthService(private val settings: SettingsRepository? = null) {
         rateLimiter.recordSuccess()
         StaffTotp.update({ StaffTotp.userId eq uid }) {
             it[StaffTotp.lastStep] = step // replay guard: this 30s window can't be reused
-            if (row[StaffTotp.activatedAt] == null) it[activatedAt] = LocalDateTime.now()
+            if (row[StaffTotp.activatedAt] == null) it[activatedAt] = VenueClock.now()
         }
         val authUser = issueSession(user)
-        val now = LocalDateTime.now()
+        val now = VenueClock.now()
         val expires = now.plusDays(TRUST_DAYS)
         val devToken = UUID.randomUUID().toString()
         TrustedDevices.insert {
@@ -218,8 +231,8 @@ class AuthService(private val settings: SettingsRepository? = null) {
         val row = TrustedDevices.selectAll()
             .where { (TrustedDevices.token eq token) and (TrustedDevices.userId eq userId) }
             .firstOrNull() ?: return false
-        if (!row[TrustedDevices.expiresAt].isAfter(LocalDateTime.now())) return false
-        TrustedDevices.update({ TrustedDevices.token eq token }) { it[lastUsedAt] = LocalDateTime.now() }
+        if (!row[TrustedDevices.expiresAt].isAfter(VenueClock.now())) return false
+        TrustedDevices.update({ TrustedDevices.token eq token }) { it[lastUsedAt] = VenueClock.now() }
         return true
     }
 
@@ -259,7 +272,7 @@ class AuthService(private val settings: SettingsRepository? = null) {
                 }
                 .firstOrNull() ?: return@transaction null
 
-            val now = LocalDateTime.now()
+            val now = VenueClock.now()
             val absolute = row[Sessions.expiresAt] ?: row[Sessions.createdAt].plusHours(ABSOLUTE_HOURS)
             val lastUsed = row[Sessions.lastUsedAt] ?: row[Sessions.createdAt]
             if (now.isAfter(absolute) || now.isAfter(lastUsed.plusMinutes(idleMinutes()))) {
@@ -272,16 +285,16 @@ class AuthService(private val settings: SettingsRepository? = null) {
         // Both writes are safe to lose: an unrevoked expired session still answers
         // null here on every later call, and a missed touch is the next one's job.
         if (expired) runCatching {
-            transaction { Sessions.update({ Sessions.token eq token }) { it[revokedAt] = LocalDateTime.now() } }
+            transaction { Sessions.update({ Sessions.token eq token }) { it[revokedAt] = VenueClock.now() } }
         } else if (user != null && touchDue) runCatching {
-            transaction { Sessions.update({ Sessions.token eq token }) { it[lastUsedAt] = LocalDateTime.now() } }
+            transaction { Sessions.update({ Sessions.token eq token }) { it[lastUsedAt] = VenueClock.now() } }
         }
         return user
     }
 
     fun logout(token: String) = transaction {
         val user = me(token) ?: return@transaction
-        Sessions.update({ Sessions.token eq token }) { it[revokedAt] = LocalDateTime.now() }
+        Sessions.update({ Sessions.token eq token }) { it[revokedAt] = VenueClock.now() }
         Outbox.write("auth.logout", "user", user.userId, buildJsonObject { put("userId", user.userId) })
     }
 

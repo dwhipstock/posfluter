@@ -13,6 +13,7 @@ import dev.dwhipstock.pos.restaurant.NotFoundException
 import dev.dwhipstock.pos.restaurant.TenderView
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.TenderType
+import dev.dwhipstock.pos.sdk.VenueClock
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -274,11 +275,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
         val url = "${config.publicBaseUrl}$path"
         val matrix = com.google.zxing.MultiFormatWriter()
             .encode(url, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512)
-        val png = java.io.ByteArrayOutputStream().use { out ->
-            javax.imageio.ImageIO.write(
-                com.google.zxing.client.j2se.MatrixToImageWriter.toBufferedImage(matrix), "png", out)
-            out.toByteArray()
-        }
+        val png = dev.dwhipstock.pos.sdk.QrPng.encode(matrix)
         call.respondBytes(png, ContentType.Image.PNG)
     }
 }
@@ -298,6 +295,10 @@ fun Route.shiftRoutes(shiftService: dev.dwhipstock.pos.restaurant.ShiftService, 
     }
 
     get("/shifts/current/report") { call.respond(shiftService.xReport()) }
+
+    // Tablet date presets must use the venue's business day, not Android's
+    // timezone (which may reflect the tablet's physical location).
+    get("/reports/today") { call.respond(mapOf("date" to VenueClock.now().toLocalDate().toString())) }
 
     /** X-report layout over closed-at dates (?from=YYYY-MM-DD&to=YYYY-MM-DD, inclusive). */
     get("/reports/range") {
@@ -692,8 +693,7 @@ private suspend fun serveCustomerMenu(call: io.ktor.server.application.Applicati
         call.respondText(zoneClosedMenuPage(label), ContentType.Text.Html)
         return
     }
-    val html = Thread.currentThread().contextClassLoader
-        .getResource("customer-menu.html")!!.readText()
+    val html = dev.dwhipstock.pos.StoreAssets.readText("customer-menu.html")
         .replace("{{TABLE_ID}}", tableId)
         // label is a user-authored nameOverride; escape it (like zoneClosedMenuPage does for
         // the same value) so it can't inject markup/script into the customer menu page.

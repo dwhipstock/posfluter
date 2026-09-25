@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.base
 
+import dev.dwhipstock.pos.sdk.VenueClock
+
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
@@ -61,7 +63,7 @@ object DeviceRegistry {
             it[Devices.id] = id
             it[Devices.name] = name.trim().ifBlank { "Terminal" }.take(100)
             it[tokenSha256] = sha256Hex(token)
-            it[pairedAt] = LocalDateTime.now()
+            it[pairedAt] = VenueClock.now()
         }
         id to token
     }
@@ -89,7 +91,7 @@ object DeviceRegistry {
         if (previous != null && previous.isAfter(now.minusSeconds(TOUCH_SECONDS))) return
         lastTouch[deviceId] = now
         transaction {
-            Devices.update({ Devices.id eq deviceId }) { it[lastSeenAt] = LocalDateTime.now() }
+            Devices.update({ Devices.id eq deviceId }) { it[lastSeenAt] = VenueClock.now() }
         }
     }
 
@@ -101,7 +103,7 @@ object DeviceRegistry {
     fun applyRevocation(deviceId: String?) {
         if (deviceId == null) return
         transaction { // joins CloudSync's pull transaction
-            val now = LocalDateTime.now()
+            val now = VenueClock.now()
             Devices.update({ (Devices.id eq deviceId) and Devices.revokedAt.isNull() }) { it[revokedAt] = now }
             Sessions.update({ (Sessions.deviceId eq deviceId) and Sessions.revokedAt.isNull() }) { it[revokedAt] = now }
             // Invalidate the cache only once the enclosing pull transaction COMMITS. Clearing

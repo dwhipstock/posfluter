@@ -16,6 +16,8 @@ client/.packages
 client/.pub-cache/
 client/.pub/
 client/build/
+client/android/build/
+.tablet-snapshot.*/
 client/.dart_tool/build/
 client/pubspec.lock
 client/*.iml
@@ -83,3 +85,6 @@ bills/
 
 # Uploaded item photos — never in git (manager uploads through the app)
 server/data/
+
+# Internal working notes — private, never in git (kept out of any published/demo repo)
+_handoff/

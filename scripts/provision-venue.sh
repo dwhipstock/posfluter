@@ -13,7 +13,7 @@
 # Options:
 #   --tenant <id>          tenant to attach the venue to (default: <slug>)
 #   --tenant-name <name>   display name when creating the tenant (default: --name)
-#   --tz <zone>            venue timezone (default: America/Toronto)
+#   --tz <zone>            venue timezone (default: America/New_York)
 #   --admin-email <email>  create a portal admin for the tenant (with --admin-password)
 #   --admin-password <pw>  password for that admin (TOTP enrolls at first login)
 #   --xmx <heap>           store JVM heap (default: 224m — several venues share 2GB)
@@ -76,7 +76,7 @@ psql_run() { run "docker compose -f $CLOUD_COMPOSE exec -T db psql -U pos -d pos
 # --- args ---
 SLUG="${1:-}"; shift || true
 [ -n "$SLUG" ] || die "usage: provision-venue.sh <slug> --name \"Venue Name\" [options]"
-NAME="" TENANT="" TENANT_NAME="" TZ_NAME="America/Toronto" ADMIN_EMAIL="" ADMIN_PASSWORD=""
+NAME="" TENANT="" TENANT_NAME="" TZ_NAME="America/New_York" ADMIN_EMAIL="" ADMIN_PASSWORD=""
 XMX="224m" ROTATE_KEY=0 BUILD_IMAGE=0 SKIP_DNS=0 IMAGE_TAG=""
 while [ $# -gt 0 ]; do
   case "$1" in

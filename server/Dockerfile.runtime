@@ -22,7 +22,7 @@ WORKDIR /app
 COPY pos-server-all.jar /app/pos-server-all.jar
 RUN mkdir -p /data /data/receipts /data/bills /data/photos && chown -R pos:pos /data
 USER pos
-ENV TZ=America/Toronto
+ENV TZ=America/New_York
 ENV POS_XMX=512m
 EXPOSE 8080
 # Headless AWT so the Java2D French raster renders without an X server.

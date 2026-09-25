@@ -1,5 +1,6 @@
 package dev.dwhipstock.pos.sdk.i18n
 
+import dev.dwhipstock.pos.StoreAssets
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.InputStream
@@ -19,7 +20,7 @@ value class LocaleCode(val tag: String) {
         val FR = LocaleCode("fr")
         val EN = LocaleCode("en")
 
-        /** Normalize a stored/user-supplied code ("EN ", "Th") to a lowercase tag. */
+        /** Normalize a stored/user-supplied code ("EN ", "Fr") to a lowercase tag. */
         fun of(raw: String) = LocaleCode(raw.trim().lowercase())
     }
 }
@@ -75,7 +76,16 @@ object Messages {
     /** Fallback for keys a locale hasn't translated, and for unknown locales. */
     val defaultLocale: LocaleCode = LocaleCode.EN
 
-    private val bundles: Map<String, Map<String, String>> = loadBundles(Messages::class.java.classLoader)
+    private val bundles: Map<String, Map<String, String>> by lazy {
+        StoreAssets.list("i18n")?.let { names ->
+            names.filter { fileName.matches(it) }.associate { name ->
+                val tag = fileName.matchEntire(name)!!.groupValues[1]
+                val properties = Properties()
+                StoreAssets.readText("i18n/$name").reader().use(properties::load)
+                tag to properties.entries.associate { (key, value) -> key.toString() to value.toString() }
+            }
+        } ?: loadBundles(Messages::class.java.classLoader)
+    }
 
     fun supportedTags(): Set<String> = bundles.keys
 

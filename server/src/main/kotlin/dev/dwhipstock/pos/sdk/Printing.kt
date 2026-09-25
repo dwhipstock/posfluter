@@ -92,7 +92,7 @@ sealed interface PrinterAdapter {
         private fun spool(dir: String, job: PrintJob): File {
             val text = renderText(job.lines)
             val d = File(dir).apply { mkdirs() }
-            val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+            val stamp = VenueClock.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
             val file = File(d, "${job.checkId}-$stamp.txt")
             file.writeText(text)
             return file

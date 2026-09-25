@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.api
 
+import dev.dwhipstock.pos.sdk.VenueClock
+
 import dev.dwhipstock.pos.base.AuthService
 import dev.dwhipstock.pos.restaurant.Checks
 import dev.dwhipstock.pos.restaurant.ConflictException
@@ -183,7 +185,7 @@ fun Route.tableRoutes(auth: AuthService) {
             if (subTables > 0) throw ConflictException(
                 "table $tableId has $subTables sub-table(s); remove them first", "has_sub_tables")
             DiningTables.update({ DiningTables.id eq tableId }) {
-                it[deletedAt] = LocalDateTime.now()
+                it[deletedAt] = VenueClock.now()
             }
             Outbox.write("table.removed", "table", tableId, buildJsonObject {
                 put("tableId", tableId)

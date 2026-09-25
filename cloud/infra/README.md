@@ -27,6 +27,9 @@ exact-host-only `Caddyfile.manager`, so it cannot intercept or modify existing v
 store traffic. Set `REGISTRY`, `IMAGE_TAG`, `DOMAIN`, `LEGACY_DOMAIN`, `ACME_EMAIL`,
 the database and admin credentials, and `STORE_API_KEY` in an untracked `.env`, then run:
 
+For a portal-only update, `WEB_IMAGE_TAG` can select a newer immutable web
+image without changing the store, API, or Caddy image tag.
+
 ```sh
 docker compose -f docker-compose.manager.yml pull
 docker compose -f docker-compose.manager.yml up -d

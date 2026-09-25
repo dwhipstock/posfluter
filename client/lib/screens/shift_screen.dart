@@ -31,7 +31,8 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
   bool _loaded = false, _busy = false;
   String? _loadError; // a failed load must NOT render as "no shift open"
   _ReportRange _range = _ReportRange.shift;
-  DateTime _customFrom = DateTime.now(), _customTo = DateTime.now();
+  DateTime? _customFrom, _customTo;
+  DateTime? _venueToday;
   final _float = TextEditingController(text: '1000');
   final _counted = TextEditingController();
 
@@ -43,7 +44,9 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
 
   /// From/to dates for the selected range (null for the live shift).
   (DateTime, DateTime)? get _rangeDates {
-    final now = DateTime.now();
+    if (_range == _ReportRange.shift) return null;
+    final now = _venueToday;
+    if (now == null) return null;
     final today = DateTime(now.year, now.month, now.day);
     return switch (_range) {
       _ReportRange.shift => null,
@@ -56,7 +59,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
         today.subtract(Duration(days: today.weekday - 1)), // Monday
         today,
       ),
-      _ReportRange.custom => (_customFrom, _customTo),
+      _ReportRange.custom => (_customFrom ?? today, _customTo ?? today),
     };
   }
 
@@ -69,6 +72,9 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
       _loadError = null;
     });
     try {
+      if (_range != _ReportRange.shift) {
+        _venueToday = await Api.venueToday();
+      }
       final dates = _rangeDates;
       if (dates == null) {
         final shift = await Api.currentShift();
@@ -98,18 +104,27 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
   }
 
   Future<void> _pickCustomRange() async {
+    late final DateTime today;
+    try {
+      today = await Api.venueToday();
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+      return;
+    }
+    if (!mounted) return;
+    _venueToday = today;
     final from = await showDatePicker(
       context: context,
-      initialDate: _customFrom,
+      initialDate: _customFrom ?? today,
       firstDate: DateTime(2026),
-      lastDate: DateTime.now(),
+      lastDate: today,
     );
     if (from == null || !mounted) return;
     final to = await showDatePicker(
       context: context,
-      initialDate: _customTo.isBefore(from) ? from : _customTo,
+      initialDate: _customTo == null || _customTo!.isBefore(from) ? from : _customTo!,
       firstDate: from,
-      lastDate: DateTime.now(),
+      lastDate: today,
     );
     if (to == null || !mounted) return;
     setState(() {
@@ -329,7 +344,9 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
                   TextButton.icon(
                     icon: const Icon(LucideIcons.calendar, size: 16),
                     label: Text(
-                      '${Prefs.instance.fmtDate(_customFrom)} – ${Prefs.instance.fmtDate(_customTo)}',
+                      _customFrom != null && _customTo != null
+                          ? '${Prefs.instance.fmtDate(_customFrom!)} – ${Prefs.instance.fmtDate(_customTo!)}'
+                          : l.rangeCustom,
                     ),
                     onPressed: _pickCustomRange,
                   ),

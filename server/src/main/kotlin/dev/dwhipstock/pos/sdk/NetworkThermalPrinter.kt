@@ -105,7 +105,7 @@ class NetworkThermalPrinter(
     private fun sendNow(t: PrinterTarget, bytes: ByteArray) {
         try {
             transport.send(t, bytes)
-            lastOkAt = LocalDateTime.now()
+            lastOkAt = VenueClock.now()
             lastError = null
         } catch (e: Exception) {
             lastError = "${e.javaClass.simpleName}: ${e.message}"
@@ -123,7 +123,7 @@ class NetworkThermalPrinter(
         if (!t.configured) return PrinterStatus(configured = false, online = false, lastError = "printer_not_configured")
         return try {
             transport.send(t, ThermalReceiptRenderer.toEscPos(lines))
-            lastOkAt = LocalDateTime.now()
+            lastOkAt = VenueClock.now()
             lastError = null
             status()
         } catch (e: Exception) {
