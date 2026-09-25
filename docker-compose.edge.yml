@@ -13,6 +13,7 @@ services:
       POS_PHOTOS_DIR: /data/photos
       POS_PUBLIC_URL: "${POS_PUBLIC_URL:-http://192.168.1.2:8080}"
       POS_SEED: none
+      POS_PRINT_RECEIPTS: "${POS_PRINT_RECEIPTS:-paper}" # paper | digital (receipts/bills saved only)
       POS_REQUIRE_DEVICE_TOKEN: "false"
       POS_XMX: 512m
       CLOUD_SYNC_URL: "https://copperlantern-manager.lostmindllc.com"

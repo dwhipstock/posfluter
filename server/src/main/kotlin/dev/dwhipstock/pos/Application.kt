@@ -31,6 +31,7 @@ import dev.dwhipstock.pos.sdk.PhotoStore
 import dev.dwhipstock.pos.sdk.PrinterAdapter
 import dev.dwhipstock.pos.sdk.NetworkThermalPrinter
 import dev.dwhipstock.pos.sdk.PrinterTarget
+import dev.dwhipstock.pos.sdk.ReceiptPrintMode
 import dev.dwhipstock.pos.api.printerRoutes
 import dev.dwhipstock.pos.restaurant.BadRequestException
 import dev.dwhipstock.pos.restaurant.ConflictException
@@ -79,6 +80,9 @@ fun Application.module(
     reportingPortalUrl: String? = System.getenv("REPORTING_PORTAL_URL"),
     physicalPrinterEnabled: Boolean = true,
     staffAppMfaRequired: Boolean = true,
+    // print.receipts=paper|digital (POS_PRINT_RECEIPTS / POS_CONFIG_FILE; the
+    // tablet passes its store.properties). Local config only, never the network.
+    receiptPrintMode: ReceiptPrintMode.Resolved = ReceiptPrintMode.fromEnv(),
 ) {
     initDatabase(dbPath)
     // discover i18n message catalogs now so missing-key warnings surface at
@@ -118,8 +122,12 @@ fun Application.module(
     // raster to the physical printer. Target IP/port read live from venue settings
     // so a DHCP change applies without a restart; sends are async/non-blocking so
     // an offline printer never blocks or rolls back a sale.
+    receiptPrintMode.warning?.let { log.warn("Receipt printing config ignored: $it") }
+    log.info("Receipt printing: ${receiptPrintMode.mode.wire} (${receiptPrintMode.source})" +
+        if (receiptPrintMode.mode == ReceiptPrintMode.DIGITAL) " — receipts/bills saved digitally only; manual prints still use paper" else "")
     val thermalPrinter = NetworkThermalPrinter(
         audit = PrinterAdapter.VirtualPrinter(receiptsDir, billsDir),
+        receiptMode = receiptPrintMode.mode,
         target = {
             if (physicalPrinterEnabled) settingsRepo.get().let { PrinterTarget(it.printerIp, it.printerPort) }
             else PrinterTarget("", 9100)
