@@ -156,7 +156,13 @@ private fun warnIfUndercounting(ctx: ReportCtx, closed: List<ResultRow>) {
 @Serializable
 data class DayRow(
     val date: String, val grossCents: Long, val netCents: Long,
-    val taxCents: Long, val checkCount: Int)
+    val taxCents: Long, val checkCount: Int,
+    /** The same day split by store (one entry per in-scope store, zeros included). */
+    val byVenue: List<VenueDayRow> = emptyList())
+
+@Serializable
+data class VenueDayRow(
+    val venueId: String, val grossCents: Long, val netCents: Long, val taxCents: Long, val checkCount: Int)
 
 /** Per business day (each row's own store zone): closed sales less refunds issued that day. */
 private fun byDay(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultRow>): List<DayRow> {
@@ -167,7 +173,15 @@ private fun byDay(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultR
         val rrows = refundByDay[date].orEmpty()
         val g = crows.sumOf(::gross) - rrows.sumOf(::rGross)
         val v = crows.sumOf(::checkTax) - rrows.sumOf(::refundTax)
-        DayRow(date.toString(), g, g - v, v, crows.size)
+        val cBy = crows.groupBy { it[Checks.venueId] }
+        val rBy = rrows.groupBy { it[Refunds.venueId] }
+        DayRow(date.toString(), g, g - v, v, crows.size, ctx.venues.map { venue ->
+            val vc = cBy[venue.id].orEmpty()
+            val vr = rBy[venue.id].orEmpty()
+            val vg = vc.sumOf(::gross) - vr.sumOf(::rGross)
+            val vt = vc.sumOf(::checkTax) - vr.sumOf(::refundTax)
+            VenueDayRow(venue.id, vg, vg - vt, vt, vc.size)
+        })
     }
 }
 
@@ -225,24 +239,51 @@ data class TaxTotals(val grossCents: Long, val netCents: Long, val taxCents: Lon
 data class PaymentRow(val type: String, val amountCents: Long, val count: Int)
 
 @Serializable
-data class VenuePayments(val venueId: String, val totalCents: Long, val rows: List<PaymentRow>)
+data class VenuePayments(
+    val venueId: String, val totalCents: Long, val rows: List<PaymentRow>, val venueName: String = "")
 
 @Serializable
 data class PaymentsResponse(val rows: List<PaymentRow>, val totalCents: Long, val byVenue: List<VenuePayments>)
+
+/** One store's share of an item or category (stores that sold none are left out). */
+@Serializable
+data class VenueQtyRow(val venueId: String, val qty: Int, val revenueCents: Long)
 
 @Serializable
 data class ItemRow(
     val itemId: String?, val nameFr: String?, val nameEn: String?,
     val categoryId: String?, val categoryNameFr: String?, val categoryNameEn: String?,
-    val qty: Int, val revenueCents: Long)
+    val qty: Int, val revenueCents: Long,
+    val byVenue: List<VenueQtyRow> = emptyList())
 
 @Serializable
 data class CategoryRow(
     val categoryId: String?, val nameFr: String?, val nameEn: String?,
-    val qty: Int, val revenueCents: Long)
+    val qty: Int, val revenueCents: Long,
+    val byVenue: List<VenueQtyRow> = emptyList())
 
 @Serializable
-data class HourRow(val hour: Int, val grossCents: Long, val checkCount: Int)
+data class VenueHourRow(val venueId: String, val grossCents: Long, val checkCount: Int)
+
+@Serializable
+data class HourRow(
+    val hour: Int, val grossCents: Long, val checkCount: Int,
+    /** One entry per in-scope store, zeros included, so charts can stack by store. */
+    val byVenue: List<VenueHourRow> = emptyList())
+
+/** Totals of one store: the per-store split of the items, categories, hourly and tables reports. */
+@Serializable
+data class VenueTotalRow(
+    val venueId: String, val venueName: String, val grossCents: Long, val checkCount: Int, val qty: Int)
+
+@Serializable
+data class ItemsResponse(val rows: List<ItemRow>, val byVenue: List<VenueTotalRow>)
+
+@Serializable
+data class CategoriesResponse(val rows: List<CategoryRow>, val byVenue: List<VenueTotalRow>)
+
+@Serializable
+data class HourlyResponse(val rows: List<HourRow>, val byVenue: List<VenueTotalRow>)
 
 @Serializable
 data class ZoneRow(
@@ -255,7 +296,7 @@ data class TableRow(
     val grossCents: Long, val checkCount: Int, val venueId: String)
 
 @Serializable
-data class TablesResponse(val byZone: List<ZoneRow>, val byTable: List<TableRow>)
+data class TablesResponse(val byZone: List<ZoneRow>, val byTable: List<TableRow>, val byVenue: List<VenueTotalRow>)
 
 @Serializable
 data class VoidRow(
@@ -263,8 +304,13 @@ data class VoidRow(
     val amountCents: Long, val reason: String?, val voidedBy: String?, val venueId: String)
 
 @Serializable
+data class VenueExceptionsRow(
+    val venueId: String, val venueName: String, val voidCount: Int, val voidAmountCents: Long, val corkageCents: Long)
+
+@Serializable
 data class ExceptionsResponse(
-    val voids: List<VoidRow>, val voidCount: Int, val voidAmountCents: Long, val corkageCents: Long)
+    val voids: List<VoidRow>, val voidCount: Int, val voidAmountCents: Long, val corkageCents: Long,
+    val byVenue: List<VenueExceptionsRow>)
 
 @Serializable
 data class TenderTypeRow(val type: String, val amountCents: Long, val count: Int)
@@ -281,7 +327,12 @@ data class ShiftDto(
     val venueId: String)
 
 @Serializable
-data class ShiftsResponse(val rows: List<ShiftDto>)
+data class VenueShiftsRow(
+    val venueId: String, val venueName: String, val shiftCount: Int, val openCount: Int,
+    val revenueCents: Long, val transactionCount: Int, val overShortCents: Long)
+
+@Serializable
+data class ShiftsResponse(val rows: List<ShiftDto>, val byVenue: List<VenueShiftsRow>)
 
 @Serializable
 data class JournalLine(
@@ -295,8 +346,13 @@ data class JournalRow(
     val grandTotalCents: Long, val taxIncludedCents: Long,
     val tenderTypes: List<String>, val lines: List<JournalLine>, val venueId: String)
 
+/** One store's share of the journal's filtered checks (the whole range, not just the page). */
 @Serializable
-data class JournalResponse(val total: Long, val rows: List<JournalRow>)
+data class VenueJournalRow(
+    val venueId: String, val venueName: String, val closedCount: Int, val voidCount: Int, val closedCents: Long)
+
+@Serializable
+data class JournalResponse(val total: Long, val rows: List<JournalRow>, val byVenue: List<VenueJournalRow>)
 
 @Serializable
 data class RefundReasonRow(
@@ -310,10 +366,15 @@ data class RefundListRow(
     val grossCents: Long, val netCents: Long, val taxCents: Long, val venueId: String)
 
 @Serializable
+data class VenueRefundsRow(
+    val venueId: String, val venueName: String, val count: Int,
+    val grossCents: Long, val netCents: Long, val taxCents: Long)
+
+@Serializable
 data class RefundsResponse(
     val count: Int, val grossCents: Long, val netCents: Long, val taxCents: Long,
     val byReason: List<RefundReasonRow>, val byTender: List<TenderTypeRow>,
-    val rows: List<RefundListRow>)
+    val rows: List<RefundListRow>, val byVenue: List<VenueRefundsRow>)
 
 @Serializable
 data class CashMovementListRow(
@@ -321,9 +382,15 @@ data class CashMovementListRow(
     val amountCents: Long, val reason: String?, val user: String?, val venueId: String)
 
 @Serializable
+data class VenueCashRow(
+    val venueId: String, val venueName: String, val paidInCents: Long, val paidOutCents: Long,
+    val netCents: Long, val inCount: Int, val outCount: Int)
+
+@Serializable
 data class CashMovementsResponse(
     val paidInCents: Long, val paidOutCents: Long, val netCents: Long,
-    val inCount: Int, val outCount: Int, val rows: List<CashMovementListRow>)
+    val inCount: Int, val outCount: Int, val rows: List<CashMovementListRow>,
+    val byVenue: List<VenueCashRow>)
 
 fun Route.reportRoutes() {
 
@@ -407,9 +474,14 @@ fun Route.reportRoutes() {
                     r[Refunds.tableLabel], r[Refunds.tenderType], r[Refunds.reason],
                     rGross(r), rNet(r), refundTax(r), venueId)
             }
+            val refundsBy = refunds.groupBy { it[Refunds.venueId] }
+            val byVenue = ctx.venues.map { v ->
+                val r = refundsBy[v.id].orEmpty()
+                VenueRefundsRow(v.id, v.venue.name, r.size, r.sumOf(::rGross), r.sumOf(::rNet), r.sumOf(::refundTax))
+            }
             RefundsResponse(
                 refunds.size, refunds.sumOf(::rGross), refunds.sumOf(::rNet), refunds.sumOf(::refundTax),
-                byReason, byTender, rows)
+                byReason, byTender, rows, byVenue)
         }
         call.respond(response)
     }
@@ -420,10 +492,18 @@ fun Route.reportRoutes() {
             val movements = CashMovements.selectAll().where {
                 inScope(ctx, CashMovements.tenantId, CashMovements.venueId, CashMovements.createdAt)
             }.toList()
-            val ins = movements.filter { it[CashMovements.direction] == "IN" }
-            val outs = movements.filter { it[CashMovements.direction] == "OUT" }
-            val paidIn = ins.sumOf { it[CashMovements.amountCents] ?: 0 }
-            val paidOut = outs.sumOf { it[CashMovements.amountCents] ?: 0 }
+            fun ins(g: List<ResultRow>) = g.filter { it[CashMovements.direction] == "IN" }
+            fun outs(g: List<ResultRow>) = g.filter { it[CashMovements.direction] == "OUT" }
+            fun sum(g: List<ResultRow>) = g.sumOf { it[CashMovements.amountCents] ?: 0 }
+            val paidIn = sum(ins(movements))
+            val paidOut = sum(outs(movements))
+            val movementsBy = movements.groupBy { it[CashMovements.venueId] }
+            val byVenue = ctx.venues.map { v ->
+                val g = movementsBy[v.id].orEmpty()
+                val vi = sum(ins(g))
+                val vo = sum(outs(g))
+                VenueCashRow(v.id, v.venue.name, vi, vo, vi - vo, ins(g).size, outs(g).size)
+            }
             val rows = movements.sortedByDescending { it[CashMovements.createdAt] }.map { m ->
                 val venueId = m[CashMovements.venueId]
                 CashMovementListRow(
@@ -431,7 +511,7 @@ fun Route.reportRoutes() {
                     m[CashMovements.direction] ?: "", m[CashMovements.amountCents] ?: 0,
                     m[CashMovements.reason], m[CashMovements.createdBy], venueId)
             }
-            CashMovementsResponse(paidIn, paidOut, paidIn - paidOut, ins.size, outs.size, rows)
+            CashMovementsResponse(paidIn, paidOut, paidIn - paidOut, ins(movements).size, outs(movements).size, rows, byVenue)
         }
         call.respond(response)
     }
@@ -447,7 +527,7 @@ fun Route.reportRoutes() {
             val byVenue = tenders.groupBy { it[CheckTenders.venueId] }.let { grouped ->
                 ctx.venues.map { v ->
                     val vr = rowsOf(grouped[v.id].orEmpty())
-                    VenuePayments(v.id, vr.sumOf { it.amountCents }, vr)
+                    VenuePayments(v.id, vr.sumOf { it.amountCents }, vr, v.venue.name)
                 }
             }
             PaymentsResponse(rows, rows.sumOf { it.amountCents }, byVenue)
@@ -459,7 +539,9 @@ fun Route.reportRoutes() {
         val ctx = reportCtx(call)
         val response = transaction {
             val categoryNames = categoryNames(ctx)
-            val rows = linesOf(ctx, closedChecks(ctx))
+            val closed = closedChecks(ctx)
+            val lines = linesOf(ctx, closed)
+            val rows = lines
                 .groupBy { it[CheckLines.itemId] }
                 .map { (itemId, group) ->
                     val first = group.first()
@@ -473,9 +555,10 @@ fun Route.reportRoutes() {
                         categoryNameEn = category?.second,
                         qty = group.sumOf { it[CheckLines.qty] },
                         revenueCents = group.sumOf { it[CheckLines.lineTotalCents] },
+                        byVenue = lineSplit(ctx, group),
                     )
                 }.sortedByDescending { it.revenueCents }
-            mapOf("rows" to rows)
+            ItemsResponse(rows, lineTotals(ctx, closed, lines))
         }
         call.respond(response)
     }
@@ -484,7 +567,9 @@ fun Route.reportRoutes() {
         val ctx = reportCtx(call)
         val response = transaction {
             val categoryNames = categoryNames(ctx)
-            val rows = linesOf(ctx, closedChecks(ctx))
+            val closed = closedChecks(ctx)
+            val lines = linesOf(ctx, closed)
+            val rows = lines
                 .groupBy { it[CheckLines.categoryId] }
                 .map { (categoryId, group) ->
                     val category = categoryNames.lookup(group.first()[CheckLines.venueId], categoryId)
@@ -494,9 +579,10 @@ fun Route.reportRoutes() {
                         nameEn = if (categoryId == null) "Open item" else category?.second,
                         qty = group.sumOf { it[CheckLines.qty] },
                         revenueCents = group.sumOf { it[CheckLines.lineTotalCents] },
+                        byVenue = lineSplit(ctx, group),
                     )
                 }.sortedByDescending { it.revenueCents }
-            mapOf("rows" to rows)
+            CategoriesResponse(rows, lineTotals(ctx, closed, lines))
         }
         call.respond(response)
     }
@@ -505,14 +591,19 @@ fun Route.reportRoutes() {
         val ctx = reportCtx(call)
         val response = transaction {
             // each check in its own store's local hour
-            val byHour = closedChecks(ctx).groupBy {
+            val closed = closedChecks(ctx)
+            val byHour = closed.groupBy {
                 CloudTime.localHour(it[Checks.closedAt]!!, ctx.zoneOf(it[Checks.venueId]))
             }
             val rows = (0..23).map { hour ->
                 val group = byHour[hour].orEmpty()
-                HourRow(hour, group.sumOf(::gross), group.size)
+                val byV = group.groupBy { it[Checks.venueId] }
+                HourRow(hour, group.sumOf(::gross), group.size, ctx.venues.map { v ->
+                    val g = byV[v.id].orEmpty()
+                    VenueHourRow(v.id, g.sumOf(::gross), g.size)
+                })
             }
-            mapOf("rows" to rows)
+            HourlyResponse(rows, checkTotals(ctx, closed))
         }
         call.respond(response)
     }
@@ -536,7 +627,7 @@ fun Route.reportRoutes() {
                     group.sumOf(::gross), group.size, key.first,
                 )
             }.sortedByDescending { it.grossCents }
-            TablesResponse(byZone, byTable)
+            TablesResponse(byZone, byTable, checkTotals(ctx, closed))
         }
         call.respond(response)
     }
@@ -545,6 +636,9 @@ fun Route.reportRoutes() {
         val ctx = reportCtx(call)
         val response = transaction {
             val voids = voidChecks(ctx).sortedByDescending { it[Checks.closedAt] }
+            val closed = closedChecks(ctx)
+            val voidsBy = voids.groupBy { it[Checks.venueId] }
+            val closedBy = closed.groupBy { it[Checks.venueId] }
             ExceptionsResponse(
                 voids = voids.map {
                     val venueId = it[Checks.venueId]
@@ -555,7 +649,13 @@ fun Route.reportRoutes() {
                 },
                 voidCount = voids.size,
                 voidAmountCents = voids.sumOf(::gross),
-                corkageCents = closedChecks(ctx).sumOf { it[Checks.corkageCents] ?: 0 },
+                corkageCents = closed.sumOf { it[Checks.corkageCents] ?: 0 },
+                byVenue = ctx.venues.map { v ->
+                    val vv = voidsBy[v.id].orEmpty()
+                    VenueExceptionsRow(
+                        v.id, v.venue.name, vv.size, vv.sumOf(::gross),
+                        closedBy[v.id].orEmpty().sumOf { it[Checks.corkageCents] ?: 0 })
+                },
             )
         }
         call.respond(response)
@@ -572,7 +672,14 @@ fun Route.reportRoutes() {
                 })
             }.orderBy(Shifts.openedAt to SortOrder.DESC_NULLS_LAST, Shifts.shiftId to SortOrder.DESC)
                 .map { shiftDto(it, ctx) }
-            ShiftsResponse(rows)
+            val rowsBy = rows.groupBy { it.venueId }
+            ShiftsResponse(rows, ctx.venues.map { v ->
+                val r = rowsBy[v.id].orEmpty()
+                VenueShiftsRow(
+                    v.id, v.venue.name, r.size, r.count { it.status == "OPEN" },
+                    r.sumOf { it.revenueCents ?: 0 }, r.sumOf { it.transactionCount ?: 0 },
+                    r.sumOf { it.overShortCents ?: 0 })
+            })
         }
         call.respond(response)
     }
@@ -612,6 +719,14 @@ fun Route.reportRoutes() {
                 op
             }
             val total = Checks.selectAll().where(condition).count()
+            // per-store counts over the whole filtered range (not just this page)
+            val allBy = Checks.select(Checks.venueId, Checks.status, Checks.grandTotalCents).where(condition)
+                .toList().groupBy { it[Checks.venueId] }
+            val byVenue = ctx.venues.map { v ->
+                val r = allBy[v.id].orEmpty()
+                val closedRows = r.filter { it[Checks.status] == "CLOSED" }
+                VenueJournalRow(v.id, v.venue.name, closedRows.size, r.size - closedRows.size, closedRows.sumOf(::gross))
+            }
             val page = Checks.selectAll().where(condition)
                 .orderBy(Checks.closedAt to SortOrder.DESC, Checks.venueId to SortOrder.ASC)
                 .limit(limit).offset(offset)
@@ -643,6 +758,7 @@ fun Route.reportRoutes() {
                         venueId = venueId,
                     )
                 },
+                byVenue = byVenue,
             )
         }
         call.respond(response)
@@ -650,6 +766,35 @@ fun Route.reportRoutes() {
 }
 
 // --- helpers (call inside a transaction) ---
+
+/** Per-store qty/revenue of a group of check lines; stores without a line are left out. */
+private fun lineSplit(ctx: ReportCtx, lines: List<ResultRow>): List<VenueQtyRow> {
+    val by = lines.groupBy { it[CheckLines.venueId] }
+    return ctx.venues.mapNotNull { v ->
+        by[v.id]?.let { g -> VenueQtyRow(v.id, g.sumOf { it[CheckLines.qty] }, g.sumOf { it[CheckLines.lineTotalCents] }) }
+    }
+}
+
+/** One row per in-scope store: line revenue, closed checks and quantity sold. */
+private fun lineTotals(ctx: ReportCtx, closed: List<ResultRow>, lines: List<ResultRow>): List<VenueTotalRow> {
+    val linesBy = lines.groupBy { it[CheckLines.venueId] }
+    val checksBy = closed.groupBy { it[Checks.venueId] }
+    return ctx.venues.map { v ->
+        val l = linesBy[v.id].orEmpty()
+        VenueTotalRow(
+            v.id, v.venue.name, l.sumOf { it[CheckLines.lineTotalCents] }, checksBy[v.id].orEmpty().size,
+            l.sumOf { it[CheckLines.qty] })
+    }
+}
+
+/** One row per in-scope store: closed-check gross and count (qty = checks). */
+private fun checkTotals(ctx: ReportCtx, closed: List<ResultRow>): List<VenueTotalRow> {
+    val by = closed.groupBy { it[Checks.venueId] }
+    return ctx.venues.map { v ->
+        val c = by[v.id].orEmpty()
+        VenueTotalRow(v.id, v.venue.name, c.sumOf(::gross), c.size, c.size)
+    }
+}
 
 /** (venue, category) → (fr, en); a combined view falls back to any store's names for the id. */
 private class CategoryNames(

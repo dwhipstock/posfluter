@@ -53,6 +53,26 @@ env var afterwards, or every restart re-triggers the reset.
 All take `?from=YYYY-MM-DD&to=YYYY-MM-DD` (inclusive, venue-local; default
 today/today). A check belongs to the day of its `closedAt`.
 
+**Store scope (every report).** `?venue=<id>` = that store only; no `venue` =
+all of the tenant's stores combined, each over its own business days. A venue
+id outside the session's tenant is a 404. Every report also carries a per-store
+split, `byVenue` (one entry per in-scope store, so a single row when a store is
+picked; rows from a specific store carry `venueId`):
+
+| report | `byVenue` entry |
+|---|---|
+| summary, tax | `{ venueId, venueName, grossCents, netCents, taxCents, checkCount, avgCheckCents, voidCount, refundAmountCents }`; each `byDay` / `rows` day also has `byVenue: [{ venueId, grossCents, netCents, taxCents, checkCount }]` |
+| by-venue | `venues: [ same as summary ]` |
+| payments | `{ venueId, venueName, totalCents, rows: [payment row] }` |
+| items, categories | top-level `{ venueId, venueName, grossCents, checkCount, qty }`; each row has `byVenue: [{ venueId, qty, revenueCents }]` (stores that sold it) |
+| hourly | top-level as items; each hour has `byVenue: [{ venueId, grossCents, checkCount }]` (every store) |
+| tables | top-level as items (closed-check gross / count) |
+| exceptions | `{ venueId, venueName, voidCount, voidAmountCents, corkageCents }` |
+| refunds | `{ venueId, venueName, count, grossCents, netCents, taxCents }` |
+| cash-movements | `{ venueId, venueName, paidInCents, paidOutCents, netCents, inCount, outCount }` |
+| shifts | `{ venueId, venueName, shiftCount, openCount, revenueCents, transactionCount, overShortCents }` |
+| journal | `{ venueId, venueName, closedCount, voidCount, closedCents }` over the whole filtered range, not the page |
+
 - `GET /v1/reports/summary`
   ```json
   { "grossCents": 0, "netCents": 0, "taxCents": 0,
