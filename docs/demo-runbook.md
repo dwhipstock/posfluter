@@ -65,6 +65,9 @@ The tablet reads its cloud settings from app-private
    shows `Cloud sync re-pointed to …`): it keeps its store identity, keeps the
    previous settings as `store-cloud.properties.prev`, and re-sends its whole
    outbox so the local portal shows Vieux-Port's full history within a minute.
+   A store that has never synced has no identity to keep: it is refused
+   (`REFUSED to re-point cloud sync` in the log; it starts normally on its
+   current settings) unless you pass `--install-id <id>` explicitly.
 
 Plain `http://` is accepted only to a private LAN address (10/8, 172.16/12,
 192.168/16); anything else must be `https://`. The Mac's DHCP address can
