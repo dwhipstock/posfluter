@@ -199,7 +199,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
 
     // Opaque-id form: the fallback path already-printed QR slips carry forever.
     get("/m/{tableId}") {
-        serveCustomerMenu(call, call.parameters["tableId"]!!)
+        serveCustomerMenu(call, call.parameters["tableId"]!!, config.displayName)
     }
 
     // Readable URL that mirrors the floor plan: /m/lower/8 → Lower's table L-8.
@@ -212,7 +212,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
         val tableId = numberSeg.toIntOrNull()?.let { n ->
             transaction { tableIdForZoneNumber(zoneId, n) }
         } ?: throw NotFoundException("no table $zoneId/$numberSeg", "table_not_found")
-        serveCustomerMenu(call, tableId)
+        serveCustomerMenu(call, tableId, config.displayName)
     }
 
     // Running bill for the guest's phone. Unauthenticated like the menu — it
@@ -246,7 +246,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
                 .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
                 .firstOrNull()?.let(::SlipData)
         } ?: throw NotFoundException("table $tableId not found")
-        call.respondText(slipPage(listOf(slip)), ContentType.Text.Html)
+        call.respondText(slipPage(listOf(slip), config.displayName), ContentType.Text.Html)
     }
 
     /** All tables on one printable page, page break per slip ("print all table slips"). */
@@ -258,7 +258,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
                 .orderBy(Zones.sortOrder).orderBy(DiningTables.sortOrder)
                 .map(::SlipData)
         }
-        call.respondText(slipPage(slips), ContentType.Text.Html)
+        call.respondText(slipPage(slips, config.displayName), ContentType.Text.Html)
     }
 
     /** Table QR slip: payload is the readable public menu URL. Staff print/laminate these (M5 setup). */
@@ -626,12 +626,12 @@ fun Route.posRoutes(checkService: CheckService, auth: dev.dwhipstock.pos.base.Au
  * 200, not a 4xx — a guest scanned a code; keep it calm. Both languages inline so
  * the server does no localization (matches the slip pages).
  */
-private fun zoneClosedMenuPage(tableLabel: String): String = """<!DOCTYPE html>
+private fun zoneClosedMenuPage(tableLabel: String, venueName: String): String = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Copper Lantern Pub</title>
+<title>${venueName.escapeHtml()}</title>
 <style>
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
   body { background: #F3F7FC; color: #17263A; min-height: 100vh; display: flex;
@@ -678,7 +678,9 @@ private fun customerBill(check: CheckView?): CustomerBillDto {
  * own API calls (bill, pending) off the internal id injected here, so the URL
  * form the guest arrived by doesn't matter downstream.
  */
-private suspend fun serveCustomerMenu(call: io.ktor.server.application.ApplicationCall, tableId: String) {
+private suspend fun serveCustomerMenu(
+    call: io.ktor.server.application.ApplicationCall, tableId: String, venueName: String,
+) {
     val row = transaction {
         DiningTables.join(Zones, org.jetbrains.exposed.sql.JoinType.INNER,
                 DiningTables.zoneId, Zones.id)
@@ -690,7 +692,7 @@ private suspend fun serveCustomerMenu(call: io.ktor.server.application.Applicati
     val (label, zoneStatus) = row
     // Closed zone: friendly banner, not a scary 4xx — the guest just scanned a QR.
     if (zoneStatus == "CLOSED") {
-        call.respondText(zoneClosedMenuPage(label), ContentType.Text.Html)
+        call.respondText(zoneClosedMenuPage(label, venueName), ContentType.Text.Html)
         return
     }
     val html = dev.dwhipstock.pos.StoreAssets.readText("customer-menu.html")
@@ -698,6 +700,7 @@ private suspend fun serveCustomerMenu(call: io.ktor.server.application.Applicati
         // label is a user-authored nameOverride; escape it (like zoneClosedMenuPage does for
         // the same value) so it can't inject markup/script into the customer menu page.
         .replace("{{TABLE_LABEL}}", label.escapeHtml())
+        .replace("{{VENUE_NAME}}", venueName.escapeHtml())
     call.respondText(html, ContentType.Text.Html)
 }
 
@@ -736,11 +739,12 @@ private class SlipData(row: org.jetbrains.exposed.sql.ResultRow) {
  * A6 print layout, one slip per page. QR images come from /tables/{id}/qr
  * (relative src → same host), which embeds the resolved publicBaseUrl.
  */
-private fun slipPage(slips: List<SlipData>): String {
+private fun slipPage(slips: List<SlipData>, venueName: String): String {
+    val venue = venueName.escapeHtml()
     val cards = slips.joinToString("\n") { s ->
         """
         <div class="slip">
-          <div class="venue">The Copper Lantern Pub</div>
+          <div class="venue">$venue</div>
           <div class="label">${s.label}</div>
           <div class="zone">${s.zoneTh} / ${s.zoneEn}</div>
           <img class="qr" src="/tables/${s.tableId}/qr" alt="QR ${s.label}">
@@ -752,7 +756,7 @@ private fun slipPage(slips: List<SlipData>): String {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Table slips — The Copper Lantern Pub</title>
+<title>Table slips — $venue</title>
 <style>
   @page { size: A6; margin: 0; }
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }

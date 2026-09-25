@@ -26,6 +26,9 @@ class SlipTest {
         val slipHtml = slip.bodyAsText()
         assertTrue("/tables/t5/qr" in slipHtml)
         assertTrue("Scannez pour commander de la nourriture" in slipHtml && "Scan to order" in slipHtml)
+        // titled with the store this process runs, not a hardcoded name
+        assertTrue("<title>Table slips — Copper Lantern — Vieux-Port</title>" in slipHtml)
+        assertTrue("Copper Lantern Pub" !in slipHtml)
 
         assertEquals(HttpStatusCode.NotFound, client.get("/tables/nope/slip").status)
 
@@ -36,5 +39,16 @@ class SlipTest {
         val all = client.get("/slips").bodyAsText()
         assertEquals(tableCount, Regex("class=\"slip\"").findAll(all).count())
         assertTrue("Alex Morgan" in all)
+    }
+
+    @Test
+    fun slipsCarryTheSelectedStoresName() = testApplication {
+        application {
+            module(dbPath = tempDb(),
+                venue = dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue.PLATEAU)
+        }
+        val all = client.get("/slips").bodyAsText()
+        assertTrue("<title>Table slips — Copper Lantern — Plateau</title>" in all)
+        assertTrue("Vieux-Port" !in all)
     }
 }
