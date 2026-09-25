@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.os.IBinder
 import android.util.Log
 import dev.dwhipstock.pos.module
+import dev.dwhipstock.pos.sdk.ReceiptPrintMode
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import java.io.File
@@ -88,6 +89,7 @@ class TabletStoreService : Service() {
                 ?.getProperty("staff.app.mfa.required")
                 ?.trim()?.toBooleanStrictOrNull() ?: true
             if (!staffAppMfaRequired) Log.w("TabletStore", "Demo build: staff-app MFA bypass enabled")
+            val receiptPrintMode = readReceiptPrintMode()
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = 8080) {
                 module(
                     dbPath = dbFile.absolutePath,
@@ -103,6 +105,7 @@ class TabletStoreService : Service() {
                     reportingPortalUrl = if (cloudReady) cloud.getProperty("portal.url") else null,
                     physicalPrinterEnabled = !isolatedTest,
                     staffAppMfaRequired = staffAppMfaRequired,
+                    receiptPrintMode = receiptPrintMode,
                 )
             }.start(wait = true)
         } catch (error: Throwable) {
@@ -110,6 +113,21 @@ class TabletStoreService : Service() {
             lastFailure = "${error.javaClass.simpleName}: ${error.message ?: "startup failed"}"
             started.set(false)
         }
+    }
+
+    /**
+     * `print.receipts=paper|digital` from the external files dir
+     * (/sdcard/Android/data/<package>/files/store.properties), so it can be
+     * changed with `adb push` on a release build (scripts/tablet-print-mode.sh).
+     * Read once per store start. Missing or bad file → paper; never fails startup.
+     */
+    private fun readReceiptPrintMode(): ReceiptPrintMode.Resolved {
+        val resolved = runCatching {
+            ReceiptPrintMode.fromFile(getExternalFilesDir(null)?.let { File(it, "store.properties") })
+        }.getOrElse { ReceiptPrintMode.Resolved(ReceiptPrintMode.PAPER, "default", it.message) }
+        resolved.warning?.let { Log.w("TabletStore", "Receipt printing config ignored: $it") }
+        Log.i("TabletStore", "Receipt printing: ${resolved.mode.wire} (${resolved.source})")
+        return resolved
     }
 
     /**
