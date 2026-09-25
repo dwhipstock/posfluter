@@ -33,6 +33,18 @@ class MigrationsTest {
     }
 
     @Test
+    fun `retired user calendar column is dropped`() {
+        val db = initDatabase(tempDb())
+        val cols = transaction(db) {
+            val c = mutableSetOf<String>()
+            exec("PRAGMA table_info(users)") { rs -> while (rs.next()) c += rs.getString("name") }
+            c
+        }
+        assertTrue("language_code" in cols, "users lost language_code: $cols")
+        assertTrue("calendar" !in cols, "users.calendar should be dropped: $cols")
+    }
+
+    @Test
     fun `partially migrated db applies only pending scripts`() {
         val path = tempDb()
         // simulate an old DB: schema_migrations exists but shows nothing applied,

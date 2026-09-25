@@ -11,7 +11,7 @@ import { errorMessage, toast } from "@/lib/toast";
 import type { ConfirmResponse, LoginResponse } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
-import { LangEraToggle } from "@/components/lang-toggle";
+import { LangToggle } from "@/components/lang-toggle";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,7 +127,7 @@ export default function LoginPage() {
     <div className="grid min-h-dvh place-items-center bg-paper px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-2 flex justify-end">
-          <LangEraToggle />
+          <LangToggle />
         </div>
         <div className="mb-8 flex flex-col items-center">
           <BrandMark large />

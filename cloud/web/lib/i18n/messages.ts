@@ -7,7 +7,6 @@
 // Money ($, comma grouping, cents) is script-neutral and lives in lib/format.ts.
 
 export type Locale = "fr" | "en";
-export type Era = "CE";
 
 type Msg = { fr: string; en: string };
 
@@ -310,7 +309,6 @@ export const messages = {
   account_footer: m("Portail cloud CopperLantern · v{version}", "CopperLantern cloud portal · v{version}"),
   account_display: m("afficher", "Display"),
   account_language: m("langue", "Language"),
-  account_calendar: m("calendrier", "Calendar"),
   account_devices: m("équipement", "Devices"),
   account_devices_hint: m("Associer et gérer des appareils POS", "Pair and manage POS terminals"),
 

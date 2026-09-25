@@ -1,5 +1,5 @@
 import { presetKeyOf, type DateRange } from "@/lib/range";
-import type { Era, Locale, MsgKey } from "./messages";
+import type { Locale, MsgKey } from "./messages";
 
 // Timestamps are naive venue-local strings; never route them through Date.
 function parts(s: string) {
@@ -38,9 +38,8 @@ export interface Fmt {
   rangeLabel(r: DateRange): string;
 }
 
-export function makeFmt(locale: Locale, era: Era, t: (key: MsgKey, vars?: Record<string, string | number>) => string): Fmt {
+export function makeFmt(locale: Locale, t: (key: MsgKey, vars?: Record<string, string | number>) => string): Fmt {
   const months = locale === "fr" ? FR_MONTHS : EN_MONTHS;
-  const year = (y: number) => y;
 
   const day = (date: string) => {
     const p = parts(date);
@@ -48,7 +47,7 @@ export function makeFmt(locale: Locale, era: Era, t: (key: MsgKey, vars?: Record
   };
   const dayYear = (date: string) => {
     const p = parts(date);
-    return `${p.d} ${months[p.m - 1]} ${year(p.y)}`;
+    return `${p.d} ${months[p.m - 1]} ${p.y}`;
   };
   const dateTime = (dt: string) => {
     const p = parts(dt);

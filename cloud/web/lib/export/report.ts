@@ -1,7 +1,7 @@
 "use client";
 
 // Per-page glue: assembles the parts of an ExportDoc that every report shares
-// — venue, era/locale-aware range label, filename stem, and a "generated at"
+// — venue, locale-aware range label, filename stem, and a "generated at"
 // stamp — from the same hooks the page already uses. A report page spreads the
 // result and adds its own title / notes / kpis / sections.
 
@@ -16,7 +16,7 @@ export type DocMeta = Pick<
 >;
 
 // Local wall-clock "now" as a naive ISO string, so the export fmt (which never
-// routes through Date) can render it in the active locale + era.
+// routes through Date) can render it in the active locale.
 function nowNaiveISO(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");

@@ -436,16 +436,15 @@ class CloudSync(
         val pinHash = d.str("pinHash")
         val active = d.bool("active") ?: true
         val lang = d.str("languageCode") ?: "en"
-        val cal = d.str("calendar") ?: "CE"
         if (exists) {
             Users.update({ Users.id eq id }) {
                 it[Users.name] = name
                 it[Users.role] = role
                 pinHash?.let { h -> it[pin] = h } // never wipe a live PIN if the snapshot omits it
                 it[Users.active] = active
-                // languageCode/calendar are store-local display preferences (PATCH
+                // languageCode is a store-local display preference (PATCH
                 // /me/preferences); the cloud snapshot only ever carries the creation
-                // defaults, so applying them here would reset a staff member's language
+                // default, so applying it here would reset a staff member's language
                 // on every portal edit. Insert-only, like the PIN rule above.
                 it[deletedAt] = null
             }
@@ -457,7 +456,6 @@ class CloudSync(
                 it[pin] = pinHash ?: "" // no hash yet → can't log in until one arrives
                 it[Users.active] = active
                 it[languageCode] = lang
-                it[calendar] = cal
             }
         }
         GrantsRepo.applyStaffOverrides(id, d["overrides"] as? JsonObject ?: buildJsonObject {})

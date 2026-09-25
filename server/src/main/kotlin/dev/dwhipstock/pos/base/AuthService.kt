@@ -298,8 +298,8 @@ class AuthService(
         Outbox.write("auth.logout", "user", user.userId, buildJsonObject { put("userId", user.userId) })
     }
 
-    /** Per-user display preferences (UI language + calendar era). */
-    fun updatePreferences(userId: String, languageCode: String, calendar: String): Unit = transaction {
+    /** Per-user display preferences (UI language). */
+    fun updatePreferences(userId: String, languageCode: String): Unit = transaction {
         // valid languages = whichever message catalogs are on the classpath
         require(languageCode in Messages.supportedTags()) {
             "languageCode must be one of ${Messages.supportedTags().sorted().joinToString(", ")}"
@@ -307,15 +307,12 @@ class AuthService(
         // Users.language_code is varchar(8): a longer tag would die inside the
         // UPDATE with an opaque error, so refuse it cleanly here
         require(languageCode.length <= 8) { "languageCode longer than 8 chars cannot be stored" }
-        require(calendar == "CE") { "calendar must use the Gregorian CE era" }
         Users.update({ Users.id eq userId }) {
             it[Users.languageCode] = languageCode
-            it[Users.calendar] = calendar
         }
         Outbox.write("user.preferences_changed", "user", userId, buildJsonObject {
             put("userId", userId)
             put("languageCode", languageCode)
-            put("calendar", calendar)
         })
     }
 
@@ -373,7 +370,7 @@ class AuthService(
 
     private fun toAuthUser(token: String, row: ResultRow, deviceId: String? = null) = AuthUser(
         token, row[Users.id], row[Users.name], row[Users.role],
-        row[Users.languageCode], row[Users.calendar],
+        row[Users.languageCode],
         grants = GrantsRepo.effectiveGrants(row[Users.id]),
         deviceId = deviceId,
     )
@@ -382,7 +379,7 @@ class AuthService(
 @Serializable
 data class AuthUser(
     val token: String, val userId: String, val name: String, val role: String,
-    val languageCode: String = "en", val calendar: String = "CE",
+    val languageCode: String = "en",
     /** The staff member's effective grants (CONTRACT §7) — the POS uses these to
      *  skip the manager-PIN prompt for actions the user is already allowed. */
     val grants: List<String> = emptyList(),

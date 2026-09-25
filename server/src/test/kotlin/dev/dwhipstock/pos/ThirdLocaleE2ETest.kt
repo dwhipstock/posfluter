@@ -30,7 +30,7 @@ class ThirdLocaleE2ETest {
         // zh became a valid preference purely because messages_zh.properties is on the classpath
         val patched = manager.patch("/me/preferences") {
             contentType(ContentType.Application.Json)
-            setBody("""{"languageCode":"zh","calendar":"CE"}""")
+            setBody("""{"languageCode":"zh"}""")
         }
         assertEquals(HttpStatusCode.OK, patched.status)
 

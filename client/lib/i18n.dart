@@ -3,7 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'api.dart';
 
-/// Per-user display preferences: UI language (en/fr) + calendar era (Gregorian CE).
+/// Per-user display preferences: UI language (en/fr).
 /// Device-persisted as the pre-login fallback; hydrated from the user profile
 /// on login and PATCHed back to the server on change.
 class Prefs extends ChangeNotifier {
@@ -13,7 +13,6 @@ class Prefs extends ChangeNotifier {
   static const _storage = FlutterSecureStorage();
 
   String lang = 'en'; // en | fr
-  String calendar = 'CE'; // CE
 
   // Floor-plan editor toggles — device-local only (per-terminal habit, never
   // synced to the user row). Grid + snap default on (the old hardwired grid);
@@ -27,7 +26,6 @@ class Prefs extends ChangeNotifier {
   Future<void> load() async {
     final storedLang = await _storage.read(key: 'pref_lang');
     lang = storedLang == 'fr' ? 'fr' : 'en';
-    calendar = 'CE';
     editorShowGrid = (await _storage.read(key: 'pref_editor_grid')) != 'false';
     editorSnap = (await _storage.read(key: 'pref_editor_snap')) != 'false';
     editorGridStep =
@@ -52,9 +50,8 @@ class Prefs extends ChangeNotifier {
   }
 
   /// Login/restore: the user's stored preference wins over the device default.
-  void hydrate({required String languageCode, required String calendarPref}) {
+  void hydrate({required String languageCode}) {
     lang = languageCode == 'fr' ? 'fr' : 'en';
-    calendar = 'CE';
     _persistLocal();
     notifyListeners();
   }
@@ -65,25 +62,18 @@ class Prefs extends ChangeNotifier {
     await _persist();
   }
 
-  Future<void> setCalendar(String value) async {
-    calendar = value;
-    notifyListeners();
-    await _persist();
-  }
-
   Future<void> _persist() async {
     await _persistLocal();
     // logged in → also store on the user row (survives device changes)
     if (Api.currentUser != null) {
       try {
-        await Api.updatePreferences(lang, calendar);
+        await Api.updatePreferences(lang);
       } catch (_) {} // offline toggle still works locally
     }
   }
 
   Future<void> _persistLocal() async {
     await _storage.write(key: 'pref_lang', value: lang);
-    await _storage.write(key: 'pref_calendar', value: calendar);
   }
 
   /// "2026-07-08T00:12:34" → "08/07/2026 00:12".
@@ -1095,7 +1085,7 @@ class LangActionsCompact extends StatelessWidget {
   }
 }
 
-/// AppBar actions: language + calendar era toggles, visible on every screen.
+/// AppBar actions: language toggle, visible on every screen.
 class LangActions extends StatelessWidget {
   const LangActions({super.key});
 

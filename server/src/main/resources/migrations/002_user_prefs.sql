@@ -1,4 +1,4 @@
--- 002: per-user display preferences — UI language + calendar era.
+-- 002: per-user display preferences — UI language.
 -- Stored per-user (not per-device): manager and server share the terminal and
 -- each sees their own language after login. English is the default; French is secondary.
 

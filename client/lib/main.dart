@@ -132,7 +132,7 @@ class PosApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // prefsScope above MaterialApp: language/calendar toggles rebuild
+    // prefsScope above MaterialApp: the language toggle rebuilds
     // every live route instantly, dialogs included.
     return prefsScope(
       child: MaterialApp(

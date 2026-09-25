@@ -366,10 +366,7 @@ class Api {
     onPairingRequired = null;
     try {
       currentUser = AuthUser.fromJson(await _get('/me'), _token!);
-      Prefs.instance.hydrate(
-        languageCode: currentUser!.languageCode,
-        calendarPref: currentUser!.calendar,
-      );
+      Prefs.instance.hydrate(languageCode: currentUser!.languageCode);
       return currentUser;
     } on PairingRequiredException {
       _token = null;
@@ -421,10 +418,7 @@ class Api {
     _token = json['token'];
     currentUser = AuthUser.fromJson(json, _token!);
     await _writeStorage('session_token', _token);
-    Prefs.instance.hydrate(
-      languageCode: currentUser!.languageCode,
-      calendarPref: currentUser!.calendar,
-    );
+    Prefs.instance.hydrate(languageCode: currentUser!.languageCode);
     return currentUser!;
   }
 
@@ -567,13 +561,9 @@ class Api {
     }
   }
 
-  static Future<AuthUser> updatePreferences(
-    String languageCode,
-    String calendar,
-  ) async {
+  static Future<AuthUser> updatePreferences(String languageCode) async {
     final json = await _patch('/me/preferences', {
       'languageCode': languageCode,
-      'calendar': calendar,
     });
     currentUser = AuthUser.fromJson(json, _token!);
     return currentUser!;
@@ -1180,7 +1170,7 @@ class PairingRequiredException extends SessionExpiredException {
 }
 
 class AuthUser {
-  final String token, userId, name, role, languageCode, calendar;
+  final String token, userId, name, role, languageCode;
 
   /// Effective grants the store computed for this user (CONTRACT §7). Used to
   /// skip the manager-PIN prompt for actions the user is already allowed.
@@ -1190,8 +1180,7 @@ class AuthUser {
     this.userId,
     this.name,
     this.role,
-    this.languageCode,
-    this.calendar, {
+    this.languageCode, {
     this.grants = const {},
   });
   factory AuthUser.fromJson(Map<String, dynamic> j, String token) => AuthUser(
@@ -1200,7 +1189,6 @@ class AuthUser {
     j['name'],
     j['role'],
     j['languageCode'] ?? 'en',
-    j['calendar'] ?? 'CE',
     grants: ((j['grants'] as List?) ?? const [])
         .map((e) => e as String)
         .toSet(),
