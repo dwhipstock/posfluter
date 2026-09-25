@@ -816,6 +816,15 @@ function renderCheck() {
   const feeRow = f => `
     <div class="row"><span class="nm">${esc(lang === "en" ? f.labelEn : f.labelFr)}</span><span>${cad(f.amountCents)}</span></div>`;
 
+  // prices are pre-tax: subtotal, then each tax added on top (GST / QST), from the server
+  const taxLabel = t => lang === "en"
+    ? `${t.labelEn} ${t.ratePercent}%`
+    : `${t.labelFr} ${String(t.ratePercent).replace(".", ",")} %`;
+  const taxRows = (check.taxes || []).length ? `
+    <div class="row"><span class="nm">${T().subtotal}</span><span>${cad(check.subtotalCents)}</span></div>
+    ${check.taxes.map(t => `
+    <div class="row"><span class="nm">${esc(taxLabel(t))}</span><span>${cad(t.amountCents)}</span></div>`).join("")}` : "";
+
   const pendingSec = check.pendingLines.length ? `
     <div class="sec">
       <h3>${T().pendingHd}</h3>
@@ -834,6 +843,7 @@ function renderCheck() {
       <h3>${T().onCheck}</h3>
       ${check.lines.map(lineRow).join("")}
       ${check.fees.map(feeRow).join("")}
+      ${taxRows}
       <div class="total"><span>${T().total}</span><span>${cad(check.grandTotalCents)}</span></div>
     </div>`
     : (check.pendingLines.length ? "" : `<div class="empty"><div class="big">🧾</div><p>${T().emptyCheck}</p></div>`);

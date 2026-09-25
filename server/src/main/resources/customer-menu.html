@@ -171,7 +171,7 @@ const STR = {
     doneTitle: "Commande envoyée !", doneText: "Le personnel confirmera votre commande sous peu.",
     orderMore: "Commandez plus", failed: "L'envoi a échoué. Essayer à nouveau.",
     billLocked: "La facture est en train d'être payée. — Veuillez contacter le personnel.",
-    viewCart: "Voir le panier", addedToast: "Ajouté au panier ✓", subtotal: "Total",
+    viewCart: "Voir le panier", addedToast: "Ajouté au panier ✓", subtotal: "Sous-total (taxes en sus)", billSubtotal: "Sous-total",
     tabMenu: "menu", tabBill: "votre facture", seeBill: "Consulter la facture",
     onBill: "sur votre facture", beingConfirmed: "Attendez que l'employé confirme.", total: "Total",
     noOrders: "Il n'y a pas encore de commande. — Sélectionnez un menu pour commencer à commander maintenant.", billPaying: "La facture est en train d'être payée.",
@@ -186,7 +186,7 @@ const STR = {
     doneTitle: "Order sent!", doneText: "Staff will confirm your order shortly.",
     orderMore: "Order more", failed: "Failed to send, please retry",
     billLocked: "Bill is being paid — please ask staff",
-    viewCart: "View basket", addedToast: "Added ✓", subtotal: "Subtotal",
+    viewCart: "View basket", addedToast: "Added ✓", subtotal: "Subtotal (plus tax)", billSubtotal: "Subtotal",
     tabMenu: "Menu", tabBill: "Your bill", seeBill: "View bill",
     onBill: "On your bill", beingConfirmed: "Being confirmed", total: "Total",
     noOrders: "No orders yet — browse the menu to start.", billPaying: "Bill is being paid",
@@ -410,6 +410,10 @@ const lineName = l => {
   const variant = lang === "en" ? l.variantLabelEn : l.variantLabelFr;
   return esc(name + (variant ? " (" + variant + ")" : ""));
 };
+// "GST 5%" / "TVQ 9,975 %" — the rate is the server's decimal string
+const taxLabel = t => lang === "en"
+  ? `${t.labelEn} ${t.ratePercent}%`
+  : `${t.labelFr} ${String(t.ratePercent).replace(".", ",")} %`;
 const billRow = l => `
   <div class="brow">
     <span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
@@ -433,10 +437,18 @@ function renderBill() {
       <h3>⏳ ${T().beingConfirmed}</h3>
       ${bill.pendingLines.map(billRow).join("")}
     </div>` : "";
+  // prices are pre-tax: subtotal, then each tax added on top (GST / QST), then the total
+  const taxes = (bill.taxes || []).length ? `
+    <div class="brow"><span class="nm">${T().billSubtotal}</span><span>${cad(bill.subtotalCents)}</span></div>
+    ${bill.taxes.map(t => `
+    <div class="brow">
+      <span class="nm">${esc(taxLabel(t))}</span>
+      <span>${cad(t.amountCents)}</span>
+    </div>`).join("")}` : "";
   el.innerHTML = `
     <div class="bsec">
       <h3>${T().onBill}</h3>
-      ${bill.lines.map(billRow).join("")}${fees}
+      ${bill.lines.map(billRow).join("")}${fees}${taxes}
       <div class="btotal"><span>${T().total}</span><span>${cad(bill.grandTotalCents)}</span></div>
       ${bill.locked ? `<div class="locknote">${T().billPaying}</div>` : ""}
     </div>
