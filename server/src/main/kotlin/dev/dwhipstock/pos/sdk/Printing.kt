@@ -106,8 +106,8 @@ sealed interface PrinterAdapter {
 
         /**
          * Shared 42-col monospace rendering. NOTE: pads by codepoint count —
-         * French combining marks throw column math off slightly; acceptable for
-         * the virtual printer. TODO(M2): proper width via ICU when thermal lands.
+         * any decomposed (combining) accent would throw column math off slightly;
+         * acceptable for the virtual printer. TODO(M2): proper width via ICU when thermal lands.
          */
         fun renderText(lines: List<PrintLine>): String = buildString {
             for (line in lines) {

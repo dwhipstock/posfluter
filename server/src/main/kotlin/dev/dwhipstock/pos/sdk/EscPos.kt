@@ -13,10 +13,10 @@ import java.io.ByteArrayOutputStream
  *
  * The whole receipt is rendered as ONE monochrome raster bitmap and pushed via
  * the GS v 0 raster command. We do NOT rely on the printer's resident code
- * pages: the XP-C300H self-test lists none with French, so a text-mode receipt
- * would print Ventes / $ / menu names as boxes. Rasterizing sidesteps code
- * pages entirely — anything Java2D can draw (French, mixed French+English, $, the
- * CAD sign, digits) prints exactly as laid out. See [ThermalReceiptRenderer].
+ * pages, so accented French text never depends on which code page the unit
+ * ships with or has selected. Rasterizing sidesteps code pages entirely —
+ * anything Java2D can draw (French, mixed French+English, $, digits) prints
+ * exactly as laid out. See [ThermalReceiptRenderer].
  */
 object EscPos {
     // 80mm printable area = 512 dots (64 bytes/row) on the XP-C300H. A wider

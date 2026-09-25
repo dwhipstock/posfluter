@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DEMO-ONLY seed: generate a handful of finalized sales through the store's HTTP API
-so the owner portal has non-empty reports (payments, items, VAT, hourly) after sync
+so the owner portal has non-empty reports (payments, items, tax, hourly) after sync
 (~10s). Talks only to the store server — nothing here is used in production.
 
 Idempotency is owned by the caller (scripts/demo-up.sh), which skips this when the
@@ -117,7 +117,7 @@ def make_sale(table, basket_idx, pay_type, menu_items):
         tendered = ((total // 10000) + 1) * 10000        # round up to next $100 → shows change
         call("POST", f"/checks/{check_id}/tenders",
              {"type": "CASH", "amountTenderedCents": tendered})
-    else:  # CARD: initiate QR, then confirm once "paid"
+    else:  # CARD: initiate, then confirm once the terminal approves
         call("POST", f"/checks/{check_id}/tenders/initiate",
              {"type": "CARD", "amountCents": total})
         call("POST", f"/checks/{check_id}/tenders/confirm",

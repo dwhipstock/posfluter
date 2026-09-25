@@ -108,7 +108,7 @@ class CustomerBillTest {
         assertEquals(2500L, fees[0]["amountCents"]!!.jsonPrimitive.long)
         assertEquals(4250L, accepted["grandTotalCents"]!!.jsonPrimitive.long)
         assertFalse(accepted["locked"]!!.jsonPrimitive.boolean)
-        // hidden VAT: the customer payload never carries a tax field
+        // hidden tax: the customer payload never carries a tax field
         assertTrue(accepted.keys.none { "tax" in it.lowercase() })
     }
 }

@@ -13,10 +13,10 @@ import kotlin.test.assertTrue
 private class PipelineTestConfig(override val fees: List<Fee> = listOf(Fee.Corkage(Money.cad(100)))) : CustomerConfig {
     override val customerId = "test"
     override val displayName = "Test Venue"
-    override val taxPolicy = TaxPolicy.InclusiveVat(ratePercent = 13, showOnReceipt = false)
+    override val taxPolicy = TaxPolicy.InclusiveTax(ratePercent = 13, showOnReceipt = false)
     override val roundingPolicy = RoundingPolicy.RoundToUnit(Money.cad(1), RoundingPolicy.RoundToUnit.Mode.DOWN)
     override val authPolicy = AuthPolicy.PinLogin(4)
-    override val receiptPolicy = ReceiptPolicy.Standard("t", emptyList(), "t", showVat = false, gregorianDates = true)
+    override val receiptPolicy = ReceiptPolicy.Standard("t", emptyList(), "t", showTax = false)
     override val printer = PrinterAdapter.VirtualPrinter("build/tmp/receipts")
     override val electronicTenders = emptyList<TenderMethod>()
     override val publicBaseUrl = "http://localhost:8080"
@@ -27,7 +27,7 @@ private val CopperLanternLikeConfig = PipelineTestConfig()
 class PipelineTest {
 
     @Test
-    fun inclusiveVatComputesOutOfBaseWithoutChangingTotal() {
+    fun inclusiveTaxComputesOutOfBaseWithoutChangingTotal() {
         val totals = TransactionPipeline.computeTotals(
             listOf(BasketLine(Money.cad(1000), 1)), corkageBottles = 0, config = CopperLanternLikeConfig,
         )
@@ -108,7 +108,7 @@ class PipelineTest {
               config = CopperLanternLikeConfig,
           )
           assertEquals(Money.cad(540), totals.itemsSubtotal) // 360 + 160 + 20
-          assertEquals(Money.cad(540), totals.grandTotal)    // inclusive VAT: total unchanged
+          assertEquals(Money.cad(540), totals.grandTotal)    // inclusive tax: total unchanged
           assertEquals(Money(6212), totals.taxIncluded)       // 54000 * 13/113, half-up
           assertTrue(totals.feeLines.isEmpty())               // corkage null at 0 bottles
       }
@@ -122,7 +122,7 @@ class PipelineTest {
           }
       }
 @Test
-      fun corkageIsTaxableSoItRaisesTheInclusiveVatBase() {
+      fun corkageIsTaxableSoItRaisesTheInclusiveTaxBase() {
           val totals = TransactionPipeline.computeTotals(
               listOf(BasketLine(Money.cad(300), 1)), // $300 food
               corkageBottles = 2,                     // 2 brought-in bottles

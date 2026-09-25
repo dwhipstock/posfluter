@@ -17,7 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Refunds (return money on a finalized check, inclusive VAT reversed) and cash
+ * Refunds (return money on a finalized check, included tax reversed) and cash
  * movements (non-sale till in/out) — both post to the shift and feed the Z-close
  * expected-cash reconciliation.
  */
@@ -40,7 +40,7 @@ class RefundAndCashMovementTest {
     }
 
     @Test
-    fun refundReversesInclusiveVatAndFeedsShiftReconciliation() = testApplication {
+    fun refundReversesInclusiveTaxAndFeedsShiftReconciliation() = testApplication {
         val receiptsDir = Files.createTempDirectory("pos-refund-receipts").toString()
         application { module(dbPath = tempDb(), receiptsDir = receiptsDir) }
         val c = loginClient()

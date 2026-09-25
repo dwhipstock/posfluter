@@ -69,7 +69,7 @@ function BreakdownCard({ rows, chart }: { rows: VenueSummaryRow[]; chart: boolea
                 <TableHead>{t("col_store")}</TableHead>
                 <TableHead className="text-right">{t("col_gross")}</TableHead>
                 <TableHead className="hidden text-right sm:table-cell">{t("col_net")}</TableHead>
-                <TableHead className="hidden text-right sm:table-cell">{t("col_vat")}</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">{t("col_tax")}</TableHead>
                 <TableHead className="text-right">{t("col_checks")}</TableHead>
                 <TableHead className="hidden text-right md:table-cell">{t("kpi_avg_check")}</TableHead>
               </TableRow>
@@ -80,7 +80,7 @@ function BreakdownCard({ rows, chart }: { rows: VenueSummaryRow[]; chart: boolea
                   <TableCell className="font-medium">{shortStoreName(r.venueName)}</TableCell>
                   <TableCell className="text-right tabular-nums">{CAD(r.grossCents)}</TableCell>
                   <TableCell className="hidden text-right tabular-nums sm:table-cell">{CAD(r.netCents)}</TableCell>
-                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{CAD(r.vatCents)}</TableCell>
+                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{CAD(r.taxCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.checkCount}</TableCell>
                   <TableCell className="hidden text-right tabular-nums md:table-cell">{CAD(r.avgCheckCents)}</TableCell>
                 </TableRow>
@@ -91,7 +91,7 @@ function BreakdownCard({ rows, chart }: { rows: VenueSummaryRow[]; chart: boolea
                 <TableCell>{t("col_total")}</TableCell>
                 <TableCell className="text-right tabular-nums">{CAD(total((r) => r.grossCents))}</TableCell>
                 <TableCell className="hidden text-right tabular-nums sm:table-cell">{CAD(total((r) => r.netCents))}</TableCell>
-                <TableCell className="hidden text-right tabular-nums sm:table-cell">{CAD(total((r) => r.vatCents))}</TableCell>
+                <TableCell className="hidden text-right tabular-nums sm:table-cell">{CAD(total((r) => r.taxCents))}</TableCell>
                 <TableCell className="text-right tabular-nums">{checks}</TableCell>
                 <TableCell className="hidden text-right tabular-nums md:table-cell">
                   {checks ? CAD(Math.round(rows.reduce((s, r) => s + r.avgCheckCents * r.checkCount, 0) / checks)) : "—"}

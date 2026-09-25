@@ -37,7 +37,7 @@ class ApplicationTest {
     }
 
     /**
-     * The whole money path: open → add lines → corkage → Card QR for $500
+     * The whole money path: open → add lines → corkage → card for $30
      * (partial) → confirm → cash for the remainder → finalize → receipt file
      * + full outbox sequence.
      */
@@ -78,7 +78,7 @@ class ApplicationTest {
             setBody("""{"bottles":1}""")
         }.let { assertEquals(HttpStatusCode.OK, it.status) }
 
-        // subtotal: 450 + 550 + 200 = $1200, VAT included ≈ $78.50 hidden
+        // subtotal: 450 + 550 + 200 = $1200, tax included ≈ $78.50 hidden
         val check = json.parseToJsonElement(c.get("/checks/$checkId").bodyAsText()).jsonObject
         assertEquals(5625L, check["grandTotalCents"]!!.jsonPrimitive.long)
         assertEquals(0L, check["taxIncludedCents"]!!.jsonPrimitive.long)
@@ -97,9 +97,9 @@ class ApplicationTest {
             setBody("""{"type":"CARD","amountCents":3000}""")
         }
         assertEquals(HttpStatusCode.Created, confirmed.status)
-        val afterQr = json.parseToJsonElement(confirmed.bodyAsText()).jsonObject["check"]!!.jsonObject
-        assertEquals(3000L, afterQr["paidCents"]!!.jsonPrimitive.long)
-        assertEquals(2625L, afterQr["outstandingCents"]!!.jsonPrimitive.long)
+        val afterCard = json.parseToJsonElement(confirmed.bodyAsText()).jsonObject["check"]!!.jsonObject
+        assertEquals(3000L, afterCard["paidCents"]!!.jsonPrimitive.long)
+        assertEquals(2625L, afterCard["outstandingCents"]!!.jsonPrimitive.long)
 
         // finalize refused while outstanding
         assertEquals(HttpStatusCode.Conflict, c.post("/checks/$checkId/finalize").status)
@@ -132,7 +132,7 @@ class ApplicationTest {
         assertTrue("Corkage" in receiptText)
         assertTrue("Total" in receiptText && "56.25" in receiptText)
         assertTrue("2026" in receiptText)          // four-digit year
-        assertTrue("impôt" !in receiptText)          // VAT hidden for CopperLantern
+        assertTrue("impôt" !in receiptText)          // tax hidden for CopperLantern
         assertTrue("Card" in receiptText && "Cash" in receiptText)
         assertTrue("Change" in receiptText)
 
@@ -145,7 +145,7 @@ class ApplicationTest {
         assertEquals(
             listOf(
                 "catalog.seeded", "auth.login", "shift.opened", "check.opened", "check.line_added", "check.line_added",
-                "check.corkage_set", "check.total_locked", "check.tender_qr_shown",
+                "check.corkage_set", "check.total_locked", "check.tender_initiated",
                 "check.tender_confirmed", "check.tendered", "check.closed", "receipt.printed",
             ),
             eventTypes,

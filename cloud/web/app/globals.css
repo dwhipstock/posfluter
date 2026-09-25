@@ -12,17 +12,16 @@
   }
   body {
     @apply bg-paper text-ink antialiased;
-    /* --font-french (French-only subset) leads so French glyphs always render from
-       the loaded Noto Sans; Latin has no glyphs there and falls through
-       to the system sans, keeping the Latin brand look untouched. */
+    /* --font-french (Noto Sans, Latin subset) leads so English and French text,
+       accents included, render from one loaded face; the system sans stack is
+       the fallback while it loads. */
     font-family: var(--font-french), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
       Roboto, "Helvetica Neue", "Noto Sans", "Noto Sans", sans-serif;
   }
-  /* French has no inter-word spaces. With lang="fr" on <html>, browsers use a
-     dictionary to break French lines at valid points; overflow-wrap is a
-     last-resort fallback (e.g. Firefox) so a long unbroken French run wraps
-     instead of overflowing its card at phone widths. break-word (not
-     anywhere) avoids shrinking table columns' min-content width. */
+  /* French labels run longer than English. overflow-wrap is a last-resort
+     fallback so a long unbroken word wraps instead of overflowing its card at
+     phone widths. break-word (not anywhere) avoids shrinking table columns'
+     min-content width. */
   :lang(fr) {
     word-break: normal;
     overflow-wrap: break-word;

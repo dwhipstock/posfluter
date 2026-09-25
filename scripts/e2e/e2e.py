@@ -179,10 +179,10 @@ def main():
 
     # -- review F1: a fresh cloud venue must NOT inherit another venue's payment data --
     st, settings = req(D1, "GET", "/settings", None, store_headers(dev1, sess1))
-    ppay = (settings or {}).get("cardProcessor", "?")
+    card_processor = (settings or {}).get("cardProcessor", "?")
     check("F1 venue_settings blank (no inherited card processor)",
-          st == 200 and ppay == "" and settings.get("corkagePerBottleCents", 1) == 0,
-          f"cardProcessor={ppay!r} corkage={settings.get('corkagePerBottleCents')}")
+          st == 200 and card_processor == "" and settings.get("corkagePerBottleCents", 1) == 0,
+          f"cardProcessor={card_processor!r} corkage={settings.get('corkagePerBottleCents')}")
 
     # -- sale on venue A --
     it = items[VA]

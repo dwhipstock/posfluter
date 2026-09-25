@@ -1,8 +1,8 @@
 -- 003: refunds projected from the store's report-complete refund.created events.
--- The store decomposed the reversed inclusive VAT (gross = money returned,
--- tax = VAT inside it, net = gross - tax); the cloud only stores and aggregates
--- these — it never recomputes tax. Refunds net out of sales + VAT in the summary
--- and VAT reports, and drive the Refunds report. Idempotent upsert by refund_id.
+-- The store decomposed the reversed included tax (gross = money returned,
+-- tax = the tax inside it, net = gross - tax); the cloud only stores and aggregates
+-- these — it never recomputes tax. Refunds net out of sales + tax in the summary
+-- and tax reports, and drive the Refunds report. Idempotent upsert by refund_id.
 
 CREATE TABLE refunds (
     tenant_id TEXT NOT NULL,

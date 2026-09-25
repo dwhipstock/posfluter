@@ -85,7 +85,7 @@ data class CustomerBillFeeDto(val labelFr: String, val labelEn: String, val amou
  * The running bill a guest sees at /m/{tableId}/bill. Strictly the table's
  * CURRENT open check — `open=false` (all else empty) when there is none; a
  * closed/previous party's check is never served. Totals are the server
- * pipeline's, VAT-inclusive and hidden, exactly like the printed bill.
+ * pipeline's, tax-inclusive and hidden, exactly like the printed bill.
  */
 @Serializable
 data class CustomerBillDto(
@@ -577,7 +577,7 @@ fun Route.posRoutes(
     }
 
     // Electronic tenders: confirm-then-record. Initiate returns payment
-    // instructions (Card QR payload / bank account details); staff confirms
+    // instructions (card terminal / bank account details); staff confirms
     // after seeing the money land, and only the confirm creates a tender row.
     post("/checks/{id}/tenders/initiate") {
         val req = call.receive<InitiateTenderRequest>()

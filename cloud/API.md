@@ -49,21 +49,21 @@ today/today). A check belongs to the day of its `closedAt`.
 
 - `GET /v1/reports/summary`
   ```json
-  { "grossCents": 0, "netCents": 0, "vatCents": 0,
+  { "grossCents": 0, "netCents": 0, "taxCents": 0,
     "checkCount": 0, "avgCheckCents": 0,
     "voidCount": 0, "voidAmountCents": 0,
     "corkageCents": 0, "serviceChargeCents": 0,
     "byDay": [ { "date": "2026-07-11", "grossCents": 0, "netCents": 0,
-                 "vatCents": 0, "checkCount": 0 } ] }
+                 "taxCents": 0, "checkCount": 0 } ] }
   ```
-- `GET /v1/reports/vat` — the tax-filing report.
+- `GET /v1/reports/tax` — the tax-filing report.
   ```json
   { "ratePercent": 13,
     "rows": [ { "date": "2026-07-11", "grossCents": 0, "netCents": 0,
-                "vatCents": 0, "checkCount": 0 } ],
-    "totals": { "grossCents": 0, "netCents": 0, "vatCents": 0, "checkCount": 0 } }
+                "taxCents": 0, "checkCount": 0 } ],
+    "totals": { "grossCents": 0, "netCents": 0, "taxCents": 0, "checkCount": 0 } }
   ```
-  (`vatCents` = Σ store-computed `taxIncludedCents`; `netCents` = gross − vat.)
+  (`taxCents` = Σ store-computed `taxIncludedCents`; `netCents` = gross − tax.)
 - `GET /v1/reports/payments` →
   `{ "rows": [ { "type": "CASH", "amountCents": 0, "count": 0 } ], "totalCents": 0 }`
   (type ∈ CASH | CARD | BANK_TRANSFER | STRIPE; amount = Σ amountApplied.)

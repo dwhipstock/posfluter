@@ -13,8 +13,8 @@ import org.junit.Test
 import kotlin.test.assertEquals
 
 /**
- * Refunds net out of the summary + VAT reports, and drive the Refunds and Cash
- * movements reports. The store decomposed gross/net/VAT; the cloud only sums —
+ * Refunds net out of the summary + tax reports, and drive the Refunds and Cash
+ * movements reports. The store decomposed gross/net/tax; the cloud only sums —
  * and its projections are idempotent by refund_id / movement_id.
  */
 class RefundAndCashMovementReportTest {
@@ -55,12 +55,12 @@ class RefundAndCashMovementReportTest {
         }
 
     @Test
-    fun refundsReduceSalesAndVatAndDriveTheNewReports() = testApplication {
+    fun refundsReduceSalesAndTaxAndDriveTheNewReports() = testApplication {
         application { module(TestSupport.config) }
 
         val gross = 10000L
         val tax = storeTax(gross) // 654
-        // refund $40 of the $100 bill, cash; store-decomposed VAT within it
+        // refund $40 of the $100 bill, cash; store-decomposed tax within it
         val rGross = 4000L
         val rTax = storeTax(rGross) // 262
         val rNet = rGross - rTax
@@ -86,24 +86,24 @@ class RefundAndCashMovementReportTest {
 
         val range = "from=2026-07-10&to=2026-07-10"
 
-        // summary: sales + VAT are net of the refund; check count unchanged;
+        // summary: sales + tax are net of the refund; check count unchanged;
         // avg check is the sale-time figure (pre-refund)
         val summary = testJson.parseToJsonElement(
             getWithCookie("/v1/reports/summary?$range", session).bodyAsText()).jsonObject
         assertEquals(gross - rGross, summary["grossCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(tax - rTax, summary["vatCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(tax - rTax, summary["taxCents"]!!.jsonPrimitive.content.toLong())
         assertEquals((gross - rGross) - (tax - rTax), summary["netCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(1, summary["checkCount"]!!.jsonPrimitive.content.toInt())
         assertEquals(gross, summary["avgCheckCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(1, summary["refundCount"]!!.jsonPrimitive.content.toInt())
         assertEquals(rGross, summary["refundAmountCents"]!!.jsonPrimitive.content.toLong())
 
-        // vat report totals reconcile the same way
-        val vat = testJson.parseToJsonElement(
-            getWithCookie("/v1/reports/vat?$range", session).bodyAsText()
+        // tax report totals reconcile the same way
+        val taxReport = testJson.parseToJsonElement(
+            getWithCookie("/v1/reports/tax?$range", session).bodyAsText()
         ).jsonObject["totals"]!!.jsonObject
-        assertEquals(gross - rGross, vat["grossCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(tax - rTax, vat["vatCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(gross - rGross, taxReport["grossCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(tax - rTax, taxReport["taxCents"]!!.jsonPrimitive.content.toLong())
 
         // refunds report: totals + by-reason + by-tender
         val refunds = testJson.parseToJsonElement(
@@ -111,7 +111,7 @@ class RefundAndCashMovementReportTest {
         assertEquals(1, refunds["count"]!!.jsonPrimitive.content.toInt())
         assertEquals(rGross, refunds["grossCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(rNet, refunds["netCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(rTax, refunds["vatCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(rTax, refunds["taxCents"]!!.jsonPrimitive.content.toLong())
         val byReason = refunds["byReason"]!!.jsonArray.map { it.jsonObject }
         assertEquals("Il y a un problème avec le produit.", byReason.single()["reason"]!!.jsonPrimitive.content)
         assertEquals("CASH", refunds["byTender"]!!.jsonArray.single().jsonObject["type"]!!.jsonPrimitive.content)

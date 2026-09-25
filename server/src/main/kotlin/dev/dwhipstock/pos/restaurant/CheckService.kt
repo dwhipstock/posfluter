@@ -30,7 +30,7 @@ import dev.dwhipstock.pos.sdk.Align
 import dev.dwhipstock.pos.sdk.PrintLine
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import dev.dwhipstock.pos.sdk.i18n.MessageKey
-import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_VAT_INCLUDED
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_INCLUDED
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_HEADER
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_NUMBER
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_REF_BILL
@@ -593,7 +593,7 @@ class CheckService(private val config: CustomerConfig) {
 
     /**
      * Confirm-then-record electronic tender, step 1: lock totals if needed and
-     * hand back payment instructions (Card QR payload / bank details).
+     * hand back payment instructions (card terminal / bank details).
      * No tender row yet — money hasn't moved.
      */
     fun initiateElectronicTender(checkId: Int, type: TenderType, amountCents: Long?, groupId: Int? = null): TenderInstructions = transaction {
@@ -603,7 +603,7 @@ class CheckService(private val config: CustomerConfig) {
         val amount = Money(amountCents ?: outstanding.cents)
         require(amount > Money.ZERO && amount <= outstanding) { "amount must be within outstanding balance" }
 
-        val event = if (type == TenderType.CARD) "check.tender_qr_shown" else "check.tender_initiated"
+        val event = "check.tender_initiated"
         Outbox.write(event, "check", checkId.toString(), buildJsonObject {
             put("checkId", checkId)
             put("type", type.name)
@@ -833,7 +833,7 @@ class CheckService(private val config: CustomerConfig) {
             fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
             grandTotal = Money(group[BillGroups.lockedTotalCents] ?: totals.grandTotal.cents),
             taxIncluded = totals.taxIncluded,
-            vatRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveVat)?.ratePercent,
+            taxRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent,
             tenders = tenders,
         )
     }
@@ -913,7 +913,7 @@ class CheckService(private val config: CustomerConfig) {
             fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
             grandTotal = Money(check[Checks.lockedGrandTotalCents] ?: totals.grandTotal.cents),
             taxIncluded = Money(check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents),
-            vatRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveVat)?.ratePercent,
+            taxRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent,
             tenders = tenders,
         )
     }
@@ -975,7 +975,7 @@ class CheckService(private val config: CustomerConfig) {
     // a check before money is applied, a refund unwinds money already taken. Full
     // or partial (by line or by amount), manager-gated, reason required, and it
     // posts to the current shift so cash refunds land in the drawer math. The
-    // reversed inclusive VAT is decomposed proportionally against the check's
+    // reversed included tax is decomposed proportionally against the check's
     // locked totals (a full refund reverses tax exactly) — the store computes it,
     // the cloud only aggregates. See CheckService.voidCheck for the manager gate.
 
@@ -1053,7 +1053,7 @@ class CheckService(private val config: CustomerConfig) {
                 "refund_exceeds_total",
             )
 
-        // reverse the inclusive VAT proportionally against the LOCKED totals:
+        // reverse the included tax proportionally against the LOCKED totals:
         // full refund → tax reverses exactly; partials stay bounded and additive.
         val refundTax = if (grandTotal == 0L) 0L
         else Math.round(checkTax.toDouble() * refundGross / grandTotal)
@@ -1106,7 +1106,7 @@ class CheckService(private val config: CustomerConfig) {
 
         val tz = tableZoneRowOrNull(check[Checks.tableId])
         // report-complete refund.created (CONTRACT.md §2): the cloud nets these
-        // out of sales + VAT from the decomposition alone, no store join.
+        // out of sales + tax from the decomposition alone, no store join.
         Outbox.write("refund.created", "refund", refundId.toString(), buildJsonObject {
             put("refundId", refundId)
             put("checkId", checkId)
@@ -1261,7 +1261,7 @@ class CheckService(private val config: CustomerConfig) {
             TenderType.STRIPE -> tenderLabels(tt.name).let { (fr, en) -> locale.dataText(fr, en) }
             else -> method?.let { locale.dataText(it.labelFr, it.labelEn) } ?: tt.name
         }
-        val vatRate = (config.taxPolicy as? TaxPolicy.InclusiveVat)?.ratePercent
+        val taxRate = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent
         val lines = buildList {
             add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
             policy.headerLines.forEach { add(PrintLine.Text(it, Align.CENTER)) }
@@ -1275,8 +1275,8 @@ class CheckService(private val config: CustomerConfig) {
             add(PrintLine.KeyValue(msg(SLIP_TIME), policy.formatDate(VenueClock.local(now))))
             add(PrintLine.Divider)
             add(PrintLine.KeyValue(msg(REFUND_TOTAL), Money(gross).format(), emphasized = true))
-            if (policy.showVat && vatRate != null) {
-                add(PrintLine.KeyValue(msg(RECEIPT_VAT_INCLUDED, vatRate), Money(tax).format()))
+            if (policy.showTax && taxRate != null) {
+                add(PrintLine.KeyValue(msg(RECEIPT_TAX_INCLUDED, taxRate), Money(tax).format()))
             }
             add(PrintLine.KeyValue(msg(REFUND_VIA), tenderLabel))
             add(PrintLine.Blank)
@@ -1501,7 +1501,7 @@ class CheckService(private val config: CustomerConfig) {
      * One-time backfill: re-emit a report-complete `check.closed` for every
      * historically CLOSED check. Checks closed before the report-complete
      * payload shipped (commit fd09a6f) were pushed thin — grand total only, no
-     * decomposed VAT and no tender rows — so the cloud's VAT and payment-mix
+     * decomposed tax and no tender rows — so the cloud's tax and payment-mix
      * reports undercount (they count ~1 detailed check while gross counts all).
      *
      * The store DB still holds the full history (locked tax + the Tenders
@@ -1788,7 +1788,7 @@ data class CheckView(
     val itemsSubtotalCents: Long,
     val fees: List<FeeView>,
     val grandTotalCents: Long,
-    val taxIncludedCents: Long, // internal-only for CopperLantern (hidden VAT); reporting uses it
+    val taxIncludedCents: Long, // internal-only for CopperLantern (hidden tax); reporting uses it
     val paidCents: Long,
     val outstandingCents: Long,
     val tenders: List<TenderView>,

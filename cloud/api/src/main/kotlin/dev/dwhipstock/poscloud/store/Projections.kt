@@ -147,8 +147,8 @@ object Projections {
 
     /**
      * A refund on a finalized check. The store already decomposed the reversed
-     * inclusive VAT (gross/net/tax); we only store it. Idempotent by refund_id so
-     * a replay is a no-op. Reports net these out of sales + VAT.
+     * included tax (gross/net/tax); we only store it. Idempotent by refund_id so
+     * a replay is a no-op. Reports net these out of sales + tax.
      */
     private fun refundCreated(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId) {
         val refundId = p.long("refundId") ?: return

@@ -121,12 +121,12 @@ class ThermalFitTest {
                 "Planche de charcuterie québécoise et fromages affinés de la région",
                 "Quebec charcuterie board with aged regional cheeses", "Grande", "Large",
                 1, money, money, null)),
-            fees = emptyList(), grandTotal = money, taxIncluded = Money(0), vatRatePercent = null,
+            fees = emptyList(), grandTotal = money, taxIncluded = Money(0), taxRatePercent = null,
             tenders = emptyList(),
         )
         for (venue in CopperLanternVenue.entries) {
             val policy = ReceiptPolicy.Standard(venue.displayName,
-                listOf(venue.address, venue.phone), "Merci ! / Thank you!", showVat = false)
+                listOf(venue.address, venue.phone), "Merci ! / Thank you!", showTax = false)
             val lines = ReceiptRenderer.render(receipt, policy, ReceiptKind.PROVISIONAL)
             assertFits(lines)
             val head = texts(ThermalReceiptRenderer.layout(lines.take(1)))

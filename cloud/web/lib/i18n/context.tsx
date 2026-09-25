@@ -23,8 +23,7 @@ interface I18n {
 const Ctx = createContext<I18n | null>(null);
 
 // Persist as a cookie (not localStorage) so the server layout can read it and
-// render <html lang> correctly on the first paint — this is also what enables
-// the browser's French line-breaking dictionary before any JS runs.
+// render <html lang> correctly on the first paint, before any JS runs.
 function writeCookie(name: string, value: string) {
   document.cookie = `${name}=${value}; path=/; max-age=31536000; samesite=lax`;
 }

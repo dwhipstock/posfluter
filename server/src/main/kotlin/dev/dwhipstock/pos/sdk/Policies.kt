@@ -10,11 +10,11 @@ sealed interface TaxPolicy {
     fun assess(taxableBase: Money): TaxAssessment
 
     /**
-     * VAT baked into the shelf price. Tax is computed out of the base
+     * Sales tax baked into the shelf price. Tax is computed out of the base
      * (base * rate / (100 + rate)) and never changes the total.
      * [showOnReceipt] = false → computed internally for reporting only.
      */
-    data class InclusiveVat(val ratePercent: Int, val showOnReceipt: Boolean) : TaxPolicy {
+    data class InclusiveTax(val ratePercent: Int, val showOnReceipt: Boolean) : TaxPolicy {
         override fun assess(taxableBase: Money): TaxAssessment {
             // rounds half-up at the cents; fine at this precision
             val tax = (taxableBase.cents * ratePercent * 2 + (100 + ratePercent)) / ((100 + ratePercent) * 2)
@@ -22,7 +22,7 @@ sealed interface TaxPolicy {
         }
     }
 
-    // TODO: ExclusiveVat (added on top) when a customer needs it
+    // TODO: ExclusiveTax (added on top, itemised as GST / TPS and QST / TVQ) when a customer needs it
     data object NoTax : TaxPolicy {
         override fun assess(taxableBase: Money) = TaxAssessment(Money.ZERO, Money.ZERO, showOnReceipt = false)
     }
@@ -30,7 +30,7 @@ sealed interface TaxPolicy {
 
 data class TaxAssessment(
     val taxIncluded: Money, // part of the total already
-    val taxAdded: Money,    // on top of the total (always ZERO for inclusive VAT)
+    val taxAdded: Money,    // on top of the total (always ZERO for inclusive tax)
     val showOnReceipt: Boolean,
 )
 

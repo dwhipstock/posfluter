@@ -90,11 +90,10 @@ class Prefs extends ChangeNotifier {
     return '${fmtDate(wall)} ${m[4]}:${m[5]}';
   }
 
-  /// Date-only with the standard Gregorian year.
+  /// Date-only, dd/MM/yyyy.
   String fmtDate(DateTime d) {
-    final year = d.year;
     String p2(int n) => n.toString().padLeft(2, '0');
-    return '${p2(d.day)}/${p2(d.month)}/$year';
+    return '${p2(d.day)}/${p2(d.month)}/${d.year}';
   }
 }
 
@@ -311,7 +310,7 @@ class L {
       : const [
           'J\'ai commandé la mauvaise table',
           'Le client a changé d\'avis.',
-          'Prix ​​mal calculé',
+          'Prix mal calculé',
           'Tester le système',
         ];
   String get otherReason => _t('Autres raisons', 'Other reason');
@@ -516,7 +515,7 @@ class L {
   // open / misc item
   String get openItem => _t('Articles spéciaux', 'Open item');
   String get openItemName => _t('Nom de l\'article', 'Item name');
-  String get openItemPrice => _t('Prix ​​(CAD)', 'Price (CAD)');
+  String get openItemPrice => _t('Prix (CAD)', 'Price (CAD)');
 
   // split checks (settlement-time bill groups)
   String get splitBill => _t('Divisez la facture', 'Split bill');
@@ -645,7 +644,6 @@ class L {
     'Tap items to refund',
   );
   String get refundSlipTitle => _t('Bon de remboursement', 'Refund slip');
-  String get vatReversed => _t('TVA restituée', 'VAT reversed');
   String get amountExceedsRefundable => _t(
     'dépassant le montant pouvant être restitué',
     'Exceeds the refundable amount',
@@ -730,7 +728,7 @@ class L {
   String get addSize => _t('augmenter la taille', 'Add size');
   String get sizeLabelFr => _t('Format (français)', 'Size (French)');
   String get sizeLabelEn => _t('Taille (anglais)', 'Size (English)');
-  String get priceCAD => _t('Prix ​​(CAD)', 'Price (CAD)');
+  String get priceCAD => _t('Prix (CAD)', 'Price (CAD)');
   String get fillAllFields =>
       _t('Informations complètes', 'Fill in all fields');
   String get editCategories => _t('Gérer les catégories', 'Edit categories');
@@ -1100,7 +1098,7 @@ class L {
     ),
     'zone_closed' => _t('Cette zone est fermée.', 'Zone is closed'),
     'bill_locked' => _t(
-      'La facture est en cours de paiement – ​​Contactez le personnel.',
+      'La facture est en cours de paiement – Contactez le personnel.',
       'Bill is being paid — ask staff',
     ),
     'already_paid' => _t(

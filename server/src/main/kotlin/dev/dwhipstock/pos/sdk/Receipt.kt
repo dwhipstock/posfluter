@@ -12,7 +12,7 @@ import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_PRINTED_AT
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_ROUNDING
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TABLE
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TOTAL
-import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_VAT_INCLUDED
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_INCLUDED
 import dev.dwhipstock.pos.sdk.i18n.Messages
 import dev.dwhipstock.pos.sdk.i18n.dataText
 import dev.dwhipstock.pos.sdk.i18n.dataTextOrNull
@@ -31,9 +31,9 @@ data class Receipt(
     val items: List<ReceiptItem>,
     val fees: List<ReceiptFee>,
     val grandTotal: Money,
-    /** Inclusive VAT already inside grandTotal; policy decides whether it prints. */
+    /** Inclusive tax already inside grandTotal; policy decides whether it prints. */
     val taxIncluded: Money,
-    val vatRatePercent: Int?,
+    val taxRatePercent: Int?,
     val tenders: List<ReceiptTender>,
 )
 
@@ -72,12 +72,12 @@ sealed interface ReceiptPolicy {
     val logoFallbackText: String
     val headerLines: List<String>
     val footerText: String
-    val showVat: Boolean
-    val gregorianDates: Boolean
+    /** Print the included-tax line (label + rate) under the total when the tax policy has a rate. */
+    val showTax: Boolean
     val locale: LocaleCode
 
     /**
-     * Date order (dd-MM-yyyy) is VENUE policy — continuity
+     * Date format (yyyy-MM-dd HH:mm) is VENUE policy — continuity
      * with the venue's paper receipts — deliberately NOT locale-driven, so a
      * locale pack cannot change them. Per-locale date patterns would be a
      * future catalog key (e.g. receipt.date_pattern), not a format here.
@@ -93,8 +93,7 @@ sealed interface ReceiptPolicy {
         override val logoFallbackText: String,
         override val headerLines: List<String>,
         override val footerText: String,
-        override val showVat: Boolean,
-        override val gregorianDates: Boolean = true,
+        override val showTax: Boolean,
         override val locale: LocaleCode = LocaleCode.EN,
     ) : ReceiptPolicy {
         override fun withLocale(locale: LocaleCode) = copy(locale = locale)
@@ -143,9 +142,9 @@ object ReceiptRenderer {
         add(PrintLine.Divider)
 
         add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.format(), emphasized = true))
-        if (policy.showVat && receipt.vatRatePercent != null) {
+        if (policy.showTax && receipt.taxRatePercent != null) {
             add(PrintLine.KeyValue(
-                msg(RECEIPT_VAT_INCLUDED, receipt.vatRatePercent),
+                msg(RECEIPT_TAX_INCLUDED, receipt.taxRatePercent),
                 receipt.taxIncluded.format(),
             ))
         }

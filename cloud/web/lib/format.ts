@@ -1,6 +1,6 @@
-// Money + numeric helpers. These are script-neutral: French business/POS usage
-// is Arabic numerals with comma grouping and the $ sign, identical in EN and
-// FR — so nothing here depends on locale. Date + tender labels, which DO
+// Money + numeric helpers. One house style for both locales ($ prefix, comma
+// grouping, cents only when nonzero), matching the POS client — so nothing
+// here depends on locale. Date + tender labels, which DO
 // change with locale, live in lib/i18n/.
 
 export function hourLabel(h: number): string {

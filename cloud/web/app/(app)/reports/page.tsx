@@ -21,7 +21,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 
 const REPORTS: { href: string; titleKey: MsgKey; descKey: MsgKey; icon: typeof Landmark }[] = [
-  { href: "/reports/vat", titleKey: "report_vat_title", descKey: "report_vat_desc", icon: Landmark },
+  { href: "/reports/tax", titleKey: "report_tax_title", descKey: "report_tax_desc", icon: Landmark },
   { href: "/reports/payments", titleKey: "report_payments_title", descKey: "report_payments_desc", icon: Wallet },
   { href: "/reports/items", titleKey: "report_items_title", descKey: "report_items_desc", icon: ListOrdered },
   { href: "/reports/tables", titleKey: "report_tables_title", descKey: "report_tables_desc", icon: Table2 },

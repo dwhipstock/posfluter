@@ -35,8 +35,8 @@ import java.time.ZoneId
 
 /**
  * Report projections over store-computed cents figures. Grep-able invariant:
- * no arithmetic on money beyond SUM/COUNT, net = gross − vat, avg = sum/count.
- * The store decomposed the VAT at sale time; the cloud only adds it up.
+ * no arithmetic on money beyond SUM/COUNT, net = gross − tax, avg = sum/count.
+ * The store decomposed the tax at sale time; the cloud only adds it up.
  *
  * Multi-store: every report covers the stores the request is scoped to — one
  * store (`?venue=<id>`) or all of the tenant's stores (no venue). Each store's
@@ -106,19 +106,19 @@ private fun voidChecks(ctx: ReportCtx): List<ResultRow> =
     Checks.selectAll().where { checksInRange(ctx) and (Checks.status eq "VOID") }.toList()
 
 private fun gross(row: ResultRow): Long = row[Checks.grandTotalCents] ?: 0
-private fun vat(row: ResultRow): Long = row[Checks.taxIncludedCents] ?: 0
+private fun checkTax(row: ResultRow): Long = row[Checks.taxIncludedCents] ?: 0
 
 /**
  * Refunds posted in the range, keyed off refund date (a refund is recognised
  * when issued, not when the original bill sold). The store already decomposed
- * gross/net/VAT; the cloud only sums. Netted out of sales + VAT everywhere.
+ * gross/net/tax; the cloud only sums. Netted out of sales + tax everywhere.
  */
 private fun refundsInRange(ctx: ReportCtx): List<ResultRow> =
     Refunds.selectAll().where { inScope(ctx, Refunds.tenantId, Refunds.venueId, Refunds.createdAt) }.toList()
 
 private fun rGross(row: ResultRow): Long = row[Refunds.grossCents] ?: 0
 private fun rNet(row: ResultRow): Long = row[Refunds.netCents] ?: 0
-private fun rVat(row: ResultRow): Long = row[Refunds.taxIncludedCents] ?: 0
+private fun refundTax(row: ResultRow): Long = row[Refunds.taxIncludedCents] ?: 0
 
 /** Rows of a per-check child table for exactly these (venue, check) pairs — check ids repeat across stores. */
 private fun childRowsOf(
@@ -139,8 +139,8 @@ private fun tendersOf(ctx: ReportCtx, checks: List<ResultRow>) =
     childRowsOf(ctx, checks, CheckTenders, CheckTenders.tenantId, CheckTenders.venueId, CheckTenders.checkId)
 
 /**
- * A closed check with a grand total but no decomposed VAT is an incomplete
- * projection — it counts toward gross while contributing 0 VAT, so VAT/net
+ * A closed check with a grand total but no decomposed tax is an incomplete
+ * projection — it counts toward gross while contributing 0 tax, so tax/net
  * undercount. The cloud can't fabricate the tax (store is authoritative), but
  * it must not undercount *silently*: log the count so the gap is visible until
  * the store's report backfill lands. Post-backfill this is always 0.
@@ -149,14 +149,14 @@ private fun warnIfUndercounting(ctx: ReportCtx, closed: List<ResultRow>) {
     val incomplete = closed.count { (it[Checks.grandTotalCents] ?: 0L) > 0L && it[Checks.taxIncludedCents] == null }
     if (incomplete > 0) log.warn(
         "reports[${ctx.label}]: $incomplete closed " +
-            "check(s) carry a grand total but no decomposed VAT — VAT/net undercount until the store's " +
+            "check(s) carry a grand total but no decomposed tax — tax/net undercount until the store's " +
             "report backfill reaches the cloud")
 }
 
 @Serializable
 data class DayRow(
     val date: String, val grossCents: Long, val netCents: Long,
-    val vatCents: Long, val checkCount: Int)
+    val taxCents: Long, val checkCount: Int)
 
 /** Per business day (each row's own store zone): closed sales less refunds issued that day. */
 private fun byDay(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultRow>): List<DayRow> {
@@ -166,7 +166,7 @@ private fun byDay(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultR
         val crows = closedByDay[date].orEmpty()
         val rrows = refundByDay[date].orEmpty()
         val g = crows.sumOf(::gross) - rrows.sumOf(::rGross)
-        val v = crows.sumOf(::vat) - rrows.sumOf(::rVat)
+        val v = crows.sumOf(::checkTax) - rrows.sumOf(::refundTax)
         DayRow(date.toString(), g, g - v, v, crows.size)
     }
 }
@@ -175,7 +175,7 @@ private fun byDay(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultR
 @Serializable
 data class VenueSummaryRow(
     val venueId: String, val venueName: String,
-    val grossCents: Long, val netCents: Long, val vatCents: Long,
+    val grossCents: Long, val netCents: Long, val taxCents: Long,
     val checkCount: Int, val avgCheckCents: Long,
     val voidCount: Int, val refundAmountCents: Long)
 
@@ -190,10 +190,10 @@ private fun venueSummaries(
         val r = refundsBy[v.id].orEmpty()
         val closedGross = c.sumOf(::gross)
         val g = closedGross - r.sumOf(::rGross)
-        val tax = c.sumOf(::vat) - r.sumOf(::rVat)
+        val tax = c.sumOf(::checkTax) - r.sumOf(::refundTax)
         VenueSummaryRow(
             venueId = v.id, venueName = v.venue.name,
-            grossCents = g, netCents = g - tax, vatCents = tax,
+            grossCents = g, netCents = g - tax, taxCents = tax,
             checkCount = c.size, avgCheckCents = if (c.isEmpty()) 0 else closedGross / c.size,
             voidCount = voidsBy[v.id].orEmpty().size, refundAmountCents = r.sumOf(::rGross),
         )
@@ -202,7 +202,7 @@ private fun venueSummaries(
 
 @Serializable
 data class SummaryResponse(
-    val grossCents: Long, val netCents: Long, val vatCents: Long,
+    val grossCents: Long, val netCents: Long, val taxCents: Long,
     val checkCount: Int, val avgCheckCents: Long,
     val voidCount: Int, val voidAmountCents: Long,
     val refundCount: Int, val refundAmountCents: Long,
@@ -215,11 +215,11 @@ data class SummaryResponse(
 data class ByVenueResponse(val venues: List<VenueSummaryRow>, val grossCents: Long, val checkCount: Int)
 
 @Serializable
-data class VatResponse(
-    val ratePercent: Int, val rows: List<DayRow>, val totals: VatTotals, val byVenue: List<VenueSummaryRow>)
+data class TaxReportResponse(
+    val ratePercent: Int, val rows: List<DayRow>, val totals: TaxTotals, val byVenue: List<VenueSummaryRow>)
 
 @Serializable
-data class VatTotals(val grossCents: Long, val netCents: Long, val vatCents: Long, val checkCount: Int)
+data class TaxTotals(val grossCents: Long, val netCents: Long, val taxCents: Long, val checkCount: Int)
 
 @Serializable
 data class PaymentRow(val type: String, val amountCents: Long, val count: Int)
@@ -301,17 +301,17 @@ data class JournalResponse(val total: Long, val rows: List<JournalRow>)
 @Serializable
 data class RefundReasonRow(
     val reason: String, val count: Int,
-    val grossCents: Long, val netCents: Long, val vatCents: Long)
+    val grossCents: Long, val netCents: Long, val taxCents: Long)
 
 @Serializable
 data class RefundListRow(
     val refundId: Long, val checkId: Int?, val createdAt: String?,
     val tableLabel: String?, val tenderType: String?, val reason: String?,
-    val grossCents: Long, val netCents: Long, val vatCents: Long, val venueId: String)
+    val grossCents: Long, val netCents: Long, val taxCents: Long, val venueId: String)
 
 @Serializable
 data class RefundsResponse(
-    val count: Int, val grossCents: Long, val netCents: Long, val vatCents: Long,
+    val count: Int, val grossCents: Long, val netCents: Long, val taxCents: Long,
     val byReason: List<RefundReasonRow>, val byTender: List<TenderTypeRow>,
     val rows: List<RefundListRow>)
 
@@ -337,11 +337,11 @@ fun Route.reportRoutes() {
             val closedGross = closed.sumOf(::gross)
             // net sales after refunds; avg check stays a sale-time figure (pre-refund)
             val grossTotal = closedGross - refunds.sumOf(::rGross)
-            val vatTotal = closed.sumOf(::vat) - refunds.sumOf(::rVat)
+            val taxTotal = closed.sumOf(::checkTax) - refunds.sumOf(::refundTax)
             SummaryResponse(
                 grossCents = grossTotal,
-                netCents = grossTotal - vatTotal,
-                vatCents = vatTotal,
+                netCents = grossTotal - taxTotal,
+                taxCents = taxTotal,
                 checkCount = closed.size,
                 avgCheckCents = if (closed.isEmpty()) 0 else closedGross / closed.size,
                 voidCount = voids.size,
@@ -371,7 +371,7 @@ fun Route.reportRoutes() {
         call.respond(response)
     }
 
-    get("/reports/vat") {
+    get("/reports/tax") {
         val ctx = reportCtx(call)
         val response = transaction {
             val closed = closedChecks(ctx)
@@ -379,11 +379,11 @@ fun Route.reportRoutes() {
             val refunds = refundsInRange(ctx)
             warnIfUndercounting(ctx, closed)
             val grossTotal = closed.sumOf(::gross) - refunds.sumOf(::rGross)
-            val vatTotal = closed.sumOf(::vat) - refunds.sumOf(::rVat)
-            VatResponse(
+            val taxTotal = closed.sumOf(::checkTax) - refunds.sumOf(::refundTax)
+            TaxReportResponse(
                 ratePercent = 13,
                 rows = byDay(ctx, closed, refunds),
-                totals = VatTotals(grossTotal, grossTotal - vatTotal, vatTotal, closed.size),
+                totals = TaxTotals(grossTotal, grossTotal - taxTotal, taxTotal, closed.size),
                 byVenue = venueSummaries(ctx, closed, voids, refunds),
             )
         }
@@ -395,7 +395,7 @@ fun Route.reportRoutes() {
         val response = transaction {
             val refunds = refundsInRange(ctx)
             val byReason = refunds.groupBy { it[Refunds.reason] ?: "—" }.map { (reason, rows) ->
-                RefundReasonRow(reason, rows.size, rows.sumOf(::rGross), rows.sumOf(::rNet), rows.sumOf(::rVat))
+                RefundReasonRow(reason, rows.size, rows.sumOf(::rGross), rows.sumOf(::rNet), rows.sumOf(::refundTax))
             }.sortedByDescending { it.grossCents }
             val byTender = refunds.groupBy { it[Refunds.tenderType] ?: "CASH" }.map { (type, rows) ->
                 TenderTypeRow(type, rows.sumOf(::rGross), rows.size)
@@ -405,10 +405,10 @@ fun Route.reportRoutes() {
                 RefundListRow(
                     r[Refunds.refundId], r[Refunds.checkId], ctx.iso(r[Refunds.createdAt], venueId),
                     r[Refunds.tableLabel], r[Refunds.tenderType], r[Refunds.reason],
-                    rGross(r), rNet(r), rVat(r), venueId)
+                    rGross(r), rNet(r), refundTax(r), venueId)
             }
             RefundsResponse(
-                refunds.size, refunds.sumOf(::rGross), refunds.sumOf(::rNet), refunds.sumOf(::rVat),
+                refunds.size, refunds.sumOf(::rGross), refunds.sumOf(::rNet), refunds.sumOf(::refundTax),
                 byReason, byTender, rows)
         }
         call.respond(response)
@@ -630,7 +630,7 @@ fun Route.reportRoutes() {
                         tableLabel = check[Checks.tableLabel],
                         zoneNameEn = check[Checks.zoneNameEn],
                         grandTotalCents = gross(check),
-                        taxIncludedCents = vat(check),
+                        taxIncludedCents = checkTax(check),
                         tenderTypes = tendersByCheck[key].orEmpty().map { it[CheckTenders.type] }.distinct(),
                         lines = linesByCheck[key].orEmpty().map {
                             JournalLine(

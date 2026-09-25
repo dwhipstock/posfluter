@@ -113,7 +113,7 @@ class _SalesScreenState extends State<SalesScreen> {
 enum _RefundMode { full, byLine, byAmount }
 
 /// Refund one finalized bill: full, by item, or by amount. Confirm collects a
-/// manager PIN and a reason, then the server reverses the inclusive VAT and
+/// manager PIN and a reason, then the server reverses the included tax and
 /// returns a slip.
 class RefundScreen extends StatefulWidget {
   final int checkId;

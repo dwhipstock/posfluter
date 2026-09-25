@@ -137,7 +137,7 @@ export const messages = {
   dash_title: m("Tableau de bord", "Dashboard"),
   kpi_gross: m("Ventes totales", "Gross"),
   kpi_net: m("Montant net (hors taxes)", "Net (before tax)"),
-  kpi_vat: m("Taxe de vente", "Sales tax"),
+  kpi_tax: m("Taxe de vente", "Sales tax"),
   kpi_checks: m("Nombre de factures", "Checks"),
   kpi_avg_check: m("Moyenne par facture", "Avg check"),
   dash_daily_trend: m("Tendances quotidiennes", "Daily trend"),
@@ -158,8 +158,8 @@ export const messages = {
   // ── reports index ─────────────────────────────────────────────────────
   reports_title: m("rapport", "Reports"),
   reports_sub: m("Sélectionnez le rapport — Toutes les éditions utilisent la période du même jour.", "Pick a report — every one shares the same date range."),
-  report_vat_title: m("Taxe de vente", "Sales tax"),
-  report_vat_desc: m("Sommaire quotidien des taxes enregistrées", "Daily breakdown of recorded sales tax"),
+  report_tax_title: m("Taxe de vente", "Sales tax"),
+  report_tax_desc: m("Sommaire quotidien des taxes enregistrées", "Daily breakdown of recorded sales tax"),
   report_payments_title: m("Paiement", "Payments"),
   report_payments_desc: m("Proportion d'espèces, card et virements", "Cash, Card and bank transfer mix"),
   report_items_title: m("menu", "Items"),
@@ -175,25 +175,25 @@ export const messages = {
   report_journal_title: m("Enregistrez la facture", "Journal"),
   report_journal_desc: m("Chaque facture peut être recherchée.", "Every check, searchable"),
   report_refunds_title: m("remboursement", "Refunds"),
-  report_refunds_desc: m("Montant du remboursement séparé par motif, net de VAT", "Refund amounts by reason, net of VAT"),
+  report_refunds_desc: m("Montants remboursés par motif, hors taxes", "Refund amounts by reason, net of tax"),
   report_cash_title: m("Entrée/sortie d'argent", "Cash movements"),
   report_cash_desc: m("Encaissements/retraits hors vente avec raisons", "Non-sale cash in/out, with reasons"),
 
-  // ── VAT report ────────────────────────────────────────────────────────
-  vat_title: m("rapport fiscal VAT", "VAT report"),
-  vat_included_badge: m("ensemble VAT {rate}%", "VAT {rate}% included"),
-  vat_note: m(
-    "Séparé du prix TTC au moment de la vente. — filet = ensemble − VAT",
+  // ── tax report ────────────────────────────────────────────────────────
+  tax_title: m("Rapport des taxes", "Sales tax report"),
+  tax_included_badge: m("Taxes incluses {rate} %", "Sales tax {rate}% included"),
+  tax_note: m(
+    "Taxes extraites des prix TTC au moment de la vente — net = brut − taxes",
     "Decomposed from tax-inclusive prices at sale time — net = gross − sales tax."
   ),
   col_date: m("date", "Date"),
   col_gross: m("Total", "Gross"),
   col_net: m("filet", "Net"),
-  col_vat: m("Taxe", "Tax"),
+  col_tax: m("Taxe", "Tax"),
   col_checks: m("facture", "Checks"),
   col_total: m("Total", "Total"),
-  vat_empty: m("Il n'y a pas de vente pendant cette période.", "No sales in this range"),
-  vat_empty_hint: m("Les dates de vente sont affichées sous forme de lignes ici.", "Days with sales get a row here."),
+  tax_empty: m("Il n'y a pas de vente pendant cette période.", "No sales in this range"),
+  tax_empty_hint: m("Les dates de vente sont affichées sous forme de lignes ici.", "Days with sales get a row here."),
 
   // ── payments report ───────────────────────────────────────────────────
   payments_title: m("Paiement", "Payments"),
@@ -246,12 +246,12 @@ export const messages = {
   // ── Refunds report ────────────────────────────────────────────────────
   refunds_title: m("Rapport de remise", "Refunds"),
   refunds_note: m(
-    "La remise est déduite des ventes et VAT Dans le rapport de synthèse et VAT déjà",
-    "Refunds are netted out of sales and VAT in the summary and VAT reports."
+    "Les remboursements sont déduits des ventes et des taxes dans le sommaire et le rapport des taxes.",
+    "Refunds are netted out of sales and tax in the summary and tax reports."
   ),
   ref_count: m("Nombre de fois", "Refunds"),
   ref_amount: m("Remboursement total", "Total refunded"),
-  ref_vat: m("VAT revenu", "VAT reversed"),
+  ref_tax: m("Taxes remboursées", "Tax reversed"),
   refunds_by_reason: m("selon la raison", "By reason"),
   refunds_by_tender: m("selon canal", "By tender"),
   refunds_list: m("Article remboursé", "Refunds"),
@@ -304,7 +304,7 @@ export const messages = {
   col_closed: m("fermé quand", "Closed"),
   badge_void: m("Annuler", "VOID"),
   journal_open_item: m("Articles spéciaux", "Open item"),
-  journal_vat_included: m("ensemble VAT:", "VAT included:"),
+  journal_tax_included: m("Taxes incluses :", "Tax included:"),
   journal_pagination: m("{from}–{to} depuis {total}", "{from}–{to} of {total}"),
   journal_empty_search: m("Aucune facture trouvée correspondant à votre recherche.", "No checks match your search"),
   journal_empty_search_hint: m(

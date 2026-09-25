@@ -43,7 +43,7 @@ function RefundsPage() {
       kpis: [
         { label: t("ref_count"), value: String(data.count) },
         { label: t("ref_amount"), value: CAD(data.grossCents) },
-        { label: t("ref_vat"), value: CAD(data.vatCents) },
+        { label: t("ref_tax"), value: CAD(data.taxCents) },
       ],
       sections: [
         {
@@ -53,7 +53,7 @@ function RefundsPage() {
             col.int<RefundReasonRow>(t("col_checks"), (r) => r.count),
             col.money<RefundReasonRow>(t("col_amount"), (r) => r.grossCents),
             col.money<RefundReasonRow>(t("col_net"), (r) => r.netCents),
-            col.money<RefundReasonRow>(t("col_vat"), (r) => r.vatCents),
+            col.money<RefundReasonRow>(t("col_tax"), (r) => r.taxCents),
           ],
           rows: data.byReason,
         },
@@ -89,7 +89,7 @@ function RefundsPage() {
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("ref_count")} value={data && String(data.count)} loading={isLoading} />
         <Kpi label={t("ref_amount")} value={data && CAD(data.grossCents)} loading={isLoading} accent />
-        <Kpi label={t("ref_vat")} value={data && CAD(data.vatCents)} loading={isLoading} />
+        <Kpi label={t("ref_tax")} value={data && CAD(data.taxCents)} loading={isLoading} />
       </div>
 
       <p className="px-1 text-xs text-neutral-500">{t("refunds_note")}</p>
@@ -104,7 +104,7 @@ function RefundsPage() {
         </Card>
       ) : data && data.count > 0 ? (
         <>
-          {/* by reason — net of VAT, the owner's "why did we refund" view */}
+          {/* by reason — net of tax, the owner's "why did we refund" view */}
           <Card>
             <div className="border-b border-neutral-100 px-5 py-3 text-sm font-semibold">
               {t("refunds_by_reason")}
@@ -116,7 +116,7 @@ function RefundsPage() {
                   <TableHead className="text-right">{t("col_checks")}</TableHead>
                   <TableHead className="text-right">{t("col_amount")}</TableHead>
                   <TableHead className="text-right">{t("col_net")}</TableHead>
-                  <TableHead className="text-right">{t("col_vat")}</TableHead>
+                  <TableHead className="text-right">{t("col_tax")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -128,7 +128,7 @@ function RefundsPage() {
                       {CAD(r.grossCents)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{CAD(r.netCents)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{CAD(r.vatCents)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{CAD(r.taxCents)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

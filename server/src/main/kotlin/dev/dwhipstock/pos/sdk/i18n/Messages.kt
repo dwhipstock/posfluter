@@ -8,7 +8,7 @@ import java.net.JarURLConnection
 import java.util.Properties
 
 /**
- * Open locale representation — a lowercase language tag ("fr", "en", "zh", …),
+ * Open locale representation — a lowercase language tag ("fr", "en", …),
  * not a closed enum. Which locales actually exist is decided by the resource
  * files [Messages] discovers at startup, so adding a language is a file drop.
  */
@@ -40,7 +40,7 @@ enum class MessageKey(val id: String) {
     RECEIPT_PRINTED_AT("receipt.printed_at"),
     RECEIPT_TOTAL("receipt.total"),
     /** {0} = sales-tax rate percent. */
-    RECEIPT_VAT_INCLUDED("receipt.vat_included"),
+    RECEIPT_TAX_INCLUDED("receipt.tax_included"),
     RECEIPT_ROUNDING("receipt.rounding"),
     RECEIPT_CHANGE("receipt.change"),
     RECEIPT_BILL_BANNER("receipt.bill_banner"),
@@ -156,7 +156,7 @@ object Messages {
             }
         }
 
-        // Strict names load; near-misses (messages_ja_JP.properties — the Java
+        // Strict names load; near-misses (messages_fr_CA.properties — the Java
         // ResourceBundle convention) warn instead of vanishing without a trace.
         fun tagOf(name: String, source: String): String? {
             fileName.matchEntire(name)?.let { return it.groupValues[1] }
