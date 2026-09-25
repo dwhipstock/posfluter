@@ -222,7 +222,12 @@ object ThermalReceiptRenderer {
 
     /** QR code (ZXing) as a black-on-white bitmap sized to [size] dots. */
     private fun qrBitmap(data: String, size: Int): BufferedImage {
-        val hints = mapOf(com.google.zxing.EncodeHintType.MARGIN to 1)
+        val hints = buildMap<com.google.zxing.EncodeHintType, Any> {
+            put(com.google.zxing.EncodeHintType.MARGIN, 1)
+            // ZXing defaults to ISO-8859-1; a Wi-Fi name like "Café" needs UTF-8.
+            // ASCII payloads (menu URLs) keep the default so their codes don't change.
+            if (data.any { it.code > 0x7E }) put(com.google.zxing.EncodeHintType.CHARACTER_SET, "UTF-8")
+        }
         val matrix = com.google.zxing.MultiFormatWriter()
             .encode(data, com.google.zxing.BarcodeFormat.QR_CODE, size, size, hints)
         return com.google.zxing.client.j2se.MatrixToImageWriter.toBufferedImage(matrix)
@@ -234,7 +239,23 @@ object ThermalReceiptRenderer {
     }
 
     private fun centered(g: java.awt.Graphics2D, text: String, font: Font, top: Int) {
-        val m = g.getFontMetrics(font)
-        at(g, text, font, ((W - m.stringWidth(text)) / 2).coerceAtLeast(MARGIN), top)
+        val f = fitted(g, text, font)
+        val m = g.getFontMetrics(f)
+        at(g, text, f, ((W - m.stringWidth(text)) / 2).coerceAtLeast(MARGIN), top)
+    }
+
+    private const val MIN_FIT = 14 // px: still legible on thermal paper
+
+    /**
+     * [font], shrunk just enough for [text] to fit the paper width (a long venue
+     * name or Wi-Fi password would otherwise run off the edge). Only ever
+     * smaller, so the row height measured with [font] still holds.
+     */
+    private fun fitted(g: java.awt.Graphics2D, text: String, font: Font): Font {
+        var f = font
+        while (g.getFontMetrics(f).stringWidth(text) > CONTENT && f.size > MIN_FIT) {
+            f = f.deriveFont(f.size2D - 2f)
+        }
+        return f
     }
 }

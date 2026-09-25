@@ -255,7 +255,7 @@ fun Application.module(
         photoRoutes(photoStore, authService)
         shiftRoutes(shiftService, authService)
         settingsRoutes(settingsRepo)
-        printerRoutes(thermalPrinter, config)
+        printerRoutes(thermalPrinter, config, settingsRepo)
         // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in
         // production, where Caddy fronts the sync API and the Next.js portal on one
         // host — so the derived scheme://host is correct. On a SPLIT deployment

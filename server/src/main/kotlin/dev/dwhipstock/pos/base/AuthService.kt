@@ -108,7 +108,9 @@ class AuthService(
      * brings the total to at most the cap. (Trimming before the insert keeps the
      * new session out of the eviction set.)
      */
-    private fun issueSession(user: ResultRow, deviceId: String? = null): AuthUser {
+    private fun issueSession(
+        user: ResultRow, deviceId: String? = null, surface: String = SessionSurface.POS,
+    ): AuthUser {
         val now = VenueClock.now()
         val uid = user[Users.id]
         val live = Sessions.selectAll()
@@ -127,13 +129,14 @@ class AuthService(
             it[expiresAt] = now.plus(java.time.Duration.ofHours(ABSOLUTE_HOURS))
             it[lastUsedAt] = now
             it[Sessions.deviceId] = deviceId // paired terminal (M8); null = staff-app phone
+            it[Sessions.surface] = surface
         }
         Outbox.write("auth.login", "user", uid, buildJsonObject {
             put("userId", uid)
             put("role", user[Users.role])
             if (evicted.isNotEmpty()) put("evictedSessions", evicted.size)
         })
-        return toAuthUser(token, user, deviceId)
+        return toAuthUser(token, user, deviceId, surface)
     }
 
     // --- Staff-app 2FA (M7): TOTP + 90-day trusted device, verified offline -----
@@ -157,14 +160,14 @@ class AuthService(
         // data intact so a later MFA-on build requires it at the next login.
         if (!staffAppMfaRequired) {
             rateLimiter.recordSuccess()
-            return@transaction StaffAppBegin("ok", user = issueSession(user))
+            return@transaction StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))
         }
 
         // A still-trusted device completes the login now (PIN only). Clearing the
         // failure counter is correct HERE because authentication is complete.
         if (deviceTokens.any { consumeTrustedDevice(uid, it) }) {
             rateLimiter.recordSuccess()
-            return@transaction StaffAppBegin("ok", user = issueSession(user))
+            return@transaction StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))
         }
 
         // The PIN is correct but a TOTP factor is still required — deliberately do
@@ -212,7 +215,7 @@ class AuthService(
             it[StaffTotp.lastStep] = step // replay guard: this 30s window can't be reused
             if (row[StaffTotp.activatedAt] == null) it[activatedAt] = VenueClock.now()
         }
-        val authUser = issueSession(user)
+        val authUser = issueSession(user, surface = SessionSurface.STAFF_APP)
         val now = VenueClock.now()
         val expires = now.plus(java.time.Duration.ofDays(TRUST_DAYS))
         val devToken = UUID.randomUUID().toString()
@@ -279,7 +282,7 @@ class AuthService(
                 return@transaction null // → 401 → client re-login
             }
             touchDue = lastUsed.isBefore(now.minusSeconds(TOUCH_SECONDS))
-            toAuthUser(token, row, row[Sessions.deviceId])
+            toAuthUser(token, row, row[Sessions.deviceId], row[Sessions.surface])
         }
         // Both writes are safe to lose: an unrevoked expired session still answers
         // null here on every later call, and a missed touch is the next one's job.
@@ -367,11 +370,14 @@ class AuthService(
         GrantsRepo.has(userId, permission)
     }
 
-    private fun toAuthUser(token: String, row: ResultRow, deviceId: String? = null) = AuthUser(
+    private fun toAuthUser(
+        token: String, row: ResultRow, deviceId: String? = null, surface: String = SessionSurface.POS,
+    ) = AuthUser(
         token, row[Users.id], row[Users.name], row[Users.role],
         row[Users.languageCode],
         grants = GrantsRepo.effectiveGrants(row[Users.id]),
         deviceId = deviceId,
+        surface = surface,
     )
 }
 
@@ -384,6 +390,9 @@ data class AuthUser(
     val grants: List<String> = emptyList(),
     /** Paired terminal this session is bound to (M8); null = staff-app phone session. */
     val deviceId: String? = null,
+    /** [SessionSurface] that minted the session. Server-side only (not sent to clients). */
+    @kotlinx.serialization.Transient
+    val surface: String = SessionSurface.POS,
 )
 
 /**

@@ -815,6 +815,32 @@ class L {
     'Print QR slips for all $n tables? This uses a lot of paper.',
   );
   String slipsPrinted(int n) => _t('Étiquette $n saisie', 'Printed $n slips');
+
+  // guest Wi-Fi (settings): the join slip and step 1 of the table slips
+  String get sectionGuestWifi => _t('Wi-Fi invités', 'Guest Wi-Fi');
+  String get guestWifiHint => _t(
+    'Imprimé sur une fiche Wi-Fi et en première étape des fiches QR des tables.',
+    'Printed on a Wi-Fi slip and as step 1 on the table QR slips.',
+  );
+  String get wifiSsidLabel =>
+      _t('Nom du réseau (vide = aucun)', 'Network name (blank = none)');
+  String get wifiPasswordLabel => _t('Mot de passe', 'Password');
+  String get wifiShowPassword =>
+      _t('Afficher le mot de passe', 'Show password');
+  String get wifiHidePassword => _t('Masquer le mot de passe', 'Hide password');
+  String get wifiSecurityLabel => _t('Sécurité', 'Security');
+  String get wifiSecurityNone => _t('Aucune (réseau ouvert)', 'None (open)');
+  String get wifiHiddenLabel => _t('Réseau masqué', 'Hidden network');
+  String get printWifiSlip => _t('Imprimer la fiche Wi-Fi', 'Print Wi-Fi slip');
+  String get wifiCopiesLabel => _t('Copies', 'Copies');
+  String wifiSlipsPrinted(int n) => _t(
+    n == 1 ? 'Fiche Wi-Fi imprimée' : '$n fiches Wi-Fi imprimées',
+    n == 1 ? 'Wi-Fi slip printed' : 'Printed $n Wi-Fi slips',
+  );
+  String get wifiNotConfigured => _t(
+    'Entrez d\'abord le nom et le mot de passe du réseau Wi-Fi.',
+    'Set the Wi-Fi network name and password first',
+  );
   String get saveFirstToTest => _t(
     'Enregistrez-le avant de pouvoir tester l\'impression.',
     'Save first, then test print',
@@ -865,6 +891,7 @@ class L {
   /// Server error codes → local language. Fallback: raw server message.
   String? apiError(String? code) => switch (code) {
     'invalid_pin' => _t('Code PIN invalide', 'Invalid PIN'),
+    'wifi_not_configured' => wifiNotConfigured,
     'pin_in_use' => _t(
       'Ce NIP est déjà utilisé par un autre membre du personnel.',
       'That PIN is already used by another staff member',
