@@ -54,6 +54,7 @@ class TabletStoreService : Service() {
             val storeDir = File(filesDir, "store").apply { mkdirs() }
             val dbFile = File(storeDir, "pos.db")
             importStagedStore(dbFile)
+            applyStagedCloudSettings(dbFile)
             val cloud = Properties()
             val cloudFile = File(filesDir, "store-cloud.properties")
             if (cloudFile.exists()) cloudFile.inputStream().use(cloud::load)
@@ -122,6 +123,8 @@ class TabletStoreService : Service() {
         val stagedConfig = File(staging, "store-cloud.properties")
         val stagedMedia = File(staging, "store-media.zip")
         if (!stagedDb.exists() && !stagedConfig.exists() && !stagedMedia.exists()) return
+        // cloud settings alone re-point an existing store (applyStagedCloudSettings)
+        if (!stagedDb.exists() && !stagedMedia.exists()) return
         check(!dbFile.exists()) { "Store import refused: this tablet already has a database" }
         check(stagedDb.isFile && stagedConfig.isFile && stagedMedia.isFile) {
             "Store import needs database, media archive, and cloud settings"
@@ -205,5 +208,85 @@ class TabletStoreService : Service() {
             dbTemp.delete()
             configTemp.delete()
         }
+    }
+
+    /**
+     * Re-point this store's cloud sync: ADB stages ONLY `store-cloud.properties`
+     * (cloud.url, cloud.apiKey, optional portal.url / store.installId) in the
+     * migration folder — e.g. the local two-store demo on a Mac
+     * (scripts/tablet-cloud-config.sh). Applied before the store starts; the
+     * store's data is never touched, only its sync settings:
+     *  - an existing store identity is kept (a staged store.installId must match
+     *    it); a store that never synced gets its identity minted here;
+     *  - the whole outbox is re-sent from the start (ingest is idempotent by
+     *    event id), so a new or wiped cloud shows this store's full history;
+     *  - the previous settings are kept as store-cloud.properties.prev.
+     * `https://` anywhere, or plain `http://` to a private LAN address only.
+     * A bad file is left staged and logged; the store still starts (offline-first).
+     */
+    private fun applyStagedCloudSettings(dbFile: File) {
+        val staging = getExternalFilesDir("migration") ?: return
+        val staged = File(staging, "store-cloud.properties")
+        if (!staged.isFile || File(staging, "pos.db").exists() || File(staging, "store-media.zip").exists()) return
+        try {
+            check(dbFile.exists()) { "open the POS once before staging cloud settings" }
+            val next = Properties().apply { staged.inputStream().use(::load) }
+            val url = next.getProperty("cloud.url")?.trim().orEmpty()
+            check(isAllowedCloudUrl(url)) { "cloud.url must be https:// or http:// to a private LAN address" }
+            check(!next.getProperty("cloud.apiKey").isNullOrBlank()) { "cloud.apiKey is missing" }
+            next.getProperty("portal.url")?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                check(isAllowedCloudUrl(it)) { "portal.url must be https:// or http:// to a private LAN address" }
+            }
+            val configFile = File(filesDir, "store-cloud.properties")
+            SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+                val existing = db.rawQuery("SELECT value FROM sync_state WHERE key='install_id'", null).use { c ->
+                    if (c.moveToFirst()) c.getString(0) else null
+                }
+                val wanted = next.getProperty("store.installId")?.trim()?.takeIf { it.isNotEmpty() }
+                check(existing == null || wanted == null || wanted == existing) {
+                    "store.installId does not match this store"
+                }
+                val installId = existing ?: wanted ?: java.util.UUID.randomUUID().toString()
+                db.beginTransaction()
+                try {
+                    if (existing == null) {
+                        db.execSQL("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('install_id', ?)", arrayOf(installId))
+                    }
+                    // the target cloud may have none of this store's events yet (a new
+                    // cloud, or a wiped demo db): re-send from the start — idempotent
+                    db.execSQL("DELETE FROM sync_state WHERE key IN ('push_hwm', 'catalog_cursor')")
+                    db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
+                }
+                next.setProperty("store.installId", installId)
+            }
+            val temp = File(filesDir, "store-cloud.repointing")
+            temp.outputStream().use { next.store(it, "cloud sync settings") }
+            if (configFile.exists()) configFile.copyTo(File(filesDir, "store-cloud.properties.prev"), overwrite = true)
+            check(temp.renameTo(configFile)) { "could not install cloud settings" }
+            staged.delete()
+            Log.i("TabletStore", "Cloud sync re-pointed to $url")
+        } catch (error: Throwable) {
+            Log.w("TabletStore", "Staged cloud settings not applied: ${error.message}")
+        }
+    }
+
+    private fun isAllowedCloudUrl(url: String): Boolean {
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+        val host = uri.host ?: return false
+        return when (uri.scheme) {
+            "https" -> true
+            "http" -> isPrivateIpv4(host)
+            else -> false
+        }
+    }
+
+    private fun isPrivateIpv4(host: String): Boolean {
+        val parts = host.split('.').map { it.toIntOrNull() ?: return false }
+        if (parts.size != 4 || parts.any { it !in 0..255 }) return false
+        return parts[0] == 10 ||
+            (parts[0] == 172 && parts[1] in 16..31) ||
+            (parts[0] == 192 && parts[1] == 168)
     }
 }

@@ -22,6 +22,24 @@ container is stopped. The tablet connects to the existing cloud ingest and
 owner portal asynchronously. Additional independent tablet uploads and
 combined reporting remain Milestone 2.
 
+## Stores
+
+One owner (tenant) has many stores (venues), and each store has exactly one
+POS tablet (one store database per venue; the cloud pins each venue to one
+store installation). Extra stations use the staff app served by that tablet
+over the LAN. The demo tenant `copperlantern` has two fictional Montréal
+stores: **Copper Lantern — Vieux-Port** (`vieux-port`, the Android tablet) and
+**Copper Lantern — Plateau** (`plateau`, the desktop build of the same store
+server). The store server picks its venue config — display name and first-boot
+seed — from `POS_VENUE` (`vieux-port` default, or `plateau`); a store's cloud
+venue comes from its API key, never from the store.
+
+The owner portal shows every page in two modes chosen by the header's store
+picker and kept in the URL (`?store=<id>`): **All stores** (default) combines
+the tenant's stores, each over its own business days, and adds a per-store
+breakdown to sales and reports; picking a store shows the same page filtered
+to it. `docs/demo-runbook.md` brings up both stores locally.
+
 ## Sync direction
 
 Sync is one-way, tablet → portal. Each store's tablet owns its menu, staff and
