@@ -123,6 +123,25 @@ class StoreProvisioningTest {
     }
 
     @Test
+    fun bootSetsAVenueTimezoneOnInsertOnlyAndNeverOverwritesIt() {
+        TestSupport.reset()
+        val first = TestSupport.config.copy(venueTz = "America/Toronto")
+        Bootstrap.run(first)
+        fun zone() = transaction {
+            Venues.selectAll().where { (Venues.tenantId eq Bootstrap.TENANT) and (Venues.id eq PRIMARY_VENUE) }
+                .single()[Venues.timezone]
+        }
+        assertEquals("America/Toronto", zone())
+        // a later boot with another (or a defaulted) VENUE_TZ keeps the stored zone,
+        // while the name still follows env
+        Bootstrap.run(first.copy(venueTz = "America/Vancouver", stores = listOf(StoreSeed(PRIMARY_VENUE, "Renamed"))))
+        assertEquals("America/Toronto", zone())
+        transaction {
+            assertEquals("Renamed", Venues.selectAll().where { Venues.id eq PRIMARY_VENUE }.single()[Venues.name])
+        }
+    }
+
+    @Test
     fun storeListParsesInOrder() {
         assertEquals(linkedMapOf("vieux-port" to "Copper Lantern — Vieux-Port", "plateau" to "Copper Lantern — Plateau"),
             parsePairs(" vieux-port=Copper Lantern — Vieux-Port , plateau=Copper Lantern — Plateau,,junk"))

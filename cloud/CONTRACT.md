@@ -332,7 +332,7 @@ separate from POS staff.
 
 Bootstrap (idempotent, from cloud env): tenant `copperlantern` and its stores
 from `STORES="<venueId>=<name>,…"` (default: one store, `vieux-port`, named
-`VENUE_NAME`), all in `VENUE_TZ`; one store API key per store (`STORE_API_KEY`
+`VENUE_NAME`), created in `VENUE_TZ` (set on insert only — a later boot never re-zones an existing venue); one store API key per store (`STORE_API_KEY`
 for the first store, `STORE_API_KEYS="<venueId>=<key>,…"` for the rest); one
 portal admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, TOTP enrolled on first login).
 Every cloud row and every cloud query is scoped by `tenant_id`; the API key

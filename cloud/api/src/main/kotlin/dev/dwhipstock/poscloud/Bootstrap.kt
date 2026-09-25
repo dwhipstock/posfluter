@@ -55,9 +55,11 @@ object Bootstrap {
                 it[name] = store.name
                 it[timezone] = config.venueTz
             }
+            // The name follows env; the timezone is set on insert only. It decides
+            // every business day and report hour, so a boot with a different or
+            // defaulted VENUE_TZ must never silently re-zone a venue's history.
             Venues.update({ (Venues.tenantId eq TENANT) and (Venues.id eq store.venueId) }) {
                 it[name] = store.name
-                it[timezone] = config.venueTz
             }
         }
         val known = config.stores.map { it.venueId }.toSet()
