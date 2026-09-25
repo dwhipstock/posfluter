@@ -217,7 +217,9 @@ class TabletStoreService : Service() {
      * (scripts/tablet-cloud-config.sh). Applied before the store starts; the
      * store's data is never touched, only its sync settings:
      *  - an existing store identity is kept (a staged store.installId must match
-     *    it); a store that never synced gets its identity minted here;
+     *    it); a store that has never synced is REFUSED unless store.installId is
+     *    staged explicitly (sync.CloudRepoint) — the refusal is logged and the
+     *    store starts normally on its current settings;
      *  - the whole outbox is re-sent from the start (ingest is idempotent by
      *    event id), so a new or wiped cloud shows this store's full history;
      *  - the previous settings are kept as store-cloud.properties.prev.
@@ -242,11 +244,9 @@ class TabletStoreService : Service() {
                 val existing = db.rawQuery("SELECT value FROM sync_state WHERE key='install_id'", null).use { c ->
                     if (c.moveToFirst()) c.getString(0) else null
                 }
-                val wanted = next.getProperty("store.installId")?.trim()?.takeIf { it.isNotEmpty() }
-                check(existing == null || wanted == null || wanted == existing) {
-                    "store.installId does not match this store"
-                }
-                val installId = existing ?: wanted ?: java.util.UUID.randomUUID().toString()
+                // never invents an identity: a never-synced store needs an explicit id
+                val installId = dev.dwhipstock.pos.sync.CloudRepoint.resolveInstallId(
+                    existing, next.getProperty("store.installId"))
                 db.beginTransaction()
                 try {
                     if (existing == null) {
@@ -267,6 +267,9 @@ class TabletStoreService : Service() {
             check(temp.renameTo(configFile)) { "could not install cloud settings" }
             staged.delete()
             Log.i("TabletStore", "Cloud sync re-pointed to $url")
+        } catch (refused: dev.dwhipstock.pos.sync.CloudRepoint.Refused) {
+            Log.e("TabletStore", "REFUSED to re-point cloud sync: ${refused.message}. " +
+                "The staged settings were left in place; the store starts on its current settings.")
         } catch (error: Throwable) {
             Log.w("TabletStore", "Staged cloud settings not applied: ${error.message}")
         }
