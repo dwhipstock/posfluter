@@ -112,7 +112,7 @@ class ReportCompleteEventsTest {
         val lanternLager = lines.first { it["itemId"]?.jsonPrimitive?.content == "lantern-lager" }
         assertTrue(lanternLager["lineId"]!!.jsonPrimitive.int > 0)
         assertEquals("lantern-lager:pitcher", lanternLager["variantId"]!!.jsonPrimitive.content)
-        assertEquals("draft-beer", lanternLager["categoryId"]!!.jsonPrimitive.content)
+        assertEquals("beer-cider", lanternLager["categoryId"]!!.jsonPrimitive.content)
         assertEquals("Lager de la Lanterne", lanternLager["nameFr"]!!.jsonPrimitive.content)
         assertEquals("Lantern House Lager", lanternLager["nameEn"]!!.jsonPrimitive.content)
         assertEquals("Pichet 60 oz", lanternLager["variantLabelFr"]!!.jsonPrimitive.content)
@@ -121,7 +121,7 @@ class ReportCompleteEventsTest {
         assertEquals(2250L, lanternLager["unitPriceCents"]!!.jsonPrimitive.long)
         assertEquals(2250L, lanternLager["lineTotalCents"]!!.jsonPrimitive.long)
         val poutine = lines.first { it["itemId"]?.jsonPrimitive?.content == "poutine" }
-        assertEquals("appetizers", poutine["categoryId"]!!.jsonPrimitive.content)
+        assertEquals("starters", poutine["categoryId"]!!.jsonPrimitive.content)
         // single live variant → no disambiguating label (mirrors receipts)
         assertFalse("variantLabelFr" in poutine)
         assertEquals("Moins épicé", poutine["note"]!!.jsonPrimitive.content)
@@ -215,13 +215,13 @@ class ReportCompleteEventsTest {
         val c = loginClient()
 
         c.postJson("/items",
-            """{"nameFr":"Soupe saisonnière","nameEn":"Seasonal Soup","categoryId":"appetizers","abbrev":"MM",
+            """{"nameFr":"Soupe saisonnière","nameEn":"Seasonal Soup","categoryId":"starters","abbrev":"MM",
                 "variants":[{"labelFr":"ordinaire","labelEn":"Regular","priceCents":6000},
                             {"labelFr":"spécial","labelEn":"Special","priceCents":8000}]}""")
             .let { assertEquals(HttpStatusCode.Created, it.status) }
         val created = lastPayload("item.created")["item"]!!.jsonObject
         assertEquals("seasonal-soup", created["id"]!!.jsonPrimitive.content)
-        assertEquals("appetizers", created["categoryId"]!!.jsonPrimitive.content)
+        assertEquals("starters", created["categoryId"]!!.jsonPrimitive.content)
         assertEquals(false, created["deleted"]!!.jsonPrimitive.boolean)
         assertEquals(true, created["active"]!!.jsonPrimitive.boolean)
         assertEquals(2, created["variants"]!!.jsonArray.size)

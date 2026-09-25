@@ -21,6 +21,8 @@ data class PrinterStatus(
     val online: Boolean,
     val lastError: String? = null,
     val lastOkAt: String? = null,
+    /** `paper` | `digital` — whether sale receipts/bills reach the thermal printer. */
+    val receiptMode: String = ReceiptPrintMode.PAPER.wire,
 )
 
 /** Sends a raw ESC/POS byte stream to a network thermal printer. */
@@ -64,6 +66,8 @@ class NetworkThermalPrinter(
     /** Read live each send so a settings change (new DHCP IP) applies at once. */
     private val target: () -> PrinterTarget,
     private val transport: EscPosTransport = TcpEscPosTransport(),
+    /** [ReceiptPrintMode.DIGITAL]: receipts/bills are audit-spooled only; [printNow] is unaffected. */
+    val receiptMode: ReceiptPrintMode = ReceiptPrintMode.PAPER,
 ) : PrinterAdapter {
 
     private val log = LoggerFactory.getLogger(NetworkThermalPrinter::class.java)
@@ -80,17 +84,18 @@ class NetworkThermalPrinter(
 
     override fun print(job: PrintJob): String {
         val text = audit.print(job)      // spool file + receipt.printed outbox (in-txn, local, fast)
-        enqueue(job.lines)               // physical print, off the sale's thread
+        enqueueReceipt(job.lines)        // physical print, off the sale's thread
         return text
     }
 
     override fun printProvisional(job: PrintJob): String {
         val text = audit.printProvisional(job)
-        enqueue(job.lines)
+        enqueueReceipt(job.lines)
         return text
     }
 
-    private fun enqueue(lines: List<PrintLine>) {
+    private fun enqueueReceipt(lines: List<PrintLine>) {
+        if (receiptMode == ReceiptPrintMode.DIGITAL) return // audit spool only, no paper
         val t = target()
         if (!t.configured) return // no printer set up yet — silently skip, no error
         try {
@@ -142,6 +147,7 @@ class NetworkThermalPrinter(
             online = t.configured && lastError == null && lastOkAt != null,
             lastError = lastError,
             lastOkAt = lastOkAt?.let(VenueClock::iso),
+            receiptMode = receiptMode.wire,
         )
     }
 

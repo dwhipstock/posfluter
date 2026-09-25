@@ -30,9 +30,11 @@ object Migrations {
     private val codeMigrations = listOf(
         Script(UtcTimestampMigration.VERSION, UtcTimestampMigration.NAME, "") { UtcTimestampMigration.run(this) },
         Script(TableTokenMigration.VERSION, TableTokenMigration.NAME, "") { TableTokenMigration.run(this) },
+        Script(MenuCategoryMigration.VERSION, MenuCategoryMigration.NAME, "") { MenuCategoryMigration.run(this) },
     )
 
-    fun run(db: Database) {
+    /** [through] is a test seam: stop after that version to build an older database. */
+    fun run(db: Database, through: Int = Int.MAX_VALUE) {
         transaction(db) {
             exec(
                 """CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -52,7 +54,7 @@ object Migrations {
         all.groupBy { it.version }.forEach { (v, group) ->
             require(group.size == 1) { "duplicate migration version $v: ${group.map { it.name }}" }
         }
-        val pending = all.filter { it.version !in applied }.sortedBy { it.version }
+        val pending = all.filter { it.version !in applied && it.version <= through }.sortedBy { it.version }
         for (script in pending) {
             // one transaction per script: a failure stops startup with earlier
             // scripts committed, so a fixed re-run resumes where it stopped

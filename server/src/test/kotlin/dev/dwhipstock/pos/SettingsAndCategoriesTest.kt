@@ -25,16 +25,16 @@ class SettingsAndCategoriesTest {
         assertEquals(HttpStatusCode.OK, res.status)
         val cats = Json.parseToJsonElement(res.bodyAsText()).jsonArray
         assertEquals(
-            listOf("draft-beer", "bottles-cans", "craft-beer", "imported-beer", "cider-na", "red-wine", "white-wine", "rose-sparkling", "cocktails", "appetizers", "burgers-sandwiches", "mains", "salads-vegetarian", "desserts", "late-night"),
+            listOf("beer-cider", "wine", "cocktails", "starters", "burgers-sandwiches", "mains-salads", "desserts"),
             cats.map { it.jsonObject["id"]!!.jsonPrimitive.content },
         )
-        assertEquals("Bières en fût", cats[0].jsonObject["nameFr"]!!.jsonPrimitive.content)
-        assertEquals("Draft Beer", cats[0].jsonObject["nameEn"]!!.jsonPrimitive.content)
+        assertEquals("Bières et cidres", cats[0].jsonObject["nameFr"]!!.jsonPrimitive.content)
+        assertEquals("Beer & Cider", cats[0].jsonObject["nameEn"]!!.jsonPrimitive.content)
 
         // items still carry their category id after the column rename
         val items = Json.parseToJsonElement(client.get("/items").bodyAsText()).jsonArray
         assertTrue(items.all { it.jsonObject["category"]!!.jsonPrimitive.content in
-            listOf("draft-beer", "bottles-cans", "craft-beer", "imported-beer", "cider-na", "red-wine", "white-wine", "rose-sparkling", "cocktails", "appetizers", "burgers-sandwiches", "mains", "salads-vegetarian", "desserts", "late-night") })
+            listOf("beer-cider", "wine", "cocktails", "starters", "burgers-sandwiches", "mains-salads", "desserts") })
     }
 
     @Test

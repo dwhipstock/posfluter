@@ -133,7 +133,7 @@ additive.
   "lines": [
     {
       "lineId": 91, "itemId": "lantern-lager", "variantId": "lantern-lager:pint",
-      "categoryId": "draft-beer",
+      "categoryId": "beer-cider",
       "nameFr": "Lager de la Lanterne", "nameEn": "Lantern House Lager",
       "variantLabelFr": "bouteille", "variantLabelEn": "Bottle",
       "qty": 2, "unitPriceCents": 9000, "lineTotalCents": 18000,

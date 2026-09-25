@@ -52,7 +52,7 @@ class CatalogCrudTest {
 
         // create with two sizes; id is slugged from the EN name
         val created = c.postJson("/items",
-            """{"nameFr":"Soupe saisonnière","nameEn":"Seasonal Soup","categoryId":"appetizers","abbrev":"MM","isAlcohol":false,
+            """{"nameFr":"Soupe saisonnière","nameEn":"Seasonal Soup","categoryId":"starters","abbrev":"MM","isAlcohol":false,
                 "variants":[{"labelFr":"ordinaire","labelEn":"Regular","priceCents":6000},
                             {"labelFr":"spécial","labelEn":"Special","priceCents":8000}]}""")
         assertEquals(HttpStatusCode.Created, created.status)
@@ -182,7 +182,7 @@ class CatalogCrudTest {
         assertEquals("dessert", afterOrder.first())
 
         // a category with live items refuses deletion; empty one deletes
-        val catRefused = c.delete("/categories/draft-beer")
+        val catRefused = c.delete("/categories/beer-cider")
         assertEquals(HttpStatusCode.Conflict, catRefused.status)
         assertTrue("category_not_empty" in catRefused.bodyAsText())
         assertEquals(HttpStatusCode.OK, c.delete("/categories/dessert").status)

@@ -231,7 +231,7 @@ class CloudSyncTest {
         // an older cloud may still serve catalog/staff rows: they must not land
         t.pages[0L] = ChangesPage(5, listOf(
             CloudChange(3, "item", "upsert", buildJsonObject {
-                put("id", "cloud-only-item"); put("nameFr", "x"); put("nameEn", "x"); put("categoryId", "mains")
+                put("id", "cloud-only-item"); put("nameFr", "x"); put("nameEn", "x"); put("categoryId", "mains-salads")
             }),
             CloudChange(4, "staff", "upsert", buildJsonObject {
                 put("id", "intruder"); put("name", "Intruder"); put("role", "MANAGER"); put("pinHash", "\$2a\$10\$x")

@@ -8,8 +8,11 @@ Two fictional Montréal stores of one owner (tenant `copperlantern`), both in
 | Copper Lantern — Vieux-Port | `vieux-port` | the Android tablet | `STORE_API_KEY` |
 | Copper Lantern — Plateau | `plateau` | this Mac (`DesktopMain.kt`, `POS_VENUE=plateau`) | `STORE_API_KEY_PLATEAU` |
 
-Plateau has the shared pub menu plus a Sushi Bar zone (tables S-1…S-11), a
-"Sushi & Sake" category (maki, nigiri, sake) and Plateau Specials.
+Both stores share the pub menu in seven categories (Beer & Cider, Wine,
+Cocktails, Starters, Burgers & Sandwiches, Mains & Salads, Desserts). Plateau
+has the shared pub menu plus a Sushi Bar zone (tables S-1…S-11), a
+"Sushi & Sake" category (maki, nigiri, sake) and Plateau Specials, listed
+after the seven.
 
 ## Bring-up (one command)
 
@@ -79,6 +82,39 @@ change — re-run step 3 if it does. With the Mac off or unreachable the tablet
 keeps starting, signing in and selling; only its sync pauses. To send the
 tablet back to another cloud, stage that cloud's URL and Vieux-Port key the
 same way.
+
+## Receipt printing: paper or digital
+
+A config-file switch (no UI) decides whether sale receipts go to the thermal
+printer: `print.receipts=paper|digital`, default `paper`.
+
+- `paper`: closed-check receipts and provisional bills print as usual.
+- `digital`: they are only saved (the `receipts/` and `bills/` spool and the
+  `receipt.printed` event, exactly as today); nothing goes to paper. Refund
+  slips are never sent to paper in either mode.
+- Manual prints always use paper: test page, table QR slips (and other
+  manual slips).
+
+`GET /printer/status` reports `receiptMode`, and the store logs
+`Receipt printing: <mode> (<source>)` at startup. A missing file, missing key
+or bad value means `paper` (logged); startup never fails on it. The setting is
+local only and never depends on the network.
+
+**Tablet** (release build, so via adb): the POS reads
+`/sdcard/Android/data/dev.dwhipstock.pos_client/files/store.properties` at
+store startup.
+
+```sh
+scripts/tablet-print-mode.sh digital   # write print.receipts=digital + restart the app
+scripts/tablet-print-mode.sh paper     # back to paper
+adb logcat -s TabletStore | grep 'Receipt printing'
+```
+
+**Desktop / docker store**: `POS_PRINT_RECEIPTS=paper|digital` (e.g.
+`POS_PRINT_RECEIPTS=digital scripts/demo-up.sh` for Plateau, or in
+`.env.edge` for `docker-compose.edge.yml`), or `POS_CONFIG_FILE=<path>` to a
+properties file in the same format. The env var wins over the file. Restart
+the store to apply.
 
 ## Tear-down
 
