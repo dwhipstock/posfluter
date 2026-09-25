@@ -7,6 +7,12 @@
 # Config/secrets come from ./.env.local (see .env.local.example). The Mac's LAN IP
 # is injected as POS_PUBLIC_URL by scripts/demo-up.sh so scan-to-order QR links
 # resolve from phones on the same Wi-Fi. Bring up with:  scripts/demo-up.sh
+#
+# Two-store demo: this file runs the cloud side only (db + api + portal). The
+# stores are the Android tablet (Vieux-Port) and the Mac desktop store (Plateau,
+# started by demo-up.sh outside Docker). The old `store` container is opt-in
+# (profile mac-store) and must NOT run next to the tablet: the tablet was
+# imported from its database, so both would push as the same store.
 name: pos-local
 
 services:
@@ -42,9 +48,12 @@ services:
       MIGRATIONS_DIR: /app/migrations
       ADMIN_EMAIL: "${ADMIN_EMAIL:?set ADMIN_EMAIL in .env.local}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env.local}"
+      # one key per store: STORE_API_KEY → vieux-port (tablet), the second → plateau (Mac)
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env.local}"
+      STORE_API_KEYS: "plateau=${STORE_API_KEY_PLATEAU:-}"
+      STORES: "vieux-port=Copper Lantern — Vieux-Port,plateau=Copper Lantern — Plateau"
       COOKIE_SECURE: "false"
-      VENUE_NAME: "${VENUE_NAME:-The Copper Lantern Pub}"
+      VENUE_NAME: "${VENUE_NAME:-Copper Lantern}"
       VENUE_TZ: "${VENUE_TZ:-America/New_York}"
     ports:
       - "8081:8081"
@@ -80,6 +89,7 @@ services:
   # server/Dockerfile for the required Unicode fonts. SQLite db + receipts/bills/photos
   # live on the 'storedata' named volume under /data so they survive restarts.
   store:
+    profiles: ["mac-store"]   # legacy; never alongside the tablet (see header)
     build:
       context: ./server
       dockerfile: Dockerfile
