@@ -13,7 +13,7 @@ import kotlin.test.assertEquals
 
 class TaxReportTest {
 
-    private val key = "store-key-vat"
+    private val key = "store-key-tax"
     private lateinit var session: String
 
     @Before

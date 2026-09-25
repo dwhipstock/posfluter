@@ -3,8 +3,8 @@
 // The point of the XLSX (vs the PDF) is that it's DATA: money lands as real
 // numbers (cents → CAD, 2-decimal number format) the accountant can sum,
 // pivot and re-file — never pre-formatted strings. Each report section becomes
-// its own worksheet; a KPI band, if present, leads as a summary sheet. French is
-// just UTF-8 text in the sheet XML, so it needs no special handling here.
+// its own worksheet; a KPI band, if present, leads as a summary sheet. Accented
+// text is plain UTF-8 in the sheet XML, so it needs no special handling here.
 
 import ExcelJS from "exceljs";
 import type { Cell, ExportDoc, Section } from "./doc";

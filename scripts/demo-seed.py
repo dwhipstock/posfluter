@@ -117,7 +117,7 @@ def make_sale(table, basket_idx, pay_type, menu_items):
         tendered = ((total // 10000) + 1) * 10000        # round up to next $100 → shows change
         call("POST", f"/checks/{check_id}/tenders",
              {"type": "CASH", "amountTenderedCents": tendered})
-    else:  # CARD: initiate QR, then confirm once "paid"
+    else:  # CARD: initiate, then confirm once the terminal approves
         call("POST", f"/checks/{check_id}/tenders/initiate",
              {"type": "CARD", "amountCents": total})
         call("POST", f"/checks/{check_id}/tenders/confirm",

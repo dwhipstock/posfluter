@@ -603,7 +603,7 @@ class CheckService(private val config: CustomerConfig) {
         val amount = Money(amountCents ?: outstanding.cents)
         require(amount > Money.ZERO && amount <= outstanding) { "amount must be within outstanding balance" }
 
-        val event = if (type == TenderType.CARD) "check.tender_qr_shown" else "check.tender_initiated"
+        val event = "check.tender_initiated"
         Outbox.write(event, "check", checkId.toString(), buildJsonObject {
             put("checkId", checkId)
             put("type", type.name)

@@ -396,7 +396,7 @@ private fun openCheckLineCount(matchLine: Op<Boolean>): Long {
         .count()
 }
 
-/** "Lantern House Lager Tower" → "lantern-lager-tower"; French-only names fall back to "item". */
+/** "Lantern House Lager Tower" → "lantern-lager-tower"; names with no ASCII letters or digits fall back to "item". */
 private fun uniqueSlug(source: String, taken: (String) -> Boolean): String {
     val base = source.trim().lowercase()
         .replace(Regex("[^a-z0-9]+"), "-").trim('-')

@@ -161,14 +161,14 @@ private fun requireZone(zoneId: String): ResultRow =
 /**
  * Zone label prefix: an explicit request wins (upper-cased, letters only);
  * otherwise the EN name's first letter (Upper→U, Bar front→B). Falls back to
- * "Z" for a French-only name with no explicit prefix.
+ * "Z" for an EN name with no letters and no explicit prefix.
  */
 private fun labelPrefixFor(requested: String?, nameEn: String): String {
     requested?.trim()?.uppercase()?.filter { it.isLetter() }?.take(4)?.ifBlank { null }?.let { return it }
     return nameEn.trim().firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "Z"
 }
 
-/** "Patio Bar" → "patio-bar"; French-only names fall back to "zone". */
+/** "Patio Bar" → "patio-bar"; names with no ASCII letters or digits fall back to "zone". */
 private fun uniqueZoneId(source: String): String {
     val base = source.trim().lowercase()
         .replace(Regex("[^a-z0-9]+"), "-").trim('-')

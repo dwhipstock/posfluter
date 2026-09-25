@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_client/api.dart';
 
 void main() {
-  test('CAD formats cents French-style', () {
+  test('CAD formats cents in the house style', () {
     expect(cad(0), '\$0');
     expect(cad(100), '\$1');
     expect(cad(101000), '\$1,010');

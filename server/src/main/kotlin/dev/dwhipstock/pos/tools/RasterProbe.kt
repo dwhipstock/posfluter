@@ -28,7 +28,7 @@ fun main(args: Array<String>) {
         GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
     }.getOrDefault(emptyList())
     val frenchish = families.filter { f ->
-        listOf("French", "Noto", "Roboto", "Loma", "Garuda", "Norasi", "Waree", "TLWG", "Umpush", "Kinnari")
+        listOf("Noto", "Roboto", "DejaVu")
             .any { f.contains(it, ignoreCase = true) }
     }
     println("headless=${GraphicsEnvironment.isHeadless()} fontFamilies=${families.size}")
