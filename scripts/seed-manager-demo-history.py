@@ -21,28 +21,29 @@ TENANT = "copperlantern"
 VENUE = "vieux-port"  # cloud migration 014 renamed the original "main" store
 ID_BASE = 900_000
 
-# item id, variant id, category id, English display name, unit price (CAD cents)
+# item id, variant id, category id, English display name, pre-tax unit price
+# (CAD cents; the store's seeded menu, CopperLanternSeed)
 MENU = [
-    ("lantern-lager", "lantern-lager:pint", "beer-cider", "Lantern House Lager", 825),
-    ("amber-ale", "amber-ale:pint", "beer-cider", "Copper Amber Ale", 875),
-    ("hazy-ipa", "hazy-ipa:regular", "beer-cider", "Local Hazy IPA", 925),
-    ("irish-stout", "irish-stout:regular", "beer-cider", "Irish Stout", 950),
-    ("dry-cider", "dry-cider:regular", "beer-cider", "Ontario Dry Cider", 875),
-    ("hop-water", "hop-water:regular", "beer-cider", "Sparkling Hop Water", 550),
-    ("wings", "wings:regular", "starters", "Chicken Wings", 1850),
-    ("poutine", "poutine:regular", "starters", "Classic Poutine", 1450),
-    ("pretzel", "pretzel:regular", "starters", "Giant Pub Pretzel", 1350),
-    ("nachos", "nachos:regular", "starters", "Loaded Pub Nachos", 1950),
-    ("lantern-burger", "lantern-burger:regular", "burgers-sandwiches", "Copper Lantern Burger", 2150),
-    ("club", "club:regular", "burgers-sandwiches", "Grilled Chicken Club", 2050),
-    ("fish-chips", "fish-chips:regular", "mains-salads", "Beer-Battered Fish and Chips", 2250),
-    ("chicken-pot-pie", "chicken-pot-pie:regular", "mains-salads", "Chicken Pot Pie", 2050),
-    ("steak-frites", "steak-frites:regular", "mains-salads", "Steak Frites", 2950),
-    ("caesar-salad", "caesar-salad:regular", "mains-salads", "Caesar Salad", 1450),
-    ("cheesecake", "cheesecake:regular", "desserts", "Maple Cheesecake", 950),
-    ("brownie", "brownie:regular", "desserts", "Stout Brownie", 900),
-    ("lantern-mule", "lantern-mule:regular", "cocktails", "Lantern Mule", 1450),
-    ("espresso-martini", "espresso-martini:regular", "cocktails", "Espresso Martini", 1550),
+    ("lantern-lager", "lantern-lager:pint", "beer-cider", "Lantern House Lager", 750),
+    ("amber-ale", "amber-ale:pint", "beer-cider", "Copper Amber Ale", 795),
+    ("hazy-ipa", "hazy-ipa:regular", "beer-cider", "Local Hazy IPA", 825),
+    ("irish-stout", "irish-stout:regular", "beer-cider", "Irish Stout", 850),
+    ("dry-cider", "dry-cider:regular", "beer-cider", "Ontario Dry Cider", 795),
+    ("hop-water", "hop-water:regular", "beer-cider", "Sparkling Hop Water", 495),
+    ("wings", "wings:regular", "starters", "Chicken Wings", 1675),
+    ("poutine", "poutine:regular", "starters", "Classic Poutine", 1300),
+    ("pretzel", "pretzel:regular", "starters", "Giant Pub Pretzel", 1225),
+    ("nachos", "nachos:regular", "starters", "Loaded Pub Nachos", 1750),
+    ("lantern-burger", "lantern-burger:regular", "burgers-sandwiches", "Copper Lantern Burger", 1925),
+    ("club", "club:regular", "burgers-sandwiches", "Grilled Chicken Club", 1850),
+    ("fish-chips", "fish-chips:regular", "mains-salads", "Beer-Battered Fish and Chips", 2025),
+    ("chicken-pot-pie", "chicken-pot-pie:regular", "mains-salads", "Chicken Pot Pie", 1850),
+    ("steak-frites", "steak-frites:regular", "mains-salads", "Steak Frites", 2650),
+    ("caesar-salad", "caesar-salad:regular", "mains-salads", "Caesar Salad", 1300),
+    ("cheesecake", "cheesecake:regular", "desserts", "Maple Cheesecake", 850),
+    ("brownie", "brownie:regular", "desserts", "Stout Brownie", 800),
+    ("lantern-mule", "lantern-mule:regular", "cocktails", "Lantern Mule", 1300),
+    ("espresso-martini", "espresso-martini:regular", "cocktails", "Espresso Martini", 1395),
 ]
 
 ZONES = [
@@ -61,6 +62,31 @@ def q(value: str | None) -> str:
 
 
 VENUE_TZ = "America/New_York"
+
+# Québec taxes added on top of the pre-tax subtotal, as the store charges them:
+# code, French label, English label, rate (percent, decimal string), registration no.
+TAXES = [
+    ("GST", "TPS", "GST", "5", "123456789 RT0001"),
+    ("QST", "TVQ", "QST", "9.975", "1234567890 TQ0001"),
+]
+
+
+def tax_cents(subtotal: int, rate: str) -> int:
+    """One tax on the whole check, rounded half-up to the cent (the store's math)."""
+    thousandths = round(float(rate) * 1000)  # 9.975 -> 9975
+    return (subtotal * thousandths * 2 + 100_000) // 200_000
+
+
+def taxes_for(subtotal: int) -> list[dict]:
+    return [
+        {"code": code, "labelFr": fr, "labelEn": en, "ratePercent": rate,
+         "registrationNumber": reg, "amountCents": tax_cents(subtotal, rate)}
+        for code, fr, en, rate, reg in TAXES
+    ]
+
+
+def jsonb(value) -> str:
+    return q(json.dumps(value, separators=(",", ":"), ensure_ascii=False)) + "::jsonb"
 
 
 def ts(value: dt.datetime) -> str:
@@ -135,15 +161,21 @@ def main() -> None:
                     picked.append(rng.choice(MENU[6:18]))
 
             line_rows = []
-            total = 0
+            subtotal = 0
             for line_no, (item, variant, category, name, price) in enumerate(picked, 1):
                 qty = 2 if rng.random() < 0.14 else 1
                 line_total = price * qty
-                total += line_total
+                subtotal += line_total
                 line_rows.append(
                     f"({q(TENANT)},{q(VENUE)},{check_id},{line_no},{q(item)},{q(variant)},{q(category)},"
                     f"{q(name)},{q(name)},NULL,NULL,{q(name)},{qty},{price},{line_total})"
                 )
+
+            # GST and QST on top of the pre-tax subtotal: the guest pays the total
+            taxes = taxes_for(subtotal)
+            gst, qst = (t["amountCents"] for t in taxes)
+            tax = gst + qst
+            total = subtotal + tax
 
             is_void = rng.random() < 0.018
             status = "VOID" if is_void else "CLOSED"
@@ -151,10 +183,10 @@ def main() -> None:
             sql.append(
                 "INSERT INTO checks (tenant_id,venue_id,check_id,status,table_id,table_label,zone_id,zone_name_fr,zone_name_en,"
                 "shift_id,opened_at,closed_at,opened_by,grand_total_cents,tax_included_cents,corkage_bottles,corkage_cents,"
-                "service_charge_cents,void_reason,voided_by) VALUES "
+                "service_charge_cents,void_reason,voided_by,gst_cents,qst_cents,taxes) VALUES "
                 f"({q(TENANT)},{q(VENUE)},{check_id},{q(status)},{q(table_id)},{q(table_label)},{q(zone_id)},"
-                f"{q(zone_name)},{q(zone_name)},{shift_id},{ts(open_time)},{ts(close_time)},{q(staff)},{total},0,0,0,0,"
-                f"{q(void_reason)},{q(staff) if is_void else 'NULL'});"
+                f"{q(zone_name)},{q(zone_name)},{shift_id},{ts(open_time)},{ts(close_time)},{q(staff)},{total},{tax},0,0,0,"
+                f"{q(void_reason)},{q(staff) if is_void else 'NULL'},{gst},{qst},{jsonb(taxes)});"
             )
             sql.append(
                 "INSERT INTO check_lines (tenant_id,venue_id,check_id,line_id,item_id,variant_id,category_id,name_fr,name_en,"
@@ -187,9 +219,11 @@ def main() -> None:
                     reason = rng.choice(["Customer complaint", "Order error", "Duplicate payment"])
                     sql.append(
                         "INSERT INTO refunds (tenant_id,venue_id,refund_id,check_id,shift_id,gross_cents,net_cents,"
-                        "tax_included_cents,tender_type,reason,refunded_by,table_label,zone_id,zone_name_fr,zone_name_en,created_at) VALUES "
-                        f"({q(TENANT)},{q(VENUE)},{refund_id},{check_id},{shift_id},{total},{total},0,{q(tender_type)},"
-                        f"{q(reason)},{q('Morgan')},{q(table_label)},{q(zone_id)},{q(zone_name)},{q(zone_name)},{ts(refund_time)});"
+                        "tax_included_cents,tender_type,reason,refunded_by,table_label,zone_id,zone_name_fr,zone_name_en,created_at,"
+                        "gst_cents,qst_cents) VALUES "
+                        f"({q(TENANT)},{q(VENUE)},{refund_id},{check_id},{shift_id},{total},{subtotal},{tax},{q(tender_type)},"
+                        f"{q(reason)},{q('Morgan')},{q(table_label)},{q(zone_id)},{q(zone_name)},{q(zone_name)},{ts(refund_time)},"
+                        f"{gst},{qst});"
                     )
 
         breakdown = json.dumps({"CASH": cash_total, "CARD": card_total}, separators=(",", ":"))

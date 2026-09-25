@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DEMO-ONLY seed: generate a handful of finalized sales through the store's HTTP API
-so the owner portal has non-empty reports (payments, items, tax, hourly) after sync
+so the owner portal has non-empty reports (payments, items, GST/QST tax, hourly) after sync
 (~10s). Talks only to the store server — nothing here is used in production.
 
 Idempotency is owned by the caller (scripts/demo-up.sh), which skips this when the
@@ -90,7 +90,7 @@ def menu():
 
 
 def cad(cents):
-    return f"${cents/100:,.0f}"
+    return f"${cents/100:,.2f}"
 
 
 # A few baskets (indices into the discovered menu list, wrapped to fit) + payment type.
@@ -112,7 +112,7 @@ def make_sale(table, basket_idx, pay_type, menu_items):
         check = call("POST", f"/checks/{check_id}/lines",
                      {"itemId": item_id, "variantId": variant_id, "qty": 1})
         added.append(name)
-    total = check["grandTotalCents"]
+    total = check["grandTotalCents"]  # the store's total: pre-tax prices + GST + QST
     if pay_type == "CASH":
         tendered = ((total // 10000) + 1) * 10000        # round up to next $100 → shows change
         call("POST", f"/checks/{check_id}/tenders",

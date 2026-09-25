@@ -85,7 +85,7 @@ zone, taking the first occurrence of the repeated fall-back hour.
    for the first tablet's cloud reporting, and tablets do not sync with one
    another.
 
-Venue policy is isolated in a typed configuration. The included configuration is fictional: CAD minor units, Gregorian dates, English/French content, generic tenders, and no preset tax rule. Menu, staff, settings, receipts, and uploaded photos remain venue-scoped.
+Venue policy is isolated in a typed configuration. The included configuration is fictional: CAD minor units, Gregorian dates, English/French content, generic tenders, and Québec sales taxes (GST 5% and QST 9.975%) added on top of pre-tax prices as data (`TaxPolicy.AddedTaxes`). Menu, staff, settings, receipts, and uploaded photos remain venue-scoped.
 
 The one tender that needs the internet is the optional **Card (Stripe)**
 (Stripe Terminal, test mode, simulated reader; `payments/StripeService.kt`,

@@ -89,8 +89,11 @@ def sale(base, dev, session, item_id, variant_id, price, zone_fr, zone_en):
     st, l = req(base, "POST", f"/checks/{check_id}/lines",
                 {"itemId": item_id, "variantId": variant_id, "qty": 2}, store_headers(dev, session))
     assert st in (200, 201), f"line: {st} {l}"
+    # pay the store's total (menu prices are pre-tax; GST and QST come on top),
+    # in cash rounded up to the nickel so it always settles the check
+    cash = (l["grandTotalCents"] + 4) // 5 * 5
     st, td = req(base, "POST", f"/checks/{check_id}/tenders",
-                 {"type": "CASH", "amountTenderedCents": price * 2}, store_headers(dev, session))
+                 {"type": "CASH", "amountTenderedCents": cash}, store_headers(dev, session))
     assert st in (200, 201), f"tender: {st} {td}"
     st, fin = req(base, "POST", f"/checks/{check_id}/finalize", {}, store_headers(dev, session))
     assert st == 200 and fin.get("status") == "CLOSED", f"finalize: {st} {fin}"
