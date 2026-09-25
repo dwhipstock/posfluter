@@ -9,11 +9,14 @@ Hard rules this contract encodes:
   writes `sync_outbox` in the same transaction; the pusher drains that table.
   No parallel sync path.
 - **The cloud aggregates pre-computed figures — it never recomputes money or
-  tax.** When configured, the store decomposes inclusive sales tax at sale time
-  (`TaxPolicy.InclusiveTax`: `tax = (base*rate*2 + (100+rate)) / ((100+rate)*2)`,
-  half-up at the cents) and stamps it on the check. Events carry those cents
-  figures; cloud reports are sums of them. `net = gross − taxIncluded`, per
-  check, computed by the store.
+  tax.** The store computes tax at sale time and stamps it on the check.
+  Copper Lantern prices are pre-tax and Québec's taxes are added on top
+  (`TaxPolicy.AddedTaxes`): GST 5% and QST 9.975%, each on the same
+  post-discount taxable base, each rounded half-up to the cent once per check
+  (a split's groups share the check's tax, largest remainder). An inclusive
+  policy (`TaxPolicy.InclusiveTax`) decomposes the tax out of the price instead.
+  Events carry those cents figures; cloud reports are sums of them.
+  `net = gross − taxIncluded`, per check, computed by the store.
 - **Sync is one-way: store → cloud.** Each store's tablet is authoritative for
   its own menu (items, variants, categories, photos), staff and grants. Edits
   happen on the tablet, offline, and are pushed up as events so the portal can
@@ -126,8 +129,15 @@ additive.
   "shiftId": 7,                        // omitted if closed outside a shift
   "openedAt": "2026-07-11T18:02:11.000-04:00", "closedAt": "2026-07-11T19:40:03.000-04:00",
   "openedBy": "1234",
-  "grandTotalCents": 53500,           // = checks.locked_grand_total_cents
-  "taxIncludedCents": 6155,           // = checks.locked_tax_included_cents (store-computed)
+  "grandTotalCents": 53486,           // = checks.locked_grand_total_cents (what the guest paid)
+  "taxIncludedCents": 6966,           // every tax inside grandTotalCents (store-computed)
+  "subtotalCents": 46520,             // pre-tax: grandTotalCents − the taxes added on top
+  "taxes": [                          // one entry per tax added on top; [] = none
+    { "code": "GST", "labelFr": "TPS", "labelEn": "GST", "ratePercent": "5",
+      "registrationNumber": "123456789 RT0001", "amountCents": 2326 },
+    { "code": "QST", "labelFr": "TVQ", "labelEn": "QST", "ratePercent": "9.975",
+      "registrationNumber": "1234567890 TQ0001", "amountCents": 4640 }
+  ],
   "corkageBottles": 0,
   "fees": [ { "code": "corkage", "labelFr": "Frais de bouchon de bouteille", "labelEn": "Corkage", "amountCents": 20000 } ],
   "lines": [
@@ -143,8 +153,8 @@ additive.
   "tenders": [
     {
       "tenderId": 5, "type": "CASH",
-      "amountTenderedCents": 60000, "amountAppliedCents": 53500,
-      "roundingAdjustmentCents": -50, "changeCents": 6500,
+      "amountTenderedCents": 60000, "amountAppliedCents": 53486,
+      "roundingAdjustmentCents": -1, "changeCents": 6515,
       "groupId": null
     }
   ]
@@ -156,13 +166,35 @@ additive.
   (mirrors receipts).
 - On split checks `tenders[].groupId` is set; reports only need `type` +
   amounts, groups are informational.
+- **Taxes.** `taxIncludedCents` is every tax inside `grandTotalCents` — the
+  historical name now also covers taxes added on top, so `net = gross − tax`
+  holds for every store. `taxes` itemises the added ones (the sum of their
+  `amountCents` is inside `taxIncludedCents`); `ratePercent` is a decimal
+  string. Labels, rate and registration number are as charged, never looked
+  up later. `subtotalCents` + the `taxes` = `grandTotalCents`.
+- **Older stores** (before store migration 036) send neither `subtotalCents`
+  nor `taxes`. The cloud stores their per-tax amounts as NULL and reports show
+  0 for them — it never estimates a tax that was not sent.
 
 ### `check.voided`
 Existing `checkId`/`reason`/`authorizedBy` plus:
 `tableId, tableLabel, zoneId, zoneNameFr, zoneNameEn, shiftId?, openedAt,
-voidedAt, amountCents, taxIncludedCents` — amount/tax are the store-computed
-totals at void time (voids have no locked totals; the store runs the same
-pipeline math it shows on screen).
+voidedAt, amountCents, taxIncludedCents, taxes` — amount/tax are the
+store-computed totals at void time (the locked totals when payment had
+started, else the same pipeline math it shows on screen); `taxes` has the
+`check.closed` shape.
+
+### `refund.created`
+`refundId, checkId, shiftId?, grossCents, netCents, taxIncludedCents,
+taxes, tenderType, reason, refundedBy, tableId, tableLabel, zoneId,
+zoneNameFr, zoneNameEn, createdAt, lines?` (+ `processor`,
+`stripePaymentIntentId`, `stripeRefundId` for a card refund through Stripe).
+`grossCents` is the money returned, `taxIncludedCents` every tax inside it,
+`netCents = grossCents − taxIncludedCents`, and `taxes` the added taxes it
+reverses (`check.closed` shape). The store reverses each tax in proportion to
+the money returned, cumulatively, so a full refund — in one go or in parts —
+reverses every tax to the cent. A by-line refund returns the lines' pre-tax
+price plus their share of the tax. Reports net refunds out of sales and tax.
 
 ### `shift.opened`
 Existing keys plus `openedAt`.

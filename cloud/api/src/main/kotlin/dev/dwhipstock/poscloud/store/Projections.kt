@@ -81,6 +81,9 @@ object Projections {
             it[serviceChargeCents] = fees?.let { f -> feeSum(f, "service_charge") }
             it[voidReason] = null
             it[voidedBy] = null
+            it[gstCents] = taxSum(p, "GST")
+            it[qstCents] = taxSum(p, "QST")
+            it[taxes] = p.arr("taxes")?.toString()
         }
         p.arr("lines")?.filterIsInstance<JsonObject>()?.let { lines ->
             CheckLines.deleteWhere {
@@ -142,6 +145,9 @@ object Projections {
             it[taxIncludedCents] = p.long("taxIncludedCents")
             it[voidReason] = p.str("reason")
             it[voidedBy] = p.str("authorizedBy") ?: p.str("voidedBy")
+            it[gstCents] = taxSum(p, "GST")
+            it[qstCents] = taxSum(p, "QST")
+            it[taxes] = p.arr("taxes")?.toString()
         }
     }
 
@@ -169,6 +175,8 @@ object Projections {
             it[zoneNameFr] = p.str("zoneNameFr")
             it[zoneNameEn] = p.str("zoneNameEn")
             it[Refunds.createdAt] = p.instant("createdAt", zone) ?: createdAt
+            it[gstCents] = taxSum(p, "GST")
+            it[qstCents] = taxSum(p, "QST")
         }
     }
 
@@ -274,4 +282,12 @@ object Projections {
 
     private fun feeSum(fees: List<JsonObject>, code: String): Long =
         fees.filter { it.str("code") == code }.sumOf { it.long("amountCents") ?: 0 }
+
+    /**
+     * One tax's amount from the store's `taxes` breakdown. NULL when the store
+     * sent no breakdown at all (an older store) — reports show 0, never a guess;
+     * 0 when it sent one without that tax.
+     */
+    private fun taxSum(p: JsonObject, code: String): Long? =
+        p.arr("taxes")?.filterIsInstance<JsonObject>()?.let { taxes -> feeSum(taxes, code) }
 }

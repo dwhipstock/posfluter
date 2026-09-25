@@ -178,8 +178,41 @@ suspend fun ApplicationTestBuilder.ingest(key: String, vararg events: IngestEven
 suspend fun ApplicationTestBuilder.getWithCookie(path: String, sessionToken: String): HttpResponse =
     client.get(path) { header(HttpHeaders.Cookie, "pos_portal_session=$sessionToken") }
 
-/** Canadian test fixture: inclusive 13% sales-tax decomposition, half-up cents. */
+/** Legacy fixture (older stores): an inclusive 13% sales-tax decomposition, half-up cents. */
 fun storeTax(gross: Long): Long = (gross * 13 * 2 + 113) / 226
+
+/** The store's Québec math: GST 5% and QST 9.975% on [subtotal], each half-up to the cent. */
+fun qcTaxes(subtotal: Long): Pair<Long, Long> =
+    ((subtotal * 5 * 2 + 100) / 200) to ((subtotal * 9975 * 2 + 100_000) / 200_000)
+
+/** The store's `taxes` breakdown for [subtotal] (store migration 036 shape). */
+fun qcTaxesJson(subtotal: Long): kotlinx.serialization.json.JsonArray {
+    val (gst, qst) = qcTaxes(subtotal)
+    return kotlinx.serialization.json.buildJsonArray {
+        add(buildJsonObject {
+            put("code", testJson.encodeToJsonElement("GST")); put("labelFr", testJson.encodeToJsonElement("TPS"))
+            put("labelEn", testJson.encodeToJsonElement("GST")); put("ratePercent", testJson.encodeToJsonElement("5"))
+            put("registrationNumber", testJson.encodeToJsonElement("123456789 RT0001"))
+            put("amountCents", testJson.encodeToJsonElement(gst))
+        })
+        add(buildJsonObject {
+            put("code", testJson.encodeToJsonElement("QST")); put("labelFr", testJson.encodeToJsonElement("TVQ"))
+            put("labelEn", testJson.encodeToJsonElement("QST")); put("ratePercent", testJson.encodeToJsonElement("9.975"))
+            put("registrationNumber", testJson.encodeToJsonElement("1234567890 TQ0001"))
+            put("amountCents", testJson.encodeToJsonElement(qst))
+        })
+    }
+}
+
+/** A current store's check.closed: pre-tax [subtotal] plus GST and QST on top. */
+fun qcCheckClosedPayload(checkId: Int, subtotal: Long, closedAt: String, shiftId: Long? = null): JsonObject {
+    val (gst, qst) = qcTaxes(subtotal)
+    return buildJsonObject {
+        checkClosedPayload(checkId, subtotal + gst + qst, gst + qst, closedAt, shiftId).forEach { (k, v) -> put(k, v) }
+        put("subtotalCents", testJson.encodeToJsonElement(subtotal))
+        put("taxes", qcTaxesJson(subtotal))
+    }
+}
 
 fun checkClosedPayload(
     checkId: Int, gross: Long, tax: Long? = null,
