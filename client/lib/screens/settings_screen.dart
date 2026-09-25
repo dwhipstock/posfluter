@@ -36,6 +36,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _alertVolume = TextEditingController();
   final _printerIp = TextEditingController();
   final _printerPort = TextEditingController();
+  final _wifiSsid = TextEditingController();
+  final _wifiPassword = TextEditingController();
+  String _wifiSecurity = 'WPA';
+  bool _wifiHidden = false;
+  bool _showWifiPassword = false;
+  int _wifiCopies = 1;
   // Store server URL is device-local (not a venue setting) — persisted via
   // shared device storage, applied on next launch. Separate from the printer IP.
   final _serverUrl = TextEditingController();
@@ -144,6 +150,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _alertVolume.text = '${s.pendingAlertVolume}';
         _printerIp.text = s.printerIp;
         _printerPort.text = '${s.printerPort}';
+        _wifiSsid.text = s.wifiSsid;
+        _wifiPassword.text = s.wifiPassword ?? '';
+        _wifiSecurity = s.wifiSecurity;
+        _wifiHidden = s.wifiHidden;
         _alertsEnabled = s.pendingAlertsEnabled;
       });
     } catch (e) {
@@ -173,6 +183,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         int.tryParse(_alertVolume.text) ?? _settings!.pendingAlertVolume,
     'printerIp': _printerIp.text.trim(),
     'printerPort': int.tryParse(_printerPort.text) ?? _settings!.printerPort,
+    'wifiSsid': _wifiSsid.text.trim(),
+    // A redacted (null) password is left untouched unless the manager typed one.
+    if (_settings!.wifiPassword != null || _wifiPassword.text.isNotEmpty)
+      'wifiPassword': _wifiSecurity == 'nopass' ? '' : _wifiPassword.text,
+    'wifiSecurity': _wifiSecurity,
+    'wifiHidden': _wifiHidden,
   });
 
   Future<void> _save() async {
@@ -272,6 +288,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// Save the form (so the slip matches what's on screen), then print
+  /// [_wifiCopies] guest Wi-Fi join slips. Outcome comes back as a toast.
+  Future<void> _printWifiSlip() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final l = L.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _persist();
+      final res = await Api.printWifiSlip(_wifiCopies);
+      final msg = !res.configured
+          ? l.printerNotConfigured
+          : !res.online
+          ? l.printerOffline
+          : l.wifiSlipsPrinted(res.printed);
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
+    } on ApiException catch (e) {
+      if (e.code == 'wifi_not_configured') {
+        messenger.showSnackBar(SnackBar(content: Text(l.wifiNotConfigured)));
+      } else if (mounted) {
+        showApiError(context, e);
+      }
+    } catch (e) {
+      if (e is SessionExpiredException) return;
+      if (mounted) showApiError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Guest Wi-Fi: network name, password, security, hidden, and the slip print.
+  List<Widget> _guestWifiSection(L l) => [
+    SectionLabel(l.sectionGuestWifi),
+    Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(l.guestWifiHint, style: T.small()),
+    ),
+    _field(_wifiSsid, l.wifiSsidLabel),
+    if (_wifiSecurity != 'nopass')
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          controller: _wifiPassword,
+          obscureText: !_showWifiPassword,
+          autocorrect: false,
+          enableSuggestions: false,
+          style: T.text(size: 16),
+          decoration: InputDecoration(
+            labelText: l.wifiPasswordLabel,
+            suffixIcon: IconButton(
+              tooltip: _showWifiPassword
+                  ? l.wifiHidePassword
+                  : l.wifiShowPassword,
+              icon: Icon(
+                _showWifiPassword ? LucideIcons.eyeOff : LucideIcons.eye,
+              ),
+              onPressed: () =>
+                  setState(() => _showWifiPassword = !_showWifiPassword),
+            ),
+          ),
+        ),
+      ),
+    Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        initialValue: _wifiSecurity,
+        decoration: InputDecoration(labelText: l.wifiSecurityLabel),
+        items: [
+          const DropdownMenuItem(value: 'WPA', child: Text('WPA/WPA2/WPA3')),
+          const DropdownMenuItem(value: 'WEP', child: Text('WEP')),
+          DropdownMenuItem(value: 'nopass', child: Text(l.wifiSecurityNone)),
+        ],
+        onChanged: (v) => setState(() => _wifiSecurity = v ?? 'WPA'),
+      ),
+    ),
+    SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      activeThumbColor: T.accent,
+      title: Text(l.wifiHiddenLabel, style: T.text(size: 16)),
+      value: _wifiHidden,
+      onChanged: (v) => setState(() => _wifiHidden = v),
+    ),
+    Row(
+      children: [
+        Text(l.wifiCopiesLabel, style: T.text(size: 16)),
+        const Spacer(),
+        IconButton(
+          icon: const Icon(LucideIcons.minus),
+          onPressed: _wifiCopies > 1
+              ? () => setState(() => _wifiCopies--)
+              : null,
+        ),
+        SizedBox(
+          width: 36,
+          child: Text(
+            '$_wifiCopies',
+            textAlign: TextAlign.center,
+            style: T.text(size: 16),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(LucideIcons.plus),
+          onPressed: _wifiCopies < 20
+              ? () => setState(() => _wifiCopies++)
+              : null,
+        ),
+      ],
+    ),
+    const SizedBox(height: 8),
+    SizedBox(
+      height: T.minTouch,
+      child: OutlinedButton.icon(
+        icon: const Icon(LucideIcons.wifi),
+        label: Text(l.printWifiSlip),
+        onPressed: _busy ? null : _printWifiSlip,
+      ),
+    ),
+    const SizedBox(height: 16),
+  ];
 
   Widget _field(
     TextEditingController c,
@@ -533,7 +669,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onPressed: _busy ? null : _printAllSlips,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
+                    ..._guestWifiSection(l),
                     SizedBox(
                       height: T.minTouch,
                       child: FilledButton.icon(

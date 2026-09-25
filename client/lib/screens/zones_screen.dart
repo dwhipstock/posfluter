@@ -244,10 +244,19 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                 case 'pin':
                   _changePin();
                 case 'slips':
-                  launchUrl(
-                    Uri.parse('${Api.baseUrl}/slips'),
-                    mode: LaunchMode.externalApplication,
-                  );
+                  // the pages carry every table's link: open with a ticket
+                  try {
+                    final ticket = await Api.slipsTicket();
+                    await launchUrl(
+                      Uri.parse(
+                        '${Api.baseUrl}/slips?ticket=${Uri.encodeQueryComponent(ticket)}',
+                      ),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  } catch (e) {
+                    if (e is SessionExpiredException) return;
+                    if (context.mounted) showApiError(context, e);
+                  }
                 case 'logout':
                   await Api.logout();
                   if (context.mounted) {
@@ -801,13 +810,42 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     _reload(); // layout and/or tables changed
   }
 
-  /// The scan-to-order URL for a table, mirroring the server's menuPathFor():
-  /// readable /m/{zoneId}/{number} when the label ends in digits, else the
-  /// opaque /m/{tableId}. Use the LAN origin, not the tablet-only API origin.
-  static String _menuUrl(Zone zone, TableInfo table, String storeBaseUrl) {
-    final n = RegExp(r'(\d+)$').firstMatch(table.label)?.group(1);
-    final path = n != null ? '/m/${zone.id}/$n' : '/m/${table.id}';
-    return '$storeBaseUrl$path';
+  /// The scan-to-order URL for a table: the server's random per-table link
+  /// (/m/t/{token}) on the LAN origin, not the tablet-only API origin.
+  static String? _menuUrl(TableInfo table, String storeBaseUrl) =>
+      table.menuPath == null ? null : '$storeBaseUrl${table.menuPath}';
+
+  /// Manager: rotate this table's link so its old slips stop working, then
+  /// reload so the on-screen QR shows the new one.
+  Future<void> _regenerateTableLink(TableInfo table) async {
+    final l = L.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.regenerateTableLink),
+        content: Text(l.regenerateTableLinkConfirm(table.displayLabel)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l.regenerate),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await Api.regenerateTableLink(table.id);
+      messenger.showSnackBar(SnackBar(content: Text(l.tableLinkRegenerated)));
+      _reload();
+    } catch (e) {
+      if (e is SessionExpiredException) return;
+      if (mounted) showApiError(context, e);
+    }
   }
 
   /// On-screen stand-in for the printed QR slip: long-press a table → show its
@@ -822,13 +860,14 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       // A QR with a guessed or tablet-only address would be worse than none.
     }
     if (!mounted) return;
-    if (storeBaseUrl == null) {
+    final url = storeBaseUrl == null ? null : _menuUrl(table, storeBaseUrl);
+    if (url == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l.tableQrNeedsWifi)),
       );
       return;
     }
-    final url = _menuUrl(zone, table, storeBaseUrl);
+    final isManager = Api.currentUser?.isManager ?? false;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -865,6 +904,15 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.close)),
+          if (isManager)
+            TextButton.icon(
+              icon: const Icon(LucideIcons.refreshCw, size: 18),
+              label: Text(l.regenerateTableLink),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _regenerateTableLink(table);
+              },
+            ),
           FilledButton.icon(
             icon: const Icon(LucideIcons.printer, size: 18),
             label: Text(l.printQrCode),
@@ -940,7 +988,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   );
 
   /// Print the table's scan-to-order QR on the thermal printer. The QR payload
-  /// is built server-side (same /m/{zone}/{n} as the on-screen code). Never
+  /// is built server-side (same /m/t/{token} link as the on-screen code). Never
   /// throws at the user: a missing/offline printer comes back as a status toast.
   Future<void> _printTableSlip(TableInfo table) async {
     final l = L.of(context);

@@ -754,6 +754,23 @@ class Api {
   static Future<PrinterStatus> printTableSlip(String tableId) async =>
       PrinterStatus.fromJson(await _post('/tables/$tableId/slip/print'));
 
+  /// Print [copies] guest Wi-Fi join slips (manager). Throws [ApiException]
+  /// with code `wifi_not_configured` until the network is set up.
+  static Future<WifiSlipResult> printWifiSlip(int copies) async =>
+      WifiSlipResult.fromJson(
+        await _post('/printer/wifi/print', {'copies': copies}),
+      );
+
+  /// Rotate a table's customer link (manager): every printed slip for it stops
+  /// working. Returns the new "/m/t/{token}" path.
+  static Future<String> regenerateTableLink(String tableId) async =>
+      (await _post('/tables/$tableId/link/regenerate'))['menuPath'] as String;
+
+  /// A short-lived ticket so the browser can open the printable slip pages
+  /// (they carry every table's link, so they aren't public).
+  static Future<String> slipsTicket() async =>
+      (await _post('/slips/ticket'))['ticket'] as String;
+
   /// Bulk-print every active table's QR slip (manager, venue setup).
   static Future<PrintAllResult> printAllTableSlips() async =>
       PrintAllResult.fromJson(await _post('/tables/slips/print-all'));
@@ -1299,6 +1316,14 @@ class VenueSettings {
   final int pendingAlertVolume;
   final String printerIp;
   final int printerPort;
+
+  /// Guest Wi-Fi for the join slips. Empty [wifiSsid] = not configured.
+  final String wifiSsid;
+
+  /// Null when this session may not read it (redacted server-side).
+  final String? wifiPassword;
+  final String wifiSecurity; // WPA | WEP | nopass
+  final bool wifiHidden;
   VenueSettings(
     this.cardProcessor,
     this.bankName,
@@ -1314,8 +1339,12 @@ class VenueSettings {
     this.pendingAlertEscalateSeconds,
     this.pendingAlertVolume,
     this.printerIp,
-    this.printerPort,
-  );
+    this.printerPort, {
+    this.wifiSsid = '',
+    this.wifiPassword,
+    this.wifiSecurity = 'WPA',
+    this.wifiHidden = false,
+  });
   factory VenueSettings.fromJson(Map<String, dynamic> j) => VenueSettings(
     j['cardProcessor'],
     j['bankName'],
@@ -1332,6 +1361,23 @@ class VenueSettings {
     j['pendingAlertVolume'] ?? 80,
     j['printerIp'] ?? '',
     j['printerPort'] ?? 9100,
+    wifiSsid: j['wifiSsid'] ?? '',
+    wifiPassword: j['wifiPassword'],
+    wifiSecurity: j['wifiSecurity'] ?? 'WPA',
+    wifiHidden: j['wifiHidden'] ?? false,
+  );
+}
+
+/// Result of POST /printer/wifi/print: printer state plus copies printed.
+class WifiSlipResult {
+  final bool configured, online;
+  final int printed, copies;
+  WifiSlipResult(this.configured, this.online, this.printed, this.copies);
+  factory WifiSlipResult.fromJson(Map<String, dynamic> j) => WifiSlipResult(
+    j['configured'] ?? false,
+    j['online'] ?? false,
+    j['printed'] ?? 0,
+    j['copies'] ?? 0,
   );
 }
 
@@ -1486,6 +1532,9 @@ class TableInfo {
   /// Floor-plan geometry: logical units on the server's 0–1000 canvas.
   final int x, y, width, height, rotation, seats;
   final String shape; // ROUND | SQUARE | RECT | BAR
+
+  /// Customer link path "/m/t/{token}" (random per table; null on an old server).
+  final String? menuPath;
   TableInfo(
     this.id,
     this.label,
@@ -1503,8 +1552,9 @@ class TableInfo {
     this.height,
     this.rotation,
     this.shape,
-    this.seats,
-  );
+    this.seats, {
+    this.menuPath,
+  });
   factory TableInfo.fromJson(Map<String, dynamic> j) => TableInfo(
     j['id'],
     j['label'],
@@ -1523,6 +1573,7 @@ class TableInfo {
     j['rotation'] ?? 0,
     j['shape'] ?? 'SQUARE',
     j['seats'] ?? 4,
+    menuPath: j['menuPath'],
   );
   String get displayLabel => nameOverride ?? label;
   bool get isVip => nameOverride != null;
@@ -1557,6 +1608,7 @@ class TableInfo {
     rotation ?? this.rotation,
     shape ?? this.shape,
     seats ?? this.seats,
+    menuPath: menuPath,
   );
 
   /// The geometry slice the batch "save layout" endpoint expects.

@@ -10,6 +10,7 @@ import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.restaurant.CheckView
 import dev.dwhipstock.pos.restaurant.LineView
 import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.restaurant.TableTokens
 import dev.dwhipstock.pos.restaurant.TenderView
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.TenderType
@@ -59,6 +60,8 @@ data class TableDto(
     val x: Int = 0, val y: Int = 0,
     val width: Int = 100, val height: Int = 100,
     val rotation: Int = 0, val shape: String = "SQUARE", val seats: Int = 4,
+    /** Customer link path "/m/t/{token}" for the on-screen QR (staff-only view). */
+    val menuPath: String? = null,
 )
 
 @Serializable
@@ -194,90 +197,167 @@ data class AvailabilityRequest(val active: Boolean, val managerPin: String? = nu
 @Serializable
 data class TenderResponse(val tender: TenderView, val check: CheckView)
 
-/** Customer-facing scan-to-order routes. Unauthenticated by design — they run on guests' phones. */
+/**
+ * Customer-facing scan-to-order routes. Unauthenticated by design — they run on
+ * guests' phones — so every one resolves the table from its random token
+ * (`/m/t/{token}`, see [TableTokens]); nothing a guest can type (a table id, a
+ * zone + number) reaches a table.
+ */
 fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.sdk.CustomerConfig) {
 
-    // Opaque-id form: the fallback path already-printed QR slips carry forever.
-    get("/m/{tableId}") {
-        serveCustomerMenu(call, call.parameters["tableId"]!!, config.displayName)
+    get("/m/t/{token}") {
+        val tableId = customerTable(call) ?: return@get scanAtTable(call, config.displayName)
+        serveCustomerMenu(call, tableId, call.parameters["token"]!!, config.displayName)
     }
 
-    // Readable URL that mirrors the floor plan: /m/lower/8 → Lower's table L-8.
-    // Two path segments, so it never collides with /m/{tableId} (one segment) or
-    // /m/{tableId}/bill (the literal "bill" beats the {number} param). Resolves
-    // (zone id + "{prefix}-{number}") → the live table, else a clear 404.
-    get("/m/{zone}/{number}") {
-        val zoneId = call.parameters["zone"]!!
-        val numberSeg = call.parameters["number"]!!
-        val tableId = numberSeg.toIntOrNull()?.let { n ->
-            transaction { tableIdForZoneNumber(zoneId, n) }
-        } ?: throw NotFoundException("no table $zoneId/$numberSeg", "table_not_found")
-        serveCustomerMenu(call, tableId, config.displayName)
-    }
-
-    // Running bill for the guest's phone. Unauthenticated like the menu — it
-    // exposes only what a printed provisional bill on that table would show.
-    get("/m/{tableId}/bill") {
-        val tableId = call.parameters["tableId"]!!
-        transaction {
-            DiningTables.selectAll()
-                .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
-                .firstOrNull()
-        } ?: throw NotFoundException("table $tableId not found")
+    // Running bill for the guest's phone. It exposes only what a printed
+    // provisional bill on that table would show.
+    get("/m/t/{token}/bill") {
+        val tableId = customerTable(call)
+            ?: throw NotFoundException("unknown table link", "table_link_invalid")
         call.respond(customerBill(checkService.openCheckForTable(tableId)))
     }
 
-    post("/tables/{tableId}/pending-lines") {
-        val tableId = call.parameters["tableId"]!!
+    post("/m/t/{token}/pending-lines") {
+        val tableId = customerTable(call)
+            ?: throw NotFoundException("unknown table link", "table_link_invalid")
         val req = call.receive<SubmitPendingRequest>()
         call.respond(HttpStatusCode.Created, checkService.submitPendingLines(tableId, req.lines))
     }
 
+    // Every other /m/... (the retired /m/{tableId}, /m/{zone}/{n} and
+    // /m/{tableId}/bill forms, a typo, an edited number) is a calm 404 page.
+    get("/m/{...}") { scanAtTable(call, config.displayName) }
+
     /**
      * Printable slips: A6 card per table — label, zone, QR, "scan to order" in
-     * FR+EN. Open at a copy shop, print, laminate (M5 setup).
+     * FR+EN. Opened in the tablet's browser with a short-lived slip ticket
+     * (they carry every table's link, so they are not public).
      */
     get("/tables/{tableId}/slip") {
+        SlipTickets.require(call)
         val tableId = call.parameters["tableId"]!!
         val slip = transaction {
             DiningTables.join(Zones, org.jetbrains.exposed.sql.JoinType.INNER,
                     DiningTables.zoneId, Zones.id)
                 .selectAll()
                 .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
-                .firstOrNull()?.let(::SlipData)
+                .firstOrNull()?.let { SlipData(it, config.publicBaseUrl) }
         } ?: throw NotFoundException("table $tableId not found")
         call.respondText(slipPage(listOf(slip), config.displayName), ContentType.Text.Html)
     }
 
     /** All tables on one printable page, page break per slip ("print all table slips"). */
     get("/slips") {
+        SlipTickets.require(call)
         val slips = transaction {
             DiningTables.join(Zones, org.jetbrains.exposed.sql.JoinType.INNER,
                     DiningTables.zoneId, Zones.id)
                 .selectAll().where { DiningTables.deletedAt.isNull() }
                 .orderBy(Zones.sortOrder).orderBy(DiningTables.sortOrder)
-                .map(::SlipData)
+                .map { SlipData(it, config.publicBaseUrl) }
         }
         call.respondText(slipPage(slips, config.displayName), ContentType.Text.Html)
     }
+}
 
-    /** Table QR slip: payload is the readable public menu URL. Staff print/laminate these (M5 setup). */
+/**
+ * Staff-side table link management (authenticated): the table QR PNG, the slip
+ * ticket for the printable pages, and rotating a table's customer link.
+ */
+fun Route.tableLinkRoutes(config: dev.dwhipstock.pos.sdk.CustomerConfig) {
+
+    /** Table QR: payload is the table's tokenised public menu URL. */
     get("/tables/{tableId}/qr") {
         val tableId = call.parameters["tableId"]!!
-        val path = transaction {
-            DiningTables.join(Zones, org.jetbrains.exposed.sql.JoinType.INNER,
-                    DiningTables.zoneId, Zones.id)
-                .selectAll()
-                .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
-                .firstOrNull()
-                ?.let { menuPathFor(it[DiningTables.zoneId], it[DiningTables.label], tableId) }
-        } ?: throw NotFoundException("table $tableId not found")
-        val url = "${config.publicBaseUrl}$path"
-        val matrix = com.google.zxing.MultiFormatWriter()
-            .encode(url, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512)
-        val png = dev.dwhipstock.pos.sdk.QrPng.encode(matrix)
-        call.respondBytes(png, ContentType.Image.PNG)
+        val url = transaction { liveTableToken(tableId) }
+            ?.let { config.publicBaseUrl + TableTokens.menuPath(it) }
+            ?: throw NotFoundException("table $tableId not found")
+        call.respondBytes(qrPng(url, 512), ContentType.Image.PNG)
     }
+
+    /** A short-lived ticket so the tablet's browser can open /slips and /tables/{id}/slip. */
+    post("/slips/ticket") {
+        call.sessionUser()
+        call.respond(SlipTickets.issue())
+    }
+
+    /**
+     * "Regenerate table link": a new random token, so every slip already
+     * printed for this table stops working. Manager-only; reprint the slip.
+     */
+    post("/tables/{tableId}/link/regenerate") {
+        requireManagerSession(call)
+        val tableId = call.parameters["tableId"]!!
+        val token = transaction {
+            liveTableToken(tableId) ?: throw NotFoundException("table $tableId not found")
+            val token = TableTokens.rotate(tableId)
+            // audit only the fact; the token itself never leaves the store
+            Outbox.write("table.link_regenerated", "table", tableId, buildJsonObject {
+                put("tableId", tableId)
+            })
+            token
+        }
+        call.respond(TableLinkDto(tableId, TableTokens.menuPath(token)))
+    }
+}
+
+@Serializable
+data class TableLinkDto(val tableId: String, val menuPath: String)
+
+@Serializable
+data class SlipTicketDto(val ticket: String, val expiresInSeconds: Long)
+
+/**
+ * Short-lived, reusable tickets for the printable slip pages, which the tablet
+ * opens in a browser that has no bearer token. In memory only: a restart just
+ * means tapping "Print slips" again.
+ */
+object SlipTickets {
+    private const val TTL_SECONDS = 600L
+    private val tickets = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    fun issue(): SlipTicketDto {
+        val now = System.currentTimeMillis()
+        tickets.entries.removeIf { it.value < now }
+        val ticket = TableTokens.newToken()
+        tickets[ticket] = now + TTL_SECONDS * 1000
+        return SlipTicketDto(ticket, TTL_SECONDS)
+    }
+
+    fun valid(ticket: String?): Boolean =
+        ticket != null && (tickets[ticket] ?: 0L) >= System.currentTimeMillis()
+
+    /** 401 unless the request carries a live `?ticket=`. */
+    fun require(call: io.ktor.server.application.ApplicationCall) {
+        if (!valid(call.request.queryParameters["ticket"])) throw SlipTicketException()
+    }
+}
+
+class SlipTicketException : RuntimeException("slip ticket required")
+
+/** The live table's token, or null if there is no such live table. Call in a transaction. */
+internal fun liveTableToken(tableId: String): String? =
+    DiningTables.selectAll()
+        .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
+        .firstOrNull()?.get(DiningTables.publicToken)
+
+/** Resolve `{token}` to a live table id, or null. */
+private fun customerTable(call: io.ktor.server.application.ApplicationCall): String? =
+    transaction { TableTokens.tableIdFor(call.parameters["token"] ?: "") }
+
+private fun qrPng(data: String, size: Int): ByteArray {
+    val matrix = com.google.zxing.MultiFormatWriter()
+        .encode(data, com.google.zxing.BarcodeFormat.QR_CODE, size, size)
+    return dev.dwhipstock.pos.sdk.QrPng.encode(matrix)
+}
+
+/**
+ * The page a guest sees for any link that isn't a live table token: an old or
+ * rotated slip, an edited number, a typed id. 404, but calm and bilingual.
+ */
+private suspend fun scanAtTable(call: io.ktor.server.application.ApplicationCall, venueName: String) {
+    call.respondText(scanAtTablePage(venueName), ContentType.Text.Html, HttpStatusCode.NotFound)
 }
 
 fun Route.shiftRoutes(shiftService: dev.dwhipstock.pos.restaurant.ShiftService, auth: dev.dwhipstock.pos.base.AuthService) {
@@ -400,6 +480,7 @@ fun Route.posRoutes(checkService: CheckService, auth: dev.dwhipstock.pos.base.Au
                         width = row[DiningTables.width], height = row[DiningTables.height],
                         rotation = row[DiningTables.rotation], shape = row[DiningTables.shape],
                         seats = row[DiningTables.seats],
+                        menuPath = row[DiningTables.publicToken]?.let(TableTokens::menuPath),
                     )
                 }
             val objectsByZone = FloorObjects.selectAll()
@@ -654,6 +735,33 @@ private fun zoneClosedMenuPage(tableLabel: String, venueName: String): String = 
 </body>
 </html>"""
 
+/** "Please scan the code at your table" — for any link that isn't a live table token. */
+private fun scanAtTablePage(venueName: String): String = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${venueName.escapeHtml()}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
+  body { background: #F3F7FC; color: #17263A; min-height: 100vh; display: flex;
+         align-items: center; justify-content: center; padding: 24px; }
+  .card { max-width: 420px; text-align: center; background: #FFFFFF; border: 1px solid #C8D5E6;
+          border-radius: 16px; padding: 36px 28px; box-shadow: 0 8px 30px rgba(32,78,128,.08); }
+  .venue { font-size: 13px; color: #1565C0; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+  .fr { font-size: 22px; font-weight: 700; line-height: 1.5; }
+  .en { font-size: 16px; color: #5B6D82; margin-top: 10px; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="venue">${venueName.escapeHtml()}</div>
+    <div class="fr">Veuillez scanner le code QR sur votre table.</div>
+    <div class="en">Please scan the QR code at your table.</div>
+  </div>
+</body>
+</html>"""
+
 /** Customer-safe projection of a CheckView; null check (no open check) → explicit empty state. */
 private fun customerBill(check: CheckView?): CustomerBillDto {
     if (check == null) return CustomerBillDto(open = false)
@@ -673,13 +781,12 @@ private fun customerBill(check: CheckView?): CustomerBillDto {
 }
 
 /**
- * Render the customer menu for a resolved internal table id — the single path
- * both /m/{tableId} and /m/{zone}/{number} funnel into. The page always keys its
- * own API calls (bill, pending) off the internal id injected here, so the URL
- * form the guest arrived by doesn't matter downstream.
+ * Render the customer menu for a table resolved from its [token]. The page keys
+ * its own API calls (bill, pending) off the same token; the internal table id
+ * never reaches the guest's phone.
  */
 private suspend fun serveCustomerMenu(
-    call: io.ktor.server.application.ApplicationCall, tableId: String, venueName: String,
+    call: io.ktor.server.application.ApplicationCall, tableId: String, token: String, venueName: String,
 ) {
     val row = transaction {
         DiningTables.join(Zones, org.jetbrains.exposed.sql.JoinType.INNER,
@@ -696,7 +803,7 @@ private suspend fun serveCustomerMenu(
         return
     }
     val html = dev.dwhipstock.pos.StoreAssets.readText("customer-menu.html")
-        .replace("{{TABLE_ID}}", tableId)
+        .replace("{{TABLE_TOKEN}}", token) // [A-Za-z0-9_-] only: safe in the page's JS string
         // label is a user-authored nameOverride; escape it (like zoneClosedMenuPage does for
         // the same value) so it can't inject markup/script into the customer menu page.
         .replace("{{TABLE_LABEL}}", label.escapeHtml())
@@ -704,40 +811,20 @@ private suspend fun serveCustomerMenu(
     call.respondText(html, ContentType.Text.Html)
 }
 
-/** Resolve (zone id + number) → the live table id via its "{prefix}-{number}" label; null if none. */
-private fun tableIdForZoneNumber(zoneId: String, number: Int): String? {
-    val zone = Zones.selectAll().where { Zones.id eq zoneId }.firstOrNull() ?: return null
-    val label = "${zone[Zones.labelPrefix]}-$number"
-    return DiningTables.selectAll().where {
-        (DiningTables.zoneId eq zoneId) and (DiningTables.label eq label) and
-            DiningTables.deletedAt.isNull()
-    }.firstOrNull()?.get(DiningTables.id)
-}
-
-/**
- * The menu path a table's QR should encode: the readable "/m/{zone}/{number}"
- * when the label carries a number, else the opaque "/m/{id}" fallback. The
- * number is the trailing digits of the label, mirroring [tableIdForZoneNumber].
- */
-internal fun menuPathFor(zoneId: String, label: String, tableId: String): String {
-    val n = Regex("(\\d+)$").find(label)?.groupValues?.get(1)
-    return if (n != null) "/m/$zoneId/$n" else "/m/$tableId"
-}
-
 private fun String.escapeHtml(): String =
     replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-/** One printable table slip: label + zone + QR. */
-private class SlipData(row: org.jetbrains.exposed.sql.ResultRow) {
-    val tableId: String = row[DiningTables.id]
+/** One printable table slip: label + zone + the QR of its tokenised menu URL. */
+private class SlipData(row: org.jetbrains.exposed.sql.ResultRow, publicBaseUrl: String) {
     val label: String = row[DiningTables.nameOverride] ?: row[DiningTables.label]
-    val zoneTh: String = row[Zones.nameFr]
+    val zoneFr: String = row[Zones.nameFr]
     val zoneEn: String = row[Zones.nameEn]
+    val menuUrl: String = publicBaseUrl + TableTokens.menuPath(row[DiningTables.publicToken]!!)
 }
 
 /**
- * A6 print layout, one slip per page. QR images come from /tables/{id}/qr
- * (relative src → same host), which embeds the resolved publicBaseUrl.
+ * A6 print layout, one slip per page. QR images are inline data URIs, so the
+ * page needs nothing else from the (authenticated) API.
  */
 private fun slipPage(slips: List<SlipData>, venueName: String): String {
     val venue = venueName.escapeHtml()
@@ -745,9 +832,9 @@ private fun slipPage(slips: List<SlipData>, venueName: String): String {
         """
         <div class="slip">
           <div class="venue">$venue</div>
-          <div class="label">${s.label}</div>
-          <div class="zone">${s.zoneTh} / ${s.zoneEn}</div>
-          <img class="qr" src="/tables/${s.tableId}/qr" alt="QR ${s.label}">
+          <div class="label">${s.label.escapeHtml()}</div>
+          <div class="zone">${s.zoneFr.escapeHtml()} / ${s.zoneEn.escapeHtml()}</div>
+          <img class="qr" src="data:image/png;base64,${java.util.Base64.getEncoder().encodeToString(qrPng(s.menuUrl, 512))}" alt="QR ${s.label.escapeHtml()}">
           <div class="cta">Scannez pour commander de la nourriture</div>
           <div class="cta-en">Scan to order</div>
         </div>"""

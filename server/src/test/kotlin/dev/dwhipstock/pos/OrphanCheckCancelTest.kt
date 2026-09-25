@@ -99,7 +99,7 @@ class OrphanCheckCancelTest {
         val c = loginClient()
 
         // customer scan-to-order auto-opens a qr-customer check with one pending line
-        val submitted = json.parseToJsonElement(client.postJson("/tables/t5-5/pending-lines",
+        val submitted = json.parseToJsonElement(client.postJson("${customerPath("t5-5")}/pending-lines",
             """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pitcher","qty":1}]}""").bodyAsText()).jsonObject
         val checkId = submitted["id"]!!.jsonPrimitive.int
         val pendingId = submitted["pendingLines"]!!.jsonArray.first()

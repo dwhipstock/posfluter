@@ -57,6 +57,14 @@ enum class MessageKey(val id: String) {
     CASH_OUT_HEADER("cash.out_header"),
     CASH_IN("cash.in"),
     CASH_OUT("cash.out"),
+    // guest Wi-Fi join slip, and the two-step table slip when Wi-Fi is set up
+    WIFI_FREE("wifi.free"),
+    WIFI_SCAN_TO_CONNECT("wifi.scan_to_connect"),
+    WIFI_NETWORK("wifi.network"),
+    WIFI_PASSWORD("wifi.password"),
+    WIFI_NO_PASSWORD("wifi.no_password"),
+    SLIP_STEP_JOIN_WIFI("slip.step_join_wifi"),
+    SLIP_STEP_SCAN_TO_ORDER("slip.step_scan_to_order"),
 }
 
 /**

@@ -5,6 +5,8 @@ import dev.dwhipstock.pos.api.authRoutes
 import dev.dwhipstock.pos.api.catalogRoutes
 import dev.dwhipstock.pos.api.cloudRoutes
 import dev.dwhipstock.pos.api.customerRoutes
+import dev.dwhipstock.pos.api.tableLinkRoutes
+import dev.dwhipstock.pos.api.SlipTicketException
 import dev.dwhipstock.pos.api.portalUrlFrom
 import dev.dwhipstock.pos.api.installAuthGate
 import dev.dwhipstock.pos.api.pairingRoutes
@@ -101,6 +103,9 @@ fun Application.module(
         // changed on first sign-in
         CopperLanternSeed.seedBootstrapManagerIfNoStaff()
     }
+    // every table must have its customer link token (033); covers any row a
+    // raw-SQL path wrote without one
+    org.jetbrains.exposed.sql.transactions.transaction { dev.dwhipstock.pos.restaurant.TableTokens.ensureAll() }
     // pre-M5 databases carry plaintext PINs — hash them in place, once
     AuthService.upgradePlaintextPins()
     // seed the default role→grant matrix (CONTRACT §7) if absent — covers existing
@@ -135,7 +140,7 @@ fun Application.module(
         },
     )
     log.info("Store: ${venue.displayName} (POS_VENUE=${venue.id})")
-    log.info("Customers scan: $publicBaseUrl/m/{zone}/{n} (e.g. /m/lower/8; /m/{tableId} still works)  — table slips: $publicBaseUrl/slips")
+    log.info("Customers scan: $publicBaseUrl/m/t/{token} (a random link per table, on its QR slip; a manager can regenerate it)  — print slips from the tablet")
     val checkService = CheckService(config)
     val shiftService = ShiftService(config)
     val authService = AuthService(settingsRepo, staffAppMfaRequired)
@@ -198,6 +203,10 @@ fun Application.module(
             call.respond(HttpStatusCode.BadRequest,
                 mapOf("error" to (cause.message ?: "bad request"), "code" to cause.code))
         }
+        exception<SlipTicketException> { call, _ ->
+            call.respond(HttpStatusCode.Unauthorized,
+                mapOf("error" to "open the slips from the tablet", "code" to "slip_ticket_required"))
+        }
         exception<ManagerApprovalException> { call, cause ->
             call.respond(HttpStatusCode.Forbidden,
                 mapOf("error" to (cause.message ?: "manager approval required"),
@@ -244,6 +253,7 @@ fun Application.module(
             call.respondText(staffAppHtml, ContentType.Text.Html)
         }
         customerRoutes(checkService, config)
+        tableLinkRoutes(config)
         authRoutes(authService)
         staffAdminRoutes(authService)
         pairingRoutes(pairingService)
@@ -255,7 +265,7 @@ fun Application.module(
         photoRoutes(photoStore, authService)
         shiftRoutes(shiftService, authService)
         settingsRoutes(settingsRepo)
-        printerRoutes(thermalPrinter, config)
+        printerRoutes(thermalPrinter, config, settingsRepo)
         // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in
         // production, where Caddy fronts the sync API and the Next.js portal on one
         // host — so the derived scheme://host is correct. On a SPLIT deployment

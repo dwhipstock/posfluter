@@ -26,8 +26,9 @@ class AuthTest {
 
         // customer-facing stays open
         assertEquals(HttpStatusCode.OK, client.get("/items").status)
-        assertEquals(HttpStatusCode.OK, client.get("/m/t5").status)
-        assertEquals(HttpStatusCode.OK, client.get("/tables/t5/qr").status)
+        assertEquals(HttpStatusCode.OK, client.get(customerPath("t5")).status)
+        // the table QR carries the table's link, so it is staff-only now
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/tables/t5/qr").status)
 
         // wrong PIN
         assertEquals(HttpStatusCode.Unauthorized, client.post("/login") {

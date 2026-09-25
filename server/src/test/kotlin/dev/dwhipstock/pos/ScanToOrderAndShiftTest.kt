@@ -26,18 +26,19 @@ class ScanToOrderAndShiftTest {
     @Test
     fun customerMenuServesHtmlAndQrServesPng() = testApplication {
         application { module(dbPath = tempDb()) }
-        val page = client.get("/m/t5-5")
+        val page = client.get(customerPath("t5-5"))
         assertEquals(HttpStatusCode.OK, page.status)
         val html = page.bodyAsText()
         assertTrue("Commande depuis un téléphone portable" in html)
-        assertTrue("5-5" in html)
+        assertTrue("U-2" in html) // label shown; the internal id "t5-5" is not
+        assertTrue("\"t5-5\"" !in html)
         assertTrue("--accent: #1565c0" in html)
         assertTrue("const cad =" in html)
         assertTrue("const CAD =" !in html)
 
         assertEquals(HttpStatusCode.NotFound, client.get("/m/no-such-table").status)
 
-        val qr = client.get("/tables/t5-5/qr")
+        val qr = loginClient().get("/tables/t5-5/qr")
         assertEquals(HttpStatusCode.OK, qr.status)
         assertEquals(ContentType.Image.PNG, qr.contentType())
         assertTrue(qr.readRawBytes().size > 100)
@@ -57,7 +58,7 @@ class ScanToOrderAndShiftTest {
             c.postJson("/shifts", """{"openingFloatCents":0,"managerPin":"1234"}""").status)
 
         // b. customer submits 2 items via QR — check auto-opens, nothing on the bill yet
-        val submitted = client.postJson("/tables/t5-5/pending-lines",
+        val submitted = client.postJson("${customerPath("t5-5")}/pending-lines",
             """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pitcher","qty":1},
                          {"itemId":"late-fries","variantId":"late-fries:regular","qty":1,"note":"plus léger aussi"}]}""")
         assertEquals(HttpStatusCode.Created, submitted.status)

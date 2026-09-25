@@ -27,7 +27,7 @@ class CustomerBillTest {
         post(path) { contentType(ContentType.Application.Json); setBody(body) }
 
     private suspend fun ApplicationTestBuilder.bill(tableId: String) =
-        json.parseToJsonElement(client.get("/m/$tableId/bill").bodyAsText()).jsonObject
+        json.parseToJsonElement(client.get("${customerPath(tableId)}/bill").bodyAsText()).jsonObject
 
     /**
      * The hard rule: the bill is strictly the table's CURRENT open check. No
@@ -69,7 +69,7 @@ class CustomerBillTest {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
 
-        client.postJson("/tables/t6/pending-lines",
+        client.postJson("${customerPath("t6")}/pending-lines",
             """{"lines":[{"itemId":"amber-ale","variantId":"amber-ale:pint","qty":2,"note":"Cool."}]}""")
 
         val pendingBill = bill("t6")

@@ -1,6 +1,8 @@
 package dev.dwhipstock.pos.base
 
+import dev.dwhipstock.pos.sdk.GuestWifi
 import dev.dwhipstock.pos.sdk.Outbox
+import dev.dwhipstock.pos.sdk.WifiSecurity
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -36,6 +38,10 @@ class SettingsRepository {
                 pendingAlertVolume = it[VenueSettings.pendingAlertVolume],
                 printerIp = it[VenueSettings.printerIp],
                 printerPort = it[VenueSettings.printerPort],
+                wifiSsid = it[VenueSettings.wifiSsid],
+                wifiPassword = it[VenueSettings.wifiPassword],
+                wifiSecurity = it[VenueSettings.wifiSecurity],
+                wifiHidden = it[VenueSettings.wifiHidden] != 0,
             )
         }
     }.also { cache = it }
@@ -63,6 +69,15 @@ class SettingsRepository {
             pendingAlertVolume = merge(patch.pendingAlertVolume, before.pendingAlertVolume, "pendingAlertVolume"),
             printerIp = merge(patch.printerIp?.trim(), before.printerIp, "printerIp"),
             printerPort = merge(patch.printerPort, before.printerPort, "printerPort"),
+            wifiSsid = merge(patch.wifiSsid?.trim(), before.wifiSsid, "wifiSsid"),
+            // not trimmed: leading/trailing spaces are legal in a Wi-Fi passphrase
+            wifiPassword = merge(patch.wifiPassword, before.wifiPassword, "wifiPassword"),
+            wifiSecurity = merge(
+                patch.wifiSecurity?.let {
+                    requireNotNull(WifiSecurity.normalize(it)) { "Wi-Fi security must be WPA, WEP or nopass" }
+                },
+                before.wifiSecurity, "wifiSecurity"),
+            wifiHidden = merge(patch.wifiHidden, before.wifiHidden, "wifiHidden"),
         )
         require(next.serviceChargePercent in 0..30) { "service charge must be 0–30%" }
         require(next.corkagePerBottleCents in 0..10_000_00L) { "corkage out of range (max $10,000/bottle)" }
@@ -78,6 +93,7 @@ class SettingsRepository {
             "printer IP must be a hostname or IPv4 address"
         }
         require(next.printerPort in 1..65535) { "printer port must be 1–65535" }
+        validateWifi(next)
 
         if (changed.isNotEmpty()) {
             VenueSettings.update({ VenueSettings.id eq 1 }) {
@@ -96,13 +112,38 @@ class SettingsRepository {
                 it[pendingAlertVolume] = next.pendingAlertVolume
                 it[printerIp] = next.printerIp
                 it[printerPort] = next.printerPort
+                it[wifiSsid] = next.wifiSsid
+                it[wifiPassword] = next.wifiPassword
+                it[wifiSecurity] = next.wifiSecurity
+                it[wifiHidden] = if (next.wifiHidden) 1 else 0
             }
+            // Key NAMES only, never values: the guest Wi-Fi password (like every
+            // other setting value) stays on the store and is never synced.
             Outbox.write("settings.updated", "settings", "venue", buildJsonObject {
                 put("changedKeys", changed.joinToString(","))
             })
             cache = next
         }
         next
+    }
+
+    /** The guest Wi-Fi for join slips, or null while it isn't set up. */
+    fun guestWifi(): GuestWifi? = get().let {
+        GuestWifi(it.wifiSsid, it.wifiPassword, it.wifiSecurity, it.wifiHidden)
+    }.takeIf { it.configured }
+
+    private fun validateWifi(s: Settings) {
+        fun printable(v: String) = v.none { it.isISOControl() }
+        require(s.wifiSsid.toByteArray(Charsets.UTF_8).size <= 32) { "Wi-Fi network name must be at most 32 bytes" }
+        require(s.wifiPassword.length <= 63) { "Wi-Fi password must be at most 63 characters" }
+        require(printable(s.wifiSsid) && printable(s.wifiPassword)) {
+            "Wi-Fi name and password can't contain control characters"
+        }
+        if (s.wifiSsid.isEmpty()) return // not configured: nothing else to check
+        when (s.wifiSecurity) {
+            WifiSecurity.WPA -> require(s.wifiPassword.length in 8..63) { "a WPA Wi-Fi password must be 8–63 characters" }
+            WifiSecurity.WEP -> require(s.wifiPassword.isNotEmpty()) { "a WEP Wi-Fi network needs a password" }
+        }
     }
 }
 
@@ -130,6 +171,17 @@ data class Settings(
     val printerIp: String,
     /** Printer raw-TCP port (JetDirect/RAW convention: 9100). */
     val printerPort: Int,
+    /** Guest Wi-Fi network name for the join-QR slips. Empty = not configured. */
+    val wifiSsid: String,
+    /**
+     * Guest Wi-Fi password. Only a manager's POS session reads it back (see
+     * api/Settings.kt); it is never written to the outbox or synced.
+     */
+    val wifiPassword: String,
+    /** WPA (default), WEP or nopass: the join QR's "T" value. */
+    val wifiSecurity: String,
+    /** Hidden (non-broadcast) network: adds H:true to the join QR. */
+    val wifiHidden: Boolean,
 )
 
 /** PATCH /settings body — every field optional. */
@@ -150,4 +202,8 @@ data class SettingsPatch(
     val pendingAlertVolume: Int? = null,
     val printerIp: String? = null,
     val printerPort: Int? = null,
+    val wifiSsid: String? = null,
+    val wifiPassword: String? = null,
+    val wifiSecurity: String? = null,
+    val wifiHidden: Boolean? = null,
 )

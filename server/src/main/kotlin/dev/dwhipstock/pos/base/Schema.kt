@@ -122,6 +122,12 @@ object VenueSettings : Table("venue_settings") {
     // IANA zone (030): seeded from VENUE_TZ once, then authoritative for display,
     // business days and reports. Timestamps themselves are UTC instants.
     val timezone = varchar("timezone", 64).default("")
+    // Guest Wi-Fi (032) for the join-QR slips. Empty ssid = not configured. The
+    // password never leaves the store (not in the outbox, not to the staff app).
+    val wifiSsid = varchar("wifi_ssid", 32).default("")
+    val wifiPassword = varchar("wifi_password", 63).default("")
+    val wifiSecurity = varchar("wifi_security", 8).default("WPA") // WPA | WEP | nopass
+    val wifiHidden = integer("wifi_hidden").default(0) // 0|1
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -139,7 +145,14 @@ object Sessions : Table("sessions") {
     val expiresAt = utcTimestamp("expires_at").nullable() // absolute; null = legacy row → createdAt+12h
     val lastUsedAt = utcTimestamp("last_used_at").nullable() // sliding; refreshed per authenticated call
     val deviceId = varchar("device_id", 36).nullable() // paired terminal that minted it (027); null = staff-app phone
+    val surface = varchar("surface", 16).default(SessionSurface.POS) // 032: pos | staff_app
     override val primaryKey = PrimaryKey(token)
+}
+
+/** Which client minted a session (032). On-prem both can be device-unbound. */
+object SessionSurface {
+    const val POS = "pos"
+    const val STAFF_APP = "staff_app"
 }
 
 /**

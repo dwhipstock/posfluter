@@ -157,7 +157,7 @@
 </div>
 
 <script>
-const TABLE_ID = "{{TABLE_ID}}";
+const TABLE_TOKEN = "{{TABLE_TOKEN}}";
 const TABLE_LABEL = "{{TABLE_LABEL}}";
 
 // Two locales end-to-end: fr (default) + en, persisted per phone.
@@ -349,7 +349,7 @@ function add(itemId) {
 }
 
 document.getElementById("submit").onclick = async () => {
-  const res = await fetch(`/tables/${TABLE_ID}/pending-lines`, {
+  const res = await fetch(`/m/t/${TABLE_TOKEN}/pending-lines`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ lines: basket.map(b => ({ itemId: b.itemId, variantId: b.variantId, qty: b.qty, note: b.note })) }),
   });
@@ -373,7 +373,7 @@ function reset() {
 }
 
 // --- "Your bill" view: read-only mirror of the table's open check. All money
-// comes from the server (/m/{tableId}/bill) — this script never sums cents.
+// comes from the server (/m/t/{token}/bill) — this script never sums cents.
 let bill;            // undefined until the first successful fetch
 let billTimer = null;
 
@@ -396,7 +396,7 @@ function showTab(v) {
 
 async function fetchBill() {
   try {
-    const res = await fetch(`/m/${TABLE_ID}/bill`);
+    const res = await fetch(`/m/t/${TABLE_TOKEN}/bill`);
     if (!res.ok) return; // keep the last known bill; next poll retries
     bill = await res.json();
   } catch (_) { return; }

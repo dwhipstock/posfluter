@@ -69,8 +69,8 @@ val PairedDeviceKey = AttributeKey<DeviceRegistry.PairedDevice>("pairedDevice")
 
 /**
  * Bearer-token gate for the staff API. Customer-facing routes stay open on
- * purpose: the menu page, catalog read, pending-line submit, and table QR all
- * run on guests' phones.
+ * purpose: the menu page, bill and pending-line submit under /m/t/{token}, and
+ * the catalog read all run on guests' phones.
  *
  * M8 device layer, active when [requireDeviceToken] (cloud-hosted venues): the
  * TERMINAL surface additionally needs a paired-device token (X-Device-Token).
@@ -169,10 +169,9 @@ private fun isOpenRoute(path: String, method: HttpMethod): Boolean =
         (method == HttpMethod.Get && path == "/categories") ||
         (method == HttpMethod.Get && path == "/staff") ||
         (method == HttpMethod.Get && path.matches(Regex("/photos/[^/]+"))) ||
-        (method == HttpMethod.Get && path.matches(Regex("/tables/[^/]+/qr"))) ||
+        // printable slip pages: opened in a browser with a short-lived ?ticket= (checked in the route)
         (method == HttpMethod.Get && path.matches(Regex("/tables/[^/]+/slip"))) ||
-        (method == HttpMethod.Get && path == "/slips") ||
-        (method == HttpMethod.Post && path.matches(Regex("/tables/[^/]+/pending-lines")))
+        (method == HttpMethod.Get && path == "/slips")
 
 fun Route.authRoutes(auth: AuthService) {
     /** Open: the login screen shows staff tiles ("who's clocking in?"). Names only, no PINs. */
