@@ -2,6 +2,7 @@ package dev.dwhipstock.pos
 
 import dev.dwhipstock.pos.base.DeviceRegistry
 import dev.dwhipstock.pos.sync.ChangesPage
+import dev.dwhipstock.pos.sync.CloudCapabilities
 import dev.dwhipstock.pos.sync.CloudTransport
 import dev.dwhipstock.pos.sync.PushEvent
 import dev.dwhipstock.pos.sync.PushResult
@@ -32,6 +33,7 @@ class DevicePairingTest {
     /** Claims succeed for [validCodes]; everything else is the cloud's bad_pairing_code refusal. */
     private class FakeTransport(private val validCodes: MutableSet<String>) : CloudTransport {
         override fun push(installId: String, events: List<PushEvent>) = PushResult(true)
+        override fun capabilities() = CloudCapabilities(2, CloudCapabilities.INSTANT)
         override fun fetchRevocations(since: Long) = ChangesPage(since, emptyList())
         override fun pushPhoto(itemId: String, bytes: ByteArray, contentType: String) = PushResult(true)
         // detail carries the cloud's machine code, matching HttpCloudTransport.claimPairing

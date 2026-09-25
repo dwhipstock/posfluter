@@ -117,6 +117,17 @@ class MultiVenueAndPairingTest {
     }
 
     @Test
+    fun capabilitiesAdvertiseInstantTimestampsToAKeyedStoreOnly() = testApplication {
+        application { module(TestSupport.config) }
+        val res = client.get("/v1/store/capabilities") { header(HttpHeaders.Authorization, "Bearer $keyA") }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val body = testJson.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals("instant", body["timestampFormat"]!!.jsonPrimitive.content)
+        assertEquals("2", body["contractVersion"]!!.jsonPrimitive.content)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/v1/store/capabilities").status)
+    }
+
+    @Test
     fun venueOutsideTheTenantIs404() = testApplication {
         application { module(TestSupport.config) }
         val foreign = client.get("/v1/staff?venue=nope") { header(HttpHeaders.Cookie, cookie()) }

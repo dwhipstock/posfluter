@@ -11,6 +11,7 @@ import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.sync.ChangesPage
 import dev.dwhipstock.pos.sync.CloudChange
 import dev.dwhipstock.pos.sync.CloudSync
+import dev.dwhipstock.pos.sync.CloudCapabilities
 import dev.dwhipstock.pos.sync.CloudTransport
 import dev.dwhipstock.pos.sync.PushEvent
 import dev.dwhipstock.pos.sync.PushResult
@@ -33,6 +34,15 @@ class FakeTransport : CloudTransport {
     val photoUploads = mutableListOf<String>()
     var failPushes = false
     val pages = mutableMapOf<Long, ChangesPage>()
+    var caps: CloudCapabilities = CloudCapabilities(2, CloudCapabilities.INSTANT)
+    var capabilityCalls = 0
+    val heartbeats = mutableListOf<List<DeviceRegistry.DeviceSummary>>()
+
+    override fun capabilities(): CloudCapabilities { capabilityCalls++; return caps }
+
+    override fun heartbeat(
+        installId: String, lanBaseUrl: String, devices: List<DeviceRegistry.DeviceSummary>,
+    ): PushResult { heartbeats += devices; return PushResult(true) }
 
     override fun push(installId: String, events: List<PushEvent>): PushResult {
         if (failPushes) return PushResult(false, "simulated outage")
@@ -255,5 +265,55 @@ class CloudSyncTest {
 
         sync.drainOnce()
         assertEquals(1, t.batches.flatten().count { it.eventType == "staff.snapshot" })
+    }
+
+    @Test
+    fun anOldCloudGetsNoInstantsUntilItConfirmsThemAndNothingIsDropped() {
+        freshDb()
+        seedEvent("check.closed", "1")
+        DeviceRegistry.pair("Bar tablet")
+        val t = FakeTransport()
+        t.caps = CloudCapabilities.LEGACY // cloud predates the handshake (404)
+        val sync = CloudSync(t, InMemoryPhotoStore(), lanBaseUrl = { "http://192.168.1.2:8080" })
+
+        sync.tick()
+        sync.tick()
+        // held: nothing pushed, the HWM untouched, the device registry not mirrored
+        assertTrue(t.batches.isEmpty())
+        assertEquals(null, state(CloudSync.PUSH_HWM))
+        assertEquals(2, t.heartbeats.size)
+        assertTrue(t.heartbeats.all { it.isEmpty() })
+        // one handshake per tick while unconfirmed
+        assertEquals(2, t.capabilityCalls)
+
+        // the cloud is upgraded: the held outbox drains in full on the next tick
+        t.caps = CloudCapabilities(2, CloudCapabilities.INSTANT)
+        sync.tick()
+        val pushed = t.batches.flatten().map { it.eventType }
+        assertTrue("check.closed" in pushed && "catalog.snapshot" in pushed)
+        assertEquals(t.batches.flatten().last().seq.toString(), state(CloudSync.PUSH_HWM))
+        assertEquals(1, t.heartbeats.last().size)
+        // confirmed once per process — no further handshakes
+        sync.tick()
+        assertEquals(3, t.capabilityCalls)
+    }
+
+    @Test
+    fun aFailedHandshakeHoldsPushesAndRetriesNextTick() {
+        freshDb()
+        seedEvent("check.closed", "1")
+        var offline = true
+        val t = object : CloudTransport by FakeTransport() {
+            val inner = FakeTransport()
+            override fun capabilities(): CloudCapabilities =
+                if (offline) throw java.io.IOException("no route to host") else inner.caps
+            override fun push(installId: String, events: List<PushEvent>) = inner.push(installId, events)
+        }
+        val sync = CloudSync(t, InMemoryPhotoStore())
+        sync.tick()
+        assertTrue(t.inner.batches.isEmpty())
+        offline = false
+        sync.tick()
+        assertTrue(t.inner.batches.flatten().any { it.eventType == "check.closed" })
     }
 }

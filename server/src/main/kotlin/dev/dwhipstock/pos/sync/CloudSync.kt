@@ -74,9 +74,41 @@ class CloudSync(
     }
 
     fun tick() {
+        val capable = checkCapabilities()
         heartbeatOnce()
-        drainOnce()
+        drainOnce(capable)
         pullOnce()
+    }
+
+    /**
+     * Capability handshake (CONTRACT §0). Every timestamp this store sends is an
+     * offset-carrying instant; a cloud that predates contract v2 would misread
+     * them (and fall back to "now"), so nothing timestamped leaves the store
+     * until the cloud says it understands instants. The outbox simply holds —
+     * nothing is dropped, and selling is never affected. Confirmed once per
+     * process; an unconfirmed cloud is asked again every tick.
+     */
+    @Volatile private var instantsConfirmed = false
+    private var holdLogged = false
+
+    fun checkCapabilities(): Boolean {
+        if (instantsConfirmed) return true
+        val caps = runCatching { transport.capabilities() }
+            .getOrElse { log.warn("cloud capabilities check failed (${it.message}); retries next tick"); return false }
+        if (caps.understandsInstants) {
+            instantsConfirmed = true
+            if (holdLogged) log.info("cloud now accepts instant timestamps (contract v${caps.contractVersion}); " +
+                "resuming held pushes")
+            holdLogged = false
+            return true
+        }
+        if (!holdLogged) {
+            log.warn("cloud speaks contract v${caps.contractVersion} (timestamps '${caps.timestampFormat}') and " +
+                "would misread this store's instant timestamps — holding outbox pushes until the cloud " +
+                "is upgraded. Nothing is dropped; selling is unaffected.")
+            holdLogged = true
+        }
+        return false
     }
 
     /**
@@ -93,10 +125,13 @@ class CloudSync(
         // every device row every 10s tick for nothing. last_seen moves at most once
         // per minute (touch throttle), so an active device still refreshes ~1/min.
         val digest = devices.joinToString("|") { "${it.id},${it.name},${it.revoked},${it.lastSeenAt}" }
-        val toSend = if (digest == lastDeviceDigest) emptyList() else devices
+        // device timestamps are instants too: an unconfirmed cloud only gets the
+        // LAN URL, and the registry follows once the handshake succeeds
+        val confirmed = instantsConfirmed
+        val toSend = if (!confirmed || digest == lastDeviceDigest) emptyList() else devices
         val result = runCatching { transport.heartbeat(installId(), url, toSend) }
             .getOrElse { PushResult(false, it.message ?: "transport error") }
-        if (result.ok) lastDeviceDigest = digest // only mark clean on a delivered beat
+        if (result.ok) { if (confirmed) lastDeviceDigest = digest } // only mark clean on a delivered registry
         else log.warn("heartbeat failed (${result.detail}); retries next tick")
     }
 
@@ -107,10 +142,11 @@ class CloudSync(
      * batches ordered by seq until the outbox is drained or a push fails.
      * The HWM only advances on a 200; failed batches simply retry next tick.
      */
-    fun drainOnce() {
+    fun drainOnce(capable: Boolean = checkCapabilities()) {
         ensureCatalogSnapshot()
         ensureStaffSnapshot()
         ensureReportBackfill()
+        if (!capable) return // held, not dropped: the HWM stays put
         while (true) {
             val hwm = stateLong(PUSH_HWM) ?: 0L
             val batch = transaction {

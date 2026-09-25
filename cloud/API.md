@@ -143,7 +143,7 @@ displays what the stores pushed up; there are no menu write endpoints.
 
 ## Store-facing (Bearer store API key — never session)
 
-Documented in CONTRACT.md: `POST /v1/ingest`, `POST /v1/ingest/photos/{itemId}`,
+Documented in CONTRACT.md: `GET /v1/store/capabilities` (handshake), `POST /v1/ingest`, `POST /v1/ingest/photos/{itemId}`,
 `GET /v1/store/revocations?since=N` (device revocations only), `POST /v1/store/heartbeat`,
 `POST /v1/store/pairing/claim`.
 

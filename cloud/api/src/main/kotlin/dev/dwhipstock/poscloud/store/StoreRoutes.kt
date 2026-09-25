@@ -128,6 +128,17 @@ data class HeartbeatRequest(
 @Serializable
 data class StaffEndpointResponse(val base: String, val seenAt: String)
 
+/** Contract capabilities a store checks before it pushes (CONTRACT §0). */
+@Serializable
+data class CapabilitiesResponse(
+    val contractVersion: Int = CONTRACT_VERSION,
+    val timestampFormat: String = "instant",
+    val revocationsPath: String = "/v1/store/revocations",
+)
+
+/** The store ⇄ cloud contract version this API speaks (cloud/CONTRACT.md). */
+const val CONTRACT_VERSION = 2
+
 @Serializable
 data class ChangeDto(val version: Long, val kind: String, val op: String, val data: JsonElement)
 
@@ -138,6 +149,16 @@ data class ChangesResponse(val cursor: Long, val changes: List<ChangeDto>)
 // config.publicBaseDomain, and a CloudConfig() default would silently read it
 // from the process env of whatever machine a call site ran on.
 fun Route.storeRoutes(config: CloudConfig) {
+
+    /**
+     * Capability handshake (CONTRACT §0): a v2 store holds its outbox until this
+     * says the cloud reads offset-carrying instants. A cloud without this route
+     * (404) is treated as v1 and gets no pushes until it is upgraded.
+     */
+    get("/store/capabilities") {
+        requireStore(call)
+        call.respond(CapabilitiesResponse())
+    }
 
     /**
      * At-least-once idempotent ingest (CONTRACT §1): one transaction per batch,

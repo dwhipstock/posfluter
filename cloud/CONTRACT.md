@@ -40,6 +40,29 @@ Hard rules this contract encodes:
 Contract version: **2** (v1 → v2: zone-less venue-local timestamps became
 offset-carrying instants; sync became one-way).
 
+## 0. Capability handshake (before any push)
+
+`GET {CLOUD_SYNC_URL}/v1/store/capabilities` — `Authorization: Bearer {key}`
+
+```json
+{ "contractVersion": 2, "timestampFormat": "instant",
+  "revocationsPath": "/v1/store/revocations" }
+```
+
+A v2 store sends instants a v1 cloud cannot read (it parsed zone-less
+local times and fell back to "now" on anything else), so the store asks first:
+- `timestampFormat: "instant"` → confirmed for the life of the process; the
+  outbox drains normally.
+- `404` (a cloud that predates this route) or any other `timestampFormat` →
+  the store **holds** its outbox: nothing is pushed, nothing is dropped, the
+  HWM does not move, and heartbeats carry the LAN URL but no device registry
+  (its timestamps are instants too). It logs the hold once and asks again every
+  tick; the first confirmed tick drains everything held.
+- A transport error → same as not confirmed, retried next tick.
+
+Selling, logins and startup never wait on the handshake. The revocation pull
+(§4) is independent of it.
+
 ## 1. Event push (store → cloud)
 
 `POST {CLOUD_SYNC_URL}/v1/ingest`
@@ -224,6 +247,10 @@ The same store loop polls:
 - The feed carries **only** `device_revocation`. A store ignores any other
   `kind` it might meet. The legacy path `/v1/store/catalog/changes` serves the
   same revocation-only feed for tablets not yet updated.
+- Against an older cloud that answers `404` on `/v1/store/revocations`, the
+  store falls back to `/v1/store/catalog/changes` (same cursor, same shape; the
+  catalog/staff rows an older cloud serves there are ignored) and stays on it
+  until a handshake (§0) confirms a current cloud.
 - A failed pull is logged and retried next tick; it never blocks anything.
 
 There is no catalog, photo, staff or grant download any more: the portal is
