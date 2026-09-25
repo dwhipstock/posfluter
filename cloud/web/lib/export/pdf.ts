@@ -9,13 +9,13 @@ import type {
 } from "pdfmake/interfaces";
 import type { Cell, ExportDoc, Kpi, Section } from "./doc";
 
-const INK = "#17263A";
-const ACCENT = "#1565C0";
-const MUTED = "#5B6D82";
-const FAINT = "#8292A5";
-const HEADER_FILL = "#E7EFF9";
-const LINE = "#C8D5E6";
-const RULE = "#C8D5E6";
+const INK = "#1C2733";
+const ACCENT = "#17456E"; // logo navy (lib/theme.ts)
+const MUTED = "#62574B";
+const FAINT = "#6F6456";
+const HEADER_FILL = "#EFE6D6";
+const LINE = "#DCCFB9";
+const RULE = "#DCCFB9";
 const CONTENT_WIDTH = 515; // A4 (595pt) minus 40pt margins each side
 
 function CADStr(cents: number): string {
@@ -115,7 +115,7 @@ export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
     { text: doc.venue || " ", style: "venue" },
     {
       columns: [
-        { text: doc.reportTitle, style: "reportTitle" },
+        { text: `${doc.reportTitle} · ${doc.scopeLabel}`, style: "reportTitle" },
         { text: doc.rangeLabel, style: "rangeLabel", alignment: "right" },
       ],
       columnGap: 12,
@@ -139,7 +139,7 @@ export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
     pageSize: "A4",
     pageMargins: [40, 44, 40, 52],
     defaultStyle: { font: "Roboto", fontSize: 9, color: INK, lineHeight: 1.15 },
-    info: { title: `${doc.reportTitle} — ${doc.rangeLabel}` },
+    info: { title: `${doc.reportTitle} · ${doc.scopeLabel} — ${doc.rangeLabel}` },
     footer: (currentPage, pageCount) => ({
       margin: [40, 8, 40, 0],
       columns: [

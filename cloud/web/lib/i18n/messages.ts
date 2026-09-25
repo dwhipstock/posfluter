@@ -476,6 +476,34 @@ export const messages = {
   perm_zone_open_close: m("Zone d'ouverture-fermeture", "Open / close a zone"),
   perm_edit_menu: m("Menu Modifier (86)", "Edit menu (86)"),
   perm_manage_staff: m("Gérer les employés", "Manage staff"),
+
+  // ── scope: one store or all stores (every page, every export) ──────────
+  scope_single: m("Magasin : {store}", "Store: {store}"),
+  scope_all_n: m("Tous les magasins ({n})", "All stores ({n})"),
+  scope_show_all: m("Afficher tous les magasins", "Show all stores"),
+  export_csv: m("CSV", "CSV"),
+  store_sales_title: m("Ventes par magasin", "Sales by store"),
+  chart_per_store_gross: m("Ventes totales, une courbe par magasin", "Gross, one line per store"),
+  chart_per_store_stacked: m("Empilé par magasin", "Stacked by store"),
+  dash_today_by_store: m("Aujourd’hui, par magasin", "Today, by store"),
+  dash_combined_today: m("Tous les magasins, aujourd’hui", "All stores, today"),
+  dash_combined_range: m("Tous les magasins · {range}", "All stores · {range}"),
+  dash_online_n: m("{n} sur {total} en ligne", "{n} of {total} online"),
+  items_by_store: m("Articles par magasin", "Items by store"),
+  payments_by_store: m("Paiements par magasin", "Payments by store"),
+  refunds_by_store: m("Remboursements par magasin", "Refunds by store"),
+  cash_by_store: m("Mouvements de caisse par magasin", "Cash in / out by store"),
+  cash_movements_n: m("Mouvements", "Movements"),
+  exc_by_store: m("Annulations par magasin", "Voids by store"),
+  shifts_by_store: m("Quarts par magasin", "Shifts by store"),
+  shifts_n: m("Quarts", "Shifts"),
+  journal_closed_n: m("Factures fermées", "Closed checks"),
+  journal_by_store_sub: m(
+    "Toutes les factures de la période et de la recherche, pas seulement cette page",
+    "Every check in the range and search, not just this page"
+  ),
+  tax_of_store: m("Taxe · {store}", "Tax · {store}"),
+  staff_count_n: m("{n} employés", "{n} staff"),
 } as const;
 
 export type MsgKey = keyof typeof messages;

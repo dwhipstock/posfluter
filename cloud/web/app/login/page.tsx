@@ -125,17 +125,23 @@ export default function LoginPage() {
   }, [code]);
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-paper px-4 py-10">
-      <div className="w-full max-w-sm">
-        <div className="mb-2 flex justify-end">
-          <LangToggle />
-        </div>
-        <div className="mb-8 flex flex-col items-center">
+    <div className="relative min-h-dvh bg-paper">
+      {/* the tablet's navy header band, with the lantern badge on it */}
+      <div className="absolute inset-x-0 top-0 h-[22rem] bg-navy" aria-hidden>
+        <div className="absolute inset-x-0 bottom-0 h-1 bg-copper" />
+      </div>
+      <div className="absolute right-4 top-4 z-10">
+        <LangToggle tone="dark" />
+      </div>
+      <div className="relative mx-auto flex w-full max-w-sm flex-col px-4 pb-10 pt-10">
+        <div className="mb-6 flex flex-col items-center text-center">
           <BrandMark large />
-          <p className="mt-3 text-sm text-neutral-500">{t("brand_tagline")}</p>
+          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-navy-muted">
+            {t("brand_tagline")}
+          </p>
         </div>
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="rounded-xl border border-neutral-200 bg-surface p-6 shadow-raised">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={stage.step}
@@ -147,7 +153,7 @@ export default function LoginPage() {
               {stage.step === "creds" && (
                 <form onSubmit={submitCreds} className="space-y-4">
                   {signedOut && (
-                    <p role="status" className="rounded-lg bg-neutral-100 px-3 py-2 text-sm text-neutral-700">
+                    <p role="status" className="rounded-lg border border-copper/30 bg-copper-soft px-3 py-2 text-sm text-copper-text">
                       {signedOut.reason === "idle"
                         ? t("login_signed_out_idle", { n: signedOut.minutes })
                         : t("login_signed_out_expired")}
@@ -221,7 +227,7 @@ export default function LoginPage() {
                     <p className="mt-1 text-sm text-neutral-500">{t("login_setup_body")}</p>
                   </div>
                   <div className="flex justify-center">
-                    <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                    <div className="rounded-xl border border-neutral-200 bg-surface p-3">
                       <QRCodeSVG value={stage.otpauthUri} size={168} />
                     </div>
                   </div>
@@ -307,7 +313,7 @@ function BackupEntry({
         spellCheck={false}
         disabled={busy}
         placeholder="xxxxx-xxxxx"
-        className="h-12 w-full rounded-xl border border-neutral-200 bg-white text-center font-mono text-lg tracking-widest text-ink placeholder:text-neutral-300 focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
+        className="h-12 w-full rounded-xl border border-neutral-200 bg-surface text-center font-mono text-lg tracking-widest text-ink placeholder:text-neutral-300 focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
       />
       <Button type="submit" className="w-full" size="lg" disabled={busy || !value.trim()}>
         {busy && <Loader2 className="animate-spin" />}
@@ -362,7 +368,7 @@ function BackupCodes({ codes, onContinue }: { codes: string[]; onContinue: () =>
           </code>
         ))}
       </div>
-      <p className="text-center text-xs font-medium text-accent">{t("login_backup_warn")}</p>
+      <p className="text-center text-xs font-medium text-copper-text">{t("login_backup_warn")}</p>
       <div className="flex gap-2">
         <Button variant="secondary" className="flex-1" onClick={copyAll} type="button">
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -421,7 +427,7 @@ const CodeInput = React.forwardRef<
     maxLength={6}
     disabled={disabled}
     placeholder="••••••"
-    className="h-14 w-full rounded-xl border border-neutral-200 bg-white text-center font-mono text-2xl tracking-[0.5em] text-ink placeholder:text-neutral-300 focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
+    className="h-14 w-full rounded-xl border border-neutral-200 bg-surface text-center font-mono text-2xl tracking-[0.5em] text-ink placeholder:text-neutral-300 focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
   />
 ));
 CodeInput.displayName = "CodeInput";

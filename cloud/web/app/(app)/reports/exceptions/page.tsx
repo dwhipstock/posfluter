@@ -5,14 +5,14 @@ import { useApi, useRange, reportKey } from "@/lib/hooks";
 import { CAD } from "@/lib/format";
 import { useT, useFmt } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
-import { useExportMeta } from "@/lib/export/report";
-import { col, type ExportDoc } from "@/lib/export/doc";
+import { useExportMeta, useStoreExport } from "@/lib/export/report";
+import { col, Int, Money, T, type ExportDoc } from "@/lib/export/doc";
 import type { ExceptionsReport, VoidRow } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Kpi } from "@/components/kpi";
 import { PageHeader } from "@/components/page-header";
-import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
+import { StoreSplit, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -29,6 +29,7 @@ function ExceptionsPage() {
   const fmt = useFmt();
   const range = useRange();
   const meta = useExportMeta();
+  const storeExport = useStoreExport();
   const { data, error, isLoading, mutate } = useApi<ExceptionsReport>(
     reportKey("/v1/reports/exceptions", range)
   );
@@ -44,15 +45,25 @@ function ExceptionsPage() {
         { label: t("exc_corkage"), value: CAD(data.corkageCents) },
       ],
       sections: [
+        ...storeExport.byStore<ExceptionsReport["byVenue"][number]>(
+          [
+            col.int(t("exc_voids"), (r) => r.voidCount),
+            col.money(t("exc_void_amount"), (r) => r.voidAmountCents),
+            col.money(t("exc_corkage"), (r) => r.corkageCents),
+          ],
+          data.byVenue,
+          [T(t("col_total")), Int(data.voidCount), Money(data.voidAmountCents), Money(data.corkageCents)]
+        ),
         {
-          columns: [
+          title: t("exceptions_title"),
+          columns: storeExport.withStore([
             col.text<VoidRow>(t("col_check"), (v) => `#${v.checkId}`),
             col.text<VoidRow>(t("col_voided"), (v) => fmt.dateTime(v.voidedAt)),
             col.text<VoidRow>(t("col_table"), (v) => v.tableLabel),
             col.money<VoidRow>(t("col_amount"), (v) => v.amountCents),
             col.text<VoidRow>(t("col_reason"), (v) => v.reason),
             col.text<VoidRow>(t("col_by"), (v) => v.voidedBy),
-          ],
+          ]),
           rows: data.voids,
         },
       ],
@@ -73,7 +84,18 @@ function ExceptionsPage() {
         }
       />
       <DateRangePicker />
-      <StoreBreakdown />
+      {data && (
+        <StoreSplit
+          rows={data.byVenue}
+          title={t("exc_by_store")}
+          chartKey="amount"
+          cols={[
+            { key: "voids", label: t("exc_voids"), value: (r) => r.voidCount, format: String },
+            { key: "amount", label: t("exc_void_amount"), value: (r) => r.voidAmountCents, format: CAD, strong: true },
+            { key: "corkage", label: t("exc_corkage"), value: (r) => r.corkageCents, format: CAD, hide: "sm" },
+          ]}
+        />
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("exc_voids")} value={data && String(data.voidCount)} loading={isLoading} />

@@ -9,11 +9,12 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-accent font-semibold text-white hover:bg-accent-hover",
-        secondary: "border border-neutral-200 bg-white text-ink hover:bg-neutral-50",
+        secondary: "border border-neutral-200 bg-surface text-ink hover:bg-neutral-50",
         ghost: "text-ink hover:bg-neutral-100",
-        dark: "bg-ink text-white hover:bg-neutral-800",
+        dark: "bg-navy text-white hover:bg-navy-deep",
+        copper: "bg-copper font-semibold text-white hover:bg-copper-text",
         destructive: "bg-red-600 text-white hover:bg-red-700",
-        "destructive-outline": "border border-red-200 bg-white text-red-600 hover:bg-red-50",
+        "destructive-outline": "border border-red-200 bg-surface text-red-600 hover:bg-red-50",
         link: "text-ink underline underline-offset-4 hover:text-accent",
       },
       size: {

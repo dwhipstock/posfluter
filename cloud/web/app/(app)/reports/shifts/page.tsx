@@ -6,8 +6,8 @@ import { CAD, CADSigned } from "@/lib/format";
 import { useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { ExportMenu } from "@/components/export-menu";
-import { useExportMeta } from "@/lib/export/report";
-import { col, type ExportDoc } from "@/lib/export/doc";
+import { useExportMeta, useStoreExport } from "@/lib/export/report";
+import { col, Int, Money, T, type ExportDoc } from "@/lib/export/doc";
 import type { Shift, ShiftsReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
-import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
+import { StoreSplit, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback } from "@/components/states";
 
@@ -32,6 +32,7 @@ function ShiftsPage() {
   const fmt = useFmt();
   const range = useRange();
   const meta = useExportMeta();
+  const storeExport = useStoreExport();
   const { data, error, isLoading, mutate } = useApi<ShiftsReport>(reportKey("/v1/reports/shifts", range));
   const [selected, setSelected] = useState<Shift | null>(null);
 
@@ -41,8 +42,25 @@ function ShiftsPage() {
       ...meta("shifts"),
       reportTitle: t("shifts_title"),
       sections: [
+        ...storeExport.byStore<ShiftsReport["byVenue"][number]>(
+          [
+            col.int(t("shifts_n"), (r) => r.shiftCount),
+            col.money(t("shift_revenue"), (r) => r.revenueCents),
+            col.int(t("shift_checks"), (r) => r.transactionCount),
+            col.money(t("shift_over_short"), (r) => r.overShortCents),
+          ],
+          data.byVenue,
+          [
+            T(t("col_total")),
+            Int(data.byVenue.reduce((n, r) => n + r.shiftCount, 0)),
+            Money(data.byVenue.reduce((n, r) => n + r.revenueCents, 0)),
+            Int(data.byVenue.reduce((n, r) => n + r.transactionCount, 0)),
+            Money(data.byVenue.reduce((n, r) => n + r.overShortCents, 0)),
+          ]
+        ),
         {
-          columns: [
+          title: t("shifts_title"),
+          columns: storeExport.withStore([
             col.int<Shift>(t("col_shift"), (s) => s.shiftId),
             col.text<Shift>(t("col_status"), (s) => (s.status === "OPEN" ? t("badge_live") : t("badge_closed"))),
             col.text<Shift>(t("shift_opened"), (s) => fmt.dateTime(s.openedAt)),
@@ -54,7 +72,7 @@ function ShiftsPage() {
               align: "right",
               width: 12,
             }),
-          ],
+          ]),
           rows: data.rows,
         },
       ],
@@ -70,7 +88,18 @@ function ShiftsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
-      <StoreBreakdown />
+      {data && (
+        <StoreSplit
+          rows={data.byVenue}
+          title={t("shifts_by_store")}
+          cols={[
+            { key: "n", label: t("shifts_n"), value: (r) => r.shiftCount, format: String },
+            { key: "open", label: t("badge_live"), value: (r) => r.openCount, format: String, hide: "sm" },
+            { key: "rev", label: t("shift_revenue"), value: (r) => r.revenueCents, format: CAD, strong: true },
+            { key: "os", label: t("shift_over_short"), value: (r) => r.overShortCents, format: CADSigned, hide: "sm" },
+          ]}
+        />
+      )}
 
       {isLoading ? (
         <div className="space-y-3">
@@ -102,7 +131,7 @@ function ShiftsPage() {
                 </div>
                 <div className="mt-3 grid grid-cols-4 gap-2">
                   <MiniStat label={t("shift_revenue")} value={CAD(s.revenueCents)} strong />
-                  <MiniStat label={t("shift_checks")} value={String(s.transactionCount)} />
+                  <MiniStat label={t("shift_checks")} value={s.transactionCount == null ? "—" : String(s.transactionCount)} />
                   <MiniStat label={t("shift_avg")} value={CAD(s.avgCheckCents)} />
                   <MiniStat
                     label={t("shift_over_short")}

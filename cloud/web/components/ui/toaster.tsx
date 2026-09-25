@@ -33,7 +33,7 @@ export function Toaster() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="pointer-events-auto flex max-w-md items-center gap-2.5 rounded-full bg-ink px-4 py-2.5 text-sm text-white shadow-lg"
+            className="pointer-events-auto flex max-w-md items-center gap-2.5 rounded-full bg-navy-deep px-4 py-2.5 text-sm text-white shadow-lg"
             onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
           >
             <span className={cn("h-2 w-2 shrink-0 rounded-full", DOT[t.kind])} />

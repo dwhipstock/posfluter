@@ -92,7 +92,10 @@ export interface ExportDoc {
   /** `{report}_{from}_{to}` — the ".pdf"/".xlsx" is appended per format. */
   filenameBase: string;
   reportTitle: string;
+  /** The store's full name, or the group's name in "All stores". */
   venue: string;
+  /** "Store: Plateau" / "All stores (2)" — printed under the title in every format. */
+  scopeLabel: string;
   /** Locale-aware, e.g. "1 – 31 Jan." or "Last 7 days". */
   rangeLabel: string;
   /** "Émettre un rapport 12 Juillet 2026 09:20" — built by the caller with the active fmt. */

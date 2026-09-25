@@ -51,7 +51,7 @@ export function RoleMatrix({
                         {roleGrants[r]?.[p] ? (
                           <Check className="h-4 w-4 text-accent" aria-label={t("grant_allow")} />
                         ) : (
-                          <Minus className="h-4 w-4 text-neutral-300" aria-label={t("grant_deny")} />
+                          <Minus className="h-4 w-4 text-neutral-400" aria-label={t("grant_deny")} />
                         )}
                       </div>
                     </td>

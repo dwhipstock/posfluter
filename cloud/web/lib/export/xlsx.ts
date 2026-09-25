@@ -10,11 +10,11 @@ import ExcelJS from "exceljs";
 import type { Cell, ExportDoc, Section } from "./doc";
 import { saveBlob } from "./download";
 
-const MUTED = "FF5B6D82";
-const FAINT = "FF8292A5";
-const HEADER_FILL = "FFE7EFF9";
-const ACCENT = "FF1565C0";
-const RULE = "FFC8D5E6";
+const MUTED = "FF62574B";
+const FAINT = "FF6F6456";
+const HEADER_FILL = "FFEFE6D6";
+const ACCENT = "FF17456E";
+const RULE = "FFDCCFB9";
 const MONEY_FMT = "#,##0.00";
 const INT_FMT = "#,##0";
 
@@ -41,6 +41,7 @@ function sheetName(name: string, used: Set<string>): string {
 
 function writeMeta(ws: ExcelJS.Worksheet, doc: ExportDoc, subtitle?: string) {
   ws.addRow([doc.venue]).font = { bold: true, size: 13 };
+  ws.addRow([doc.scopeLabel]).font = { bold: true, size: 10, color: { argb: ACCENT } };
   ws.addRow([`${doc.reportTitle}${subtitle ? ` · ${subtitle}` : ""} — ${doc.rangeLabel}`]).font = {
     size: 10,
     color: { argb: MUTED },

@@ -6,14 +6,14 @@ import { CAD } from "@/lib/format";
 import { useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { ExportMenu } from "@/components/export-menu";
-import { useExportMeta } from "@/lib/export/report";
-import { col, type ExportDoc } from "@/lib/export/doc";
+import { useExportMeta, useStoreExport } from "@/lib/export/report";
+import { col, Int, Money, T, type ExportDoc } from "@/lib/export/doc";
 import type { RefundsReport, RefundReasonRow, RefundListRow } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Kpi } from "@/components/kpi";
 import { PageHeader } from "@/components/page-header";
-import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
+import { StoreSplit, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -30,6 +30,7 @@ function RefundsPage() {
   const fmt = useFmt();
   const range = useRange();
   const meta = useExportMeta();
+  const storeExport = useStoreExport();
   const { data, error, isLoading, mutate } = useApi<RefundsReport>(
     reportKey("/v1/reports/refunds", range)
   );
@@ -46,6 +47,16 @@ function RefundsPage() {
         { label: t("ref_tax"), value: CAD(data.taxCents) },
       ],
       sections: [
+        ...storeExport.byStore<RefundsReport["byVenue"][number]>(
+          [
+            col.int(t("col_checks"), (r) => r.count),
+            col.money(t("col_amount"), (r) => r.grossCents),
+            col.money(t("col_net"), (r) => r.netCents),
+            col.money(t("col_tax"), (r) => r.taxCents),
+          ],
+          data.byVenue,
+          [T(t("col_total")), Int(data.count), Money(data.grossCents), Money(data.netCents), Money(data.taxCents)]
+        ),
         {
           title: t("refunds_by_reason"),
           columns: [
@@ -59,7 +70,7 @@ function RefundsPage() {
         },
         {
           title: t("refunds_list"),
-          columns: [
+          columns: storeExport.withStore([
             col.text<RefundListRow>(t("col_check"), (r) => (r.checkId ? `#${r.checkId}` : "—")),
             col.text<RefundListRow>(t("col_time"), (r) => (r.createdAt ? fmt.dateTime(r.createdAt) : "—")),
             col.text<RefundListRow>(t("col_table"), (r) => r.tableLabel ?? "—"),
@@ -68,7 +79,7 @@ function RefundsPage() {
             ),
             col.text<RefundListRow>(t("col_reason"), (r) => r.reason ?? "—"),
             col.money<RefundListRow>(t("col_amount"), (r) => r.grossCents),
-          ],
+          ]),
           rows: data.rows,
         },
       ],
@@ -84,7 +95,19 @@ function RefundsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.count === 0} />}
       />
       <DateRangePicker />
-      <StoreBreakdown />
+      {data && (
+        <StoreSplit
+          rows={data.byVenue}
+          title={t("refunds_by_store")}
+          chartKey="gross"
+          cols={[
+            { key: "count", label: t("ref_count"), value: (r) => r.count, format: String },
+            { key: "gross", label: t("ref_amount"), value: (r) => r.grossCents, format: CAD, strong: true },
+            { key: "net", label: t("col_net"), value: (r) => r.netCents, format: CAD, hide: "sm" },
+            { key: "tax", label: t("ref_tax"), value: (r) => r.taxCents, format: CAD, hide: "sm" },
+          ]}
+        />
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("ref_count")} value={data && String(data.count)} loading={isLoading} />
