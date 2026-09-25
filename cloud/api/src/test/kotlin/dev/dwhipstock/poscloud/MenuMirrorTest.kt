@@ -29,7 +29,7 @@ class MenuMirrorTest {
     fun setUp() {
         TestSupport.reset()
         seedTenant("copperlantern")
-        seedStoreKey("copperlantern", "main", key)
+        seedStoreKey("copperlantern", "vieux-port", key)
         session = seedSession("copperlantern", seedUser("copperlantern", "menu@test.dev", "password-m"))
     }
 

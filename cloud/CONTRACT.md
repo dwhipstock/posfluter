@@ -303,8 +303,20 @@ separate from POS staff.
 
 ## 6. Cloud identifiers
 
-Bootstrap (idempotent, from cloud env): tenant `copperlantern`, venue `main`
-(display "The Copper Lantern Pub", tz `America/New_York`), one store API key
-(`STORE_API_KEY`), one portal admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, TOTP
-enrolled on first login). Every cloud row and every cloud query is scoped by
-`tenant_id`; the API key resolves to (tenant, venue) server-side.
+Bootstrap (idempotent, from cloud env): tenant `copperlantern` and its stores
+from `STORES="<venueId>=<name>,…"` (default: one store, `vieux-port`, named
+`VENUE_NAME`), all in `VENUE_TZ`; one store API key per store (`STORE_API_KEY`
+for the first store, `STORE_API_KEYS="<venueId>=<key>,…"` for the rest); one
+portal admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, TOTP enrolled on first login).
+Every cloud row and every cloud query is scoped by `tenant_id`; the API key
+resolves to (tenant, venue) server-side, so a store never names its venue.
+
+The demo tenant's stores are `vieux-port` (Copper Lantern — Vieux-Port, the
+Android tablet) and `plateau` (Copper Lantern — Plateau). Cloud migration 014
+renamed the original venue id `main` to `vieux-port` in every venue-scoped
+table (history, projections, keys, devices, install identity); the tablet's
+key keeps working unchanged.
+
+Portal reads take an optional `?venue=<id>`: with it, exactly that store;
+without it, all of the tenant's stores combined (each over its own business
+days), with a per-store `byVenue` breakdown on the sales reports.

@@ -21,7 +21,7 @@ class IngestIdempotencyTest {
     fun setUp() {
         TestSupport.reset()
         seedTenant("copperlantern")
-        seedStoreKey("copperlantern", "main", key)
+        seedStoreKey("copperlantern", "vieux-port", key)
     }
 
     @Test

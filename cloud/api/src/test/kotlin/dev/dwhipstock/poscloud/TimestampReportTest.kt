@@ -29,8 +29,8 @@ class TimestampReportTest {
     @Before
     fun setUp() {
         TestSupport.reset()
-        seedTenant("copperlantern", "main")
-        seedStoreKey("copperlantern", "main", key)
+        seedTenant("copperlantern", "vieux-port")
+        seedStoreKey("copperlantern", "vieux-port", key)
         session = seedSession("copperlantern", seedUser("copperlantern", "ts@test.dev", "password-t"))
     }
 

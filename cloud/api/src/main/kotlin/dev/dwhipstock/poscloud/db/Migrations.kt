@@ -68,7 +68,7 @@ object Migrations {
         return scripts
     }
 
-    private fun statements(sql: String): List<String> {
+    internal fun statements(sql: String): List<String> {
         val out = mutableListOf<String>()
         val current = StringBuilder()
         for (line in sql.lines()) {

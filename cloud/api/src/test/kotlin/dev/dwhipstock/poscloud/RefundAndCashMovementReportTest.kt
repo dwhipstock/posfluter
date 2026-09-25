@@ -26,7 +26,7 @@ class RefundAndCashMovementReportTest {
     fun setUp() {
         TestSupport.reset()
         seedTenant("copperlantern")
-        seedStoreKey("copperlantern", "main", key)
+        seedStoreKey("copperlantern", "vieux-port", key)
         session = seedSession("copperlantern", seedUser("copperlantern", "refund@test.dev", "password-x"))
     }
 

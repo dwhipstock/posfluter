@@ -40,9 +40,9 @@ class MultiVenueAndPairingTest {
     @Before
     fun setUp() {
         TestSupport.reset()
-        seedTenant("copperlantern", "main")
+        seedTenant("copperlantern", "vieux-port")
         seedTenant("copperlantern", "patio") // second venue, same tenant/group
-        seedStoreKey("copperlantern", "main", keyA)
+        seedStoreKey("copperlantern", "vieux-port", keyA)
         seedStoreKey("copperlantern", "patio", keyB)
         session = seedSession("copperlantern", seedUser("copperlantern", "owner@test.dev", "password-g"))
     }
@@ -90,10 +90,10 @@ class MultiVenueAndPairingTest {
             put("staffId", "camille"); put("staff", staffJson("camille", "Camille B."))
         }, seq = 1))
 
-        assertEquals(listOf("manager", "camille"), staffIds("main"))
+        assertEquals(listOf("manager", "camille"), staffIds("vieux-port"))
         assertEquals(listOf("camille"), staffIds("patio"))
 
-        val main = testJson.parseToJsonElement(client.get("/v1/staff?venue=main") {
+        val main = testJson.parseToJsonElement(client.get("/v1/staff?venue=vieux-port") {
             header(HttpHeaders.Cookie, cookie())
         }.bodyAsText()).jsonObject
         val camille = main["staff"]!!.jsonArray.map { it.jsonObject }.single { it["id"]!!.jsonPrimitive.content == "camille" }
@@ -104,7 +104,7 @@ class MultiVenueAndPairingTest {
         ingest(keyA, event("staff.deleted", buildJsonObject {
             put("staffId", "camille"); put("staff", staffJson("camille", "Camille", deleted = true))
         }, seq = 2))
-        assertEquals(listOf("manager"), staffIds("main"))
+        assertEquals(listOf("manager"), staffIds("vieux-port"))
 
         // the portal cannot write staff any more, and nothing is ever queued for a store
         val post = client.post("/v1/staff") {
@@ -129,7 +129,7 @@ class MultiVenueAndPairingTest {
         // a leftover distribution row from before one-way sync
         transaction {
             CatalogChanges.insert {
-                it[tenantId] = "copperlantern"; it[venueId] = "main"; it[kind] = "item"
+                it[tenantId] = "copperlantern"; it[venueId] = "vieux-port"; it[kind] = "item"
                 it[entityId] = "x"; it[op] = "upsert"; it[data] = "{}"; it[createdAt] = dev.dwhipstock.poscloud.CloudTime.now()
             }
         }
@@ -154,18 +154,18 @@ class MultiVenueAndPairingTest {
             contentType(ContentType.Application.Json)
             setBody("""{"lanBaseUrl":"http://192.168.1.9:8080","devices":[{"id":"ghost","name":"Old"}]}""")
         }
-        val del = client.delete("/v1/venues/main/devices/ghost") { header(HttpHeaders.Cookie, cookie()) }
+        val del = client.delete("/v1/venues/vieux-port/devices/ghost") { header(HttpHeaders.Cookie, cookie()) }
         assertEquals(HttpStatusCode.OK, del.status)
-        val list = client.get("/v1/venues/main/devices") { header(HttpHeaders.Cookie, cookie()) }
+        val list = client.get("/v1/venues/vieux-port/devices") { header(HttpHeaders.Cookie, cookie()) }
         assertEquals(0, testJson.parseToJsonElement(list.bodyAsText()).jsonObject["devices"]!!.jsonArray.size)
         // a second delete is a clean 404
         assertEquals(HttpStatusCode.NotFound,
-            client.delete("/v1/venues/main/devices/ghost") { header(HttpHeaders.Cookie, cookie()) }.status)
+            client.delete("/v1/venues/vieux-port/devices/ghost") { header(HttpHeaders.Cookie, cookie()) }.status)
     }
 
     // --- pairing ---
 
-    private suspend fun ApplicationTestBuilder.mintCode(venue: String = "main"): String {
+    private suspend fun ApplicationTestBuilder.mintCode(venue: String = "vieux-port"): String {
         val res = client.post("/v1/venues/$venue/pairing-codes") {
             header(HttpHeaders.Cookie, cookie())
             contentType(ContentType.Application.Json)
@@ -186,7 +186,7 @@ class MultiVenueAndPairingTest {
     fun pairingCodeIsSingleUseAndVenueBound() = testApplication {
         application { module(TestSupport.config) }
 
-        val code = mintCode("main")
+        val code = mintCode("vieux-port")
         // the wrong venue's store can never redeem it — and must not learn why
         assertEquals(HttpStatusCode.NotFound, claim(keyB, code).status)
         // the right venue redeems once (case/dash-insensitively)…
@@ -199,7 +199,7 @@ class MultiVenueAndPairingTest {
     fun expiredPairingCodeRefuses() = testApplication {
         application { module(TestSupport.config) }
 
-        val code = mintCode("main")
+        val code = mintCode("vieux-port")
         transaction {
             PairingCodes.update { it[expiresAt] = dev.dwhipstock.poscloud.CloudTime.now().minusMinutes(1) }
         }
@@ -223,14 +223,14 @@ class MultiVenueAndPairingTest {
             """[{"id":"dev-1","name":"Bar","pairedAt":"2026-07-20T10:00:00","lastSeenAt":"2026-07-21T09:00:00","revoked":false}]""")
         assertEquals(HttpStatusCode.OK, hb.status)
 
-        val list = client.get("/v1/venues/main/devices") { header(HttpHeaders.Cookie, cookie()) }
+        val list = client.get("/v1/venues/vieux-port/devices") { header(HttpHeaders.Cookie, cookie()) }
         assertEquals(HttpStatusCode.OK, list.status)
         val devices = testJson.parseToJsonElement(list.bodyAsText()).jsonObject["devices"]!!.jsonArray
         assertEquals(1, devices.size)
         assertEquals("Bar", devices[0].jsonObject["name"]!!.jsonPrimitive.content)
         assertNull(devices[0].jsonObject["revokeRequestedAt"]!!.jsonPrimitive.contentOrNull())
 
-        val revoke = client.post("/v1/venues/main/devices/dev-1/revoke") { header(HttpHeaders.Cookie, cookie()) }
+        val revoke = client.post("/v1/venues/vieux-port/devices/dev-1/revoke") { header(HttpHeaders.Cookie, cookie()) }
         assertEquals(HttpStatusCode.OK, revoke.status)
 
         // the revocation is on MAIN's feed only
@@ -240,12 +240,12 @@ class MultiVenueAndPairingTest {
         assertTrue(feed(keyB).none { it["kind"]!!.jsonPrimitive.content == "device_revocation" })
 
         // intent is visible until the store confirms; store truth stays revoked=false for now
-        val after = client.get("/v1/venues/main/devices") { header(HttpHeaders.Cookie, cookie()) }
+        val after = client.get("/v1/venues/vieux-port/devices") { header(HttpHeaders.Cookie, cookie()) }
         val dev = testJson.parseToJsonElement(after.bodyAsText()).jsonObject["devices"]!!.jsonArray[0].jsonObject
         assertNotNull(dev["revokeRequestedAt"]!!.jsonPrimitive.contentOrNull())
         assertEquals(false, dev["revoked"]!!.jsonPrimitive.content.toBoolean())
 
-        val missing = client.post("/v1/venues/main/devices/ghost/revoke") { header(HttpHeaders.Cookie, cookie()) }
+        val missing = client.post("/v1/venues/vieux-port/devices/ghost/revoke") { header(HttpHeaders.Cookie, cookie()) }
         assertEquals(HttpStatusCode.NotFound, missing.status)
     }
 
@@ -277,7 +277,7 @@ class MultiVenueAndPairingTest {
             it.jsonObject["venueId"]!!.jsonPrimitive.content to
                 it.jsonObject["grossCents"]!!.jsonPrimitive.content.toLong()
         }
-        assertEquals(10000, rows["main"])
+        assertEquals(10000, rows["vieux-port"])
         assertEquals(25000, rows["patio"])
     }
 }

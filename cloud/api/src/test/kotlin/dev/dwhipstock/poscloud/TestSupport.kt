@@ -99,7 +99,7 @@ object TestSupport {
 
 // --- seed helpers ---
 
-fun seedTenant(tenantId: String, venueId: String = "main", venueName: String = "Test Pub") = transaction {
+fun seedTenant(tenantId: String, venueId: String = "vieux-port", venueName: String = "Test Pub") = transaction {
     Tenants.insertIgnore {
         it[id] = tenantId
         it[name] = venueName
