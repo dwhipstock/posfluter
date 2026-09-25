@@ -36,6 +36,9 @@ services:
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}"
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env}"
       COOKIE_SECURE: "true"
+      # portal sign-out: idle minutes (background polls don't count) + absolute cap in hours
+      PORTAL_SESSION_IDLE_MINUTES: "${PORTAL_SESSION_IDLE_MINUTES:-60}"
+      PORTAL_SESSION_MAX_HOURS: "${PORTAL_SESSION_MAX_HOURS:-12}"
       VENUE_NAME: "${VENUE_NAME:-Copper Lantern}"
       VENUE_TZ: "America/New_York"
       # Base domain for cloud-hosted venue stores (<venue>.<this>); pairing

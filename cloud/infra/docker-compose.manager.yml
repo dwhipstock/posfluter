@@ -36,6 +36,9 @@ services:
       STORE_API_KEYS: "${STORE_API_KEYS:-}"
       STORES: "${STORES:-}"
       COOKIE_SECURE: "true"
+      # portal sign-out: idle minutes (background polls don't count) + absolute cap in hours
+      PORTAL_SESSION_IDLE_MINUTES: "${PORTAL_SESSION_IDLE_MINUTES:-60}"
+      PORTAL_SESSION_MAX_HOURS: "${PORTAL_SESSION_MAX_HOURS:-12}"
       VENUE_NAME: "${VENUE_NAME:-Copper Lantern}"
       VENUE_TZ: "${VENUE_TZ:-America/New_York}"
       PUBLIC_BASE_DOMAIN: "${PUBLIC_BASE_DOMAIN:-lostmindllc.com}"

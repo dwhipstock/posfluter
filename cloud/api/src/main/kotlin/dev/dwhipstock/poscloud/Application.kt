@@ -1,6 +1,7 @@
 package dev.dwhipstock.poscloud
 
 import dev.dwhipstock.poscloud.auth.authRoutes
+import dev.dwhipstock.poscloud.auth.installPortalSessions
 import dev.dwhipstock.poscloud.db.Db
 import dev.dwhipstock.poscloud.db.Migrations
 import dev.dwhipstock.poscloud.menu.menuRoutes
@@ -33,6 +34,7 @@ fun Application.module(config: CloudConfig = CloudConfig()) {
     val db = Db.connect(config)
     Migrations.run(db, File(config.migrationsDir))
     Bootstrap.run(config)
+    installPortalSessions(config)
 
     install(ContentNegotiation) {
         // explicit nulls: API.md promises null fields (open-shift close columns,

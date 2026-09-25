@@ -9,14 +9,20 @@ browser talks same-origin (no CORS). In dev, Next rewrites `/v1/*` →
 `http://localhost:8081`.
 
 Errors: non-2xx bodies are `{ "error": "human message", "code": "machine_code" }`.
-401 `not_authenticated`, 403 `totp_pending` (session exists but TOTP step not
+401 `not_authenticated` / `session_idle` / `session_expired`, 403 `totp_pending` (session exists but TOTP step not
 done), 404/409/400 as usual.
 
 ## Auth
 
 Session = opaque token in an `HttpOnly; SameSite=Lax; Path=/` cookie
-`pos_portal_session` (Secure flag when the request came via https). 30-day
-expiry, sliding. Passwords BCrypt. TOTP: RFC 6238, SHA-1, 6 digits, 30 s
+`pos_portal_session` (Secure flag when the request came via https). Idle
+timeout `PORTAL_SESSION_IDLE_MINUTES` (default 60): each authenticated request
+refreshes last-used, except ones sent with `X-Background: 1` (portal
+auto-refresh polls), which are served but don't count as activity. Absolute cap
+`PORTAL_SESSION_MAX_HOURS` (default 12) from sign-in; the cookie's Max-Age is the
+same cap. A dead session → 401 `session_idle` (plus `X-Session-Idle-Minutes`)
+or `session_expired`, and the cookie is cleared; dead rows are swept at each
+sign-in and every 15 min. Passwords BCrypt. TOTP: RFC 6238, SHA-1, 6 digits, 30 s
 period, ±1 step tolerance. TOTP is REQUIRED: a user without it enrolled is
 forced through setup at login.
 

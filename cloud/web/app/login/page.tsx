@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
 import { Check, Copy, Download, Loader2 } from "lucide-react";
-import { ApiError, post } from "@/lib/api";
+import { ApiError, IDLE_MINUTES_PARAM, SIGNED_OUT_PARAM, post } from "@/lib/api";
 import { errorMessage, toast } from "@/lib/toast";
 import type { ConfirmResponse, LoginResponse } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
@@ -42,6 +42,7 @@ export default function LoginPage() {
   const [backupMode, setBackupMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
+  const signedOut = useSignedOutNotice();
 
   const showAuthError = (err: unknown) => {
     const key = err instanceof ApiError ? AUTH_ERR[err.code] : undefined;
@@ -145,6 +146,13 @@ export default function LoginPage() {
             >
               {stage.step === "creds" && (
                 <form onSubmit={submitCreds} className="space-y-4">
+                  {signedOut && (
+                    <p role="status" className="rounded-lg bg-neutral-100 px-3 py-2 text-sm text-neutral-700">
+                      {signedOut.reason === "idle"
+                        ? t("login_signed_out_idle", { n: signedOut.minutes })
+                        : t("login_signed_out_expired")}
+                    </p>
+                  )}
                   <div className="space-y-1.5">
                     <Label htmlFor="email">{t("login_email")}</Label>
                     <Input
@@ -233,6 +241,20 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+/** `?signedOut=idle&idleMinutes=60` / `?signedOut=expired` — set by lib/api.ts on a 401. */
+function useSignedOutNotice(): { reason: "idle" | "expired"; minutes: string } | null {
+  const [notice, setNotice] = useState<{ reason: "idle" | "expired"; minutes: string } | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const reason = q.get(SIGNED_OUT_PARAM);
+    const mins = q.get(IDLE_MINUTES_PARAM);
+    if (reason === "idle" || reason === "expired") {
+      setNotice({ reason, minutes: mins && /^\d+$/.test(mins) ? mins : "60" });
+    }
+  }, []);
+  return notice;
 }
 
 function BusySpinner({ busy }: { busy: boolean }) {

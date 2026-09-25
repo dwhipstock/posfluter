@@ -16,7 +16,14 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import io.ktor.util.AttributeKey
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
+import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
@@ -30,14 +37,65 @@ import java.time.OffsetDateTime
 /**
  * Portal auth: email+password → mandatory TOTP → opaque session cookie.
  * Tokens (session + pending) are 32 random bytes hex; only their SHA-256 is
- * stored, so a DB leak doesn't leak live sessions. Sessions: 30-day absolute
- * expiry + last-used touch. Pending tokens: 5 min, single-use.
+ * stored, so a DB leak doesn't leak live sessions. Sessions: sliding idle
+ * timeout + absolute cap (see [SessionPolicy]). Pending tokens: 5 min, single-use.
  */
 
 const val SESSION_COOKIE = "pos_portal_session"
 private const val BCRYPT_COST = 12
-private val SESSION_DAYS = 30L
 private val PENDING_MINUTES = 5L
+
+/**
+ * Requests carrying `X-Background: 1` (the portal's auto-refresh polls) are
+ * authenticated but do NOT refresh last_used_at, so a tab left open still idles out.
+ */
+const val BACKGROUND_HEADER = "X-Background"
+
+/** On an idle-timeout 401: the idle window in minutes, for the portal's sign-in notice. */
+const val IDLE_MINUTES_HEADER = "X-Session-Idle-Minutes"
+
+/**
+ * Portal session lifetime.
+ *  - idle: invalid once [idleMinutes] pass with no foreground request (401 `session_idle`);
+ *  - absolute: invalid [maxHours] after sign-in however active (401 `session_expired`).
+ * The cookie's Max-Age is the absolute cap, so it never outlives the server session,
+ * and any rejected session gets its cookie cleared on the 401.
+ */
+data class SessionPolicy(val idleMinutes: Long = 60, val maxHours: Long = 12, val cookieSecure: Boolean = false) {
+    val maxAgeSeconds: Long get() = maxHours * 3600
+
+    companion object {
+        fun from(config: CloudConfig) = SessionPolicy(config.sessionIdleMinutes, config.sessionMaxHours, config.cookieSecure)
+    }
+}
+
+private val SessionPolicyKey = AttributeKey<SessionPolicy>("PortalSessionPolicy")
+
+private fun ApplicationCall.sessionPolicy(): SessionPolicy =
+    application.attributes.getOrNull(SessionPolicyKey) ?: SessionPolicy()
+
+private const val SWEEP_EVERY_MINUTES = 15L
+
+/** Register the session policy and a periodic sweep of dead session rows. */
+fun Application.installPortalSessions(config: CloudConfig) {
+    val policy = SessionPolicy.from(config)
+    attributes.put(SessionPolicyKey, policy)
+    launch {
+        while (isActive) {
+            delay(SWEEP_EVERY_MINUTES * 60_000)
+            runCatching { transaction { sweepExpiredSessions(policy) } }
+                .onFailure { log.warn("portal session sweep failed", it) }
+        }
+    }
+}
+
+/** Delete every session past its idle window or absolute cap (call inside a transaction). */
+fun sweepExpiredSessions(policy: SessionPolicy, now: OffsetDateTime = dev.dwhipstock.poscloud.CloudTime.now()): Int =
+    PortalSessions.deleteWhere {
+        (expiresAt lessEq now) or
+            (createdAt lessEq now.minusHours(policy.maxHours)) or
+            (lastUsedAt less now.minusMinutes(policy.idleMinutes))
+    }
 
 data class Principal(val tenantId: String, val userId: Long, val email: String, val displayName: String)
 
@@ -81,26 +139,44 @@ object BackupCodes {
     val normalizedLength get() = LEN
 }
 
-/** Resolve the session cookie or throw 401. Touches last_used_at. */
+/**
+ * Resolve the session cookie or throw 401. A foreground request refreshes
+ * last_used_at (the sliding idle window); a [BACKGROUND_HEADER] poll does not.
+ *
+ * A dead session's row is left for [sweepExpiredSessions] rather than deleted
+ * here, so the portal's parallel requests all see the same reason
+ * (`session_idle` / `session_expired`) instead of a racing `not_authenticated`.
+ * The rejection clears the cookie.
+ */
 fun requirePortal(call: ApplicationCall): Principal {
+    val policy = call.sessionPolicy()
     val token = call.request.cookies[SESSION_COOKIE] ?: throw UnauthorizedException()
-    return transaction {
-        val hash = sha256Hex(token)
-        val row = PortalSessions.selectAll().where { PortalSessions.tokenSha256 eq hash }.firstOrNull()
-            ?: throw UnauthorizedException()
-        val now = dev.dwhipstock.poscloud.CloudTime.now()
-        if (now.isAfter(row[PortalSessions.expiresAt])) {
-            PortalSessions.deleteWhere { tokenSha256 eq hash }
-            throw UnauthorizedException()
-        }
-        PortalSessions.update({ PortalSessions.tokenSha256 eq hash }) { it[lastUsedAt] = now }
-        val user = PortalUsers.selectAll().where { PortalUsers.id eq row[PortalSessions.userId] }.firstOrNull()
-            ?: throw UnauthorizedException()
-        Principal(
-            row[PortalSessions.tenantId], user[PortalUsers.id],
-            user[PortalUsers.email], user[PortalUsers.displayName],
-        )
+    val background = call.request.headers[BACKGROUND_HEADER] == "1"
+    try {
+        return transaction { resolveSession(sha256Hex(token), policy, background) }
+    } catch (e: UnauthorizedException) {
+        call.clearSessionCookie(policy.cookieSecure)
+        if (e.code == "session_idle") call.response.header(IDLE_MINUTES_HEADER, policy.idleMinutes.toString())
+        throw e
     }
+}
+
+private fun resolveSession(hash: String, policy: SessionPolicy, background: Boolean): Principal {
+    val row = PortalSessions.selectAll().where { PortalSessions.tokenSha256 eq hash }.firstOrNull()
+        ?: throw UnauthorizedException()
+    val now = dev.dwhipstock.poscloud.CloudTime.now()
+    val absoluteEnd = minOf(row[PortalSessions.expiresAt], row[PortalSessions.createdAt].plusHours(policy.maxHours))
+    if (!now.isBefore(absoluteEnd))
+        throw UnauthorizedException("session expired; sign in again", "session_expired")
+    if (now.isAfter(row[PortalSessions.lastUsedAt].plusMinutes(policy.idleMinutes)))
+        throw UnauthorizedException("signed out after ${policy.idleMinutes} minutes of inactivity", "session_idle")
+    if (!background) PortalSessions.update({ PortalSessions.tokenSha256 eq hash }) { it[lastUsedAt] = now }
+    val user = PortalUsers.selectAll().where { PortalUsers.id eq row[PortalSessions.userId] }.firstOrNull()
+        ?: throw UnauthorizedException()
+    return Principal(
+        row[PortalSessions.tenantId], user[PortalUsers.id],
+        user[PortalUsers.email], user[PortalUsers.displayName],
+    )
 }
 
 /** In-memory login throttle: 10 attempts per rolling minute per email+IP. */
@@ -187,6 +263,7 @@ private data class ConfirmResponse(val ok: Boolean = true, val backupCodes: List
 private data class MeResponse(val email: String, val displayName: String, val venueName: String, val tenantName: String)
 
 fun Route.authRoutes(config: CloudConfig) {
+    val policy = SessionPolicy.from(config)
 
     post("/auth/login") {
         val req = call.receive<LoginRequest>()
@@ -202,7 +279,7 @@ fun Route.authRoutes(config: CloudConfig) {
             val token = newToken()
             if (!config.totpRequired) {
                 LoginResponse(stage = "authenticated") to
-                    createSession(user[PortalUsers.tenantId], user[PortalUsers.id])
+                    createSession(user[PortalUsers.tenantId], user[PortalUsers.id], policy)
             } else if (user[PortalUsers.totpEnabled]) {
                 insertPending(token, user, "totp", user[PortalUsers.totpSecret]!!, now)
                 LoginResponse(stage = "totp", pendingToken = token) to null
@@ -217,7 +294,7 @@ fun Route.authRoutes(config: CloudConfig) {
                 ) to null
             }
         }
-        sessionToken?.let { call.setSessionCookie(it, config) }
+        sessionToken?.let { call.setSessionCookie(it, policy) }
         call.respond(response)
     }
 
@@ -236,9 +313,9 @@ fun Route.authRoutes(config: CloudConfig) {
             }
             TotpAttempts.clear(pending[LoginPending.tokenSha256])
             LoginPending.deleteWhere { tokenSha256 eq pending[LoginPending.tokenSha256] }
-            createSession(pending[LoginPending.tenantId], pending[LoginPending.userId])
+            createSession(pending[LoginPending.tenantId], pending[LoginPending.userId], policy)
         }
-        call.setSessionCookie(token, config)
+        call.setSessionCookie(token, policy)
         call.respond(OkResponse())
     }
 
@@ -260,9 +337,9 @@ fun Route.authRoutes(config: CloudConfig) {
                 it[totpEnabled] = true
             }
             val codes = issueBackupCodes(pending[LoginPending.tenantId], pending[LoginPending.userId], now)
-            createSession(pending[LoginPending.tenantId], pending[LoginPending.userId]) to codes
+            createSession(pending[LoginPending.tenantId], pending[LoginPending.userId], policy) to codes
         }
-        call.setSessionCookie(token, config)
+        call.setSessionCookie(token, policy)
         call.respond(ConfirmResponse(backupCodes = backupCodes))
     }
 
@@ -270,9 +347,7 @@ fun Route.authRoutes(config: CloudConfig) {
         call.request.cookies[SESSION_COOKIE]?.let { token ->
             transaction { PortalSessions.deleteWhere { tokenSha256 eq sha256Hex(token) } }
         }
-        call.response.cookies.append(
-            Cookie(SESSION_COOKIE, "", maxAge = 0, path = "/", httpOnly = true, secure = config.cookieSecure)
-        )
+        call.clearSessionCookie(config.cookieSecure)
         call.respond(OkResponse())
     }
 
@@ -284,13 +359,21 @@ fun Route.authRoutes(config: CloudConfig) {
     }
 }
 
-private fun ApplicationCall.setSessionCookie(token: String, config: CloudConfig) {
+/** Max-Age = the session's absolute cap: the cookie never outlives the server session. */
+private fun ApplicationCall.setSessionCookie(token: String, policy: SessionPolicy) {
     response.cookies.append(
         Cookie(
-            SESSION_COOKIE, token, maxAge = (SESSION_DAYS * 24 * 3600).toInt(), path = "/",
-            httpOnly = true, secure = config.cookieSecure,
+            SESSION_COOKIE, token, maxAge = policy.maxAgeSeconds.toInt(), path = "/",
+            httpOnly = true, secure = policy.cookieSecure,
             extensions = mapOf("SameSite" to "Lax"),
         )
+    )
+}
+
+private fun ApplicationCall.clearSessionCookie(secure: Boolean) {
+    response.cookies.append(
+        Cookie(SESSION_COOKIE, "", maxAge = 0, path = "/", httpOnly = true, secure = secure,
+            extensions = mapOf("SameSite" to "Lax"))
     )
 }
 
@@ -370,15 +453,16 @@ private fun consumablePending(token: String, expectedPurpose: String): org.jetbr
     return row
 }
 
-private fun createSession(tenant: String, user: Long): String {
+private fun createSession(tenant: String, user: Long, policy: SessionPolicy): String {
     val token = newToken()
     val now = dev.dwhipstock.poscloud.CloudTime.now()
+    sweepExpiredSessions(policy, now) // every sign-in also clears out dead rows
     PortalSessions.insert {
         it[tokenSha256] = sha256Hex(token)
         it[tenantId] = tenant
         it[userId] = user
         it[createdAt] = now
-        it[expiresAt] = now.plusDays(SESSION_DAYS)
+        it[expiresAt] = now.plusHours(policy.maxHours)
         it[lastUsedAt] = now
     }
     return token
