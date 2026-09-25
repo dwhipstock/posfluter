@@ -209,7 +209,8 @@ fun Route.authRoutes(config: CloudConfig) {
             } else {
                 val secret = Totp.newSecret()
                 insertPending(token, user, "totp_setup", secret, now)
-                val issuer = venueNameOf(user[PortalUsers.tenantId]) ?: config.venueName
+                // the group (tenant), not one of its stores
+                val issuer = tenantNameOf(user[PortalUsers.tenantId]) ?: venueNameOf(user[PortalUsers.tenantId]) ?: config.venueName
                 LoginResponse(
                     stage = "totp_setup", pendingToken = token, secret = secret,
                     otpauthUri = Totp.otpauthUri(issuer, user[PortalUsers.email], secret),
@@ -278,11 +279,7 @@ fun Route.authRoutes(config: CloudConfig) {
     get("/auth/me") {
         val principal = requirePortal(call)
         val venueName = transaction { venueNameOf(principal.tenantId) } ?: config.venueName
-        val tenantName = transaction {
-            dev.dwhipstock.poscloud.db.Tenants.selectAll()
-                .where { dev.dwhipstock.poscloud.db.Tenants.id eq principal.tenantId }
-                .firstOrNull()?.get(dev.dwhipstock.poscloud.db.Tenants.name)
-        } ?: venueName
+        val tenantName = transaction { tenantNameOf(principal.tenantId) } ?: venueName
         call.respond(MeResponse(principal.email, principal.displayName, venueName, tenantName))
     }
 }
@@ -298,6 +295,11 @@ private fun ApplicationCall.setSessionCookie(token: String, config: CloudConfig)
 }
 
 // --- helpers (call inside a transaction) ---
+
+fun tenantNameOf(tenantId: String): String? =
+    dev.dwhipstock.poscloud.db.Tenants.selectAll()
+        .where { dev.dwhipstock.poscloud.db.Tenants.id eq tenantId }
+        .firstOrNull()?.get(dev.dwhipstock.poscloud.db.Tenants.name)
 
 fun venueNameOf(tenantId: String): String? =
     Venues.selectAll().where { Venues.tenantId eq tenantId }
