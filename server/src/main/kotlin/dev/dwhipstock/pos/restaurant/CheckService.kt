@@ -102,6 +102,8 @@ data class RefundInfo(
     val refundedCents: Long,
     val refundableCents: Long,
     val refunds: List<RefundView>,
+    /** Still refundable back to the card through Stripe (0 = no Stripe tender). */
+    val stripeRefundableCents: Long = 0,
 )
 
 /** A CLOSED check in the refund picker: what it was, what's left to refund. */
@@ -619,6 +621,27 @@ class CheckService(private val config: CustomerConfig) {
         recordTender(checkId, type, "check.tender_confirmed", amountCents, applied, Money.ZERO, Money.ZERO, groupId)
     }
 
+    /**
+     * Stripe step 1: lock totals if needed and return what is still due on the
+     * check (or bill group) — the most a card PaymentIntent may be for. Same
+     * guards as every tender (open shift, split rules, not already paid).
+     */
+    fun lockForElectronicPayment(checkId: Int, groupId: Int? = null): Money = transaction {
+        lockAndOutstanding(checkId, groupId)
+    }
+
+    /**
+     * Stripe final step: record the tender for a PaymentIntent Stripe reports as
+     * captured. Exact cents, no rounding, through the ordinary tender path (same
+     * outbox event as any confirmed electronic tender, type STRIPE + the PI id).
+     */
+    fun recordStripeTender(checkId: Int, amountCents: Long, paymentIntentId: String, groupId: Int? = null): TenderView = transaction {
+        val outstanding = lockAndOutstanding(checkId, groupId)
+        val applied = TransactionPipeline.tenderElectronic(outstanding, Money(amountCents))
+        recordTender(checkId, TenderType.STRIPE, "check.tender_confirmed", amountCents, applied,
+            Money.ZERO, Money.ZERO, groupId, stripePaymentIntentId = paymentIntentId)
+    }
+
     private fun lockAndOutstanding(checkId: Int, groupId: Int? = null): Money {
         // money movement needs a shift to land in — otherwise the Z-report's
         // drawer math can never account for this cash (walkthrough 2026-07-08)
@@ -653,8 +676,10 @@ class CheckService(private val config: CustomerConfig) {
         checkId: Int, type: TenderType, eventType: String,
         tenderedCents: Long, applied: Money, rounding: Money, change: Money,
         groupId: Int? = null,
+        stripePaymentIntentId: String? = null,
     ): TenderView {
         val tenderId = Tenders.insertAndGetId {
+            it[Tenders.stripePaymentIntentId] = stripePaymentIntentId
             it[transactionId] = checkId
             it[Tenders.type] = type.name
             it[amountTenderedCents] = tenderedCents
@@ -673,6 +698,8 @@ class CheckService(private val config: CustomerConfig) {
             put("roundingAdjustmentCents", rounding.cents)
             put("changeCents", change.cents)
             groupId?.let { g -> put("groupId", g) }
+            // processor reference only — never a key, card data or client secret
+            stripePaymentIntentId?.let { pi -> put("processor", "stripe"); put("stripePaymentIntentId", pi) }
         })
         if (groupId != null) {
             val group = BillGroups.selectAll().where { BillGroups.id eq groupId }.first()
@@ -786,10 +813,10 @@ class CheckService(private val config: CustomerConfig) {
         val tenders = Tenders.selectAll()
             .where { (Tenders.transactionId eq checkId) and (Tenders.billGroupId eq groupId) }
             .map { row ->
-                val method = runCatching { config.tenderMethod(TenderType.valueOf(row[Tenders.type])) }.getOrNull()
+                val (labelFr, labelEn) = tenderLabels(row[Tenders.type])
                 ReceiptTender(
-                    labelFr = method?.labelFr ?: "espèces",
-                    labelEn = method?.labelEn ?: "Cash",
+                    labelFr = labelFr,
+                    labelEn = labelEn,
                     amountTendered = Money(row[Tenders.amountTenderedCents]),
                     amountApplied = Money(row[Tenders.amountAppliedCents]),
                     roundingAdjustment = Money(row[Tenders.roundingAdjustmentCents]),
@@ -812,6 +839,14 @@ class CheckService(private val config: CustomerConfig) {
     }
 
     /** Re-render the receipt for a closed check (client preview; deterministic). */
+    /** (fr, en) receipt label for a stored tender type. */
+    private fun tenderLabels(type: String): Pair<String, String> {
+        val tt = runCatching { TenderType.valueOf(type) }.getOrNull()
+        if (tt == TenderType.STRIPE) return "Carte (Stripe)" to "Card (Stripe)"
+        val method = tt?.let { runCatching { config.tenderMethod(it) }.getOrNull() }
+        return (method?.labelFr ?: "espèces") to (method?.labelEn ?: "Cash")
+    }
+
     fun receiptText(checkId: Int): String = transaction {
         val check = requireCheck(checkId)
         if (check[Checks.status] != "CLOSED") throw ConflictException("check $checkId is ${check[Checks.status]}; no receipt yet", "no_receipt_yet")
@@ -859,10 +894,10 @@ class CheckService(private val config: CustomerConfig) {
                 )
             }
         val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->
-            val method = runCatching { config.tenderMethod(TenderType.valueOf(row[Tenders.type])) }.getOrNull()
+            val (labelFr, labelEn) = tenderLabels(row[Tenders.type])
             ReceiptTender(
-                labelFr = method?.labelFr ?: "espèces",
-                labelEn = method?.labelEn ?: "Cash",
+                labelFr = labelFr,
+                labelEn = labelEn,
                 amountTendered = Money(row[Tenders.amountTenderedCents]),
                 amountApplied = Money(row[Tenders.amountAppliedCents]),
                 roundingAdjustment = Money(row[Tenders.roundingAdjustmentCents]),
@@ -957,6 +992,39 @@ class CheckService(private val config: CustomerConfig) {
         reason: String,
         managerId: String,
     ): RefundResult = transaction {
+        val plan = planRefund(checkId, amountCents, lines, tenderType, reason, managerId)
+        // a card refund through Stripe must happen AT Stripe first — see payments.StripePayments.refund
+        if (plan.tenderType == TenderType.STRIPE)
+            throw ConflictException("Stripe refunds go through the Stripe refund path", "stripe_refund_via_stripe")
+        recordRefund(plan)
+    }
+
+    /** A validated refund, not yet written. See [planRefund] / [recordRefund]. */
+    data class RefundPlan(
+        val checkId: Int,
+        val gross: Long,
+        val net: Long,
+        val tax: Long,
+        val tenderType: TenderType,
+        val reason: String,
+        val managerId: String,
+        val linesJson: JsonArray?,
+    )
+
+    /**
+     * Validate a refund (grant, closed check, amount/lines, cumulative cap) and
+     * compute its tax split — without writing anything. Stripe refunds plan
+     * first, refund at Stripe, then [recordRefund]: a refund Stripe did not make
+     * is never recorded.
+     */
+    fun planRefund(
+        checkId: Int,
+        amountCents: Long?,
+        lines: List<RefundLineRequest>?,
+        tenderType: String,
+        reason: String,
+        managerId: String,
+    ): RefundPlan = transaction {
         require(reason.isNotBlank()) { "refund reason is required" }
         // defense-in-depth: the route already authorized this; re-check the grant on the authorizer
         if (!GrantsRepo.has(managerId, Permissions.REFUND))
@@ -990,6 +1058,34 @@ class CheckService(private val config: CustomerConfig) {
         val refundTax = if (grandTotal == 0L) 0L
         else Math.round(checkTax.toDouble() * refundGross / grandTotal)
         val refundNet = refundGross - refundTax
+        RefundPlan(checkId, refundGross, refundNet, refundTax, tt, reason, managerId, linesJson)
+    }
+
+    /**
+     * Write a planned refund: row, report-complete outbox event, slip. The
+     * cumulative cap is re-checked here unless Stripe already returned the money
+     * ([stripeRefundId] set) — then the refund happened and must be recorded.
+     */
+    fun recordRefund(
+        plan: RefundPlan,
+        stripePaymentIntentId: String? = null,
+        stripeRefundId: String? = null,
+    ): RefundResult = transaction {
+        val checkId = plan.checkId
+        val check = requireCheck(checkId)
+        val grandTotal = check[Checks.lockedGrandTotalCents] ?: 0L
+        if (stripeRefundId == null && refundedSoFar(checkId) + plan.gross > grandTotal)
+            throw ConflictException(
+                "refund exceeds remaining refundable (${grandTotal - refundedSoFar(checkId)} cents left on check $checkId)",
+                "refund_exceeds_total",
+            )
+        val refundGross = plan.gross
+        val refundNet = plan.net
+        val refundTax = plan.tax
+        val tt = plan.tenderType
+        val reason = plan.reason
+        val managerId = plan.managerId
+        val linesJson = plan.linesJson
 
         val shift = currentOpenShiftId()
         val now = VenueClock.now()
@@ -1004,6 +1100,8 @@ class CheckService(private val config: CustomerConfig) {
             it[Refunds.linesJson] = linesJson?.toString()
             it[refundedBy] = managerId
             it[createdAt] = now
+            it[Refunds.stripePaymentIntentId] = stripePaymentIntentId
+            it[Refunds.stripeRefundId] = stripeRefundId
         }.value
 
         val tz = tableZoneRowOrNull(check[Checks.tableId])
@@ -1026,6 +1124,11 @@ class CheckService(private val config: CustomerConfig) {
             put("zoneNameEn", tz?.get(Zones.nameEn))
             put("createdAt", VenueClock.iso(now))
             linesJson?.let { put("lines", it) }
+            stripeRefundId?.let { r ->
+                put("processor", "stripe")
+                put("stripePaymentIntentId", stripePaymentIntentId)
+                put("stripeRefundId", r)
+            }
         })
 
         RefundResult(
@@ -1067,7 +1170,40 @@ class CheckService(private val config: CustomerConfig) {
             .orderBy(Refunds.id to SortOrder.ASC)
             .map { refundView(it) }
         val refunded = refunds.sumOf { it.grossCents }
-        RefundInfo(checkId, grand, refunded, grand - refunded, refunds)
+        val stripeLeft = stripeRefundCapacity(checkId).sumOf { it.remainingCents }
+        RefundInfo(checkId, grand, refunded, grand - refunded, refunds,
+            stripeRefundableCents = minOf(stripeLeft, grand - refunded))
+    }
+
+    /**
+     * Per Stripe PaymentIntent on this check: (PI id, cents still refundable to
+     * that card) = what its tenders applied minus what was already refunded
+     * through Stripe against it. Stripe refunds one PI at a time.
+     */
+    fun stripeRefundCapacity(checkId: Int): List<StripeCapacity> = transaction {
+        val paid = Tenders.selectAll()
+            .where { (Tenders.transactionId eq checkId) and (Tenders.type eq TenderType.STRIPE.name) }
+            .mapNotNull { r -> r[Tenders.stripePaymentIntentId]?.let { it to r[Tenders.amountAppliedCents] } }
+            .groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
+        val refunded = Refunds.selectAll()
+            .where { (Refunds.checkId eq checkId) and Refunds.stripePaymentIntentId.isNotNull() }
+            .groupBy({ it[Refunds.stripePaymentIntentId]!! }, { it[Refunds.grossCents] })
+            .mapValues { it.value.sum() }
+        paid.map { (pi, amount) -> StripeCapacity(pi, amount, (amount - (refunded[pi] ?: 0L)).coerceAtLeast(0L)) }
+    }
+
+    data class StripeCapacity(val paymentIntentId: String, val paidCents: Long, val remainingCents: Long)
+
+    /** The tender already recorded for a Stripe PaymentIntent, if any. */
+    fun tenderIdForPaymentIntent(paymentIntentId: String): Int? = transaction {
+        Tenders.selectAll().where { Tenders.stripePaymentIntentId eq paymentIntentId }.firstOrNull()?.get(Tenders.id)?.value
+    }
+
+    fun tenderView(tenderId: Int): TenderView = transaction {
+        val r = Tenders.selectAll().where { Tenders.id eq tenderId }.firstOrNull()
+            ?: throw NotFoundException("tender $tenderId not found", "tender_not_found")
+        TenderView(tenderId, r[Tenders.type], r[Tenders.amountTenderedCents], r[Tenders.amountAppliedCents],
+            r[Tenders.roundingAdjustmentCents], r[Tenders.changeCents], r[Tenders.billGroupId])
     }
 
     private fun refundedSoFar(checkId: Int): Long =
@@ -1122,6 +1258,7 @@ class CheckService(private val config: CustomerConfig) {
         val method = runCatching { config.tenderMethod(tt) }.getOrNull()
         val tenderLabel = when (tt) {
             TenderType.CASH -> msg(TENDER_CASH)
+            TenderType.STRIPE -> tenderLabels(tt.name).let { (fr, en) -> locale.dataText(fr, en) }
             else -> method?.let { locale.dataText(it.labelFr, it.labelEn) } ?: tt.name
         }
         val vatRate = (config.taxPolicy as? TaxPolicy.InclusiveVat)?.ratePercent
@@ -1337,6 +1474,7 @@ class CheckService(private val config: CustomerConfig) {
                 put("roundingAdjustmentCents", row[Tenders.roundingAdjustmentCents])
                 put("changeCents", row[Tenders.changeCents])
                 put("groupId", row[Tenders.billGroupId])
+                row[Tenders.stripePaymentIntentId]?.let { pi -> put("stripePaymentIntentId", pi) }
             }
         }
         return buildJsonObject {

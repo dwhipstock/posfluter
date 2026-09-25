@@ -132,6 +132,9 @@ else
     exit 1
   fi
   echo "Starting Copper Lantern — Plateau on :${PLATEAU_PORT}…"
+  # optional Stripe test key for "Card (Stripe)": env wins, else the repo-root .env
+  # (STRIPE_KEY=sk_test_...). Never printed. Unset → Stripe simply stays off.
+  STRIPE_KEY="${STRIPE_KEY:-$(sed -n 's/^STRIPE_KEY=//p' "$REPO_ROOT/.env" 2>/dev/null | tail -1 | tr -d '"'"'"'\r')}"
   (
     cd "$PLATEAU_DIR"
     POS_VENUE=plateau \
@@ -146,6 +149,8 @@ else
     CLOUD_SYNC_API_KEY="$STORE_API_KEY_PLATEAU" \
     CLOUD_SYNC_INTERVAL_SECONDS=10 \
     REPORTING_PORTAL_URL="$PORTAL_URL" \
+    STRIPE_KEY="$STRIPE_KEY" \
+    STRIPE_LOCATION_ID="${STRIPE_LOCATION_ID:-}" \
     nohup java -jar "$JAR" >> "$PLATEAU_DIR/store.log" 2>&1 &
     echo $! > "$PID_FILE"
   )

@@ -2,7 +2,12 @@ package dev.dwhipstock.pos.sdk
 
 import kotlinx.serialization.Serializable
 
-enum class TenderType { CASH, CARD, BANK_TRANSFER }
+/**
+ * STRIPE = card taken through Stripe Terminal (optional, test mode). It is never
+ * a [TenderMethod] in [CustomerConfig.electronicTenders]: staff cannot confirm
+ * it by hand; it is recorded only after Stripe reports the payment captured.
+ */
+enum class TenderType { CASH, CARD, BANK_TRANSFER, STRIPE }
 
 /**
  * An electronic tender method the customer offers. Open (not sealed) on purpose:

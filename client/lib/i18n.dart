@@ -356,6 +356,125 @@ class L {
   String receivedToast(String amount, String due) =>
       _t('$amount reçu — $due à payer', 'Received $amount — $due outstanding');
 
+  // Card (Stripe) — optional tender, test mode, simulated reader
+  String get cardStripe => _t('Carte (Stripe)', 'Card (Stripe)');
+  String get chargeCardStripe =>
+      _t('Encaisser par carte (Stripe)', 'Charge card (Stripe)');
+  String get simulatedCardLabel =>
+      _t('Carte simulée (mode test)', 'Simulated card (test mode)');
+  String get simApproved => _t('Approuvée', 'Approved');
+  String get simDeclined => _t('Refusée', 'Declined');
+  String get simInsufficient => _t('Fonds insuffisants', 'Insufficient funds');
+  String get stripeTitle =>
+      _t('Paiement par carte (Stripe)', 'Card payment (Stripe)');
+  String get stripeTestMode => _t(
+    'MODE TEST — lecteur simulé, aucun argent réel',
+    'TEST MODE — simulated reader, no real money',
+  );
+  String chargedInCurrency(String code) => _t(
+    'Facturé en $code (devise du compte Stripe de test)',
+    'Charged in $code (the Stripe test account currency)',
+  );
+  String get stripePreparing =>
+      _t('Préparation du paiement…', 'Preparing the payment…');
+  String get stripePermissions => _t(
+    'Autorisations Bluetooth et position…',
+    'Checking Bluetooth and location permission…',
+  );
+  String get stripeConnecting => _t(
+    'Connexion au lecteur de carte (simulé)…',
+    'Connecting to the card reader (simulated)…',
+  );
+  String get stripeTapCard => _t(
+    'Présentez la carte au lecteur (simulé)',
+    'Tap, insert or swipe the card (simulated)',
+  );
+  String get stripeProcessing => _t('Traitement du paiement…', 'Processing…');
+  String get stripeApproved => _t('Paiement approuvé', 'Payment approved');
+  String get stripeDeclinedTitle => _t('Carte refusée', 'Card declined');
+  String get stripeErrorTitle =>
+      _t('Paiement par carte impossible', 'Card payment failed');
+  String get nothingCharged => _t(
+    'Rien n\'a été facturé. Le compte peut être réglé autrement.',
+    'Nothing was charged. The bill can be paid another way.',
+  );
+
+  /// Why "Card (Stripe)" is greyed out (hint under the tender tiles).
+  String stripeUnavailableHint(String? reason) => switch (reason) {
+    'stripe_unavailable' => _t(
+      'Pas d\'Internet — la carte (Stripe) est indisponible',
+      'No internet — Card (Stripe) is unavailable',
+    ),
+    'stripe_live_key_refused' => _t(
+      'Stripe désactivé : seules les clés de test (sk_test_) sont acceptées',
+      'Stripe is off: only test keys (sk_test_) are accepted',
+    ),
+    'stripe_permission_denied' => _t(
+      'Autorisation Bluetooth/position refusée — carte (Stripe) désactivée',
+      'Bluetooth/location permission denied — Card (Stripe) disabled',
+    ),
+    'stripe_unsupported' => _t(
+      'La carte (Stripe) fonctionne sur la tablette Android seulement',
+      'Card (Stripe) works on the Android tablet only',
+    ),
+    'stripe_location_required' => _t(
+      'Stripe : aucun emplacement Terminal (réglez STRIPE_LOCATION_ID)',
+      'Stripe: no Terminal location (set STRIPE_LOCATION_ID)',
+    ),
+    _ => _t(
+      'La carte (Stripe) est indisponible pour le moment',
+      'Card (Stripe) is unavailable right now',
+    ),
+  };
+
+  /// Friendly text for a Stripe decline code.
+  String stripeDeclineMessage(String? code) => switch (code) {
+    'insufficient_funds' => _t(
+      'Fonds insuffisants. Essayez une autre carte ou un autre mode de paiement.',
+      'Insufficient funds. Try another card or another way to pay.',
+    ),
+    'expired_card' => _t(
+      'Carte expirée. Essayez une autre carte.',
+      'The card has expired. Try another card.',
+    ),
+    'incorrect_pin' || 'incorrect_cvc' || 'invalid_pin' => _t(
+      'NIP incorrect. Réessayez ou utilisez une autre carte.',
+      'Incorrect PIN. Try again or use another card.',
+    ),
+    'pin_try_exceeded' => _t(
+      'Trop d\'essais de NIP. Utilisez une autre carte.',
+      'Too many PIN attempts. Use another card.',
+    ),
+    _ => _t(
+      'La carte a été refusée. Essayez une autre carte ou un autre mode de paiement.',
+      'The card was declined. Try another card or another way to pay.',
+    ),
+  };
+
+  /// Friendly text for a reader-side failure kind (see CardReaderError).
+  String stripeReaderError(String kind) => switch (kind) {
+    'offline' => _t(
+      'Stripe est injoignable (Internet ?).',
+      'Can\'t reach Stripe (internet?).',
+    ),
+    'permissionDenied' => _t(
+      'Autorisation Bluetooth/position refusée : la carte (Stripe) est désactivée.',
+      'Bluetooth/location permission was denied, so Card (Stripe) is disabled.',
+    ),
+    'unsupported' => _t(
+      'La carte (Stripe) fonctionne sur la tablette Android seulement.',
+      'Card (Stripe) works on the Android tablet only.',
+    ),
+    'servicesOff' => _t(
+      'Activez le Bluetooth et la localisation, puis réessayez.',
+      'Turn on Bluetooth and Location, then try again.',
+    ),
+    _ => _t(
+      'Le lecteur de carte n\'a pas répondu.',
+      'The card reader didn\'t respond.',
+    ),
+  };
+
   // table ops: move / merge
   String get moveMerge => _t('Déplacer/fusionner des factures', 'Move / merge');
   String moveMergeTitle(int billId) => _t(
@@ -1172,6 +1291,61 @@ class L {
     'internal' => _t(
       'Erreur système : réessayez.',
       'Something went wrong — try again',
+    ),
+    'stripe_unavailable' => _t(
+      'Stripe est injoignable (Internet ?). Rien n\'a été fait chez Stripe.',
+      'Can\'t reach Stripe (internet?). Nothing was done at Stripe.',
+    ),
+    'stripe_declined' => stripeDeclineMessage(null),
+    'stripe_not_configured' => _t(
+      'La carte (Stripe) n\'est pas configurée sur ce magasin.',
+      'Card (Stripe) is not set up on this store',
+    ),
+    'stripe_live_key_refused' => stripeUnavailableHint(
+      'stripe_live_key_refused',
+    ),
+    'stripe_location_required' => stripeUnavailableHint(
+      'stripe_location_required',
+    ),
+    'stripe_error' => _t(
+      'Stripe a refusé la demande. Rien n\'a été facturé.',
+      'Stripe refused the request. Nothing was charged.',
+    ),
+    'stripe_amount_exceeds_due' => _t(
+      'Le compte ne doit plus ce montant : la carte n\'a pas été débitée.',
+      'The bill no longer owes that amount — the card was not charged',
+    ),
+    'stripe_payment_reversed' => _t(
+      'Le paiement n\'a pas pu être appliqué à ce compte et a été remboursé.',
+      'The card payment could not be applied to this bill and was refunded',
+    ),
+    'stripe_payment_canceled' => _t(
+      'Ce paiement par carte a été annulé.',
+      'That card payment was canceled',
+    ),
+    'stripe_not_ready' => _t(
+      'Le paiement par carte n\'est pas terminé. Réessayez.',
+      'The card payment isn\'t finished yet — try again',
+    ),
+    'stripe_no_card_tender' => _t(
+      'Ce compte n\'a pas été payé par carte (Stripe).',
+      'This bill wasn\'t paid by Card (Stripe)',
+    ),
+    'stripe_refund_exceeds_card' => _t(
+      'Le remboursement dépasse le montant payé par carte (Stripe).',
+      'The refund is more than was paid by Card (Stripe)',
+    ),
+    'stripe_refund_split_required' => _t(
+      'Remboursez chaque paiement par carte séparément.',
+      'Refund each card payment separately',
+    ),
+    'stripe_refund_failed' => _t(
+      'Stripe n\'a pas effectué le remboursement. Rien n\'a été enregistré.',
+      'Stripe did not make the refund. Nothing was recorded.',
+    ),
+    'stripe_refund_via_stripe' => _t(
+      'Les remboursements par carte (Stripe) passent par Stripe.',
+      'Card (Stripe) refunds go through Stripe',
     ),
     _ => null,
   };

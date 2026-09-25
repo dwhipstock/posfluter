@@ -116,6 +116,117 @@ adb logcat -s TabletStore | grep 'Receipt printing'
 properties file in the same format. The env var wins over the file. Restart
 the store to apply.
 
+## Stripe (test mode)
+
+An optional extra tender, **Card (Stripe)**, takes a card through Stripe
+Terminal's **simulated reader** (no hardware), in Stripe **test mode only**.
+Cash, Card (the external terminal) and Transfer are unchanged. Without a key the option is
+not shown; with a key but no internet (or a refused key, or a denied
+permission) it is greyed out with a hint. It never blocks startup, sign-in or
+a sale: nothing contacts Stripe until someone picks it, and a failure records
+nothing, so the bill can always be paid another way.
+
+### Setup
+
+1. Create (or use) a Stripe account and switch the dashboard to **Test mode**.
+   Developers → API keys → copy the **secret test key** (`sk_test_…`).
+2. Put it in the gitignored `.env` at the repo root (never commit it):
+   ```sh
+   STRIPE_KEY=sk_test_...
+   # optional; otherwise the store creates/reuses its own Terminal Location
+   # STRIPE_LOCATION_ID=tml_...
+   ```
+3. **Tablet**: push it and restart the POS:
+   ```sh
+   scripts/tablet-stripe-config.sh        # merges stripe.secretKey into store.properties
+   scripts/tablet-stripe-config.sh --off  # remove it again
+   adb logcat -s TabletStore | grep 'Stripe:'
+   ```
+   The key goes into `/sdcard/Android/data/dev.dwhipstock.pos_client/files/store.properties`
+   next to `print.receipts` (other lines are kept).
+   **Desktop / docker store**: `STRIPE_KEY` (and optional `STRIPE_LOCATION_ID`)
+   in the environment; `scripts/demo-up.sh` reads it from `.env` for Plateau,
+   and both compose files pass it through. `POS_CONFIG_FILE` with
+   `stripe.secretKey=` works too.
+4. The first time Card (Stripe) is used the tablet asks for **location and
+   Bluetooth** permission (the Terminal SDK requires them even for the
+   simulated reader). Denying just disables Card (Stripe) until the app restarts.
+
+Rules the store enforces: only `sk_test_…` keys are accepted — a live,
+restricted or malformed key is refused, logged as
+`Stripe: DISABLED — … not an sk_test_ key`, and Stripe stays off. The key is
+never logged, never stored in the database and never sent to the cloud; tender
+and refund events carry only the tender type `STRIPE` and the Stripe
+PaymentIntent / refund ids.
+
+On startup (in the background, never gating anything) the store reads the
+Stripe account and charges in the **account's default currency**. A Canadian
+account charges CAD, matching the store. If an account in another currency is
+used, the store logs a warning and still charges, for the same number of cents
+with no conversion (test mode only); the payment screen then shows the currency
+code. Unless `STRIPE_LOCATION_ID` is set, the store reuses a Terminal Location
+tagged with its store id, or creates one (idempotently) with a fictional
+Montréal address for a CA account. Its id is kept locally in `sync_state`.
+
+### Taking a payment
+
+Pay → **Card (Stripe)** → (optional amount on the keypad, blank = all due) →
+pick a **simulated card** → **Charge card (Stripe)**. The screen shows
+connecting → tap card (simulated) → processing → approved / declined. On
+approval the store captures the payment and records a `STRIPE` tender (the
+receipt says "Card (Stripe)"); the bill closes as usual. **Cancel** returns
+to the tender screen and records nothing (the PaymentIntent is canceled at
+Stripe). Declines and errors show a plain message plus "Nothing was charged".
+
+How it works: `capture_method=manual`. The reader only *authorizes*; the
+store re-checks that the bill still owes the amount, then captures and records
+the tender. If the bill was paid some other way in the meantime, the
+authorization is released instead of charged. Every Stripe write carries an
+idempotency key, so a retry after a timeout can't charge, capture or refund
+twice. If Stripe times out, nothing is recorded, and the bill stays payable
+by cash or anything else.
+
+Test cards and amounts (Stripe test mode; details on Stripe's Terminal
+testing page, docs.stripe.com/terminal/references/testing):
+
+| Simulated card on the Pay screen | Card number used     | Result                        |
+|----------------------------------|----------------------|-------------------------------|
+| Approved                         | reader default (Visa)| approved                      |
+| Declined                         | 4000 0000 0000 0002  | declined (`card_declined`)    |
+| Insufficient funds               | 4000 0000 0000 9995  | declined (`insufficient_funds`)|
+
+Stripe's Terminal test amounts also decline by the cents of the amount: an
+amount ending in **.01** (call issuer), **.05** (generic decline), **.55**
+(incorrect PIN), **.65** (withdrawal count limit) or **.75** (PIN tries
+exceeded); check Stripe's page for which apply to the simulated reader. The
+POS keypad takes whole dollars, so make the bill total end in those cents
+(e.g. add an open item at $10.05). Stripe's minimum charge is 0.50.
+
+### Refunds
+
+Refunds use the existing refund screen and rules (manager grant, reason,
+by amount or by line, cumulative cap). **Card (Stripe)** appears as a refund
+method only for a bill that was paid that way. The store refunds at Stripe
+first (full or partial, against that PaymentIntent, idempotency key per
+amount) and records the refund only after Stripe accepted it. **If Stripe
+can't be reached, the refund is refused** ("Can't reach Stripe"), and
+nothing is recorded: the POS never shows a card refund that didn't happen.
+A cash refund of the same bill still works if the customer agrees.
+
+### Real money later (not done here)
+
+- **Activate** the Stripe account (business details, bank account) and swap
+  in a live key. The store refuses live keys today, so that is a
+  deliberate code change, not only config.
+- A **physical reader** (e.g. a Bluetooth reader like the Stripe M2 or
+  WisePad 3), or **Tap to Pay on Android** on a supported NFC device. Either
+  replaces the simulated discovery in `client/lib/payments/card_reader.dart`.
+- **Interac** (Canadian debit): `interac_present` payments are captured
+  automatically, and their refunds must be made in person on the reader
+  (card present). Neither is handled yet.
+- Live-mode checks: receipts with the card brand / last 4 and auth code,
+  reconciliation with Stripe payouts, and dispute handling.
+
 ## Tear-down
 
 ```sh
