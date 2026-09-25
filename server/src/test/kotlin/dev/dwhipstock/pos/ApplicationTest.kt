@@ -127,7 +127,7 @@ class ApplicationTest {
         assertTrue("Je ne veux pas de glace." in receiptText)
         assertTrue("Corkage" in receiptText)
         assertTrue("Total" in receiptText && "56.25" in receiptText)
-        assertTrue("2026" in receiptText)          // CE calendar
+        assertTrue("2026" in receiptText)          // four-digit year
         assertTrue("impôt" !in receiptText)          // VAT hidden for CopperLantern
         assertTrue("Card" in receiptText && "Cash" in receiptText)
         assertTrue("Change" in receiptText)

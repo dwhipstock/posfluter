@@ -1,20 +1,17 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { messages, type Era, type Locale, type MsgKey } from "./messages";
+import { messages, type Locale, type MsgKey } from "./messages";
 import { makeFmt, type Fmt } from "./format";
 
-export type { Era, Locale } from "./messages";
+export type { Locale } from "./messages";
 
 type Vars = Record<string, string | number>;
 
 interface I18n {
   locale: Locale;
-  era: Era;
   setLocale: (l: Locale) => void;
-  setEra: (e: Era) => void;
   toggleLocale: () => void;
-  toggleEra: () => void;
   t: (key: MsgKey, vars?: Vars) => string;
   fmt: Fmt;
   /** Data-driven bilingual names (items, categories, zones): locale first. */
@@ -34,25 +31,17 @@ function writeCookie(name: string, value: string) {
 
 export function LocaleProvider({
   initialLocale,
-  initialEra,
   children,
 }: {
   initialLocale: Locale;
-  initialEra: Era;
   children: React.ReactNode;
 }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
-  const [era, setEraState] = useState<Era>(initialEra);
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
     writeCookie("locale", l);
     document.documentElement.lang = l;
-  }, []);
-
-  const setEra = useCallback((e: Era) => {
-    setEraState(e);
-    writeCookie("era", e);
   }, []);
 
   const t = useCallback(
@@ -65,7 +54,7 @@ export function LocaleProvider({
     [locale]
   );
 
-  const fmt = useMemo(() => makeFmt(locale, era, t), [locale, era, t]);
+  const fmt = useMemo(() => makeFmt(locale, t), [locale, t]);
 
   const name = useCallback(
     (fr?: string | null, en?: string | null) => (locale === "en" ? en || fr || "" : fr || en || ""),
@@ -83,17 +72,14 @@ export function LocaleProvider({
   const value = useMemo<I18n>(
     () => ({
       locale,
-      era,
       setLocale,
-      setEra,
       toggleLocale: () => setLocale(locale === "fr" ? "en" : "fr"),
-      toggleEra: () => setEra("CE"),
       t,
       fmt,
       name,
       nameAlt,
     }),
-    [locale, era, setLocale, setEra, t, fmt, name, nameAlt]
+    [locale, setLocale, t, fmt, name, nameAlt]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

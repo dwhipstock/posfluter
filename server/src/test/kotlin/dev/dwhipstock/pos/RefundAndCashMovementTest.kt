@@ -46,7 +46,7 @@ class RefundAndCashMovementTest {
         val c = loginClient()
         c.patch("/me/preferences") {
             contentType(ContentType.Application.Json)
-            setBody("""{"languageCode":"fr","calendar":"CE"}""")
+            setBody("""{"languageCode":"fr"}""")
         }
         // a server lacks the refund / cash_movement grants → gated actions need approval (CONTRACT §7)
         val server = loginClient("9999")
@@ -132,7 +132,7 @@ class RefundAndCashMovementTest {
         val c = loginClient()
         c.patch("/me/preferences") {
             contentType(ContentType.Application.Json)
-            setBody("""{"languageCode":"en","calendar":"CE"}""")
+            setBody("""{"languageCode":"en"}""")
         }.let { assertEquals(HttpStatusCode.OK, it.status) }
         c.postJson("/shifts", """{"openingFloatCents":0,"managerPin":"1234"}""")
             .let { assertEquals(HttpStatusCode.Created, it.status) }

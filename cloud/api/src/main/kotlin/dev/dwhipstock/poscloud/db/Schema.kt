@@ -326,7 +326,6 @@ object Staff : Table("staff") {
     val pinHash = text("pin_hash")
     val active = bool("active")
     val languageCode = text("language_code")
-    val calendar = text("calendar")
     val deleted = bool("deleted")
     val createdAt = datetime("created_at")
     val updatedAt = datetime("updated_at")

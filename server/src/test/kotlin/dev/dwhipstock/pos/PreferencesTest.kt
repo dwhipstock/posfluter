@@ -17,29 +17,46 @@ class PreferencesTest {
     private fun tempDb() = Files.createTempDirectory("pos-test").resolve("pos.db").toString()
 
     @Test
-    fun preferencesPersistAndDriveReceiptLanguage() = testApplication {
+    fun olderClientSendingRetiredCalendarFieldIsAccepted() = testApplication {
         application { module(dbPath = tempDb(), receiptsDir = Files.createTempDirectory("rc").toString()) }
         val manager = loginClient()
 
-        // defaults are English / CE
-        var me = Json.parseToJsonElement(manager.get("/me").bodyAsText()).jsonObject
-        assertEquals("en", me["languageCode"]!!.jsonPrimitive.content)
-        assertEquals("CE", me["calendar"]!!.jsonPrimitive.content)
-
-        // switch to French / CE — persisted on the user row
+        // pre-removal clients still PATCH {"calendar":"CE"}; the field is ignored
         val patched = manager.patch("/me/preferences") {
             contentType(ContentType.Application.Json)
             setBody("""{"languageCode":"fr","calendar":"CE"}""")
         }
         assertEquals(HttpStatusCode.OK, patched.status)
+        val body = Json.parseToJsonElement(patched.bodyAsText()).jsonObject
+        assertEquals("fr", body["languageCode"]!!.jsonPrimitive.content)
+        assertTrue("calendar" !in body)
+        val me = Json.parseToJsonElement(manager.get("/me").bodyAsText()).jsonObject
+        assertEquals("fr", me["languageCode"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun preferencesPersistAndDriveReceiptLanguage() = testApplication {
+        application { module(dbPath = tempDb(), receiptsDir = Files.createTempDirectory("rc").toString()) }
+        val manager = loginClient()
+
+        // default is English; the profile carries no retired preference fields
+        var me = Json.parseToJsonElement(manager.get("/me").bodyAsText()).jsonObject
+        assertEquals("en", me["languageCode"]!!.jsonPrimitive.content)
+        assertTrue("calendar" !in me, "retired calendar field still on /me: $me")
+
+        // switch to French — persisted on the user row
+        val patched = manager.patch("/me/preferences") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"languageCode":"fr"}""")
+        }
+        assertEquals(HttpStatusCode.OK, patched.status)
         me = Json.parseToJsonElement(manager.get("/me").bodyAsText()).jsonObject
         assertEquals("fr", me["languageCode"]!!.jsonPrimitive.content)
-        assertEquals("CE", me["calendar"]!!.jsonPrimitive.content)
 
         // invalid values rejected
         assertEquals(HttpStatusCode.BadRequest, manager.patch("/me/preferences") {
             contentType(ContentType.Application.Json)
-            setBody("""{"languageCode":"de","calendar":"CE"}""")
+            setBody("""{"languageCode":"de"}""")
         }.status)
 
         // tendering needs an open shift

@@ -77,7 +77,7 @@ sealed interface ReceiptPolicy {
     val locale: LocaleCode
 
     /**
-     * Date order (dd-MM-yyyy) and calendar era are VENUE policy — continuity
+     * Date order (dd-MM-yyyy) is VENUE policy — continuity
      * with the venue's paper receipts — deliberately NOT locale-driven, so a
      * locale pack cannot change them. Per-locale date patterns would be a
      * future catalog key (e.g. receipt.date_pattern), not a format here.

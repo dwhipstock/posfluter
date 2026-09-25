@@ -40,7 +40,7 @@ class StaffGrantApplyTest {
         active: Boolean = true, deleted: Boolean = false, refundOverride: Boolean? = null,
     ) = buildJsonObject {
         put("id", id); put("name", name); put("role", role); put("pinHash", pinHash)
-        put("active", active); put("languageCode", "fr"); put("calendar", "CE"); put("deleted", deleted)
+        put("active", active); put("languageCode", "fr"); put("deleted", deleted)
         put("overrides", buildJsonObject { refundOverride?.let { put("refund", it) } })
     }
 
@@ -102,7 +102,7 @@ class StaffGrantApplyTest {
 
         // staff picks English locally — the snapshot's languageCode is only a creation default
         transaction {
-            Users.update({ Users.id eq "nok" }) { it[languageCode] = "en"; it[calendar] = "CE" }
+            Users.update({ Users.id eq "nok" }) { it[languageCode] = "en" }
         }
 
         // a portal rename re-sends the snapshot; display preferences must survive it
@@ -116,7 +116,6 @@ class StaffGrantApplyTest {
             val row = Users.selectAll().where { Users.id eq "nok" }.first()
             assertEquals("Nok", row[Users.name])
             assertEquals("en", row[Users.languageCode])
-            assertEquals("CE", row[Users.calendar])
         }
     }
 

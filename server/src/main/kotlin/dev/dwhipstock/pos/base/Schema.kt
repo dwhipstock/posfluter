@@ -71,7 +71,6 @@ object Users : Table("users") {
     val role = varchar("role", 20) // MANAGER | SERVER
     val pin = varchar("pin", 100) // BCrypt hash ($2a$...); plaintext auto-upgraded at startup
     val languageCode = varchar("language_code", 8).default("en")
-    val calendar = varchar("calendar", 2).default("CE")
     val active = bool("active").default(true) // cloud can deactivate (024)
     val deletedAt = datetime("deleted_at").nullable() // cloud soft-delete (024); row kept for session/check FKs
     override val primaryKey = PrimaryKey(id)

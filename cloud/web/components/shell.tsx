@@ -9,7 +9,7 @@ import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/hooks";
 import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
-import { LangEraToggle } from "@/components/lang-toggle";
+import { LangToggle } from "@/components/lang-toggle";
 import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="space-y-3 border-t border-white/10 px-5 py-4 text-xs text-neutral-500">
-          <LangEraToggle tone="dark" />
+          <LangToggle tone="dark" />
           {me.data?.venueName ?? " "}
         </div>
       </aside>
@@ -82,7 +82,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Wordmark />
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-xs text-neutral-400">{me.data?.venueName ?? ""}</span>
-          <LangEraToggle tone="dark" />
+          <LangToggle tone="dark" />
         </div>
       </header>
 

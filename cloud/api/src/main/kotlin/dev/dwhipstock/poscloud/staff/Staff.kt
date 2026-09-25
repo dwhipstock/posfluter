@@ -144,7 +144,6 @@ fun Route.staffRoutes() {
                 it[pinHash] = hashStaffPin(req.pin)
                 it[active] = true
                 it[languageCode] = "en"
-                it[calendar] = "CE"
                 it[deleted] = false
                 it[createdAt] = now
                 it[updatedAt] = now
@@ -402,7 +401,6 @@ private fun insertSeedStaff(scope: Scope, id: String, name: String, role: String
         it[pinHash] = hashStaffPin(pin)
         it[active] = true
         it[languageCode] = "en"
-        it[calendar] = "CE"
         it[deleted] = false
         it[createdAt] = now
         it[updatedAt] = now
@@ -577,7 +575,6 @@ private fun staffSnapshot(scope: Scope, staffId: String): JsonObject {
         put("pinHash", row[Staff.pinHash]) // BCrypt hash — the store verifies logins offline against it
         put("active", row[Staff.active])
         put("languageCode", row[Staff.languageCode])
-        put("calendar", row[Staff.calendar])
         put("deleted", row[Staff.deleted])
         put("overrides", buildJsonObject { overrides.forEach { (k, v) -> put(k, v) } })
     }

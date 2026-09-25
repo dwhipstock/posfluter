@@ -265,7 +265,7 @@ Two new `kind`s on `GET /v1/store/catalog/changes`:
   "data": {
     "id": "server1", "name": "employé (Server)", "role": "SERVER",
     "pinHash": "$2a$10$…",              // BCrypt hash ONLY — never the plaintext PIN
-    "active": true, "languageCode": "fr", "calendar": "CE", "deleted": false,
+    "active": true, "languageCode": "fr", "deleted": false,
     "overrides": { "refund": true }     // per-staff grant overrides (only keys the owner set)
   } }
 { "version": 92, "kind": "role_grants", "op": "upsert",

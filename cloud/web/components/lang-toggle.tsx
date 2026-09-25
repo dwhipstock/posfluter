@@ -3,10 +3,10 @@
 import { useI18n } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
-// Compact language + calendar-era toggles, mirroring the POS app bar. Each
-// button shows the CURRENT value; tapping flips it. `tone` adapts to the dark
+// Compact language toggle, mirroring the POS app bar. The button shows the
+// CURRENT value; tapping flips it. `tone` adapts to the dark
 // shell chrome vs. the light login card.
-export function LangEraToggle({ tone = "light" }: { tone?: "light" | "dark" }) {
+export function LangToggle({ tone = "light" }: { tone?: "light" | "dark" }) {
   const { locale, toggleLocale } = useI18n();
 
   const btn = cn(
@@ -25,7 +25,7 @@ export function LangEraToggle({ tone = "light" }: { tone?: "light" | "dark" }) {
   );
 }
 
-// Segmented pickers for the Account "Display" card — both options visible so
+// Segmented picker for the Account "Display" card — both options visible so
 // the choice is obvious, not a mystery toggle.
 export function SegmentedToggle<T extends string>({
   value,

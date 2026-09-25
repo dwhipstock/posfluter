@@ -14,6 +14,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.*
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 val SessionUserKey = AttributeKey<AuthUser>("sessionUser")
 
@@ -25,7 +26,10 @@ class ManagerApprovalException(message: String = "manager PIN required") :
 data class LoginRequest(val pin: String)
 
 @Serializable
-data class PreferencesRequest(val languageCode: String, val calendar: String)
+data class PreferencesRequest(val languageCode: String)
+
+/** Older clients still send retired preference fields; accept and ignore them. */
+private val preferencesJson = Json { ignoreUnknownKeys = true }
 
 @Serializable
 data class ChangePinRequest(val currentPin: String, val newPin: String)
@@ -232,10 +236,10 @@ fun Route.authRoutes(auth: AuthService) {
     get("/me") { call.respond(call.attributes[SessionUserKey]) }
 
     patch("/me/preferences") {
-        val req = call.receive<PreferencesRequest>()
+        val req = preferencesJson.decodeFromString<PreferencesRequest>(call.receiveText())
         val user = call.sessionUser()
-        auth.updatePreferences(user.userId, req.languageCode, req.calendar)
-        call.respond(user.copy(languageCode = req.languageCode, calendar = req.calendar))
+        auth.updatePreferences(user.userId, req.languageCode)
+        call.respond(user.copy(languageCode = req.languageCode))
     }
 
     patch("/me/pin") {

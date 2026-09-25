@@ -194,8 +194,8 @@ object CopperLanternSeed {
             this[FloorObjects.width] = o.width; this[FloorObjects.height] = o.height
             this[FloorObjects.label] = o.label
         }
-        Users.insert { it[id] = "manager"; it[name] = "Demo Manager"; it[role] = "MANAGER"; it[pin] = AuthService.hashPin("1234"); it[languageCode] = "en"; it[calendar] = "CE" }
-        Users.insert { it[id] = "server1"; it[name] = "Demo Server"; it[role] = "SERVER"; it[pin] = AuthService.hashPin("9999"); it[languageCode] = "en"; it[calendar] = "CE" }
+        Users.insert { it[id] = "manager"; it[name] = "Demo Manager"; it[role] = "MANAGER"; it[pin] = AuthService.hashPin("1234"); it[languageCode] = "en" }
+        Users.insert { it[id] = "server1"; it[name] = "Demo Server"; it[role] = "SERVER"; it[pin] = AuthService.hashPin("9999"); it[languageCode] = "en" }
         Outbox.write("catalog.seeded", "catalog", "copper-lantern", buildJsonObject { put("items", menu.size); put("zones", zones.size); put("tables", tables.size) })
     }
 }
