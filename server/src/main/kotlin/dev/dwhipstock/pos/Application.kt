@@ -250,7 +250,11 @@ fun Application.module(
         get("/") { call.respond(mapOf("service" to "pos-server", "version" to "0.1.0")) }
         // pairingRequired lets the terminal decide between the pairing screen and
         // the legacy LAN flow before it has any credentials
-        get("/health") { call.respond(HealthResponse(status = "ok", pairingRequired = requireDeviceToken)) }
+        // venue = the store's display name ("Copper Lantern — Vieux-Port") so the
+        // sign-in screen can say which store this terminal serves before login
+        get("/health") {
+            call.respond(HealthResponse(status = "ok", pairingRequired = requireDeviceToken, venue = config.displayName))
+        }
         // Staff ordering web app (M7): a mobile-first page served from the store.
         // Public shell (like the customer menu); it authenticates via POST /login
         // inside and drives the gated ordering API with the returned bearer token.
@@ -319,4 +323,4 @@ private fun wipeMigrationSeedResidueIfNeverSynced() =
     }
 
 @Serializable
-data class HealthResponse(val status: String, val pairingRequired: Boolean = false)
+data class HealthResponse(val status: String, val pairingRequired: Boolean = false, val venue: String = "")

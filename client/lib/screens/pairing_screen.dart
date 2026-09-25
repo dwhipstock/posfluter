@@ -154,7 +154,7 @@ class _PairingScreenState extends State<PairingScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(LucideIcons.link, size: 40, color: T.accent),
+                      const Icon(LucideIcons.link, size: 40, color: T.primary),
                       const SizedBox(height: 12),
                       Text(
                         'Copper Lantern POS',

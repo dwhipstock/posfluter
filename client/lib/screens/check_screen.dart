@@ -114,10 +114,6 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       final result = await showModalBottomSheet<(Variant, int, String?)>(
         context: context,
         isScrollControlled: true,
-        backgroundColor: T.surfaceAlt,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: T.rLarge),
-        ),
         builder: (_) => _VariantSheet(item: item),
       );
       if (result == null) return;
@@ -368,14 +364,21 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             ? Center(child: Text(_error!))
             : check == null
             ? const DelayedSpinner()
-            : Row(
-                children: [
-                  _navRail(check, l),
-                  const VerticalDivider(),
-                  Expanded(flex: 5, child: _menuColumn(l)),
-                  const VerticalDivider(),
-                  SizedBox(width: 380, child: _billPanel(check, l)),
-                ],
+            : LayoutBuilder(
+                builder: (context, c) => Row(
+                  children: [
+                    _navRail(check, l),
+                    const VerticalDivider(),
+                    Expanded(child: _menuColumn(l)),
+                    const VerticalDivider(),
+                    // fixed cart: roomy on the landscape tablet, narrower
+                    // when the screen is (portrait / small windows)
+                    SizedBox(
+                      width: c.maxWidth >= 1100 ? 420 : 340,
+                      child: _billPanel(check, l),
+                    ),
+                  ],
+                ),
               ),
       ),
     );
@@ -384,10 +387,11 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   // ~64pt icon column: back, void; language pinned at the bottom
   Widget _navRail(Check check, L l) {
     return Container(
-      width: 64,
-      color: T.background,
+      width: 72,
+      color: T.surface,
       child: Column(
         children: [
+          const SizedBox(height: 8),
           IconButton(
             icon: const Icon(LucideIcons.arrowLeft),
             tooltip: MaterialLocalizations.of(context).backButtonTooltip,
@@ -412,7 +416,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 : null,
           ),
           const Spacer(),
-          const RotatedBox(quarterTurns: 0, child: LangActionsCompact()),
+          const LangActionsCompact(),
           const SizedBox(height: 8),
         ],
       ),
@@ -421,18 +425,18 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   Widget _menuColumn(L l) {
     final visible = _items.where((i) => i.category == _category).toList();
-    final portrait = MediaQuery.of(context).size.width < 1100;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: 60,
+          height: 72,
           child: ListView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             children: [
               for (final c in _categories)
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.only(right: 10),
                   child: _CategoryChip(
                     label: l.name(c.nameFr, c.nameEn),
                     selected: c.id == _category,
@@ -441,81 +445,106 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 ),
               // off-menu line by name + price — lives with the add-item chips
               OutlinedButton.icon(
-                icon: const Icon(LucideIcons.pencilLine, size: 16),
+                icon: const Icon(LucideIcons.pencilLine, size: 18),
                 label: Text(
                   l.openItem,
-                  style: T.small(weight: FontWeight.w600),
+                  style: T.text(size: 16, weight: FontWeight.w600),
                 ),
                 onPressed: _check?.status == 'OPEN' ? _addOpenItem : null,
                 style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  foregroundColor: T.navy,
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                 ),
               ),
             ],
           ),
         ),
         Expanded(
-          child: GridView.count(
-            crossAxisCount: portrait ? 3 : 4,
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 1.05,
-            children: [for (final item in visible) _menuTile(item, l)],
+          child: LayoutBuilder(
+            builder: (context, c) {
+              // responsive grid: ~175pt columns that always fill the pane
+              // (4 across on the landscape tablet);
+              // photo 16:10 + a fixed two-line name + price
+              const pad = 16.0, gap = 14.0;
+              final avail = c.maxWidth - pad * 2;
+              final cols = ((avail + gap) / (172 + gap)).floor().clamp(2, 6);
+              final tileW = (avail - gap * (cols - 1)) / cols;
+              return GridView.builder(
+                padding: const EdgeInsets.fromLTRB(pad, 4, pad, pad),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: cols,
+                  mainAxisSpacing: gap,
+                  crossAxisSpacing: gap,
+                  mainAxisExtent: tileW * 10 / 16 + _tileTextHeight,
+                ),
+                itemCount: visible.length,
+                itemBuilder: (_, i) => _menuTile(visible[i], l),
+              );
+            },
           ),
         ),
       ],
     );
   }
 
+  /// Name (two lines) + price block under each tile's photo.
+  static const _tileTextHeight = 90.0;
+
   Widget _menuTile(Item item, L l) {
     final inactive = !item.active; // 86'd: greyed + strike-through, NOT hidden
     return Opacity(
       opacity: inactive ? 0.45 : 1,
       child: PosPanel(
+        raised: !inactive,
         onTap: inactive ? null : () => _addItem(item),
         onLongPress: inactive ? null : () => _addItem(item, forceSheet: true),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
+            AspectRatio(
+              aspectRatio: 16 / 10,
               child: ItemPhoto(
                 item,
                 width: 512,
-                fallback: AbbrevFallback(item.abbrev),
+                fallback: AbbrevFallback(item.abbrev, size: 56),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l.name(item.nameFr, item.nameEn),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: T
-                        .small(color: T.textPrimary, weight: FontWeight.w600)
-                        .copyWith(
-                          decoration: inactive
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        item.variants.length == 1
-                            ? cad(item.variants.first.priceCents)
-                            : '${cad(item.variants.first.priceCents)}+',
-                        style: T.price(size: 16, color: T.accent),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l.name(item.nameFr, item.nameEn),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: T
+                            .text(size: 16, weight: FontWeight.w600)
+                            .copyWith(
+                              height: 1.25,
+                              decoration: inactive
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
                       ),
-                      if (inactive) const Pill('86', color: T.destructive),
-                    ],
-                  ),
-                ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          item.variants.length == 1
+                              ? cad(item.variants.first.priceCents)
+                              : '${cad(item.variants.first.priceCents)}+',
+                          style: T.price(size: 18, weight: FontWeight.w700),
+                        ),
+                        if (inactive) const Pill('86', color: T.destructive),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -531,10 +560,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         children: [
           // panel header: table + bill number, corkage "+"
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: T.border)),
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
+            decoration: const BoxDecoration(color: T.navy),
             child: Row(
               children: [
                 Expanded(
@@ -543,9 +570,22 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     children: [
                       Text(
                         '${l.table} ${widget.tableLabel}',
-                        style: T.text(weight: FontWeight.w600),
+                        style: T.text(
+                          size: 22,
+                          weight: FontWeight.w700,
+                          color: T.onPrimary,
+                        ),
                       ),
-                      Text('${l.bill} #${widget.checkId}', style: T.small()),
+                      Text(
+                        [
+                          '${l.bill} #${widget.checkId}',
+                          if (check.lines.isNotEmpty)
+                            l.itemCount(
+                              check.lines.fold(0, (n, x) => n + x.qty),
+                            ),
+                        ].join('  ·  '),
+                        style: T.small(color: T.onNavyMuted),
+                      ),
                     ],
                   ),
                 ),
@@ -559,6 +599,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                   ),
                 IconButton(
                   icon: const Icon(LucideIcons.plusCircle),
+                  color: T.onPrimary,
+                  disabledColor: T.onNavyMuted.withValues(alpha: .5),
                   tooltip: l.corkageTitle,
                   constraints: const BoxConstraints(
                     minWidth: T.minTouch,
@@ -571,7 +613,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
           ),
           Expanded(
             child: check.lines.isEmpty && check.pendingLines.isEmpty
-                ? Center(child: Text(l.noItemsYet, style: T.small()))
+                ? const _EmptyBill()
                 : ListView(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     children: [
@@ -581,7 +623,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                             horizontal: 16,
                             vertical: 8,
                           ),
-                          color: T.attention.withValues(alpha: .12),
+                          color: T.pending.withValues(alpha: .22),
                           child: Row(
                             children: [
                               const AttentionDot(),
@@ -602,7 +644,11 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                           _pendingLine(line, l),
                         const Divider(),
                       ],
-                      for (final line in check.lines) _billLine(check, line, l),
+                      for (final (i, line) in check.lines.indexed) ...[
+                        if (i > 0) const Divider(indent: 20, endIndent: 20),
+                        _billLine(check, line, l),
+                      ],
+                      if (check.fees.isNotEmpty) const Divider(),
                       for (final fee in check.fees)
                         Padding(
                           padding: const EdgeInsets.symmetric(
@@ -628,8 +674,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
           ),
           // total + big green pay button
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
             decoration: const BoxDecoration(
+              color: T.background,
               border: Border(top: BorderSide(color: T.border)),
             ),
             child: Column(
@@ -639,18 +686,22 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(l.total, style: T.text(weight: FontWeight.w600)),
+                    Text(
+                      l.total,
+                      style: T.text(size: 20, weight: FontWeight.w600),
+                    ),
                     Text(
                       cad(check.grandTotalCents),
                       style: T.price(
                         size: T.priceBigSize,
-                        weight: FontWeight.w600,
+                        weight: FontWeight.w700,
+                        color: T.navy,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                // secondary "check please" bill next to — not competing with — Pay.
+                // secondary "check please" bill above — not competing with — Pay.
                 // Same enable rule as Pay: needs real, resolved (non-pending) content.
                 Row(
                   children: [
@@ -664,39 +715,62 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                         minimumSize: const Size(0, T.minTouch),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         side: BorderSide(
-                          color: check.split != null ? T.accent : T.border,
+                          color: check.split != null ? T.primary : T.border,
                         ),
                       ),
                       child: Icon(
                         LucideIcons.split,
                         size: 20,
-                        color: check.split != null ? T.accent : T.textPrimary,
+                        color: check.split != null ? T.primary : T.textPrimary,
                         semanticLabel: l.splitBill,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      icon: const Icon(LucideIcons.receiptText, size: 18),
-                      label: Text(l.printBill),
-                      onPressed:
-                          check.lines.isEmpty || check.pendingLines.isNotEmpty
-                          ? null
-                          : _printBill,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, T.minTouch),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(LucideIcons.receiptText, size: 18),
+                        label: Text(l.printBill),
+                        onPressed:
+                            check.lines.isEmpty || check.pendingLines.isNotEmpty
+                            ? null
+                            : _printBill,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, T.minTouch),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Pay: full width under the secondary actions, so its label
+                // (long in French) never has to squeeze
+                Row(
+                  children: [
                     Expanded(
                       child: SizedBox(
-                        height: T.minTouch,
+                        height: 64,
                         child: FilledButton.icon(
+                          // the one copper call to action on the screen
+                          style: FilledButton.styleFrom(
+                            backgroundColor: T.accent,
+                            foregroundColor: T.onAccent,
+                            textStyle: T.text(
+                              size: 20,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
                           icon: const Icon(LucideIcons.banknote),
-                          label: Text(
-                            check.pendingLines.isNotEmpty
-                                ? l.ordersAwaiting
-                                : l.pay,
+                          // one line, scaled down for the long French /
+                          // "orders awaiting" labels rather than wrapping
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              check.pendingLines.isNotEmpty
+                                  ? l.ordersAwaiting
+                                  : l.pay,
+                              maxLines: 1,
+                            ),
                           ),
                           // a split check settles per group — Pay routes there
                           onPressed:
@@ -760,7 +834,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
           IconButton(
             icon: const Icon(
               LucideIcons.checkCircle2,
-              color: T.accent,
+              color: T.primary,
               size: 22,
             ),
             tooltip: l.acceptOrder,
@@ -792,66 +866,117 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   Widget _billLine(Check check, CheckLine line, L l) {
     final editable = check.status == 'OPEN';
+    final variant = line.variantLabelFr == null
+        ? null
+        : l.name(
+            line.variantLabelFr!,
+            line.variantLabelEn ?? line.variantLabelFr!,
+          );
+    final detail = [?variant, ?line.note].join(' · ');
     final row = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(20, 10, 12, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _lineTitle(line, l),
-                  maxLines: 1,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  l.name(line.nameFr, line.nameEn),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: T.text(size: 16),
+                  style: T.text(size: 17, weight: FontWeight.w600),
                 ),
-                if (line.note != null) Text(line.note!, style: T.small()),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  cad(line.lineTotalCents),
+                  textAlign: TextAlign.right,
+                  style: T.price(size: 17, weight: FontWeight.w700),
+                ),
+              ),
+            ],
           ),
-          if (editable) ...[
-            // − at qty 1 deletes the line entirely (no zero-qty lines), same as trash
-            _stepBtn(
-              LucideIcons.minus,
-              () => _guarded(
-                () => line.qty > 1
-                    ? Api.setLineQty(widget.checkId, line.id, line.qty - 1)
-                    : Api.removeLine(widget.checkId, line.id),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  detail.isEmpty
+                      ? '${cad(line.unitPriceCents)} ${l.each}'
+                      : detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.small(),
+                ),
               ),
-            ),
-            SizedBox(
-              width: 28,
-              child: Center(
-                child: Text('${line.qty}', style: T.price(size: 16)),
-              ),
-            ),
-            _stepBtn(
-              LucideIcons.plus,
-              () => _guarded(
-                () => Api.setLineQty(widget.checkId, line.id, line.qty + 1),
-              ),
-            ),
-          ] else
-            Text('×${line.qty}  ', style: T.small()),
-          SizedBox(
-            width: 66,
-            child: Text(
-              cad(line.lineTotalCents),
-              textAlign: TextAlign.right,
-              style: T.price(size: 16),
-            ),
+              if (editable) ...[
+                // − at qty 1 deletes the line entirely (no zero-qty lines), same as trash
+                Container(
+                  decoration: BoxDecoration(
+                    color: T.surface,
+                    borderRadius: T.radiusMedium,
+                    border: Border.all(color: T.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _stepBtn(
+                        LucideIcons.minus,
+                        () => _guarded(
+                          () => line.qty > 1
+                              ? Api.setLineQty(
+                                  widget.checkId,
+                                  line.id,
+                                  line.qty - 1,
+                                )
+                              : Api.removeLine(widget.checkId, line.id),
+                        ),
+                        width: 48,
+                        height: 48,
+                      ),
+                      SizedBox(
+                        width: 32,
+                        child: Center(
+                          child: Text(
+                            '${line.qty}',
+                            style: T.price(size: 18, weight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                      _stepBtn(
+                        LucideIcons.plus,
+                        () => _guarded(
+                          () => Api.setLineQty(
+                            widget.checkId,
+                            line.id,
+                            line.qty + 1,
+                          ),
+                        ),
+                        width: 48,
+                        height: 48,
+                      ),
+                    ],
+                  ),
+                ),
+                // primary, discoverable delete — swipe stays as a secondary gesture below.
+                // Muted so it doesn't shout; tap = immediate delete (mistakes get re-added).
+                _stepBtn(
+                  LucideIcons.trash2,
+                  () => _guarded(() => Api.removeLine(widget.checkId, line.id)),
+                  width: 48,
+                  color: T.textMuted,
+                  tooltip: l.deleteLine,
+                ),
+              ] else
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text('×${line.qty}', style: T.price(size: 16)),
+                ),
+            ],
           ),
-          if (editable)
-            // primary, discoverable delete — swipe stays as a secondary gesture below.
-            // Muted so it doesn't shout; tap = immediate delete (mistakes get re-added).
-            _stepBtn(
-              LucideIcons.trash2,
-              () => _guarded(() => Api.removeLine(widget.checkId, line.id)),
-              width: 44,
-              color: T.textMuted,
-              tooltip: l.deleteLine,
-            ),
         ],
       ),
     );
@@ -878,11 +1003,12 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     IconData icon,
     VoidCallback? onTap, {
     double width = 52,
+    double height = T.minTouch,
     Color? color,
     String? tooltip,
   }) => SizedBox(
     width: width,
-    height: T.minTouch,
+    height: height,
     child: IconButton(
       padding: EdgeInsets.zero,
       iconSize: 20,
@@ -906,29 +1032,73 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // selected = the copper accent; the rest sit quietly on cream
     return AnimatedContainer(
       duration: T.dNormal,
       curve: T.ease,
       decoration: BoxDecoration(
-        color: selected ? T.accent.withValues(alpha: .16) : T.surface,
-        borderRadius: T.radiusMedium,
+        color: selected ? T.accent : T.surface,
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: selected ? T.accent : T.border),
+        boxShadow: selected ? T.raised : null,
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: T.radiusMedium,
+          borderRadius: BorderRadius.circular(999),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Text(
               label,
-              style: T.small(
-                color: selected ? T.accent : T.textPrimary,
+              style: T.text(
+                size: 16,
+                color: selected ? T.onAccent : T.textPrimary,
                 weight: FontWeight.w600,
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cart empty state: what to do next, not a blank pane.
+class _EmptyBill extends StatelessWidget {
+  const _EmptyBill();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 76,
+              height: 76,
+              decoration: const BoxDecoration(
+                color: T.surfaceAlt,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                LucideIcons.receiptText,
+                size: 34,
+                color: T.navy,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              l.emptyBill,
+              textAlign: TextAlign.center,
+              style: T.text(size: 18, weight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(l.tapToAdd, textAlign: TextAlign.center, style: T.small()),
+          ],
         ),
       ),
     );

@@ -218,7 +218,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: T.destructive,
-              foregroundColor: Colors.white,
+              foregroundColor: T.onDestructive,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(l.deleteTable),
@@ -365,7 +365,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: T.destructive,
-              foregroundColor: Colors.white,
+              foregroundColor: T.onDestructive,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(l.deleteObject),
@@ -853,7 +853,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     bool on,
     VoidCallback onTap,
   ) => IconButton(
-    icon: Icon(icon, color: on ? T.accent : T.textMuted),
+    icon: Icon(icon, color: on ? T.primary : T.textMuted),
     tooltip: on ? '$label ✓' : label,
     onPressed: onTap,
   );
@@ -862,7 +862,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   /// Icon reads accent when the grid is on, muted when off — same colour
   /// language as the Snap toggle.
   Widget _gridMenu(L l) => PopupMenuButton<String>(
-    icon: Icon(LucideIcons.grid3x3, color: _showGrid ? T.accent : T.textMuted),
+    icon: Icon(LucideIcons.grid3x3, color: _showGrid ? T.primary : T.textMuted),
     tooltip: l.editorGrid,
     onSelected: _selectGrid,
     itemBuilder: (ctx) => [
@@ -894,7 +894,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         SizedBox(
           width: 26,
           child: selected
-              ? const Icon(LucideIcons.check, size: 16, color: T.accent)
+              ? const Icon(LucideIcons.check, size: 16, color: T.primary)
               : null,
         ),
         Text(label),
@@ -931,7 +931,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         style: OutlinedButton.styleFrom(
           padding: EdgeInsets.zero,
           backgroundColor: active ? T.surfaceAlt : null,
-          side: BorderSide(color: active ? T.accent : T.border),
+          side: BorderSide(color: active ? T.primary : T.border),
         ),
         // RECT/BAR presets widen the footprint so the shape reads immediately
         onPressed: () => _mutateSelected(
@@ -948,7 +948,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
             height: shape == 'BAR' ? 60 : e.height,
           ),
         ),
-        child: Icon(icon, size: 20, color: active ? T.accent : T.textMuted),
+        child: Icon(icon, size: 20, color: active ? T.primary : T.textMuted),
       ),
     );
   }

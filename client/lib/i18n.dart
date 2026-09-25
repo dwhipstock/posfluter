@@ -86,11 +86,7 @@ class Prefs extends ChangeNotifier {
       r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})',
     ).firstMatch(iso.trim());
     if (m == null) return iso;
-    final wall = DateTime(
-      int.parse(m[1]!),
-      int.parse(m[2]!),
-      int.parse(m[3]!),
-    );
+    final wall = DateTime(int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!));
     return '${fmtDate(wall)} ${m[4]}:${m[5]}';
   }
 
@@ -149,6 +145,44 @@ class L {
     'Connection interrupted — enter your PIN again',
   );
   String get whoClockingIn => _t('Qui est en poste ?', "Who's clocking in?");
+  String get switchLanguage => _t('Changer de langue', 'Switch language');
+  String get staffTerminal => _t('Terminal du personnel', 'Staff terminal');
+
+  // floor header: short labels under the action icons
+  String get navMenu => _t('Menu', 'Menu');
+  String get navReports => _t('Rapports', 'Reports');
+  String get navRefunds => _t('Remboursements', 'Refunds');
+  String get navLayout => _t('Plan de salle', 'Layout');
+  String get navRefresh => _t('Actualiser', 'Refresh');
+  String get navMore => _t('Plus', 'More');
+
+  // floor legend + room list
+  String get rooms => _t('Salles', 'Rooms');
+  String get legendFree => _t('Libre', 'Free');
+  String get legendOccupied => _t('Occupée', 'Occupied');
+  String get legendPending => _t('Commande en attente', 'Order waiting');
+  String tablesOccupied(int open, int total) =>
+      _t('$open sur $total occupées', '$open of $total occupied');
+
+  /// How long a check has been open, e.g. "25 min", "1 h 05".
+  String openFor(Duration d) {
+    if (d.inMinutes < 1) return _t('à l\'instant', 'just now');
+    if (d.inHours < 1) return '${d.inMinutes} min';
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    return '${d.inHours} h $m';
+  }
+
+  // check screen cart
+  String itemCount(int n) => en
+      ? (n == 1 ? '1 item' : '$n items')
+      : (n <= 1 ? '$n article' : '$n articles');
+  String get emptyBill =>
+      _t('Rien sur cette facture pour l\'instant', 'Nothing on this bill yet');
+  String get each => _t('l\'unité', 'each');
+  String get tapToAdd => _t(
+    'Touchez un article du menu pour l\'ajouter.',
+    'Tap a menu item to add it.',
+  );
 
   // zones
   String get zones => _t('zone', 'Zones');
@@ -161,7 +195,9 @@ class L {
   String get free => _t('gratuit', 'Free');
 
   // floor plan
-  String seatsShort(int n) => _t('$n sièges', '$n seats');
+  String seatsShort(int n) => en
+      ? (n == 1 ? '1 seat' : '$n seats')
+      : (n <= 1 ? '$n place' : '$n places');
   String get emptyZoneOnboarding => _t(
     'Il n\'y a aucune table dans cette zone.\\nAppuyez sur l\'icône en forme de crayon pour organiser la disposition des tables.',
     'No tables in this zone yet.\nTap the pencil to build the layout.',
@@ -907,7 +943,10 @@ class L {
       'Ce NIP est déjà utilisé par un autre membre du personnel.',
       'That PIN is already used by another staff member',
     ),
-    'bad_pin' => _t('Le NIP doit comporter 4 chiffres.', 'PIN must be 4 digits'),
+    'bad_pin' => _t(
+      'Le NIP doit comporter 4 chiffres.',
+      'PIN must be 4 digits',
+    ),
     'last_manager' => _t(
       'Gardez au moins un gérant actif pouvant gérer le personnel.',
       'Keep at least one active manager who can manage staff',
@@ -1168,25 +1207,44 @@ class LangActionsCompact extends StatelessWidget {
   }
 }
 
-/// AppBar actions: language toggle, visible on every screen.
+/// AppBar actions: language toggle, visible on every screen. A small
+/// outlined pill (globe + EN/FR) in the surrounding icon colour, so it reads
+/// on the cream app bars and on the navy floor header alike.
 class LangActions extends StatelessWidget {
-  const LangActions({super.key});
+  final Color? color;
+  const LangActions({super.key, this.color});
 
   @override
   Widget build(BuildContext context) {
-    L.of(context); // subscribe to rebuilds
+    final l = L.of(context); // subscribe to rebuilds
     final prefs = Prefs.instance;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextButton(
+    final fg =
+        color ?? IconTheme.of(context).color ?? Theme.of(context).primaryColor;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Tooltip(
+        message: l.switchLanguage,
+        child: OutlinedButton.icon(
           onPressed: () => prefs.setLang(prefs.isEn ? 'fr' : 'en'),
-          child: Text(
+          icon: Icon(Icons.language, size: 18, color: fg),
+          label: Text(
             prefs.isEn ? 'EN' : 'FR',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: fg,
+              letterSpacing: .5,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            foregroundColor: fg,
+            minimumSize: const Size(0, 44),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            side: BorderSide(color: fg.withValues(alpha: .45)),
+            shape: const StadiumBorder(),
           ),
         ),
-      ],
+      ),
     );
   }
 }

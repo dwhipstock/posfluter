@@ -122,7 +122,9 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
     if (from == null || !mounted) return;
     final to = await showDatePicker(
       context: context,
-      initialDate: _customTo == null || _customTo!.isBefore(from) ? from : _customTo!,
+      initialDate: _customTo == null || _customTo!.isBefore(from)
+          ? from
+          : _customTo!,
       firstDate: from,
       lastDate: today,
     );
@@ -461,7 +463,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
                     style: T.headline(),
                   ),
                 ),
-                const Pill('OPEN', color: T.accent),
+                const Pill('OPEN', color: T.primary),
               ],
             ),
             Text(
@@ -543,7 +545,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
       'BANK_TRANSFER': l.bankTransfer,
     };
     const tenderColors = {
-      'CASH': T.accent,
+      'CASH': T.primary,
       'CARD': T.textPrimary,
       'BANK_TRANSFER': T.textMuted,
     };
@@ -659,7 +661,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
             r.refundTotalCents > 0) ...[
           SectionLabel(l.paidInOut),
           if (r.cashPaidInCents > 0)
-            kv('▲ ${l.cashIn}', cad(r.cashPaidInCents), color: T.accent),
+            kv('▲ ${l.cashIn}', cad(r.cashPaidInCents), color: T.primary),
           if (r.cashPaidOutCents > 0)
             kv('▼ ${l.cashOut}', cad(r.cashPaidOutCents), color: T.destructive),
           if (r.refundTotalCents > 0)
@@ -679,7 +681,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
                   l.overShort,
                   cad(r.overShortCents!),
                   bold: true,
-                  color: r.overShortCents! < 0 ? T.destructive : T.accent,
+                  color: r.overShortCents! < 0 ? T.destructive : T.primary,
                 ),
               ],
             ),

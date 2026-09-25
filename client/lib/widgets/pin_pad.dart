@@ -9,7 +9,15 @@ import '../i18n.dart';
 class PinPad extends StatefulWidget {
   final int length;
   final void Function(String pin) onComplete;
-  const PinPad({super.key, this.length = 4, required this.onComplete});
+
+  /// Key size; the sign-in screen passes a larger one for the tablet.
+  final Size keySize;
+  const PinPad({
+    super.key,
+    this.length = 4,
+    required this.onComplete,
+    this.keySize = const Size(84, T.minTouch + 8),
+  });
 
   @override
   State<PinPad> createState() => PinPadState();
@@ -34,15 +42,36 @@ class PinPadState extends State<PinPad> {
 
   @override
   Widget build(BuildContext context) {
+    final big = widget.keySize.height >= 72;
+    final gap = big ? 12.0 : 8.0;
     Widget key(String label, {Widget? child, VoidCallback? onTap}) => SizedBox(
-      width: 84,
-      height: T.minTouch + 8,
+      width: widget.keySize.width,
+      height: widget.keySize.height,
       child: label.isEmpty && child == null
           ? const SizedBox()
-          : OutlinedButton(
-              onPressed: onTap ?? () => _tap(label),
-              style: OutlinedButton.styleFrom(backgroundColor: T.surface),
-              child: child ?? Text(label, style: T.price(size: 24)),
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: T.radiusMedium,
+                boxShadow: big ? T.raised : null,
+              ),
+              child: OutlinedButton(
+                onPressed: onTap ?? () => _tap(label),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: T.surface,
+                  foregroundColor: T.navy,
+                  padding: EdgeInsets.zero,
+                ),
+                child:
+                    child ??
+                    Text(
+                      label,
+                      style: T.price(
+                        size: big ? 30 : 24,
+                        weight: FontWeight.w600,
+                        color: T.navy,
+                      ),
+                    ),
+              ),
             ),
     );
 
@@ -56,44 +85,45 @@ class PinPadState extends State<PinPad> {
               AnimatedContainer(
                 duration: T.dFast,
                 curve: T.ease,
-                width: 14,
-                height: 14,
-                margin: const EdgeInsets.all(6),
+                width: big ? 18 : 14,
+                height: big ? 18 : 14,
+                margin: EdgeInsets.all(big ? 8 : 6),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: i < _pin.length ? T.accent : T.surfaceAlt,
+                  color: i < _pin.length ? T.navy : T.surface,
                   border: Border.all(
-                    color: i < _pin.length ? T.accent : T.border,
+                    color: i < _pin.length ? T.navy : T.textMuted,
+                    width: 1.5,
                   ),
                 ),
               ),
           ],
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: big ? 20 : 16),
         for (final row in const [
           ['1', '2', '3'],
           ['4', '5', '6'],
           ['7', '8', '9'],
         ])
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.only(bottom: gap),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              spacing: 8,
+              spacing: gap,
               children: [for (final digit in row) key(digit)],
             ),
           ),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          spacing: 8,
+          spacing: gap,
           children: [
             key(''),
             key('0'),
             key(
               '',
-              child: const Icon(
+              child: Icon(
                 LucideIcons.delete,
-                size: 22,
+                size: big ? 28 : 22,
                 color: T.textMuted,
               ),
               onTap: () => setState(
@@ -188,11 +218,6 @@ class _ManagerPinDialogState extends State<_ManagerPinDialog> {
   Widget build(BuildContext context) {
     final l = L.of(context);
     return Dialog(
-      backgroundColor: T.surfaceAlt,
-      shape: RoundedRectangleBorder(
-        borderRadius: T.radiusLarge,
-        side: const BorderSide(color: T.border),
-      ),
       child: SizedBox(
         width: 380, // floating card, not a full-width sheet
         child: Padding(

@@ -295,14 +295,14 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: active ? T.accent.withValues(alpha: .16) : Colors.transparent,
+          color: active ? T.surfaceAlt : Colors.transparent,
           borderRadius: T.radiusMedium,
-          border: Border.all(color: active ? T.accent : T.border),
+          border: Border.all(color: active ? T.primary : T.border),
         ),
         child: Text(
           label,
           style: T.small(
-            color: active ? T.accent : T.textMuted,
+            color: active ? T.primary : T.textMuted,
             weight: FontWeight.w600,
           ),
         ),
@@ -344,13 +344,13 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
                       children: [
                         const Icon(
                           LucideIcons.checkCheck,
-                          color: T.accent,
+                          color: T.primary,
                           size: 32,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           l.allItemsAssigned,
-                          style: T.small(color: T.accent),
+                          style: T.small(color: T.primary),
                         ),
                       ],
                     ),
@@ -414,8 +414,8 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
     return PosPanel(
       color: group.isPaid
           ? T.surface
-          : (selected ? T.accent.withValues(alpha: .07) : T.surfaceAlt),
-      borderColor: group.isPaid ? T.border : (selected ? T.accent : T.border),
+          : (selected ? T.primary.withValues(alpha: .07) : T.surfaceAlt),
+      borderColor: group.isPaid ? T.border : (selected ? T.primary : T.border),
       onTap: selectable
           ? () => setState(() => _selectedGroupId = group.id)
           : null,
@@ -432,11 +432,11 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
                   l.groupTitle(group.number),
                   style: T.text(
                     weight: FontWeight.w600,
-                    color: selected ? T.accent : T.textPrimary,
+                    color: selected ? T.primary : T.textPrimary,
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (group.isPaid) Pill(l.paid, color: T.accent),
+                if (group.isPaid) Pill(l.paid, color: T.primary),
                 const Spacer(),
                 if (showCorkage)
                   InkWell(
@@ -538,7 +538,10 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
                     child: Center(
                       child: Text(
                         l.paid,
-                        style: T.text(color: T.accent, weight: FontWeight.w600),
+                        style: T.text(
+                          color: T.primary,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   )

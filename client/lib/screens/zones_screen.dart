@@ -10,6 +10,7 @@ import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
 import '../pending_alerts.dart';
+import '../widgets/brand.dart';
 import '../widgets/floor_plan.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/resume_refresh.dart';
@@ -55,6 +56,10 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   void initState() {
     super.initState();
     _loadAlertConfig();
+    // header names the store; startup's health probe usually has it already
+    Api.loadVenueName().then((_) {
+      if (mounted) setState(() {});
+    }, onError: (_) {});
     _zonesRequestInFlight = true;
     _zones = _fetchZonesSerialized();
     // occupancy/pending badges change from customer phones and other flows —
@@ -191,27 +196,37 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     final l = L.of(context);
     final isManager = Api.currentUser?.isManager ?? false;
     return Scaffold(
+      // navy brand header: badge + venue, then labelled actions
       appBar: AppBar(
-        title: Text('Copper Lantern POS  ·  ${Api.currentUser?.name ?? ""}'),
+        toolbarHeight: 76,
+        backgroundColor: T.navy,
+        foregroundColor: T.onPrimary,
+        shape: const Border(),
+        titleSpacing: 16,
+        title: _VenueTitle(userName: Api.currentUser?.name),
         actions: [
-          const LangActions(),
-          IconButton(
-            icon: const Icon(LucideIcons.utensils),
+          const LangActions(color: T.onPrimary),
+          const SizedBox(width: 4),
+          _HeaderAction(
+            icon: LucideIcons.utensils,
+            label: l.navMenu,
             tooltip: l.manageMenu,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const MenuManagementScreen()),
             ),
           ),
-          IconButton(
-            icon: const Icon(LucideIcons.barChart3),
+          _HeaderAction(
+            icon: LucideIcons.barChart3,
+            label: l.navReports,
             tooltip: l.shiftReports,
             onPressed: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const ShiftScreen())),
           ),
           // refund a finalized bill — recent closed bills, manager-gated
-          IconButton(
-            icon: const Icon(LucideIcons.receiptText),
+          _HeaderAction(
+            icon: LucideIcons.receiptText,
+            label: l.navRefunds,
             tooltip: l.refunds,
             onPressed: () => Navigator.of(
               context,
@@ -219,18 +234,23 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
           ),
           // floor-plan editor: shown to everyone, a manager PIN unlocks it
           // (same inline-approval pattern as void/86/zone close)
-          IconButton(
-            icon: const Icon(LucideIcons.pencilRuler),
+          _HeaderAction(
+            icon: LucideIcons.pencilRuler,
+            label: l.navLayout,
             tooltip: l.editLayout,
             onPressed: _openLayoutEditor,
           ),
-          IconButton(
-            icon: const Icon(LucideIcons.refreshCw),
+          _HeaderAction(
+            icon: LucideIcons.refreshCw,
+            label: l.navRefresh,
+            tooltip: l.navRefresh,
             onPressed: _reload,
           ),
           // top-right menu: settings (manager), change PIN (everyone), slips, logout
           PopupMenuButton<String>(
-            icon: const Icon(LucideIcons.settings),
+            tooltip: l.navMore,
+            position: PopupMenuPosition.under,
+            child: _HeaderAction(icon: LucideIcons.settings, label: l.navMore),
             onSelected: (v) async {
               switch (v) {
                 case 'settings':
@@ -352,37 +372,88 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                   (z) => z.id == _zoneId,
                   orElse: () => zones.first,
                 );
-                return Column(
-                  children: [
-                    // room switcher: one chip per zone, occupancy + status at
-                    // a glance; long-press = close/reopen (manager PIN)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final z in zones) ...[
-                              _zoneChip(
-                                z,
-                                zones,
-                                selected: z.id == zone.id,
-                                l: l,
+                // room switcher: one chip per zone, occupancy + status at
+                // a glance; long-press = close/reopen (manager PIN)
+                final chips = [
+                  for (final z in zones)
+                    _zoneChip(z, zones, selected: z.id == zone.id, l: l),
+                  _addZoneChip(l),
+                ];
+                return LayoutBuilder(
+                  builder: (context, c) {
+                    // landscape tablet: rooms + legend in a side column so
+                    // the floor gets the full height
+                    if (c.maxWidth >= 900) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            width: 260,
+                            decoration: const BoxDecoration(
+                              color: T.surface,
+                              border: Border(
+                                right: BorderSide(color: T.border),
                               ),
-                              const SizedBox(width: 10),
-                            ],
-                            _addZoneChip(l),
-                          ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  child: ListView(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      4,
+                                      16,
+                                      16,
+                                    ),
+                                    children: [
+                                      SectionLabel(l.rooms),
+                                      for (final chip in chips) ...[
+                                        chip,
+                                        const SizedBox(height: 10),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const Divider(),
+                                _FloorLegend(zone: zone),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: _floorPlan(zone, l),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              spacing: 10,
+                              children: [
+                                for (final chip in chips)
+                                  IntrinsicWidth(child: chip),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
-                        child: _floorPlan(zone, l),
-                      ),
-                    ),
-                  ],
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            child: _floorPlan(zone, l),
+                          ),
+                        ),
+                        _FloorLegend(zone: zone, horizontal: true),
+                      ],
+                    );
+                  },
                 );
               },
             ),
@@ -403,7 +474,6 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     final willClose = !zone.isClosed;
     final action = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: T.surfaceAlt,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -421,7 +491,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
               willClose ? l.zoneCloseAction : l.zoneReopenAction,
               willClose ? LucideIcons.eyeOff : LucideIcons.eye,
               'toggle',
-              color: willClose ? T.destructive : T.accent,
+              color: willClose ? T.destructive : T.primary,
             ),
             if (idx > 0)
               _sheetAction(ctx, l.moveRoomLeft, LucideIcons.arrowLeft, 'left'),
@@ -636,7 +706,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: T.destructive,
-              foregroundColor: Colors.white,
+              foregroundColor: T.onDestructive,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(l.deleteRoom),
@@ -680,30 +750,36 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       (sum, t) => sum + t.pendingCount,
     );
     final chip = PosPanel(
-      color: selected ? T.surfaceAlt : T.surface,
+      color: selected ? T.navy : T.surface,
       borderColor: pendingCount > 0
-          ? T.attention
-          : (selected ? T.accent : T.border),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ? T.pending
+          : (selected ? T.navy : T.border),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       onTap: () => setState(() => _zoneId = zone.id),
       onLongPress: () => _manageZone(zone, zones),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            l.name(zone.nameFr, zone.nameEn),
-            style: T.text(
-              weight: FontWeight.w600,
-              color: selected ? T.textPrimary : T.textMuted,
+          Expanded(
+            child: Text(
+              l.name(zone.nameFr, zone.nameEn),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: T.text(
+                size: 17,
+                weight: FontWeight.w600,
+                color: selected ? T.onPrimary : T.textPrimary,
+              ),
             ),
           ),
           const SizedBox(width: 10),
           if (zone.isClosed)
-            Pill(l.zoneClosed, color: T.destructive)
+            Pill(l.zoneClosed, color: selected ? T.onPrimary : T.destructive)
           else
             Pill(
               '$open/${zone.tables.length}',
-              color: open > 0 ? T.accent : T.textMuted,
+              color: selected
+                  ? T.onPrimary
+                  : (open > 0 ? T.accent : T.textMuted),
             ),
           if (pendingCount > 0) ...[
             const SizedBox(width: 8),
@@ -720,12 +796,11 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   /// Trailing "+" chip in the room switcher: add a new room. Shown to everyone
   /// like the layout-editor pencil; a manager PIN gates the actual creation.
   Widget _addZoneChip(L l) => PosPanel(
-    color: T.surface,
+    color: Colors.transparent,
     borderColor: T.border,
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     onTap: _addZone,
     child: Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(LucideIcons.plus, size: 18, color: T.textMuted),
         const SizedBox(width: 6),
@@ -749,7 +824,9 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
         ),
       );
     }
+    final now = DateTime.now();
     return FloorPlanViewport(
+      contentBounds: floorContentBounds(zone),
       builder: (scale) => [
         // structural props first — they sit beneath the tables as quiet context
         for (final o in zone.objects)
@@ -774,11 +851,25 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                 subtitle: t.openCheckId != null
                     ? cad(t.openCheckTotalCents ?? 0)
                     : l.seatsShort(t.seats),
+                detail: _openedFor(t, now, l),
+                // seat count is the only optional line: small free tables
+                // show just their label
+                subtitleOptional: t.openCheckId == null,
               ),
             ),
           ),
       ],
     );
+  }
+
+  /// "25 min" since the table's check opened; null for a free table.
+  static String? _openedFor(TableInfo t, DateTime now, L l) {
+    final at = t.openCheckId == null
+        ? null
+        : DateTime.tryParse(t.openCheckOpenedAt ?? '');
+    if (at == null) return null;
+    final d = now.difference(at);
+    return l.openFor(d.isNegative ? Duration.zero : d);
   }
 
   /// Edit mode for the zone currently on screen. The PIN collected here
@@ -862,9 +953,9 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     if (!mounted) return;
     final url = storeBaseUrl == null ? null : _menuUrl(table, storeBaseUrl);
     if (url == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.tableQrNeedsWifi)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.tableQrNeedsWifi)));
       return;
     }
     final isManager = Api.currentUser?.isManager ?? false;
@@ -1127,6 +1218,160 @@ class _ErrorRetry extends StatelessWidget {
           Text(error, style: T.small()),
           const SizedBox(height: 8),
           FilledButton(onPressed: onRetry, child: Text(l.retry)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Floor header title: small badge, venue brand, then location and the
+/// signed-in staff member. Two short lines, so nothing truncates.
+class _VenueTitle extends StatelessWidget {
+  final String? userName;
+  const _VenueTitle({this.userName});
+
+  @override
+  Widget build(BuildContext context) {
+    final second = [
+      if (Api.venueLocation != null) Api.venueLocation!,
+      if (userName != null && userName!.isNotEmpty) userName!,
+    ].join('  ·  ');
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const BrandLogo(size: 48, ring: true),
+        const SizedBox(width: 14),
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                Api.venueBrand,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                style: T.text(
+                  size: 21,
+                  weight: FontWeight.w700,
+                  color: T.onPrimary,
+                ),
+              ),
+              if (second.isNotEmpty)
+                Text(
+                  second,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: T.small(color: T.onNavyMuted, weight: FontWeight.w500),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Header action: icon over a short label (touch-first — no hover needed to
+/// learn what it does); the tooltip carries the longer name.
+class _HeaderAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? tooltip;
+
+  /// Null when a parent (the overflow menu button) handles the tap.
+  final VoidCallback? onPressed;
+  const _HeaderAction({
+    required this.icon,
+    required this.label,
+    this.tooltip,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final body = ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 72, minHeight: T.minTouch),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 22, color: T.onPrimary),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              style: T
+                  .small(color: T.onNavyMuted, weight: FontWeight.w600)
+                  .copyWith(fontSize: 12.5),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (onPressed == null) return body;
+    return Tooltip(
+      message: tooltip ?? label,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: T.radiusMedium,
+        child: body,
+      ),
+    );
+  }
+}
+
+/// What the table colours mean, plus this room's occupancy.
+class _FloorLegend extends StatelessWidget {
+  final Zone zone;
+  final bool horizontal;
+  const _FloorLegend({required this.zone, this.horizontal = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final open = zone.tables.where((t) => t.openCheckId != null).length;
+    Widget swatch(Color fill, Color border, String label) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: T.radiusSmall,
+            border: Border.all(color: border, width: 1.5),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(label, style: T.small(color: T.textPrimary)),
+      ],
+    );
+    final items = [
+      swatch(T.surface, T.border, l.legendFree),
+      swatch(T.accent, T.accent, l.legendOccupied),
+      swatch(T.pending, T.pending, l.legendPending),
+    ];
+    if (horizontal) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        child: Wrap(spacing: 20, runSpacing: 8, children: items),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 10,
+        children: [
+          Text(
+            l.tablesOccupied(open, zone.tables.length),
+            style: T.text(size: 16, weight: FontWeight.w600),
+          ),
+          ...items,
         ],
       ),
     );

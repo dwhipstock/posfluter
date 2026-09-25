@@ -331,7 +331,7 @@ class _RefundScreenState extends State<RefundScreen> {
                 l.refundableLabel,
                 cad(info.refundableCents),
                 bold: true,
-                color: T.accent,
+                color: T.primary,
               ),
             ],
           ),

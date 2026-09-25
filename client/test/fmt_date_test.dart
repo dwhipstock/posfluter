@@ -15,16 +15,19 @@ void main() {
       expect(prefs.fmtDateTime('2026-07-08T00:12:34'), '08/07/2026 00:12');
     });
 
-    test('shows the venue wall clock of an offset timestamp, not device time', () {
-      expect(
-        prefs.fmtDateTime('2026-11-01T01:30:00.000-05:00'),
-        '01/11/2026 01:30',
-      );
-      expect(
-        prefs.fmtDateTime('2026-11-01T01:30:00.000-04:00'),
-        '01/11/2026 01:30',
-      );
-    });
+    test(
+      'shows the venue wall clock of an offset timestamp, not device time',
+      () {
+        expect(
+          prefs.fmtDateTime('2026-11-01T01:30:00.000-05:00'),
+          '01/11/2026 01:30',
+        );
+        expect(
+          prefs.fmtDateTime('2026-11-01T01:30:00.000-04:00'),
+          '01/11/2026 01:30',
+        );
+      },
+    );
 
     test('returns the raw string unchanged when it cannot be parsed', () {
       // edge case: DateTime.tryParse returns null, so the input is echoed back.

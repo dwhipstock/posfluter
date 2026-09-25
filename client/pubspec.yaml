@@ -40,7 +40,6 @@ dependencies:
   # entries are immutable and replacements bust every layer naturally.
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.1
-  google_fonts: ^8.1.0
   qr_flutter: ^4.1.0
   flutter_secure_storage: ^10.3.1
   image_picker: ^1.2.3
@@ -73,6 +72,25 @@ flutter:
 
   assets:
     - assets/chime.wav
+    # brand badge (cropped from branding/copper-lantern-logo.png)
+    - assets/copper_lantern_logo.png
+    - assets/fonts/OFL-Inter.txt
+    - assets/fonts/OFL-NotoSans.txt
+
+  # Bundled, never fetched: the terminal must render identically offline.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/NotoSans-Regular.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -173,7 +173,7 @@ class _TablePickerScreenState extends State<TablePickerScreen> {
     return Opacity(
       opacity: enabled ? 1 : 0.45,
       child: PosPanel(
-        edgeStrip: self ? T.attention : (open ? T.accent : null),
+        edgeStrip: self ? T.attention : (open ? T.primary : null),
         onTap: enabled ? () => _pick(table) : null,
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -196,12 +196,12 @@ class _TablePickerScreenState extends State<TablePickerScreen> {
               Text(
                 beingPaid ? l.beingPaid : l.merge,
                 style: T.small(
-                  color: beingPaid ? T.destructive : T.accent,
+                  color: beingPaid ? T.destructive : T.primary,
                   weight: FontWeight.w600,
                 ),
               ),
             ] else
-              Text(l.free, style: T.small(color: T.accent)),
+              Text(l.free, style: T.small(color: T.primary)),
           ],
         ),
       ),
