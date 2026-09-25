@@ -7,7 +7,7 @@ import { useT, useFmt } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta } from "@/lib/export/report";
 import { col, Int, Money, T, type ExportDoc } from "@/lib/export/doc";
-import type { DayRow, VatReport } from "@/lib/types";
+import type { DayRow, TaxReport } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -27,28 +27,28 @@ import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/component
 export default function Page() {
   return (
     <Suspense fallback={<PageFallback />}>
-      <VatPage />
+      <TaxPage />
     </Suspense>
   );
 }
 
-function VatPage() {
+function TaxPage() {
   const t = useT();
   const fmt = useFmt();
   const range = useRange();
   const meta = useExportMeta();
-  const { data, error, isLoading, mutate } = useApi<VatReport>(reportKey("/v1/reports/vat", range));
+  const { data, error, isLoading, mutate } = useApi<TaxReport>(reportKey("/v1/reports/tax", range));
 
   const buildDoc = (): ExportDoc | null => {
     if (!data) return null;
     return {
-      ...meta("vat"),
-      reportTitle: t("vat_title"),
-      notes: [t("vat_note")],
+      ...meta("tax"),
+      reportTitle: t("tax_title"),
+      notes: [t("tax_note")],
       kpis: [
         { label: t("col_gross"), value: CAD(data.totals.grossCents) },
         { label: t("col_net"), value: CAD(data.totals.netCents) },
-        { label: t("col_vat"), value: CAD(data.totals.vatCents) },
+        { label: t("col_tax"), value: CAD(data.totals.taxCents) },
         { label: t("col_checks"), value: String(data.totals.checkCount) },
       ],
       sections: [
@@ -57,7 +57,7 @@ function VatPage() {
             col.text<DayRow>(t("col_date"), (r) => fmt.dayYear(r.date)),
             col.money<DayRow>(t("col_gross"), (r) => r.grossCents),
             col.money<DayRow>(t("col_net"), (r) => r.netCents),
-            col.money<DayRow>(t("col_vat"), (r) => r.vatCents),
+            col.money<DayRow>(t("col_tax"), (r) => r.taxCents),
             col.int<DayRow>(t("col_checks"), (r) => r.checkCount),
           ],
           rows: data.rows,
@@ -65,7 +65,7 @@ function VatPage() {
             T(t("col_total")),
             Money(data.totals.grossCents),
             Money(data.totals.netCents),
-            Money(data.totals.vatCents),
+            Money(data.totals.taxCents),
             Int(data.totals.checkCount),
           ],
         },
@@ -76,7 +76,7 @@ function VatPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t("vat_title")}
+        title={t("tax_title")}
         sub={fmt.rangeLabel(range)}
         back={{ href: "/reports", label: t("reports_title") }}
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
@@ -86,8 +86,8 @@ function VatPage() {
 
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-neutral-100 px-5 py-3">
-          <Badge variant="pink">{t("vat_included_badge", { rate: data?.ratePercent ?? 7 })}</Badge>
-          <span className="text-xs text-neutral-500">{t("vat_note")}</span>
+          {data && <Badge variant="pink">{t("tax_included_badge", { rate: data.ratePercent })}</Badge>}
+          <span className="text-xs text-neutral-500">{t("tax_note")}</span>
         </div>
         {isLoading ? (
           <TableSkeleton rows={6} />
@@ -100,7 +100,7 @@ function VatPage() {
                 <TableHead>{t("col_date")}</TableHead>
                 <TableHead className="text-right">{t("col_gross")}</TableHead>
                 <TableHead className="text-right">{t("col_net")}</TableHead>
-                <TableHead className="text-right">{t("col_vat")}</TableHead>
+                <TableHead className="text-right">{t("col_tax")}</TableHead>
                 <TableHead className="text-right">{t("col_checks")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -110,7 +110,7 @@ function VatPage() {
                   <TableCell className="font-medium">{fmt.day(r.date)}</TableCell>
                   <TableCell className="text-right tabular-nums">{CAD(r.grossCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{CAD(r.netCents)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{CAD(r.vatCents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{CAD(r.taxCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.checkCount}</TableCell>
                 </TableRow>
               ))}
@@ -121,14 +121,14 @@ function VatPage() {
                 <TableCell className="text-right tabular-nums">{CAD(data.totals.grossCents)}</TableCell>
                 <TableCell className="text-right tabular-nums">{CAD(data.totals.netCents)}</TableCell>
                 <TableCell className="text-right tabular-nums text-accent">
-                  {CAD(data.totals.vatCents)}
+                  {CAD(data.totals.taxCents)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{data.totals.checkCount}</TableCell>
               </TableRow>
             </TableFooter>
           </Table>
         ) : (
-          <EmptyState title={t("vat_empty")} hint={t("vat_empty_hint")} />
+          <EmptyState title={t("tax_empty")} hint={t("tax_empty_hint")} />
         )}
       </Card>
     </div>

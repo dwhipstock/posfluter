@@ -78,7 +78,7 @@ class ApplicationTest {
             setBody("""{"bottles":1}""")
         }.let { assertEquals(HttpStatusCode.OK, it.status) }
 
-        // subtotal: 450 + 550 + 200 = $1200, VAT included ≈ $78.50 hidden
+        // subtotal: 450 + 550 + 200 = $1200, tax included ≈ $78.50 hidden
         val check = json.parseToJsonElement(c.get("/checks/$checkId").bodyAsText()).jsonObject
         assertEquals(5625L, check["grandTotalCents"]!!.jsonPrimitive.long)
         assertEquals(0L, check["taxIncludedCents"]!!.jsonPrimitive.long)
@@ -132,7 +132,7 @@ class ApplicationTest {
         assertTrue("Corkage" in receiptText)
         assertTrue("Total" in receiptText && "56.25" in receiptText)
         assertTrue("2026" in receiptText)          // four-digit year
-        assertTrue("impôt" !in receiptText)          // VAT hidden for CopperLantern
+        assertTrue("impôt" !in receiptText)          // tax hidden for CopperLantern
         assertTrue("Card" in receiptText && "Cash" in receiptText)
         assertTrue("Change" in receiptText)
 

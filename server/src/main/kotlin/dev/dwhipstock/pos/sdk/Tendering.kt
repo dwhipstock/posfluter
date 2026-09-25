@@ -32,7 +32,7 @@ interface TenderMethod {
 data class TenderInstructions(
     val type: String,
     val amountCents: Long,
-    /** EMV QR payload for QR-based methods; null for account-detail methods. */
+    /** QR payload for a method that shows one (none ship today); null otherwise. */
     val qrPayload: String? = null,
     /** Ordered display fields (label → value), e.g. bank name / account no. / account name. */
     val displayFields: List<DisplayField> = emptyList(),

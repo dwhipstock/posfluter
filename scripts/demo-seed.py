@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DEMO-ONLY seed: generate a handful of finalized sales through the store's HTTP API
-so the owner portal has non-empty reports (payments, items, VAT, hourly) after sync
+so the owner portal has non-empty reports (payments, items, tax, hourly) after sync
 (~10s). Talks only to the store server — nothing here is used in production.
 
 Idempotency is owned by the caller (scripts/demo-up.sh), which skips this when the

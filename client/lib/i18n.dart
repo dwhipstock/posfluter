@@ -90,11 +90,10 @@ class Prefs extends ChangeNotifier {
     return '${fmtDate(wall)} ${m[4]}:${m[5]}';
   }
 
-  /// Date-only with the standard Gregorian year.
+  /// Date-only, dd/MM/yyyy.
   String fmtDate(DateTime d) {
-    final year = d.year;
     String p2(int n) => n.toString().padLeft(2, '0');
-    return '${p2(d.day)}/${p2(d.month)}/$year';
+    return '${p2(d.day)}/${p2(d.month)}/${d.year}';
   }
 }
 
@@ -645,7 +644,6 @@ class L {
     'Tap items to refund',
   );
   String get refundSlipTitle => _t('Bon de remboursement', 'Refund slip');
-  String get vatReversed => _t('TVA restituée', 'VAT reversed');
   String get amountExceedsRefundable => _t(
     'dépassant le montant pouvant être restitué',
     'Exceeds the refundable amount',

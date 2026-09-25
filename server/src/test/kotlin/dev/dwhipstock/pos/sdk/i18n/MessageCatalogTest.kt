@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
  */
 class MessageCatalogTest {
 
-    // canonical receipt: variants, qty>1, notes, fees, VAT, rounding and change
+    // canonical receipt: variants, qty>1, notes, fees, tax, rounding and change
     private val receipt = Receipt(
         checkId = 42,
         tableLabel = "A5",
@@ -39,13 +39,13 @@ class MessageCatalogTest {
         ),
         fees = listOf(ReceiptFee("Frais de bouchon de bouteille", "Corkage", Money.cad(100))),
         grandTotal = Money(46050),
-        taxIncluded = Money(3013),
-        vatRatePercent = 7,
+        taxIncluded = Money(5298),
+        taxRatePercent = 13,
         tenders = listOf(ReceiptTender("espèces", "Cash", Money.cad(500), Money(46050), Money(-50), Money.cad(39))),
     )
     private val policy = ReceiptPolicy.Standard(
-        "COPPERLANTERN", listOf("123 route d'essai", "téléphone. 081-234-5678"), "merci",
-        showVat = true, gregorianDates = true,
+        "COPPERLANTERN", listOf("123 route d'essai", "téléphone. 514-555-0142"), "merci",
+        showTax = true,
     )
 
     private fun golden(name: String) =
@@ -152,8 +152,8 @@ class MessageCatalogTest {
 
     @Test
     fun placeholdersSubstitute() {
-        assertEquals("Taxe de vente 13% (incluse)", Messages.get(MessageKey.RECEIPT_VAT_INCLUDED, LocaleCode.FR, 13))
-        assertEquals("Sales tax 13% (included)", Messages.get(MessageKey.RECEIPT_VAT_INCLUDED, LocaleCode.EN, 13))
+        assertEquals("Taxe de vente 13% (incluse)", Messages.get(MessageKey.RECEIPT_TAX_INCLUDED, LocaleCode.FR, 13))
+        assertEquals("Sales tax 13% (included)", Messages.get(MessageKey.RECEIPT_TAX_INCLUDED, LocaleCode.EN, 13))
     }
 
     @Test

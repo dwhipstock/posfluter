@@ -218,7 +218,7 @@ class CloudSync(
 
     /**
      * One-time backfill: checks closed before the report-complete payload
-     * existed synced thin (grand total only), so cloud VAT/payment-mix
+     * existed synced thin (grand total only), so cloud tax/payment-mix
      * undercount. Re-emit report-complete `check.closed` events from the
      * store's own history; they ride the normal drain and the cloud upsert
      * backfills tax + tenders in place. Gated by a SyncState marker so it runs

@@ -11,7 +11,7 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 
-class VatReportTest {
+class TaxReportTest {
 
     private val key = "store-key-vat"
     private lateinit var session: String
@@ -21,11 +21,11 @@ class VatReportTest {
         TestSupport.reset()
         seedTenant("copperlantern")
         seedStoreKey("copperlantern", "vieux-port", key)
-        session = seedSession("copperlantern", seedUser("copperlantern", "vat@test.dev", "password-x"))
+        session = seedSession("copperlantern", seedUser("copperlantern", "tax@test.dev", "password-x"))
     }
 
     @Test
-    fun vatReportSumsStoreComputedFiguresExactly() = testApplication {
+    fun taxReportSumsStoreComputedFiguresExactly() = testApplication {
         application { module(TestSupport.config) }
         // report-complete fixtures: tax follows the store formula exactly
         ingest(
@@ -42,7 +42,7 @@ class VatReportTest {
         )
 
         val body = testJson.parseToJsonElement(
-            getWithCookie("/v1/reports/vat?from=2026-07-01&to=2026-07-02", session).bodyAsText()
+            getWithCookie("/v1/reports/tax?from=2026-07-01&to=2026-07-02", session).bodyAsText()
         ).jsonObject
         assertEquals(13, body["ratePercent"]!!.jsonPrimitive.content.toInt())
 
@@ -50,27 +50,27 @@ class VatReportTest {
         assertEquals(2, rows.size)
 
         val day1Gross = 53500L + 10000L
-        val day1Vat = storeTax(53500) + storeTax(10000)
+        val day1Tax = storeTax(53500) + storeTax(10000)
         assertEquals("2026-07-01", rows[0]["date"]!!.jsonPrimitive.content)
         assertEquals(day1Gross, rows[0]["grossCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(day1Vat, rows[0]["vatCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(day1Gross - day1Vat, rows[0]["netCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(day1Tax, rows[0]["taxCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(day1Gross - day1Tax, rows[0]["netCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(2, rows[0]["checkCount"]!!.jsonPrimitive.content.toInt())
 
-        // legacy check contributes gross with vat treated as 0
+        // legacy check contributes gross with tax treated as 0
         val day2Gross = 25000L + 15000L
-        val day2Vat = storeTax(25000)
+        val day2Tax = storeTax(25000)
         assertEquals("2026-07-02", rows[1]["date"]!!.jsonPrimitive.content)
         assertEquals(day2Gross, rows[1]["grossCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(day2Vat, rows[1]["vatCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(day2Gross - day2Vat, rows[1]["netCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(day2Tax, rows[1]["taxCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(day2Gross - day2Tax, rows[1]["netCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(2, rows[1]["checkCount"]!!.jsonPrimitive.content.toInt())
 
         val totals = body["totals"]!!.jsonObject
         assertEquals(day1Gross + day2Gross, totals["grossCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(day1Vat + day2Vat, totals["vatCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(day1Tax + day2Tax, totals["taxCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(
-            (day1Gross + day2Gross) - (day1Vat + day2Vat),
+            (day1Gross + day2Gross) - (day1Tax + day2Tax),
             totals["netCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(4, totals["checkCount"]!!.jsonPrimitive.content.toInt())
     }

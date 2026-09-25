@@ -1,9 +1,9 @@
 -- 022: refunds against a finalized (CLOSED) check. Distinct from a void, which
 -- cancels a check before any money is applied. A refund returns money on a check
 -- that already closed — full or partial (by line or by amount). The store
--- decomposes the reversed inclusive VAT proportionally against the check's locked
+-- decomposes the reversed included tax proportionally against the check's locked
 -- totals (a full refund reverses tax exactly); the cloud only aggregates.
--- gross = money returned, tax = inclusive VAT within it, net = gross - tax.
+-- gross = money returned, tax = included tax within it, net = gross - tax.
 -- tender_type is how the money went back (CASH | CARD | BANK_TRANSFER; no
 -- card refunds). lines_json is [{lineId,qty,amountCents}] on a by-line refund,
 -- NULL on a by-amount one. shift_id posts it to the current shift (drawer math).

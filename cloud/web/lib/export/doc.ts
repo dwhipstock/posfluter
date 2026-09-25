@@ -98,7 +98,7 @@ export interface ExportDoc {
   /** "Émettre un rapport 12 Juillet 2026 09:20" — built by the caller with the active fmt. */
   generatedLabel: string;
   locale: Locale;
-  /** Explanatory captions (e.g. the VAT decomposition note). */
+  /** Explanatory captions (e.g. the tax decomposition note). */
   notes?: string[];
   kpis?: Kpi[];
   sections: Section[];

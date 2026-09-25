@@ -263,7 +263,7 @@ function JournalRowView({
               ))}
               <div className="flex items-center justify-between border-t border-neutral-200/70 pt-2 text-xs text-neutral-500">
                 <span>
-                  {t("journal_vat_included")} <span className="tabular-nums">{CAD(row.taxIncludedCents)}</span>
+                  {t("journal_tax_included")} <span className="tabular-nums">{CAD(row.taxIncludedCents)}</span>
                 </span>
                 <span className="sm:hidden">
                   {row.tenderTypes.map((tt) => t(`tender_${tt}` as MsgKey)).join(" · ") || "—"}

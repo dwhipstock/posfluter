@@ -10,9 +10,9 @@ Hard rules this contract encodes:
   No parallel sync path.
 - **The cloud aggregates pre-computed figures — it never recomputes money or
   tax.** When configured, the store decomposes inclusive sales tax at sale time
-  (`TaxPolicy.InclusiveVat`: `tax = (base*rate*2 + (100+rate)) / ((100+rate)*2)`,
+  (`TaxPolicy.InclusiveTax`: `tax = (base*rate*2 + (100+rate)) / ((100+rate)*2)`,
   half-up at the cents) and stamps it on the check. Events carry those cents
-  figures; cloud reports are sums of them. `net = gross − vatIncluded`, per
+  figures; cloud reports are sums of them. `net = gross − taxIncluded`, per
   check, computed by the store.
 - **Sync is one-way: store → cloud.** Each store's tablet is authoritative for
   its own menu (items, variants, categories, photos), staff and grants. Edits

@@ -66,13 +66,13 @@ class MessagesJarLoadingTest {
                 // a fat jar merges dependency resources — these must NOT become catalogs
                 "messages_fr.properties" to "receipt.total=Totale\n",
                 "messages_fr.properties" to "receipt.total=POISONED\n",
-                "com/example/messages_de.properties" to "receipt.total=Gesamt\n",
+                "com/example/messages_zz.properties" to "receipt.total=ZZ\n",
             ),
             includeDirEntry = true,
         )
         val bundles = load(jar)
         assertFalse("fr" in bundles, "root-level dependency file must not register a locale")
-        assertFalse("de" in bundles, "nested dependency file must not register a locale")
+        assertFalse("zz" in bundles, "nested dependency file must not register a locale")
         assertEquals("Total", bundles["en"]?.get("receipt.total"))
     }
 
@@ -80,14 +80,14 @@ class MessagesJarLoadingTest {
     fun corruptOptionalCatalogIsSkippedWithoutKillingTheRest() {
         val jar = jarOf(
             mapOf(
-                "i18n/messages_de.properties" to "bad=\\u20A\n", // malformed \\uxxxx escape
+                "i18n/messages_zz.properties" to "bad=\\u20A\n", // malformed \\uxxxx escape
                 "i18n/messages_en.properties" to "receipt.total=Total\n",
             ),
             includeDirEntry = false,
         )
         val bundles = load(jar)
         assertEquals("Total", bundles["en"]?.get("receipt.total"), "good catalog must survive a bad sibling")
-        assertFalse("de" in bundles, "corrupt catalog must be dropped, not partially loaded")
+        assertFalse("zz" in bundles, "corrupt catalog must be dropped, not partially loaded")
     }
 
     @Test
@@ -107,11 +107,11 @@ class MessagesJarLoadingTest {
         val jar = jarOf(
             mapOf(
                 "i18n/messages_en.properties" to "receipt.total=Total\n",
-                "i18n/messages_ja_JP.properties" to "receipt.total=合計\n", // ResourceBundle convention, wrong here
+                "i18n/messages_fr_CA.properties" to "receipt.total=Total\n", // ResourceBundle convention, wrong here
             ),
             includeDirEntry = true,
         )
         val bundles = load(jar)
-        assertTrue(bundles.keys.none { it.contains("ja") }, "uppercase/underscore names must not load (warned instead)")
+        assertTrue(bundles.keys.none { it.startsWith("fr") }, "uppercase/underscore names must not load (warned instead)")
     }
 }

@@ -55,7 +55,7 @@ function Dashboard() {
       kpis: [
         { label: t("kpi_gross"), value: CAD(s.grossCents) },
         { label: t("kpi_net"), value: CAD(s.netCents) },
-        { label: t("kpi_vat"), value: CAD(s.vatCents) },
+        { label: t("kpi_tax"), value: CAD(s.taxCents) },
         { label: t("kpi_checks"), value: String(s.checkCount) },
         { label: t("kpi_avg_check"), value: CAD(s.avgCheckCents) },
         { label: t("exc_voids"), value: String(s.voidCount) },
@@ -72,7 +72,7 @@ function Dashboard() {
             col.text<DayRow>(t("col_date"), (r) => fmt.dayYear(r.date)),
             col.money<DayRow>(t("col_gross"), (r) => r.grossCents),
             col.money<DayRow>(t("col_net"), (r) => r.netCents),
-            col.money<DayRow>(t("col_vat"), (r) => r.vatCents),
+            col.money<DayRow>(t("col_tax"), (r) => r.taxCents),
             col.int<DayRow>(t("col_checks"), (r) => r.checkCount),
           ],
           rows: s.byDay,
@@ -80,7 +80,7 @@ function Dashboard() {
             T(t("col_total")),
             Money(s.grossCents),
             Money(s.netCents),
-            Money(s.vatCents),
+            Money(s.taxCents),
             Int(s.checkCount),
           ],
         },
@@ -105,7 +105,7 @@ function Dashboard() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
           <Kpi label={t("kpi_gross")} value={s && CAD(s.grossCents)} accent loading={summary.isLoading} />
           <Kpi label={t("kpi_net")} value={s && CAD(s.netCents)} loading={summary.isLoading} />
-          <Kpi label={t("kpi_vat")} value={s && CAD(s.vatCents)} loading={summary.isLoading} />
+          <Kpi label={t("kpi_tax")} value={s && CAD(s.taxCents)} loading={summary.isLoading} />
           <Kpi label={t("kpi_checks")} value={s && String(s.checkCount)} loading={summary.isLoading} />
           <Kpi
             label={t("kpi_avg_check")}

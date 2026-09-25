@@ -59,8 +59,7 @@ class CopperLanternConfig(
                 logoFallbackText = displayName, // TODO(M2): real logo bitmap for the thermal printer
                 headerLines = listOf(s.venueAddress, "Phone / Téléphone: ${s.venuePhone}"),
                 footerText = s.receiptFooter,
-                showVat = false,
-                gregorianDates = true,
+                showTax = false,
             )
         }
 

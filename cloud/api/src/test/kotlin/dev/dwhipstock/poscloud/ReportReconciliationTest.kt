@@ -13,12 +13,12 @@ import org.junit.Test
 import kotlin.test.assertEquals
 
 /**
- * The reconciliation invariant the VAT/payment-mix bug violated: over any
- * multi-check range, a check counted in GROSS must also contribute its VAT and
+ * The reconciliation invariant the tax/payment-mix bug violated: over any
+ * multi-check range, a check counted in GROSS must also contribute its tax and
  * its tenders. Asserts, against complete report-complete events:
- *   - VAT total == Σ per-check store-decomposed tax  (not one check's tax)
+ *   - TAX total == Σ per-check store-decomposed tax  (not one check's tax)
  *   - payment-mix total == GROSS                      (every CAD is tendered)
- *   - NET + VAT == GROSS
+ *   - NET + TAX == GROSS
  */
 class ReportReconciliationTest {
 
@@ -40,11 +40,11 @@ class ReportReconciliationTest {
     }
 
     @Test
-    fun vatPaymentsAndNetReconcileWithGrossOverARange() = testApplication {
+    fun taxPaymentsAndNetReconcileWithGrossOverARange() = testApplication {
         application { module(TestSupport.config) }
 
         // Three closed checks over two days; every one fully tendered (its
-        // tenders sum to its grand total) and carrying its decomposed VAT.
+        // tenders sum to its grand total) and carrying its decomposed tax.
         val gross = listOf(53500L, 10000L, 25000L)
         val tax = gross.map { storeTax(it) }
         ingest(
@@ -68,23 +68,23 @@ class ReportReconciliationTest {
         )
 
         val grossTotal = gross.sum()
-        val vatTotal = tax.sum()
+        val taxTotal = tax.sum()
         val range = "from=2026-07-01&to=2026-07-02"
 
         val summary = testJson.parseToJsonElement(
             getWithCookie("/v1/reports/summary?$range", session).bodyAsText()
         ).jsonObject
         assertEquals(grossTotal, summary["grossCents"]!!.jsonPrimitive.content.toLong())
-        // VAT is the SUM of every check's tax, not a single detailed check's
-        assertEquals(vatTotal, summary["vatCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(grossTotal - vatTotal, summary["netCents"]!!.jsonPrimitive.content.toLong())
+        // Tax is the SUM of every check's tax, not a single detailed check's
+        assertEquals(taxTotal, summary["taxCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(grossTotal - taxTotal, summary["netCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(3, summary["checkCount"]!!.jsonPrimitive.content.toInt())
 
-        val vat = testJson.parseToJsonElement(
-            getWithCookie("/v1/reports/vat?$range", session).bodyAsText()
+        val taxReport = testJson.parseToJsonElement(
+            getWithCookie("/v1/reports/tax?$range", session).bodyAsText()
         ).jsonObject["totals"]!!.jsonObject
-        assertEquals(grossTotal, vat["grossCents"]!!.jsonPrimitive.content.toLong())
-        assertEquals(vatTotal, vat["vatCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(grossTotal, taxReport["grossCents"]!!.jsonPrimitive.content.toLong())
+        assertEquals(taxTotal, taxReport["taxCents"]!!.jsonPrimitive.content.toLong())
 
         val payments = testJson.parseToJsonElement(
             getWithCookie("/v1/reports/payments?$range", session).bodyAsText()

@@ -15,7 +15,7 @@ export interface VenueSummaryRow {
   venueName: string;
   grossCents: number;
   netCents: number;
-  vatCents: number;
+  taxCents: number;
   checkCount: number;
   avgCheckCents: number;
   voidCount: number;
@@ -43,14 +43,14 @@ export interface DayRow {
   date: string;
   grossCents: number;
   netCents: number;
-  vatCents: number;
+  taxCents: number;
   checkCount: number;
 }
 
 export interface Summary {
   grossCents: number;
   netCents: number;
-  vatCents: number;
+  taxCents: number;
   checkCount: number;
   avgCheckCents: number;
   voidCount: number;
@@ -64,10 +64,10 @@ export interface Summary {
   byVenue: VenueSummaryRow[];
 }
 
-export interface VatReport {
+export interface TaxReport {
   ratePercent: number;
   rows: DayRow[];
-  totals: { grossCents: number; netCents: number; vatCents: number; checkCount: number };
+  totals: { grossCents: number; netCents: number; taxCents: number; checkCount: number };
   byVenue: VenueSummaryRow[];
 }
 
@@ -156,7 +156,7 @@ export interface RefundReasonRow {
   count: number;
   grossCents: number;
   netCents: number;
-  vatCents: number;
+  taxCents: number;
 }
 
 export interface RefundListRow {
@@ -168,7 +168,7 @@ export interface RefundListRow {
   reason: string | null;
   grossCents: number;
   netCents: number;
-  vatCents: number;
+  taxCents: number;
   venueId: string;
 }
 
@@ -176,7 +176,7 @@ export interface RefundsReport {
   count: number;
   grossCents: number;
   netCents: number;
-  vatCents: number;
+  taxCents: number;
   byReason: RefundReasonRow[];
   byTender: { type: TenderType; amountCents: number; count: number }[];
   rows: RefundListRow[];

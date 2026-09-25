@@ -27,10 +27,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The backfill that fixes cloud VAT/payment-mix undercounting: re-emitting a
+ * The backfill that fixes cloud tax/payment-mix undercounting: re-emitting a
  * report-complete `check.closed` for a check that already synced. Drives a real
  * sale, then re-runs the backfill and asserts a fresh COMPLETE event (with
- * decomposed VAT + tenders) is written — the thing thin historical events lack.
+ * decomposed tax + tenders) is written — the thing thin historical events lack.
  */
 class ReportBackfillTest {
 

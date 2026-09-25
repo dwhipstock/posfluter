@@ -130,8 +130,8 @@ object BillGroupAllocations : IntIdTable("bill_group_allocations") {
 /**
  * A refund returns money on a finalized (CLOSED) check — full or partial.
  * Distinct from a void (which cancels before money is applied). The store
- * decomposes the reversed inclusive VAT proportionally against the check's
- * locked totals: gross = money returned, tax = VAT inside it, net = gross - tax.
+ * decomposes the reversed included tax proportionally against the check's
+ * locked totals: gross = money returned, tax = the tax inside it, net = gross - tax.
  * The cloud only aggregates these — it never recomputes tax.
  */
 object Refunds : IntIdTable("refunds") {
