@@ -314,34 +314,6 @@ object ItemPhotos : Table("item_photos") {
     override val primaryKey = PrimaryKey(tenantId, venueId, itemId)
 }
 
-/**
- * Cloud-authoritative staff master (006, tenant-scoped since 008). One identity
- * per tenant — name/PIN/active are group-wide; venue membership and per-venue
- * role live in [StaffVenues]. pin_hash is BCrypt; plaintext never stored.
- */
-object Staff : Table("staff") {
-    val tenantId = text("tenant_id")
-    val id = text("id")
-    val name = text("name")
-    val pinHash = text("pin_hash")
-    val active = bool("active")
-    val languageCode = text("language_code")
-    val deleted = bool("deleted")
-    val createdAt = datetime("created_at")
-    val updatedAt = datetime("updated_at")
-    override val primaryKey = PrimaryKey(tenantId, id)
-}
-
-/** Per-venue staff assignment (008): which venues a staff member works at, and their role there. */
-object StaffVenues : Table("staff_venues") {
-    val tenantId = text("tenant_id")
-    val staffId = text("staff_id")
-    val venueId = text("venue_id")
-    val role = text("role") // MANAGER | SERVER
-    val createdAt = datetime("created_at")
-    override val primaryKey = PrimaryKey(tenantId, staffId, venueId)
-}
-
 /** Role default grants (006): one row per (role, permission). */
 object RoleGrants : Table("role_grants") {
     val tenantId = text("tenant_id")
@@ -360,6 +332,22 @@ object StaffGrants : Table("staff_grants") {
     val permission = text("permission")
     val granted = bool("granted")
     override val primaryKey = PrimaryKey(tenantId, venueId, staffId, permission)
+}
+
+/**
+ * Store-owned staff projection (012, one-way sync). Venue-scoped: each store's
+ * staff list is its own. Display-only — no PIN hash ever reaches the cloud.
+ */
+object StoreStaff : Table("store_staff") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val id = text("id")
+    val name = text("name")
+    val role = text("role")
+    val active = bool("active")
+    val deleted = bool("deleted")
+    val updatedAt = datetime("updated_at")
+    override val primaryKey = PrimaryKey(tenantId, venueId, id)
 }
 
 /** Single-use terminal pairing codes (009); only the SHA-256 is stored. */

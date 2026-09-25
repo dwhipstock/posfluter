@@ -31,11 +31,7 @@ class HttpCloudTransportTest {
                     exchange.reply(200, "{}")
                 }
                 "/v1/store/heartbeat" -> exchange.reply(200, "{}")
-                "/v1/store/catalog/changes" -> exchange.reply(200, """{"cursor":7,"changes":[]}""")
-                "/v1/store/photos/item-1" -> {
-                    exchange.responseHeaders.add("Content-Type", "image/jpeg")
-                    exchange.reply(200, "photo")
-                }
+                "/v1/store/revocations" -> exchange.reply(200, """{"cursor":7,"changes":[]}""")
                 "/v1/ingest/photos/item-1" -> {
                     photoUpload.set(exchange.requestBody.use { it.readBytes() })
                     exchange.reply(201, "{}")
@@ -55,8 +51,7 @@ class HttpCloudTransportTest {
             assertEquals("event-1", posted["events"]?.jsonArray?.single()?.jsonObject
                 ?.get("eventId")?.jsonPrimitive?.content)
             assertTrue(transport.heartbeat("install-1", "http://192.168.1.2:8080").ok)
-            assertEquals(7L, transport.fetchChanges(0).cursor)
-            assertEquals("photo", transport.fetchPhoto("item-1")?.bytes?.toString(Charsets.UTF_8))
+            assertEquals(7L, transport.fetchRevocations(0).cursor)
             assertTrue(transport.pushPhoto("item-1", "photo".toByteArray(), "image/jpeg").ok)
             assertTrue(photoUpload.get().toString(Charsets.UTF_8).contains("photo"))
             val refusal = transport.claimPairing("wrong")

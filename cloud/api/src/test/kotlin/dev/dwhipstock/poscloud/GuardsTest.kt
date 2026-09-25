@@ -121,7 +121,7 @@ class GuardsTest {
         val snapshotWithPhoto = buildJsonObject {
             put("item", buildJsonObject {
                 put("id", "lantern-lager")
-                put("nameFr", "éléphant"); put("nameEn", "Lantern House Lager")
+                put("nameFr", "Lager de la Lanterne"); put("nameEn", "Lantern House Lager")
                 put("categoryId", "beer"); put("abbrev", "CH")
                 put("isAlcohol", true); put("active", true); put("deleted", false)
                 put("photoVersion", 12345L)
@@ -133,7 +133,7 @@ class GuardsTest {
         val snapshotWithout = buildJsonObject {
             put("item", buildJsonObject {
                 put("id", "lantern-lager")
-                put("nameFr", "nouvel éléphant"); put("nameEn", "Lantern House Lager New")
+                put("nameFr", "Nouvelle lager de la Lanterne"); put("nameEn", "Lantern House Lager New")
                 put("categoryId", "beer"); put("abbrev", "CH")
                 put("isAlcohol", true); put("active", true); put("deleted", false)
                 put("variants", buildJsonArray {})

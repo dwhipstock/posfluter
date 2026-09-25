@@ -164,6 +164,12 @@ object CopperLanternSeed {
         SeedObject("lower-pillar-2", "lower", "PILLAR", 865, 360, 65, 65),
     )
 
+    /** Empty-mode stores (POS_SEED=none): one manager so the owner can sign in and set up. */
+    fun seedBootstrapManagerIfNoStaff() = transaction {
+        if (Users.selectAll().count() > 0) return@transaction
+        Users.insert { it[id] = "manager"; it[name] = "Manager"; it[role] = "MANAGER"; it[pin] = AuthService.hashPin("1234"); it[languageCode] = "en" }
+    }
+
     fun seedIfEmpty() = transaction {
         if (Users.selectAll().count() > 0) return@transaction
         Items.batchInsert(menu) { m ->

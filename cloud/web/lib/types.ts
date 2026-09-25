@@ -242,6 +242,8 @@ export interface MenuItem {
   active: boolean;
   photoVersion: number | null;
   variants: MenuVariant[];
+  /** The store this row comes from (a combined view lists every store's items). */
+  venueId: string;
 }
 
 export interface MenuCategory {
@@ -256,7 +258,7 @@ export interface MenuResponse {
   items: MenuItem[];
 }
 
-// --- staff + grants (CONTRACT §7) ---
+// --- staff + grants (CONTRACT §7) — read-only, pushed up by each store ---
 
 export type StaffRole = "MANAGER" | "SERVER";
 
@@ -265,14 +267,18 @@ export interface StaffMember {
   name: string;
   role: StaffRole;
   active: boolean;
-  /** Per-staff overrides the owner set explicitly; absent perms inherit the role default. */
+  /** Per-staff overrides set on the store; absent perms inherit the role default. */
   overrides: Record<string, boolean>;
+  /** The store this member works at (ids repeat across stores). */
+  venueId: string;
 }
 
 export interface StaffListResponse {
   staff: StaffMember[];
-  /** role → permission → granted. The default for a staff member with no override. */
+  /** role → permission → granted, for the selected store. */
   roleGrants: Record<string, Record<string, boolean>>;
+  /** Every in-scope store's matrix (the combined view shows one per store). */
+  venueGrants: { venueId: string; roleGrants: Record<string, Record<string, boolean>> }[];
   /** The fixed permission vocabulary, in display order. */
   permissions: string[];
 }

@@ -3,7 +3,6 @@ package dev.dwhipstock.poscloud
 import dev.dwhipstock.poscloud.auth.hashPassword
 import dev.dwhipstock.poscloud.auth.sha256Hex
 import dev.dwhipstock.poscloud.catalog.Scope
-import dev.dwhipstock.poscloud.staff.seedStaffDefaults
 import dev.dwhipstock.poscloud.db.PortalBackupCodes
 import dev.dwhipstock.poscloud.db.PortalUsers
 import dev.dwhipstock.poscloud.db.StoreApiKeys
@@ -52,8 +51,6 @@ object Bootstrap {
             it[name] = config.venueName
             it[timezone] = config.venueTz
         }
-        // Default staff + grant matrix (CONTRACT §7), distributed to the store once.
-        seedStaffDefaults(Scope(TENANT, VENUE))
         config.storeApiKey?.let { key ->
             StoreApiKeys.insertIgnore {
                 it[tenantId] = TENANT

@@ -96,7 +96,7 @@ class AuthService(
         issueSession(user, deviceId)
     }
 
-    /** Active, non-deleted staff whose PIN matches (cloud-managed, CONTRACT §7). */
+    /** Active, non-deleted staff whose PIN matches (tablet-managed, CONTRACT §7). */
     private fun activeUserByPin(pin: String): ResultRow? =
         Users.selectAll().where { (Users.active eq true) and Users.deletedAt.isNull() }
             .firstOrNull { verifyPin(pin, it[Users.pin]) }
@@ -262,7 +262,7 @@ class AuthService(
         var expired = false
         var touchDue = false
         val user = transaction {
-            // deactivated / soft-deleted staff (cloud-managed, CONTRACT §7) stop resolving
+            // deactivated / soft-deleted staff (tablet-managed, CONTRACT §7) stop resolving
             // immediately — a live session must not outlive the account it belongs to
             val row = Sessions.join(Users, JoinType.INNER, Sessions.userId, Users.id)
                 .selectAll()

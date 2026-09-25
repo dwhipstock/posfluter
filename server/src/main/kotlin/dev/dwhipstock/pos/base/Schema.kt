@@ -77,8 +77,8 @@ object Users : Table("users") {
 }
 
 /**
- * Local mirror of the cloud grant model (024, CONTRACT §7). Role defaults + per-staff
- * overrides sync down; the effective grant is computed and enforced offline. Query DSL
+ * Local grant model (024, CONTRACT §7), owned by the tablet. Role defaults + per-staff
+ * overrides are pushed up for display; the effective grant is enforced offline. Query DSL
  * only — see [dev.dwhipstock.pos.base.GrantsRepo] for the logic.
  */
 object RoleGrants : Table("role_grants") {

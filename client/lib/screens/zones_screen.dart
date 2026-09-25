@@ -20,6 +20,7 @@ import 'menu_management_screen.dart';
 import 'sales_screen.dart';
 import 'settings_screen.dart';
 import 'shift_screen.dart';
+import 'staff_screen.dart';
 
 class ZonesScreen extends StatefulWidget {
   const ZonesScreen({super.key});
@@ -236,6 +237,10 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen()),
                   );
+                case 'staff':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StaffScreen()),
+                  );
                 case 'pin':
                   _changePin();
                 case 'slips':
@@ -261,6 +266,17 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                       const Icon(LucideIcons.slidersHorizontal, size: 18),
                       const SizedBox(width: 10),
                       Text(l.settings),
+                    ],
+                  ),
+                ),
+              if (Api.currentUser?.can(Perm.manageStaff) ?? false)
+                PopupMenuItem(
+                  value: 'staff',
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.users, size: 18),
+                      const SizedBox(width: 10),
+                      Text(l.staffTitle),
                     ],
                   ),
                 ),

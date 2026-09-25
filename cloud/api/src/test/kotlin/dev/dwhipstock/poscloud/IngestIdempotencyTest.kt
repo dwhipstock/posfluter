@@ -115,7 +115,7 @@ class IngestIdempotencyTest {
             buildJsonObject {
                 put("item", buildJsonObject {
                     put("id", "lantern-lager")
-                    put("nameFr", "éléphant")
+                    put("nameFr", "Lager de la Lanterne")
                     put("nameEn", name)
                     put("categoryId", "beer")
                     put("variants", buildJsonArray { })

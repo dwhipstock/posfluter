@@ -1,16 +1,20 @@
 package dev.dwhipstock.poscloud
 
+import dev.dwhipstock.poscloud.db.CatalogChanges
 import dev.dwhipstock.poscloud.db.PairingCodes
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.junit.Before
@@ -22,12 +26,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * M8 group model: staff are tenant-scoped with per-venue assignments; the
- * changes feed is venue-scoped (a store key only ever sees its own venue's
- * changes); pairing codes are single-use and venue-bound; device revocations
- * ride the feed; /reports/by-venue combines venues.
+ * Group model under one-way sync: every store pushes its own staff and menu
+ * (venue-scoped projections, read-only in the portal); the only cloud → store
+ * feed is device revocations, and it is venue-scoped; pairing codes are
+ * single-use and venue-bound; /reports/by-venue combines venues.
  */
-class GroupStaffAndPairingTest {
+class MultiVenueAndPairingTest {
 
     private val keyA = "store-key-venue-a"
     private val keyB = "store-key-venue-b"
@@ -46,7 +50,7 @@ class GroupStaffAndPairingTest {
     private fun cookie() = "pos_portal_session=$session"
 
     private suspend fun ApplicationTestBuilder.feed(key: String, since: Long = 0): List<JsonObject> {
-        val res = client.get("/v1/store/catalog/changes?since=$since") {
+        val res = client.get("/v1/store/revocations?since=$since") {
             header(HttpHeaders.Authorization, "Bearer $key")
         }
         assertEquals(HttpStatusCode.OK, res.status)
@@ -54,138 +58,91 @@ class GroupStaffAndPairingTest {
             .jsonArray.map { it.jsonObject }
     }
 
-    private suspend fun ApplicationTestBuilder.createStaff(name: String, pin: String = "4321"): String {
-        val res = client.post("/v1/staff") {
-            header(HttpHeaders.Cookie, cookie())
-            contentType(ContentType.Application.Json)
-            setBody("""{"name":"$name","role":"SERVER","pin":"$pin"}""")
-        }
-        assertEquals(HttpStatusCode.Created, res.status)
-        return testJson.parseToJsonElement(res.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
-    }
-
-    private suspend fun ApplicationTestBuilder.assignVenues(staffId: String, vararg pairs: Pair<String, String>): HttpResponse =
-        client.put("/v1/staff/$staffId/venues") {
-            header(HttpHeaders.Cookie, cookie())
-            contentType(ContentType.Application.Json)
-            setBody(buildString {
-                append("""{"venues":[""")
-                append(pairs.joinToString(",") { """{"venueId":"${it.first}","role":"${it.second}"}""" })
-                append("]}")
-            })
+    private fun staffJson(id: String, name: String, role: String = "SERVER", deleted: Boolean = false) =
+        buildJsonObject {
+            put("id", id); put("name", name); put("role", role)
+            put("active", true); put("deleted", deleted)
+            put("overrides", buildJsonObject { if (role == "SERVER") put("refund", true) })
         }
 
-    // --- venue-scoped feed ---
-
-    @Test
-    fun feedIsVenueScoped() = testApplication {
-        application { module(TestSupport.config) }
-
-        // staff created under the default venue (main) must never reach patio's feed
-        val staffId = createStaff("Somchai")
-        val a = feed(keyA)
-        val b = feed(keyB)
-        assertTrue(a.any { it["kind"]!!.jsonPrimitive.content == "staff" &&
-            it["data"]!!.jsonObject["id"]!!.jsonPrimitive.content == staffId })
-        assertTrue(b.none { it["kind"]!!.jsonPrimitive.content == "staff" })
-    }
-
-    // --- group staff ---
-
-    @Test
-    fun staffAssignedToTwoVenuesDistributesToBoth() = testApplication {
-        application { module(TestSupport.config) }
-
-        val staffId = createStaff("Nok")
-        val res = assignVenues(staffId, "main" to "SERVER", "patio" to "MANAGER")
+    private suspend fun ApplicationTestBuilder.staffIds(venue: String? = null): List<String> {
+        val res = client.get("/v1/staff" + (venue?.let { "?venue=$it" } ?: "")) {
+            header(HttpHeaders.Cookie, cookie())
+        }
         assertEquals(HttpStatusCode.OK, res.status)
-        val dto = testJson.parseToJsonElement(res.bodyAsText()).jsonObject
-        assertEquals("MANAGER", dto["venues"]!!.jsonObject["patio"]!!.jsonPrimitive.content)
+        return testJson.parseToJsonElement(res.bodyAsText()).jsonObject["staff"]!!
+            .jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
+    }
 
-        // each venue's feed carries the snapshot with the role AT THAT venue
-        val aSnap = feed(keyA).last { it["kind"]!!.jsonPrimitive.content == "staff" &&
-            it["data"]!!.jsonObject["id"]!!.jsonPrimitive.content == staffId }
-        val bSnap = feed(keyB).last { it["kind"]!!.jsonPrimitive.content == "staff" &&
-            it["data"]!!.jsonObject["id"]!!.jsonPrimitive.content == staffId }
-        assertEquals("SERVER", aSnap["data"]!!.jsonObject["role"]!!.jsonPrimitive.content)
-        assertEquals("MANAGER", bSnap["data"]!!.jsonObject["role"]!!.jsonPrimitive.content)
+    // --- store-owned staff (one-way sync) ---
 
-        // PIN reset ripples to every assigned venue
-        val beforeA = feed(keyA).size
-        val beforeB = feed(keyB).size
-        val pin = client.post("/v1/staff/$staffId/pin") {
+    @Test
+    fun storeStaffSnapshotsProjectPerVenueAndStayReadOnly() = testApplication {
+        application { module(TestSupport.config) }
+        ingest(keyA, event("staff.snapshot", buildJsonObject {
+            put("staff", buildJsonArray { add(staffJson("manager", "Manager", "MANAGER")); add(staffJson("camille", "Camille")) })
+            put("roles", buildJsonObject {
+                put("SERVER", buildJsonObject { put("void", true) })
+            })
+        }, seq = 1))
+        // the same id at another store is a different person
+        ingest(keyB, event("staff.created", buildJsonObject {
+            put("staffId", "camille"); put("staff", staffJson("camille", "Camille B."))
+        }, seq = 1))
+
+        assertEquals(listOf("manager", "camille"), staffIds("main"))
+        assertEquals(listOf("camille"), staffIds("patio"))
+
+        val main = testJson.parseToJsonElement(client.get("/v1/staff?venue=main") {
+            header(HttpHeaders.Cookie, cookie())
+        }.bodyAsText()).jsonObject
+        val camille = main["staff"]!!.jsonArray.map { it.jsonObject }.single { it["id"]!!.jsonPrimitive.content == "camille" }
+        assertEquals("true", camille["overrides"]!!.jsonObject["refund"]!!.jsonPrimitive.content)
+        assertEquals("true", main["roleGrants"]!!.jsonObject["SERVER"]!!.jsonObject["void"]!!.jsonPrimitive.content)
+
+        // a store-side delete drops the member from the portal list
+        ingest(keyA, event("staff.deleted", buildJsonObject {
+            put("staffId", "camille"); put("staff", staffJson("camille", "Camille", deleted = true))
+        }, seq = 2))
+        assertEquals(listOf("manager"), staffIds("main"))
+
+        // the portal cannot write staff any more, and nothing is ever queued for a store
+        val post = client.post("/v1/staff") {
             header(HttpHeaders.Cookie, cookie())
             contentType(ContentType.Application.Json)
-            setBody("""{"pin":"7777"}""")
+            setBody("""{"name":"X","role":"SERVER","pin":"4321"}""")
         }
-        assertEquals(HttpStatusCode.OK, pin.status)
-        assertTrue(feed(keyA).size > beforeA)
-        assertTrue(feed(keyB).size > beforeB)
-
-        // unassigning patio emits a delete THERE only. Nok is patio's lone manager,
-        // so removing them outright would trip the lockout guard — cover patio with
-        // the seeded manager first (which also exercises the guard's regression rule).
-        assertEquals(HttpStatusCode.Conflict, assignVenues(staffId, "main" to "SERVER").status)
-        assertEquals(HttpStatusCode.OK,
-            assignVenues("manager", "main" to "MANAGER", "patio" to "MANAGER").status)
-        assertEquals(HttpStatusCode.OK, assignVenues(staffId, "main" to "SERVER").status)
-        val bAfter = feed(keyB).last { it["kind"]!!.jsonPrimitive.content == "staff" &&
-            it["data"]!!.jsonObject["id"]!!.jsonPrimitive.content == staffId }
-        assertEquals("delete", bAfter["op"]!!.jsonPrimitive.content)
-        val aAfter = feed(keyA).last { it["kind"]!!.jsonPrimitive.content == "staff" &&
-            it["data"]!!.jsonObject["id"]!!.jsonPrimitive.content == staffId }
-        assertEquals("upsert", aAfter["op"]!!.jsonPrimitive.content)
+        assertTrue(post.status == HttpStatusCode.NotFound || post.status == HttpStatusCode.MethodNotAllowed)
+        assertEquals(0, transaction { CatalogChanges.selectAll().count() })
     }
 
     @Test
-    fun venueQueryParamScopesStaffList() = testApplication {
+    fun venueOutsideTheTenantIs404() = testApplication {
         application { module(TestSupport.config) }
-
-        val staffId = createStaff("Lek")
-        assignVenues(staffId, "patio" to "SERVER").let { assertEquals(HttpStatusCode.OK, it.status) }
-
-        val patio = client.get("/v1/staff?venue=patio") { header(HttpHeaders.Cookie, cookie()) }
-        assertEquals(HttpStatusCode.OK, patio.status)
-        val patioIds = testJson.parseToJsonElement(patio.bodyAsText()).jsonObject["staff"]!!
-            .jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
-        assertEquals(listOf(staffId), patioIds)
-
-        // a venue outside the tenant is a 404, never a fall-through
         val foreign = client.get("/v1/staff?venue=nope") { header(HttpHeaders.Cookie, cookie()) }
         assertEquals(HttpStatusCode.NotFound, foreign.status)
     }
 
     @Test
-    fun defaultScopePrefersMainSoASecondVenueCantHijackThePortal() = testApplication {
-        // review F3: 'zzz' sorts AFTER 'main', but 'aaa' sorts BEFORE — the default
-        // must stay 'main' regardless of what venue ids get added,
-        // or provisioning a venue like 'copperlanternpub'/'aaa' would flip the whole portal.
-        seedTenant("copperlantern", "aaa")
+    fun revocationFeedServesOnlyRevocationsEvenOnTheLegacyPath() = testApplication {
         application { module(TestSupport.config) }
-
-        // no ?venue → 'main' (seeded staff live there; 'aaa' is empty)
-        val res = client.get("/v1/staff") { header(HttpHeaders.Cookie, cookie()) }
-        assertEquals(HttpStatusCode.OK, res.status)
-        val ids = testJson.parseToJsonElement(res.bodyAsText()).jsonObject["staff"]!!
-            .jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
-        assertTrue("manager" in ids, "default scope must resolve to 'main', not the alphabetically-first venue")
-    }
-
-    @Test
-    fun emptyVenueListIsRefusedSoAnIdentityCantBeOrphaned() = testApplication {
-        // review F37: {"venues":[]} would unassign everywhere yet leave the identity
-        // live and invisible — refuse it; DELETE is the way to remove a member.
-        application { module(TestSupport.config) }
-        val staffId = createStaff("Ghost")
-        assignVenues(staffId, "patio" to "SERVER").let { assertEquals(HttpStatusCode.OK, it.status) }
-        val res = client.put("/v1/staff/$staffId/venues") {
-            header(HttpHeaders.Cookie, cookie())
-            contentType(ContentType.Application.Json)
-            setBody("""{"venues":[]}""")
+        // a leftover distribution row from before one-way sync
+        transaction {
+            CatalogChanges.insert {
+                it[tenantId] = "copperlantern"; it[venueId] = "main"; it[kind] = "item"
+                it[entityId] = "x"; it[op] = "upsert"; it[data] = "{}"; it[createdAt] = LocalDateTime.now()
+            }
         }
-        assertEquals(HttpStatusCode.BadRequest, res.status)
-        assertEquals("no_venues",
-            testJson.parseToJsonElement(res.bodyAsText()).jsonObject["code"]!!.jsonPrimitive.content)
+        assertEquals(0, feed(keyA).size)
+        val legacy = client.get("/v1/store/catalog/changes?since=0") {
+            header(HttpHeaders.Authorization, "Bearer $keyA")
+        }
+        assertEquals(HttpStatusCode.OK, legacy.status)
+        assertEquals(0, testJson.parseToJsonElement(legacy.bodyAsText()).jsonObject["changes"]!!.jsonArray.size)
+        // the old photo download endpoint is gone
+        assertEquals(HttpStatusCode.NotFound, client.get("/v1/store/photos/x") {
+            header(HttpHeaders.Authorization, "Bearer $keyA")
+        }.status)
     }
 
     @Test
@@ -204,17 +161,6 @@ class GroupStaffAndPairingTest {
         // a second delete is a clean 404
         assertEquals(HttpStatusCode.NotFound,
             client.delete("/v1/venues/main/devices/ghost") { header(HttpHeaders.Cookie, cookie()) }.status)
-    }
-
-    @Test
-    fun lastManagerGuardHoldsPerVenue() = testApplication {
-        application { module(TestSupport.config) }
-
-        // Bootstrap seeded manager only at 'main' — pulling them out of main must refuse
-        val res = assignVenues("manager", "patio" to "MANAGER")
-        assertEquals(HttpStatusCode.Conflict, res.status)
-        val body = testJson.parseToJsonElement(res.bodyAsText()).jsonObject
-        assertEquals("last_manager", body["code"]!!.jsonPrimitive.content)
     }
 
     // --- pairing ---

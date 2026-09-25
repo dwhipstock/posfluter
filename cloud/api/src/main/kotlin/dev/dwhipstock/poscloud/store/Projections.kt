@@ -14,6 +14,7 @@ import dev.dwhipstock.poscloud.db.CheckTenders
 import dev.dwhipstock.poscloud.db.Checks
 import dev.dwhipstock.poscloud.db.Refunds
 import dev.dwhipstock.poscloud.db.Shifts
+import dev.dwhipstock.poscloud.staff.StaffProjection
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
@@ -31,6 +32,8 @@ import java.time.LocalDateTime
  */
 object Projections {
 
+    private val STAFF_EVENTS = setOf("staff.created", "staff.updated", "staff.deleted")
+
     fun apply(scope: Scope, event: IngestEvent) {
         val payload = event.payload
         val createdAt = runCatching { LocalDateTime.parse(event.createdAt) }.getOrElse { LocalDateTime.now() }
@@ -42,6 +45,10 @@ object Projections {
             event.eventType == "shift.opened" -> shiftOpened(scope, payload, createdAt)
             event.eventType == "shift.closed" -> shiftClosed(scope, payload, createdAt)
             event.eventType == "catalog.snapshot" -> catalogSnapshot(scope, payload)
+            event.eventType == "staff.snapshot" -> staffSnapshot(scope, payload)
+            event.eventType in STAFF_EVENTS -> staffEvent(scope, payload)
+            event.eventType == "role_grants.updated" ->
+                payload.obj("roles")?.let { StaffProjection.applyRoleGrants(scope, it) }
             event.eventType == "categories.reordered" -> categoriesReordered(scope, payload)
             event.eventType.startsWith("item.") -> itemEvent(scope, payload)
             event.eventType.startsWith("category.") -> categoryEvent(scope, payload)
@@ -225,36 +232,44 @@ object Projections {
         }
     }
 
-    /** POS-originated edit → apply + redistribute; origin:"cloud" echo → audit log only. */
+    /**
+     * Store menu edit → mirror it for display (one-way sync: the tablet owns the
+     * menu, nothing is redistributed). Legacy origin:"cloud" echoes (from the
+     * era when the portal edited the menu) are audit-only: the state they carry
+     * already landed in the mirror when the portal edit was made.
+     */
     private fun itemEvent(scope: Scope, p: JsonObject) {
         if (p.str("origin") == "cloud") return
         val item = p.obj("item") ?: return
-        val itemId = item.str("id") ?: return
         Catalog.applyItemSnapshot(scope, item)
-        Catalog.appendChange(scope, "item", itemId, "upsert", item)
     }
 
     private fun categoryEvent(scope: Scope, p: JsonObject) {
         if (p.str("origin") == "cloud") return
         val category = p.obj("category") ?: return
-        val categoryId = category.str("id") ?: return
         Catalog.applyCategorySnapshot(scope, category)
-        Catalog.appendChange(scope, "category", categoryId, "upsert", category)
     }
 
     private fun categoriesReordered(scope: Scope, p: JsonObject) {
         if (p.str("origin") == "cloud") return
-        p.arr("categories")?.filterIsInstance<JsonObject>()?.forEach { category ->
-            val categoryId = category.str("id") ?: return@forEach
-            Catalog.applyCategorySnapshot(scope, category)
-            Catalog.appendChange(scope, "category", categoryId, "upsert", category)
-        }
+        p.arr("categories")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyCategorySnapshot(scope, it) }
     }
 
-    /** Bootstrap upload of state the store already has: apply, no redistribution. */
+    /** Bootstrap upload of the menu the store already has. */
     private fun catalogSnapshot(scope: Scope, p: JsonObject) {
         p.arr("categories")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyCategorySnapshot(scope, it) }
         p.arr("items")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyItemSnapshot(scope, it) }
+    }
+
+    /** staff.created / staff.updated / staff.deleted carry one full `staff` snapshot. */
+    private fun staffEvent(scope: Scope, p: JsonObject) {
+        p.obj("staff")?.let { StaffProjection.applyStaff(scope, it) }
+    }
+
+    /** One-time bootstrap: every staff row + the role matrix. */
+    private fun staffSnapshot(scope: Scope, p: JsonObject) {
+        p.arr("staff")?.filterIsInstance<JsonObject>()?.forEach { StaffProjection.applyStaff(scope, it) }
+        p.obj("roles")?.let { StaffProjection.applyRoleGrants(scope, it) }
     }
 
     private fun feeSum(fees: List<JsonObject>, code: String): Long =

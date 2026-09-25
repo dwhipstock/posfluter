@@ -88,7 +88,7 @@ class TenantIsolationTest {
         ingest(keyA, event("item.created", buildJsonObject {
             put("item", buildJsonObject {
                 put("id", "lantern-lager")
-                put("nameFr", "éléphant")
+                put("nameFr", "Lager de la Lanterne")
                 put("nameEn", "Lantern House Lager")
                 put("categoryId", "beer")
                 put("variants", buildJsonArray { })

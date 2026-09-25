@@ -22,6 +22,15 @@ container is stopped. The tablet connects to the existing cloud ingest and
 owner portal asynchronously. Additional independent tablet uploads and
 combined reporting remain Milestone 2.
 
+## Sync direction
+
+Sync is one-way, tablet → portal. Each store's tablet owns its menu, staff and
+grants: they are created and edited on the tablet (offline), and every change
+is pushed up through the outbox so the portal can display it. The portal is
+read-only for menu and staff. The only thing a tablet pulls down is device
+revocations — the owner's remote lock for a lost terminal. No internet means
+only sync pauses; nothing on the tablet waits for it.
+
 Business timestamps are recorded in the venue's `America/New_York` timezone,
 independent of the tablet's Android timezone. The cloud portal's date presets
 use the same timezone. Existing timestamp strings remain unchanged when this

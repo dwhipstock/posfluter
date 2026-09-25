@@ -111,31 +111,21 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
     private fun errorCode(body: String): String? =
         runCatching { Json.parseToJsonElement(body).jsonObject["code"]?.jsonPrimitive?.content }.getOrNull()
 
-    override fun fetchChanges(since: Long): ChangesPage {
-        val res = request("/v1/store/catalog/changes?since=$since")
-        check(res.status == 200) { "HTTP ${res.status} from catalog changes" }
+    override fun fetchRevocations(since: Long): ChangesPage {
+        val res = request("/v1/store/revocations?since=$since")
+        check(res.status == 200) { "HTTP ${res.status} from revocations" }
         val obj = Json.parseToJsonElement(res.text).jsonObject
         return ChangesPage(
             cursor = obj["cursor"]!!.jsonPrimitive.long,
             changes = (obj["changes"]?.jsonArray ?: emptyList()).map { el ->
                 val c = el.jsonObject
-                CatalogChange(
+                CloudChange(
                     version = c["version"]!!.jsonPrimitive.long,
                     kind = c["kind"]!!.jsonPrimitive.content,
                     op = c["op"]!!.jsonPrimitive.content,
                     data = c["data"]!!.jsonObject,
                 )
             },
-        )
-    }
-
-    override fun fetchPhoto(itemId: String): FetchedPhoto? {
-        val res = request("/v1/store/photos/$itemId")
-        if (res.status == 404) return null
-        check(res.status == 200) { "HTTP ${res.status} fetching photo $itemId" }
-        return FetchedPhoto(
-            bytes = res.bytes,
-            contentType = res.contentType ?: "image/jpeg",
         )
     }
 

@@ -43,6 +43,8 @@ import java.time.LocalDateTime
 private const val MAX_PHOTO_BYTES = 2 * 1024 * 1024
 private val ALLOWED_PHOTO_TYPES = setOf("image/jpeg", "image/png")
 private const val CHANGES_PAGE = 200
+/** The one change kind the cloud still sends down (remote lock of a lost terminal). */
+const val REVOCATION_KIND = "device_revocation"
 // A heartbeat older than this → the store is treated as offline (its LAN IP is
 // not served for the /staff-app redirect). The store beats every sync tick (~10s).
 // shared with the portal venue picker (venues/VenueRoutes.kt) so "store online"
@@ -182,17 +184,23 @@ fun Route.storeRoutes(config: CloudConfig) {
         call.respond(mapOf("itemId" to itemId, "photoVersion" to version.toString()))
     }
 
-    /** Distribution feed (CONTRACT §4): cursor = last version in the page, or `since` when empty. */
-    get("/store/catalog/changes") {
+    /**
+     * Revocation feed (CONTRACT §4) — the ONLY cloud → store data (one-way sync:
+     * menu and staff are tablet-owned). Cursor = last version in the page, or
+     * `since` when empty. The legacy `/store/catalog/changes` path serves the
+     * same revocation-only feed so a not-yet-updated tablet keeps its remote lock.
+     */
+    val revocations: suspend RoutingContext.() -> Unit = {
         val scope = requireStore(call)
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0
         val response = transaction {
-            // scoped to the key's VENUE, not just its tenant — a multi-venue group's
-            // stores must each receive exactly their own staff/catalog/revocations
+            // scoped to the key's VENUE, not just its tenant — each store receives
+            // exactly its own devices' revocations
             val rows = CatalogChanges.selectAll()
                 .where {
                     (CatalogChanges.tenantId eq scope.tenantId) and
                         (CatalogChanges.venueId eq scope.venueId) and
+                        (CatalogChanges.kind eq REVOCATION_KIND) and
                         (CatalogChanges.version greater since)
                 }
                 .orderBy(CatalogChanges.version)
@@ -210,18 +218,8 @@ fun Route.storeRoutes(config: CloudConfig) {
         }
         call.respond(response)
     }
-
-    get("/store/photos/{itemId}") {
-        val scope = requireStore(call)
-        val itemId = call.parameters["itemId"]!!
-        val row = transaction {
-            ItemPhotos.selectAll().where {
-                (ItemPhotos.tenantId eq scope.tenantId) and (ItemPhotos.venueId eq scope.venueId) and
-                    (ItemPhotos.itemId eq itemId)
-            }.firstOrNull()
-        } ?: throw NotFoundException("no photo for item $itemId")
-        call.respondBytes(row[ItemPhotos.content], ContentType.parse(row[ItemPhotos.contentType]))
-    }
+    get("/store/revocations", revocations)
+    get("/store/catalog/changes", revocations)
 
     /**
      * Store liveness + reachable LAN address (M7 / CONTRACT §8). The store posts
@@ -403,11 +401,7 @@ private suspend fun ByteReadChannel.readCapped(max: Int): ByteArray {
     return out.toByteArray()
 }
 
-/**
- * Upsert the binary + emit an item.photo change row. Re-distributing a
- * store-originated photo back to it is a harmless no-op download (CONTRACT §3
- * exception) — kept simple on purpose.
- */
+/** Upsert the store-pushed binary for portal display (nothing is redistributed). */
 fun storePhoto(scope: Scope, itemId: String, bytes: ByteArray, contentType: String): Long = transaction {
     val version = System.currentTimeMillis()
     ItemPhotos.upsert {
@@ -423,9 +417,5 @@ fun storePhoto(scope: Scope, itemId: String, bytes: ByteArray, contentType: Stri
         (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and
             (CatalogItems.id eq itemId)
     }) { it[photoVersion] = version }
-    Catalog.appendChange(scope, "item.photo", itemId, "upsert", buildJsonObject {
-        put("itemId", itemId)
-        put("photoVersion", version)
-    })
     version
 }

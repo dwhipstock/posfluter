@@ -1,10 +1,8 @@
 package dev.dwhipstock.pos
 
 import dev.dwhipstock.pos.base.DeviceRegistry
-import dev.dwhipstock.pos.sync.CatalogChange
 import dev.dwhipstock.pos.sync.ChangesPage
 import dev.dwhipstock.pos.sync.CloudTransport
-import dev.dwhipstock.pos.sync.FetchedPhoto
 import dev.dwhipstock.pos.sync.PushEvent
 import dev.dwhipstock.pos.sync.PushResult
 import io.ktor.client.request.*
@@ -34,8 +32,7 @@ class DevicePairingTest {
     /** Claims succeed for [validCodes]; everything else is the cloud's bad_pairing_code refusal. */
     private class FakeTransport(private val validCodes: MutableSet<String>) : CloudTransport {
         override fun push(installId: String, events: List<PushEvent>) = PushResult(true)
-        override fun fetchChanges(since: Long) = ChangesPage(since, emptyList())
-        override fun fetchPhoto(itemId: String): FetchedPhoto? = null
+        override fun fetchRevocations(since: Long) = ChangesPage(since, emptyList())
         override fun pushPhoto(itemId: String, bytes: ByteArray, contentType: String) = PushResult(true)
         // detail carries the cloud's machine code, matching HttpCloudTransport.claimPairing
         // (which parses `code` out of the error body) rather than raw HTTP text.
