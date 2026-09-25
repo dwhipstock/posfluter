@@ -5,15 +5,20 @@ import dev.dwhipstock.pos.db.SyncState
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.PhotoStore
-import dev.dwhipstock.pos.sync.CatalogChange
+import dev.dwhipstock.pos.base.DeviceRegistry
+import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.sync.ChangesPage
+import dev.dwhipstock.pos.sync.CloudChange
 import dev.dwhipstock.pos.sync.CloudSync
+import dev.dwhipstock.pos.sync.CloudCapabilities
 import dev.dwhipstock.pos.sync.CloudTransport
-import dev.dwhipstock.pos.sync.FetchedPhoto
 import dev.dwhipstock.pos.sync.PushEvent
 import dev.dwhipstock.pos.sync.PushResult
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -29,7 +34,15 @@ class FakeTransport : CloudTransport {
     val photoUploads = mutableListOf<String>()
     var failPushes = false
     val pages = mutableMapOf<Long, ChangesPage>()
-    val photos = mutableMapOf<String, FetchedPhoto>()
+    var caps: CloudCapabilities = CloudCapabilities(2, CloudCapabilities.INSTANT)
+    var capabilityCalls = 0
+    val heartbeats = mutableListOf<List<DeviceRegistry.DeviceSummary>>()
+
+    override fun capabilities(): CloudCapabilities { capabilityCalls++; return caps }
+
+    override fun heartbeat(
+        installId: String, lanBaseUrl: String, devices: List<DeviceRegistry.DeviceSummary>,
+    ): PushResult { heartbeats += devices; return PushResult(true) }
 
     override fun push(installId: String, events: List<PushEvent>): PushResult {
         if (failPushes) return PushResult(false, "simulated outage")
@@ -38,10 +51,8 @@ class FakeTransport : CloudTransport {
         return PushResult(true)
     }
 
-    override fun fetchChanges(since: Long): ChangesPage =
+    override fun fetchRevocations(since: Long): ChangesPage =
         pages[since] ?: ChangesPage(since, emptyList())
-
-    override fun fetchPhoto(itemId: String): FetchedPhoto? = photos[itemId]
 
     override fun pushPhoto(itemId: String, bytes: ByteArray, contentType: String): PushResult {
         if (failPushes) return PushResult(false, "simulated outage")
@@ -205,20 +216,104 @@ class CloudSyncTest {
     }
 
     @Test
-    fun emptyChangesPageLeavesCursorUntouched() {
+    fun onlyRevocationsArePulledAndCatalogOrStaffChangesAreIgnored() {
         freshDb()
+        val itemsBefore = transaction { Items.selectAll().count() }
+        val staffBefore = transaction { Users.selectAll().map { it[Users.name] } }
+        val deviceId = DeviceRegistry.pair("Bar tablet").first
+        val outboxBefore = transaction { SyncOutbox.selectAll().count() }
+
         val t = FakeTransport()
         val sync = CloudSync(t, InMemoryPhotoStore())
         sync.pullOnce()
-        assertEquals(null, state(CloudSync.CATALOG_CURSOR))
+        assertEquals(null, state(CloudSync.CHANGES_CURSOR)) // empty page: cursor untouched
 
-        t.pages[0L] = ChangesPage(3, listOf(
-            CatalogChange(3, "category", "upsert", buildJsonObject {
-                put("id", "wine"); put("nameFr", "vin"); put("nameEn", "Wine")
-                put("sortOrder", 9); put("deleted", false)
+        // an older cloud may still serve catalog/staff rows: they must not land
+        t.pages[0L] = ChangesPage(5, listOf(
+            CloudChange(3, "item", "upsert", buildJsonObject {
+                put("id", "cloud-only-item"); put("nameFr", "x"); put("nameEn", "x"); put("categoryId", "mains")
             }),
+            CloudChange(4, "staff", "upsert", buildJsonObject {
+                put("id", "intruder"); put("name", "Intruder"); put("role", "MANAGER"); put("pinHash", "\$2a\$10\$x")
+            }),
+            CloudChange(5, "device_revocation", "upsert", buildJsonObject { put("deviceId", deviceId) }),
         ))
         sync.pullOnce()
-        assertEquals("3", state(CloudSync.CATALOG_CURSOR))
+        assertEquals("5", state(CloudSync.CHANGES_CURSOR))
+        assertEquals(itemsBefore, transaction { Items.selectAll().count() })
+        assertEquals(staffBefore, transaction { Users.selectAll().map { it[Users.name] } })
+        // the revocation applied
+        assertTrue(DeviceRegistry.summaries().single { it.id == deviceId }.revoked)
+        // and nothing was echoed back into the outbox
+        assertEquals(outboxBefore, transaction { SyncOutbox.selectAll().count() })
+    }
+
+    @Test
+    fun firstDrainPushesOneStaffSnapshotWithoutPinHashes() {
+        freshDb()
+        dev.dwhipstock.pos.customers.copperlantern.CopperLanternSeed.seedIfEmpty()
+        val t = FakeTransport()
+        val sync = CloudSync(t, InMemoryPhotoStore())
+        sync.drainOnce()
+        val snapshots = t.batches.flatten().filter { it.eventType == "staff.snapshot" }
+        assertEquals(1, snapshots.size)
+        val payload = snapshots.single().payload
+        val ids = payload["staff"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
+        assertTrue("manager" in ids && "server1" in ids)
+        assertTrue("MANAGER" in payload["roles"]!!.jsonObject)
+        assertTrue("\$2a\$" !in payload.toString(), "PIN hashes must never leave the tablet")
+
+        sync.drainOnce()
+        assertEquals(1, t.batches.flatten().count { it.eventType == "staff.snapshot" })
+    }
+
+    @Test
+    fun anOldCloudGetsNoInstantsUntilItConfirmsThemAndNothingIsDropped() {
+        freshDb()
+        seedEvent("check.closed", "1")
+        DeviceRegistry.pair("Bar tablet")
+        val t = FakeTransport()
+        t.caps = CloudCapabilities.LEGACY // cloud predates the handshake (404)
+        val sync = CloudSync(t, InMemoryPhotoStore(), lanBaseUrl = { "http://192.168.1.2:8080" })
+
+        sync.tick()
+        sync.tick()
+        // held: nothing pushed, the HWM untouched, the device registry not mirrored
+        assertTrue(t.batches.isEmpty())
+        assertEquals(null, state(CloudSync.PUSH_HWM))
+        assertEquals(2, t.heartbeats.size)
+        assertTrue(t.heartbeats.all { it.isEmpty() })
+        // one handshake per tick while unconfirmed
+        assertEquals(2, t.capabilityCalls)
+
+        // the cloud is upgraded: the held outbox drains in full on the next tick
+        t.caps = CloudCapabilities(2, CloudCapabilities.INSTANT)
+        sync.tick()
+        val pushed = t.batches.flatten().map { it.eventType }
+        assertTrue("check.closed" in pushed && "catalog.snapshot" in pushed)
+        assertEquals(t.batches.flatten().last().seq.toString(), state(CloudSync.PUSH_HWM))
+        assertEquals(1, t.heartbeats.last().size)
+        // confirmed once per process — no further handshakes
+        sync.tick()
+        assertEquals(3, t.capabilityCalls)
+    }
+
+    @Test
+    fun aFailedHandshakeHoldsPushesAndRetriesNextTick() {
+        freshDb()
+        seedEvent("check.closed", "1")
+        var offline = true
+        val t = object : CloudTransport by FakeTransport() {
+            val inner = FakeTransport()
+            override fun capabilities(): CloudCapabilities =
+                if (offline) throw java.io.IOException("no route to host") else inner.caps
+            override fun push(installId: String, events: List<PushEvent>) = inner.push(installId, events)
+        }
+        val sync = CloudSync(t, InMemoryPhotoStore())
+        sync.tick()
+        assertTrue(t.inner.batches.isEmpty())
+        offline = false
+        sync.tick()
+        assertTrue(t.inner.batches.flatten().any { it.eventType == "check.closed" })
     }
 }

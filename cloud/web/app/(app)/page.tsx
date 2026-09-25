@@ -19,6 +19,8 @@ import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback } from "@/components/states";
 import { MONO_COLORS, MONO_HEX } from "@/components/chart-colors";
+import { StoreBreakdown } from "@/components/store-breakdown";
+import { useStoreHref } from "@/lib/store";
 
 export default function Page() {
   return (
@@ -34,6 +36,7 @@ function Dashboard() {
   const { name, nameAlt } = useI18n();
   const range = useRange();
   const meta = useExportMeta();
+  const storeHref = useStoreHref();
   const multiDay = range.from !== range.to;
   const summary = useApi<Summary>(reportKey("/v1/reports/summary", range));
   const payments = useApi<PaymentsReport>(reportKey("/v1/reports/payments", range));
@@ -112,6 +115,8 @@ function Dashboard() {
           />
         </div>
       )}
+
+      {s && <StoreBreakdown rows={s.byVenue} chart />}
 
       {multiDay && (
         <Card>
@@ -212,7 +217,7 @@ function Dashboard() {
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>{t("dash_top_items")}</CardTitle>
           <Link
-            href="/reports/items"
+            href={storeHref("/reports/items")}
             className="flex items-center gap-0.5 text-xs font-medium text-neutral-500 hover:text-ink"
           >
             {t("dash_all_items")} <ChevronRight className="h-3.5 w-3.5" />

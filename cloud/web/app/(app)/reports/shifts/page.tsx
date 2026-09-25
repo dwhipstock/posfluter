@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
+import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback } from "@/components/states";
 
@@ -69,6 +70,7 @@ function ShiftsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
+      <StoreBreakdown />
 
       {isLoading ? (
         <div className="space-y-3">
@@ -83,10 +85,11 @@ function ShiftsPage() {
       ) : data && data.rows.length > 0 ? (
         <div className="space-y-3">
           {data.rows.map((s) => (
-            <button key={s.shiftId} className="block w-full text-left" onClick={() => setSelected(s)}>
+            <button key={`${s.venueId}/${s.shiftId}`} className="block w-full text-left" onClick={() => setSelected(s)}>
               <Card className="p-4 transition-colors hover:border-accent/50">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold">{t("shift_n", { id: s.shiftId })}</span>
+                  <StoreTag venueId={s.venueId} />
                   {s.status === "OPEN" ? (
                     <Badge variant="pink">{t("badge_live")}</Badge>
                   ) : (

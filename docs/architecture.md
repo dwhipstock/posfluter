@@ -22,10 +22,46 @@ container is stopped. The tablet connects to the existing cloud ingest and
 owner portal asynchronously. Additional independent tablet uploads and
 combined reporting remain Milestone 2.
 
-Business timestamps are recorded in the venue's `America/New_York` timezone,
-independent of the tablet's Android timezone. The cloud portal's date presets
-use the same timezone. Existing timestamp strings remain unchanged when this
-policy is deployed; historical corrections require a separate reconciliation.
+## Stores
+
+One owner (tenant) has many stores (venues), and each store has exactly one
+POS tablet (one store database per venue; the cloud pins each venue to one
+store installation). Extra stations use the staff app served by that tablet
+over the LAN. The demo tenant `copperlantern` has two fictional Montréal
+stores: **Copper Lantern — Vieux-Port** (`vieux-port`, the Android tablet) and
+**Copper Lantern — Plateau** (`plateau`, the desktop build of the same store
+server). The store server picks its venue config — display name and first-boot
+seed — from `POS_VENUE` (`vieux-port` default, or `plateau`); a store's cloud
+venue comes from its API key, never from the store.
+
+The owner portal shows every page in two modes chosen by the header's store
+picker and kept in the URL (`?store=<id>`): **All stores** (default) combines
+the tenant's stores, each over its own business days, and adds a per-store
+breakdown to sales and reports; picking a store shows the same page filtered
+to it. `docs/demo-runbook.md` brings up both stores locally.
+
+## Sync direction
+
+Sync is one-way, tablet → portal. Each store's tablet owns its menu, staff and
+grants: they are created and edited on the tablet (offline), and every change
+is pushed up through the outbox so the portal can display it. The portal is
+read-only for menu and staff. The only thing a tablet pulls down is device
+revocations — the owner's remote lock for a lost terminal. No internet means
+only sync pauses; nothing on the tablet waits for it.
+
+## Time
+
+Every business timestamp is stored as a UTC instant together with the store's
+IANA zone: the tablet keeps the zone in `venue_settings.timezone` (seeded once
+from `VENUE_TZ`, `America/New_York` for both demo stores) and the cloud keeps
+it on each venue row (`timestamptz` columns). The zone is applied only to show
+a time, to group by business day (midnight to midnight in the store's zone,
+DST-aware) and to build reports — never the tablet's Android timezone or the
+server's. On the wire timestamps are ISO-8601 with the venue offset
+(`2026-11-01T01:30:00.000-04:00`), so the repeated hour when clocks fall back
+is unambiguous. Rows written before this change were zone-less venue-local
+times; both databases converted them once by reading them in their venue's
+zone, taking the first occurrence of the repeated fall-back hour.
 
 ## On-tablet delivery milestones
 

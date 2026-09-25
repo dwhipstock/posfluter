@@ -31,8 +31,8 @@ class TenantIsolationTest {
         TestSupport.reset()
         seedTenant("ten-a")
         seedTenant("ten-b")
-        seedStoreKey("ten-a", "main", keyA)
-        seedStoreKey("ten-b", "main", keyB)
+        seedStoreKey("ten-a", "vieux-port", keyA)
+        seedStoreKey("ten-b", "vieux-port", keyB)
         sessionA = seedSession("ten-a", seedUser("ten-a", "a@test.dev", "password-a"))
         sessionB = seedSession("ten-b", seedUser("ten-b", "b@test.dev", "password-b"))
     }
@@ -88,7 +88,7 @@ class TenantIsolationTest {
         ingest(keyA, event("item.created", buildJsonObject {
             put("item", buildJsonObject {
                 put("id", "lantern-lager")
-                put("nameFr", "éléphant")
+                put("nameFr", "Lager de la Lanterne")
                 put("nameEn", "Lantern House Lager")
                 put("categoryId", "beer")
                 put("variants", buildJsonArray { })

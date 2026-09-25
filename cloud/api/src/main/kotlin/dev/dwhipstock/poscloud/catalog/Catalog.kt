@@ -20,7 +20,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.upsert
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 /** (tenant, venue) resolved from a store API key or a portal session. */
 data class Scope(val tenantId: String, val venueId: String)
@@ -32,13 +32,14 @@ fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.longOrN
 fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
 fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 fun JsonObject.arr(key: String): JsonArray? = this[key] as? JsonArray
-fun JsonObject.dateTime(key: String): LocalDateTime? =
-    str(key)?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+/** A store-sent timestamp (offset or legacy zone-less venue-local) → instant; see CloudTime.parse. */
+fun JsonObject.instant(key: String, zone: java.time.ZoneId): java.time.OffsetDateTime? =
+    dev.dwhipstock.poscloud.CloudTime.parse(str(key), zone)
 
 /**
- * Cloud-authoritative catalog mirror: full-snapshot upserts (CONTRACT §2/§4)
- * from both the ingest path (POS edits) and the portal menu editor, plus the
- * catalog_changes append that feeds redistribution to the store.
+ * Display mirror of each store's catalog: full-snapshot upserts (CONTRACT §2)
+ * from the ingest path only — the tablet owns its menu (one-way sync). The
+ * change feed ([appendChange]) now only carries device revocations down.
  */
 object Catalog {
 
@@ -114,69 +115,7 @@ object Catalog {
             it[CatalogChanges.entityId] = entityId
             it[CatalogChanges.op] = op
             it[CatalogChanges.data] = data.toString()
-            it[createdAt] = LocalDateTime.now()
+            it[createdAt] = dev.dwhipstock.poscloud.CloudTime.now()
         } get CatalogChanges.version
     }
-
-    /** Full item snapshot from the mirror — the §2 shape the store applies. */
-    fun itemSnapshot(scope: Scope, itemId: String): JsonObject {
-        val row = CatalogItems.selectAll().where {
-            (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and
-                (CatalogItems.id eq itemId)
-        }.first()
-        val variants = CatalogVariants.selectAll().where {
-            (CatalogVariants.tenantId eq scope.tenantId) and (CatalogVariants.venueId eq scope.venueId) and
-                (CatalogVariants.itemId eq itemId)
-        }.orderBy(CatalogVariants.sortOrder).toList()
-        return buildJsonObject {
-            put("id", row[CatalogItems.id])
-            put("nameFr", row[CatalogItems.nameFr])
-            put("nameEn", row[CatalogItems.nameEn])
-            put("descriptionFr", row[CatalogItems.descriptionFr])
-            put("descriptionEn", row[CatalogItems.descriptionEn])
-            put("categoryId", row[CatalogItems.categoryId])
-            put("abbrev", row[CatalogItems.abbrev])
-            put("isAlcohol", row[CatalogItems.isAlcohol])
-            put("active", row[CatalogItems.active])
-            put("deleted", row[CatalogItems.deleted])
-            row[CatalogItems.photoVersion]?.let { put("photoVersion", it) }
-            put("variants", buildJsonArray {
-                variants.forEach { v ->
-                    add(buildJsonObject {
-                        put("id", v[CatalogVariants.id])
-                        put("labelFr", v[CatalogVariants.labelFr])
-                        put("labelEn", v[CatalogVariants.labelEn])
-                        put("priceCents", v[CatalogVariants.priceCents])
-                        put("sortOrder", v[CatalogVariants.sortOrder])
-                        put("deleted", v[CatalogVariants.deleted])
-                    })
-                }
-            })
-        }
-    }
-
-    fun categorySnapshot(scope: Scope, categoryId: String): JsonObject {
-        val row = CatalogCategories.selectAll().where {
-            (CatalogCategories.tenantId eq scope.tenantId) and
-                (CatalogCategories.venueId eq scope.venueId) and (CatalogCategories.id eq categoryId)
-        }.first()
-        return buildJsonObject {
-            put("id", row[CatalogCategories.id])
-            put("nameFr", row[CatalogCategories.nameFr])
-            put("nameEn", row[CatalogCategories.nameEn])
-            put("sortOrder", row[CatalogCategories.sortOrder])
-            put("deleted", row[CatalogCategories.deleted])
-        }
-    }
-}
-
-/** "Lantern House Lager Tower" → "lantern-lager-tower"; French-only names fall back to [fallback]. Same rule as the store. */
-fun uniqueSlug(source: String, fallback: String = "item", taken: (String) -> Boolean): String {
-    val base = source.trim().lowercase()
-        .replace(Regex("[^a-z0-9]+"), "-").trim('-')
-        .ifBlank { fallback }
-    if (!taken(base)) return base
-    var n = 2
-    while (taken("$base-$n")) n++
-    return "$base-$n"
 }

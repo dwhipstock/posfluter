@@ -41,6 +41,20 @@ export const messages = {
   col_status: m("statut", "Status"),
 
   // ── nav ───────────────────────────────────────────────────────────────
+  // ── store picker (every page: all stores combined, or one store) ─────
+  store_all: m("Tous les magasins", "All stores"),
+  store_label: m("Magasin", "Store"),
+  col_store: m("Magasin", "Store"),
+  store_breakdown_title: m("Par magasin", "By store"),
+  store_breakdown_sub: m(
+    "Chaque magasin selon ses propres journées d’affaires",
+    "Each store over its own business days"
+  ),
+  store_pick_hint: m(
+    "Choisissez un magasin dans l’en-tête pour jumeler un terminal.",
+    "Pick a store in the header to pair a terminal."
+  ),
+
   nav_dashboard: m("Tableau de bord", "Dashboard"),
   nav_reports: m("rapport", "Reports"),
   nav_menu: m("menu", "Menu"),
@@ -174,7 +188,7 @@ export const messages = {
   col_date: m("date", "Date"),
   col_gross: m("Total", "Gross"),
   col_net: m("filet", "Net"),
-  col_vat: m("VAT", "VAT"),
+  col_vat: m("Taxe", "Tax"),
   col_checks: m("facture", "Checks"),
   col_total: m("Total", "Total"),
   vat_empty: m("Il n'y a pas de vente pendant cette période.", "No sales in this range"),
@@ -361,113 +375,43 @@ export const messages = {
     "Revoke requested — the store confirms within a few seconds."
   ),
 
-  // ── menu ──────────────────────────────────────────────────────────────
-  menu_title: m("menu", "Menu"),
-  menu_sub: m("Les modifications seront synchronisées. POS au prochain tour", "Edits sync to the POS on its next poll."),
-  menu_categories_btn: m("Catégorie", "Categories"),
-  menu_item_btn: m("ajouter un menu", "Item"),
-  menu_off: m("Fermé à la vente", "Off menu"),
-  menu_empty: m("Le menu est toujours vide.", "The menu is empty"),
+  // ── menu (read-only: each store's tablet owns its menu) ───────────────
+  menu_title: m("Menu", "Menu"),
+  menu_sub: m(
+    "Le menu se modifie sur la tablette de chaque magasin ; il apparaît ici après sa synchronisation.",
+    "Menus are edited on each store’s tablet and appear here once it syncs."
+  ),
+  menu_off: m("Retiré de la vente", "Off menu"),
+  menu_empty: m("Aucun menu synchronisé pour l’instant", "No menu synced yet"),
   menu_empty_hint: m(
-    "Ajoutez une catégorie puis ajoutez le premier menu — POS le tirera automatiquement vers vous",
-    "Add a category, then your first item — the POS picks it up automatically."
+    "Le menu apparaîtra dès que la tablette du magasin se sera connectée.",
+    "It appears as soon as the store’s tablet connects."
   ),
-  menu_cat_empty: m("Il n'y a pas encore de menus dans cette catégorie.", "No items here yet."),
-  menu_available_aria: m("Statut des ventes {name}", "{name} available"),
+  menu_cat_empty: m("Aucun article dans cette catégorie.", "No items here yet."),
 
-  // ── category manager ──────────────────────────────────────────────────
-  cats_title: m("Catégorie", "Categories"),
-  cats_none: m("Il n'y a pas encore de catégories. — Ajoutez la première catégorie ci-dessous.", "No categories yet — add the first one below."),
-  cats_both_names: m("Le nom doit être saisi dans les deux langues.", "Both names are required"),
-  cats_in_use: m("Cette catégorie a toujours un menu. — Déménagez d'abord", "Category still has items — move them first"),
-  cats_delete_q: m("supprimer {name}?", "Delete {name}?"),
-  cats_delete_body: m("Seules les catégories vides peuvent être supprimées.", "Only empty categories can be deleted."),
-  cats_add: m("Ajouter une catégorie", "Add category"),
-
-  // ── item editor ───────────────────────────────────────────────────────
-  item_new: m("Nouveau menu", "New item"),
-  item_name_fr: m("Nom (français)", "Name (French)"),
-  item_name_en: m("Nom (anglais)", "Name (English)"),
-  item_category: m("Catégorie", "Category"),
-  item_pick_category: m("Choisissez une catégorie", "Pick a category"),
-  item_abbrev: m("Abréviation à la réception", "Receipt abbreviation"),
-  item_alcohol: m("alcool", "Alcohol"),
-  item_variants: m("Taille/Prix", "Variants"),
-  item_photo: m("image", "Photo"),
-  item_delete: m("Supprimer le menu", "Delete item"),
-  item_create: m("Créer un menu", "Create item"),
-  item_delete_q: m("supprimer {name}?", "Delete {name}?"),
-  item_delete_body: m(
-    "Ce menu disparaîtra du menu et POS lors du prochain cycle de synchronisation, l'historique des ventes est toujours là.",
-    "It disappears from the menu and the POS on its next sync. Sales history keeps it."
+  // ── staff + grants (read-only: each store's tablet owns its staff) ─────
+  nav_staff: m("Personnel", "Staff"),
+  staff_title: m("Personnel", "Staff"),
+  staff_sub: m(
+    "Le personnel et les droits se gèrent sur la tablette de chaque magasin.",
+    "Staff and permissions are managed on each store’s tablet."
   ),
-  item_add_variant: m("augmenter la taille", "Add variant"),
-  item_regular: m("normale", "Regular"),
-  item_required: m("Doit remplir le nom français, le nom anglais et la catégorie.", "French name, English name and category are required"),
-  item_variants_required: m(
-    "Chaque taille doit avoir un nom et un prix français et anglais.",
-    "Every variant needs French + English labels and a price"
-  ),
-  item_variant_required: m("La taille doit avoir un nom et un prix français et anglais.", "Variant needs French + English labels and a price"),
-  item_needs_variant: m("Le menu doit avoir au moins une taille.", "An item needs at least one variant"),
-  item_created_toast: m("Menu créé", "Item created"),
-  item_saved_toast: m("Enregistré", "Saved"),
-  item_deleted_toast: m("Menu supprimé", "Item deleted"),
-
-  // ── photo ─────────────────────────────────────────────────────────────
-  photo_replace: m("changer de forme", "Replace photo"),
-  photo_upload: m("Télécharger une photo", "Upload photo"),
-  photo_hint: m("JPEG ou PNG pas plus que 2 MB", "JPEG or PNG, up to 2 MB."),
-  photo_type_err: m("Soutien JPEG ou PNG seulement", "JPEG or PNG only"),
-  photo_size_err: m("L'image ne doit pas dépasser 2 MB", "Photo must be 2 MB or less"),
-  photo_updated: m("Photo mise à jour", "Photo updated"),
-
-  // ── staff + grants ────────────────────────────────────────────────────
-  nav_staff: m("employé", "Staff"),
-  staff_title: m("employé", "Staff"),
-  staff_sub: m("Gérer les employés et les licences", "Manage staff and permissions"),
-  staff_add: m("Ajouter des employés", "Add staff"),
-  staff_none: m("Il n'y a pas encore d'employés.", "No staff yet"),
-  staff_new: m("Ajouter de nouveaux employés", "New staff"),
-  staff_edit: m("Modifier les employés", "Edit staff"),
-  staff_name: m("nom", "Name"),
-  staff_name_ph: m("comme Somchai", "e.g. Somchai"),
-  staff_role: m("position", "Role"),
-  role_manager: m("directeur", "Manager"),
-  role_server: m("employé", "Server"),
+  staff_none: m("Aucun membre du personnel synchronisé", "No staff synced yet"),
+  role_manager: m("Gérant", "Manager"),
+  role_server: m("Serveur", "Server"),
   staff_active: m("Actif", "Active"),
   staff_inactive: m("Désactivé", "Inactive"),
-  staff_pin: m("code PIN", "PIN"),
-  staff_pin_set: m("ensemble PIN (4 principal)", "Set PIN (4 digits)"),
-  staff_pin_reset: m("Réinitialiser PIN", "Reset PIN"),
-  staff_pin_keep: m("Laissez vide pour ne pas changer. PIN", "Leave blank to keep the current PIN"),
-  staff_pin_required: m("Doit être réglé PIN 4 principal", "A 4-digit PIN is required"),
-  staff_pin_bad: m("PIN Doit être un nombre 4 principal", "PIN must be 4 digits"),
-  staff_name_required: m("Veuillez entrer le nom", "A name is required"),
-  staff_delete: m("Supprimer un employé", "Delete staff"),
-  staff_delete_q: m("supprimer {name}?", "Delete {name}?"),
-  staff_delete_body: m(
-    "L'employé sera désactivé et disparaîtra de l'écran de connexion. L'histoire demeure",
-    "They’ll be deactivated and drop off the login screen. History is kept."
-  ),
-  staff_created: m("Employé ajouté", "Staff added"),
-  staff_saved: m("Enregistré", "Saved"),
-  staff_deleted: m("Employé supprimé", "Staff removed"),
-  staff_last_manager: m(
-    "Il doit y avoir au moins un manager capable de gérer les employés.",
-    "Keep at least one active manager"
-  ),
-  staff_overrides_n: m("Ajuster les droits {n} liste", "{n} overrides"),
+  staff_overrides_n: m("{n} droit(s) ajusté(s)", "{n} overrides"),
 
   // grant matrix
   grants_roles_title: m("Droits selon le poste", "Role permissions"),
   grants_roles_sub: m(
-    "Valeur par défaut pour chaque position — Des ajustements individuels peuvent être effectués sur la carte d'employé.",
-    "Defaults per role — override per person from the staff card"
+    "Valeurs par défaut de chaque poste, telles que réglées sur la tablette du magasin.",
+    "Defaults per role, as set on the store’s tablet."
   ),
   grants_overrides_title: m("Droits individuels", "This person’s permissions"),
   grants_overrides_sub: m("Remplacez les valeurs en fonction de l'emplacement par personne.", "Override the role default for this person"),
-  col_permission: m("droite", "Permission"),
+  col_permission: m("Droit", "Permission"),
   grant_default: m("selon le poste", "Role default"),
   grant_default_on: m("Par poste (autorisé)", "Role default (allowed)"),
   grant_default_off: m("Par poste (non autorisé)", "Role default (denied)"),

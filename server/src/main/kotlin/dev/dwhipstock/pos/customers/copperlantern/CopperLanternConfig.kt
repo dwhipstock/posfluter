@@ -14,11 +14,13 @@ import dev.dwhipstock.pos.sdk.TaxPolicy
 import dev.dwhipstock.pos.sdk.TenderMethod
 
 /**
- * The Copper Lantern Pub — fictional Canadian venue configuration. Owner-editable
+ * Copper Lantern — fictional Canadian venue configuration, one per store
+ * ([CopperLanternVenue]). Owner-editable
  * payment, fee, and receipt details read live from
  * [SettingsRepository] so a settings change applies on the next transaction.
  */
 class CopperLanternConfig(
+    val venue: CopperLanternVenue = CopperLanternVenue.VIEUX_PORT,
     private val settings: SettingsRepository,
     override val printer: PrinterAdapter,
     publicBaseUrl: String,
@@ -31,7 +33,7 @@ class CopperLanternConfig(
     private val initialPublicBaseUrl = publicBaseUrl
 
     override val customerId = "copperlantern"
-    override val displayName = "The Copper Lantern Pub"
+    override val displayName = venue.displayName
 
     // ---- policy: typed, changing these is a deploy, on purpose ----
     // The demo makes no jurisdiction-specific tax assumption.

@@ -12,6 +12,7 @@ import type { TablesReport, ZoneRow, ZoneTableRow } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
+import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -82,6 +83,7 @@ function TablesPage() {
         }
       />
       <DateRangePicker />
+      <StoreBreakdown />
 
       <Card>
         <CardHeader>
@@ -125,8 +127,13 @@ function TablesPage() {
             </TableHeader>
             <TableBody>
               {byTable.map((t) => (
-                <TableRow key={t.tableId}>
-                  <TableCell className="font-medium">{t.tableLabel}</TableCell>
+                <TableRow key={`${t.venueId}/${t.tableId}`}>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-1.5">
+                      {t.tableLabel}
+                      <StoreTag venueId={t.venueId} />
+                    </span>
+                  </TableCell>
                   <TableCell className="text-xs text-neutral-500">{t.zoneNameEn}</TableCell>
                   <TableCell className="text-right tabular-nums">{t.checkCount}</TableCell>
                   <TableCell className="text-right font-medium tabular-nums">

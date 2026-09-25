@@ -89,8 +89,10 @@ class ZoneStatusTest {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
 
-        // menu serves normally while open
-        assertEquals(HttpStatusCode.OK, client.get("/m/t3").status)
+        // menu serves normally while open, headed with the selected store's name
+        val open = client.get("/m/t3")
+        assertEquals(HttpStatusCode.OK, open.status)
+        assertTrue("<title>Copper Lantern — Vieux-Port — Order Online</title>" in open.bodyAsText())
 
         c.patchJson("/zones/outside/status", """{"status":"CLOSED","managerPin":"1234"}""")
 
@@ -100,6 +102,7 @@ class ZoneStatusTest {
         val body = menu.bodyAsText()
         assertTrue("Cette zone est temporairement fermée." in body, "missing French closed banner")
         assertTrue("temporarily closed" in body, "missing English closed banner")
+        assertTrue("<title>Copper Lantern — Vieux-Port</title>" in body, "closed page titled with the store")
 
         // the raw QR-order endpoint refuses (machine surface) with zone_closed
         val pend = client.postJson("/tables/t3/pending-lines",

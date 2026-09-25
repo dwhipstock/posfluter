@@ -77,14 +77,14 @@ class SecurityTest {
         assertEquals(HttpStatusCode.OK, manager.get("/me").status)
 
         // simulate 31 idle minutes → sliding expiry → 401
-        transaction { Sessions.update { it[lastUsedAt] = VenueClock.now().minusMinutes(31) } }
+        transaction { Sessions.update { it[lastUsedAt] = VenueClock.now().minusSeconds(31 * 60L) } }
         assertEquals(HttpStatusCode.Unauthorized, manager.get("/me").status)
 
         // fresh login, then simulate an ancient session → absolute expiry
         val manager2 = loginClient()
         transaction {
             Sessions.update({ Sessions.revokedAt.isNull() }) {
-                it[expiresAt] = VenueClock.now().minusMinutes(1)
+                it[expiresAt] = VenueClock.now().minusSeconds(1 * 60L)
             }
         }
         assertEquals(HttpStatusCode.Unauthorized, manager2.get("/me").status)

@@ -26,7 +26,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
 import java.sql.DriverManager
 import java.sql.SQLException
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.util.UUID
 
 /** Suites hit a real Postgres: pos_cloud_test, created on demand, truncated per test.
@@ -99,11 +99,11 @@ object TestSupport {
 
 // --- seed helpers ---
 
-fun seedTenant(tenantId: String, venueId: String = "main", venueName: String = "Test Pub") = transaction {
+fun seedTenant(tenantId: String, venueId: String = "vieux-port", venueName: String = "Test Pub") = transaction {
     Tenants.insertIgnore {
         it[id] = tenantId
         it[name] = venueName
-        it[createdAt] = LocalDateTime.now()
+        it[createdAt] = dev.dwhipstock.poscloud.CloudTime.now()
     }
     Venues.insertIgnore {
         it[Venues.tenantId] = tenantId
@@ -119,7 +119,7 @@ fun seedStoreKey(tenantId: String, venueId: String, key: String) = transaction {
         it[StoreApiKeys.venueId] = venueId
         it[keySha256] = sha256Hex(key)
         it[label] = "test"
-        it[createdAt] = LocalDateTime.now()
+        it[createdAt] = dev.dwhipstock.poscloud.CloudTime.now()
     }
 }
 
@@ -131,14 +131,14 @@ fun seedUser(tenantId: String, email: String, password: String, totpSecret: Stri
         it[PortalUsers.totpSecret] = totpSecret
         it[totpEnabled] = totpSecret != null
         it[displayName] = "Test User"
-        it[createdAt] = LocalDateTime.now()
+        it[createdAt] = dev.dwhipstock.poscloud.CloudTime.now()
     } get PortalUsers.id
 }
 
 /** Direct session row — auth flow is covered by AuthTotpTest; other suites just need a cookie. */
 fun seedSession(tenantId: String, userId: Long): String = transaction {
     val token = newToken()
-    val now = LocalDateTime.now()
+    val now = dev.dwhipstock.poscloud.CloudTime.now()
     PortalSessions.insert {
         it[tokenSha256] = sha256Hex(token)
         it[PortalSessions.tenantId] = tenantId

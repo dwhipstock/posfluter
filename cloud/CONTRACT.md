@@ -14,13 +14,54 @@ Hard rules this contract encodes:
   half-up at the cents) and stamps it on the check. Events carry those cents
   figures; cloud reports are sums of them. `net = gross − vatIncluded`, per
   check, computed by the store.
-- **Cloud is authoritative for the catalog** (items, variants, categories,
-  photos). POS edits push up as events; the cloud applies them, bumps its
-  version, and redistributes. The store always converges to the cloud's state.
-- **All money is integer cents.** All timestamps are venue-local ISO-8601
-  `LocalDateTime` strings without zone (`2026-07-11T18:02:11`); the venue's
-  IANA timezone lives on the cloud `venues` row (America/New_York) and is display
-  metadata only — bucketing by day/hour uses the naive timestamps as-is.
+- **Sync is one-way: store → cloud.** Each store's tablet is authoritative for
+  its own menu (items, variants, categories, photos), staff and grants. Edits
+  happen on the tablet, offline, and are pushed up as events so the portal can
+  *display* them; the cloud never edits or redistributes them. The single
+  exception is **device revocations** (§4): the owner's remote lock for a lost
+  terminal is the only data the store pulls down. Sync never blocks startup, a
+  sale or a login — with no internet only sync pauses.
+- **All money is integer cents.**
+- **Timestamps are instants (contract v2).** Every timestamp on the wire is an
+  ISO-8601 instant WITH an offset — the store sends its venue's offset at that
+  moment, e.g. `2026-07-11T18:02:11.123-04:00` (a `Z` form is equally valid).
+  Both sides store the UTC instant: the store as UTC text in SQLite, the cloud
+  as `timestamptz`. The venue's IANA zone lives in the store's
+  `venue_settings.timezone` (seeded once from `VENUE_TZ`) and on the cloud
+  `venues.timezone`; it is applied only for display, business-day grouping
+  (a day runs from the venue's midnight to the next, DST-aware — 23 or 25
+  hours on transition days) and hourly reports. Portal API responses carry the
+  venue's offset too, so the leading wall-clock part is venue-local.
+  *Legacy (v1):* a zone-less `2026-07-11T18:02:11` from an older store is read
+  as venue-local; in the repeated fall-back hour it resolves to the FIRST
+  occurrence (daylight time). Stored v1 rows were converted with the same rule
+  (store migration 031, cloud migration 013).
+
+Contract version: **2** (v1 → v2: zone-less venue-local timestamps became
+offset-carrying instants; sync became one-way).
+
+## 0. Capability handshake (before any push)
+
+`GET {CLOUD_SYNC_URL}/v1/store/capabilities` — `Authorization: Bearer {key}`
+
+```json
+{ "contractVersion": 2, "timestampFormat": "instant",
+  "revocationsPath": "/v1/store/revocations" }
+```
+
+A v2 store sends instants a v1 cloud cannot read (it parsed zone-less
+local times and fell back to "now" on anything else), so the store asks first:
+- `timestampFormat: "instant"` → confirmed for the life of the process; the
+  outbox drains normally.
+- `404` (a cloud that predates this route) or any other `timestampFormat` →
+  the store **holds** its outbox: nothing is pushed, nothing is dropped, the
+  HWM does not move, and heartbeats carry the LAN URL but no device registry
+  (its timestamps are instants too). It logs the hold once and asks again every
+  tick; the first confirmed tick drains everything held.
+- A transport error → same as not confirmed, retried next tick.
+
+Selling, logins and startup never wait on the handshake. The revocation pull
+(§4) is independent of it.
 
 ## 1. Event push (store → cloud)
 
@@ -43,7 +84,7 @@ tenant+venue on the cloud; the store never sends tenant ids).
       "eventType": "check.closed",
       "aggregateType": "check",
       "aggregateId": "42",
-      "createdAt": "2026-07-11T18:02:11",
+      "createdAt": "2026-07-11T18:02:11.123-04:00",
       "payload": { }                  // JSON object, shapes below
     }
   ]
@@ -83,7 +124,7 @@ additive.
   "tableId": "l13", "tableLabel": "L-8",
   "zoneId": "lower", "zoneNameFr": "Zone inférieure", "zoneNameEn": "Lower",
   "shiftId": 7,                        // omitted if closed outside a shift
-  "openedAt": "2026-07-11T18:02:11", "closedAt": "2026-07-11T19:40:03",
+  "openedAt": "2026-07-11T18:02:11.000-04:00", "closedAt": "2026-07-11T19:40:03.000-04:00",
   "openedBy": "1234",
   "grandTotalCents": 53500,           // = checks.locked_grand_total_cents
   "taxIncludedCents": 6155,           // = checks.locked_tax_included_cents (store-computed)
@@ -93,7 +134,7 @@ additive.
     {
       "lineId": 91, "itemId": "lantern-lager", "variantId": "lantern-lager:pint",
       "categoryId": "draft-beer",
-      "nameFr": "éléphant", "nameEn": "Lantern House Lager",
+      "nameFr": "Lager de la Lanterne", "nameEn": "Lantern House Lager",
       "variantLabelFr": "bouteille", "variantLabelEn": "Bottle",
       "qty": 2, "unitPriceCents": 9000, "lineTotalCents": 18000,
       "note": null
@@ -140,11 +181,11 @@ Every `item.*` event (`item.created`, `item.updated`, `item.deleted`,
 post-mutation snapshot under `"item"`:
 ```json
 "item": {
-  "id": "lantern-lager", "nameFr": "éléphant", "nameEn": "Lantern House Lager",
+  "id": "lantern-lager", "nameFr": "Lager de la Lanterne", "nameEn": "Lantern House Lager",
   "categoryId": "beer", "abbrev": "CH", "isAlcohol": true,
   "active": true, "deleted": false,
   "photoVersion": 1736590000000,      // optional hint (PhotoStore mtime); may be null/absent.
-                                       // Photo binaries move via §3/§4, never via this field.
+                                       // Photo binaries move via §3, never via this field.
   "variants": [
     { "id": "lantern-lager:bottle", "labelFr": "bouteille", "labelEn": "Bottle",
       "priceCents": 9000, "sortOrder": 0, "deleted": false }
@@ -158,18 +199,14 @@ mirror deletions.) Every `category.*` event gains
 
 ### `catalog.snapshot` (one-time bootstrap)
 Written once, at the store's first-ever sync (`sync_state` flag), carrying the
-full live catalog; the cloud applies it WITHOUT emitting distribution changes.
-Because it lands at first connect, any menu edits made in the portal *before*
-the store has ever synced are superseded by it — connect the store first,
-then edit the menu from the web.
+full live catalog. The cloud mirrors it for display; every later menu edit on
+the tablet carries its own snapshot (above).
 
-### Echo tag
-When the **store applies a cloud-originated catalog change** (§4) it writes
-the corresponding `item.*`/`category.*` outbox event **with an extra
-`"origin": "cloud"` key**. The cloud stores such events (audit) but skips
-catalog application and does NOT emit a new distribution change — this is
-what breaks the echo loop. Events without `origin` are POS-originated edits
-and are applied + redistributed.
+### Legacy echo tag
+Before sync became one-way, a store that applied a portal menu edit wrote the
+matching `item.*`/`category.*` event with `"origin": "cloud"`. Such events may
+still sit in older outboxes; the cloud stores them (audit) and does not apply
+them. Current stores never write `origin`.
 
 ## 3. Photo up-sync (sideband binary, event-triggered)
 
@@ -181,53 +218,43 @@ the current photo:
 multipart field `photo` (content-type image/jpeg or image/png).
 Idempotent overwrite; best-effort (a failed upload is logged and retried the
 next time a photo event for that item is drained; it never blocks the HWM).
+The cloud keeps the binary for portal display only.
 
-## 4. Catalog pull (cloud → store)
+## 4. Device revocations (cloud → store) — the only pull
 
 The same store loop polls:
 
-`GET {CLOUD_SYNC_URL}/v1/store/catalog/changes?since={cursor}`
+`GET {CLOUD_SYNC_URL}/v1/store/revocations?since={cursor}`
 `Authorization: Bearer {key}`
 
 ```json
 {
-  "cursor": 87,
+  "cursor": 93,
   "changes": [
-    { "version": 86, "kind": "category", "op": "upsert",
-      "data": { "id": "beer", "nameFr": "bière", "nameEn": "Beer", "sortOrder": 0, "deleted": false } },
-    { "version": 87, "kind": "item", "op": "upsert",
-      "data": { …item snapshot, same shape as §2… } },
-    { "version": 88, "kind": "item.photo", "op": "upsert",
-      "data": { "itemId": "lantern-lager", "photoVersion": 1736590000001 } }
+    { "version": 93, "kind": "device_revocation", "op": "upsert",
+      "data": { "deviceId": "3f0c…" } }
   ]
 }
 ```
 
-- `version` is the cloud's monotonically increasing per-tenant change number;
-  the store applies in `version` order and persists the last applied value as
-  `sync_state` key `catalog_cursor`. Empty `changes` → cursor unchanged.
-- `op: "upsert"` carries the FULL snapshot (not a delta): the store
-  insert-or-updates items+variants / categories to exactly that state
-  (variant/category rows absent locally are created; snapshot `deleted: true`
-  soft-deletes). `op: "delete"` soft-deletes by id.
-- `kind: "item.photo"` → the store fetches
-  `GET /v1/store/photos/{itemId}` (same auth, binary response + content-type)
-  and saves it into its PhotoStore, then sets `items.photo_path`.
-- Applying is idempotent: re-applying any prefix of the change stream is a
-  no-op. Guards the store already enforces stay enforced locally (e.g. an
-  item on an open check line can't be hard-removed — snapshots only
-  soft-delete, so this never conflicts).
-- After each applied change the store writes the matching outbox event with
-  `"origin": "cloud"` (§2), keeping the local audit trail and giving the
-  cloud an ack without an echo.
+- Written when the owner revokes a lost terminal in the portal. The store flags
+  the device revoked and ends its sessions at once; its next heartbeat reports
+  `revoked: true` back to the portal.
+- `version` is monotonic; the store applies in `version` order and persists
+  the last applied value as `sync_state` key `catalog_cursor` (historical
+  name). Empty `changes` → cursor unchanged. Applying is idempotent.
+- Venue-scoped: a store key only ever sees its own venue's revocations.
+- The feed carries **only** `device_revocation`. A store ignores any other
+  `kind` it might meet. The legacy path `/v1/store/catalog/changes` serves the
+  same revocation-only feed for tablets not yet updated.
+- Against an older cloud that answers `404` on `/v1/store/revocations`, the
+  store falls back to `/v1/store/catalog/changes` (same cursor, same shape; the
+  catalog/staff rows an older cloud serves there are ignored) and stays on it
+  until a handshake (§0) confirms a current cloud.
+- A failed pull is logged and retried next tick; it never blocks anything.
 
-### Conflict rule (cloud-authoritative)
-The cloud applies whatever reaches it, in arrival order, and bumps `version`.
-A POS edit therefore wins at the cloud until a later web edit (and vice
-versa); the store always converges to the cloud's latest state on its next
-pull, even if that overwrites a local edit that never reached the cloud
-(last-to-reach-cloud wins; the losing edit survives in the event log). Menu
-edits are rare and single-owner — convergence beats merge cleverness here.
+There is no catalog, photo, staff or grant download any more: the portal is
+read-only for menu and staff, and `GET /v1/store/photos/{itemId}` is gone.
 
 ## 5. Store configuration
 
@@ -238,18 +265,18 @@ edits are rare and single-owner — convergence beats merge cleverness here.
 | `CLOUD_SYNC_INTERVAL_SECONDS` | drain/poll cadence | `10` |
 
 State lives in the store DB table `sync_state (key TEXT PK, value TEXT)`:
-`push_hwm` (last acked outbox row id) and `catalog_cursor` (last applied
-cloud change version).
+`push_hwm` (last acked outbox row id), `catalog_cursor` (last applied
+revocation version), `catalog_snapshot_seq` / `staff_snapshot_seq` (one-time
+bootstrap markers) and `install_id`.
 
-## 7. Staff + grants distribution (cloud → store)
+## 7. Staff + grants (store-owned, pushed up)
 
 Staff (manager/server, PIN auth, roles) and a **basic predefined grant** system
-are **cloud-authoritative** and ride the same catalog change feed (§4) — the
-owner manages them from the portal, the store converges on its next pull, and
-enforcement runs **offline on the store**. Unlike the catalog, staff flow **down
-only**: the store never originates staff/grant mutations, so there is no up-sync
-and no echo. The store applies these changes into its local `users` table +
-`role_grants`/`staff_grants` tables and enforces without the cloud.
+are **owned by each store's tablet**. A manager (anyone with `manage_staff`)
+adds, edits, deactivates and deletes staff on the tablet — offline — and
+enforcement runs **offline on the store**. Every change is pushed up so the
+portal can show each store's staff; the portal cannot edit them. Staff are
+per store: the same id at two stores is two different people.
 
 The fixed permission set (10, gate POS actions):
 `void, refund, discount_comp, cash_movement, open_shift, close_shift,
@@ -258,30 +285,35 @@ price_override, zone_open_close, edit_menu, manage_staff`. Roles: `MANAGER`,
 `per-staff override[perm]` if set, else `role default[role][perm]`, else `false`.
 Defaults: MANAGER = all true; SERVER = only `price_override`.
 
-Two new `kind`s on `GET /v1/store/catalog/changes`:
+Up-sync events (outbox, §1):
 
 ```json
-{ "version": 91, "kind": "staff", "op": "upsert",
-  "data": {
-    "id": "server1", "name": "employé (Server)", "role": "SERVER",
-    "pinHash": "$2a$10$…",              // BCrypt hash ONLY — never the plaintext PIN
-    "active": true, "languageCode": "fr", "deleted": false,
-    "overrides": { "refund": true }     // per-staff grant overrides (only keys the owner set)
-  } }
-{ "version": 92, "kind": "role_grants", "op": "upsert",
-  "data": { "roles": {
+{ "eventType": "staff.created",            // also staff.updated / staff.deleted
+  "payload": { "staffId": "camille-tremblay",
+    "staff": { "id": "camille-tremblay", "name": "Camille Tremblay", "role": "SERVER",
+               "active": true, "deleted": false,
+               "overrides": { "refund": true } } } }
+{ "eventType": "role_grants.updated",
+  "payload": { "roles": {
     "MANAGER": { "void": true, "refund": true, "…": true },
-    "SERVER":  { "void": false, "price_override": true, "…": false }
-  } } }
+    "SERVER":  { "void": false, "price_override": true, "…": false } } } }
+{ "eventType": "staff.snapshot",           // once per store DB, at first sync
+  "payload": { "staff": [ …staff snapshots… ], "roles": { …matrix… } } }
 ```
 
-- `kind: "staff"`, `op: "upsert"` upserts the staff into the store `users` table
-  (`pin` = `pinHash`) and replaces that staff's `staff_grants` overrides with
-  `data.overrides`. `op: "delete"` (or `deleted: true`) soft-deletes: the row is
-  kept (`active=false`, session/check FKs stay valid) and its overrides are cleared.
-- `kind: "role_grants"`, `op: "upsert"` replaces the store `role_grants` table
-  with the full matrix in `data.roles`.
-- No echo: the store does **not** re-emit staff/grant changes to the outbox.
+- Snapshots are full state; the cloud upserts them into its venue-scoped
+  `store_staff` / `staff_grants` / `role_grants` projections (idempotent).
+- **No PIN hash, and no PIN, ever leaves the tablet.**
+- `staff.snapshot` is written once per store database (`staff_snapshot_seq`),
+  including on stores that synced before staff were store-owned.
+
+**Store staff API** (gated: the session's user must hold `manage_staff`):
+`GET /staff/manage`, `POST /staff/manage {name, role, pin}`,
+`PATCH /staff/manage/{id} {name?, role?, active?}`,
+`POST /staff/manage/{id}/pin {pin}`, `PUT /staff/manage/{id}/grants {overrides}`,
+`DELETE /staff/manage/{id}` (soft), `PUT /roles/grants {roles}`. PINs are 4
+digits and unique among live staff (`409 pin_in_use`); deactivating, deleting
+or re-PINning a member ends their sessions and trusted staff-app devices.
 
 **Enforcement (store, offline).** A gated action for permission `P` by the
 logged-in staff `U` (+ optional inline manager PIN): if `effective(U, P)` → allow
@@ -290,15 +322,28 @@ allow (the existing manager-PIN override); else `403 manager_approval_required`.
 `GET /me` and `POST /login` return the acting user's effective grants so the POS
 knows whether to prompt.
 
-**Owner lockout guard.** The cloud refuses any staff/grant mutation that would
-leave **no active staff with `manage_staff`** (`409 last_manager`). The portal
-owner (a `portal_users` TOTP account) is separate from POS staff and is never
-locked out.
+**Lockout guard.** The store refuses any staff/grant change that would leave
+**no active staff with `manage_staff`** (`409 last_manager`). A store started
+with an empty catalog (`POS_SEED=none`) gets one bootstrap manager (PIN 1234)
+so someone can sign in. The portal owner (a `portal_users` TOTP account) is
+separate from POS staff.
 
 ## 6. Cloud identifiers
 
-Bootstrap (idempotent, from cloud env): tenant `copperlantern`, venue `main`
-(display "The Copper Lantern Pub", tz `America/New_York`), one store API key
-(`STORE_API_KEY`), one portal admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, TOTP
-enrolled on first login). Every cloud row and every cloud query is scoped by
-`tenant_id`; the API key resolves to (tenant, venue) server-side.
+Bootstrap (idempotent, from cloud env): tenant `copperlantern` and its stores
+from `STORES="<venueId>=<name>,…"` (default: one store, `vieux-port`, named
+`VENUE_NAME`), created in `VENUE_TZ` (set on insert only — a later boot never re-zones an existing venue); one store API key per store (`STORE_API_KEY`
+for the first store, `STORE_API_KEYS="<venueId>=<key>,…"` for the rest); one
+portal admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, TOTP enrolled on first login).
+Every cloud row and every cloud query is scoped by `tenant_id`; the API key
+resolves to (tenant, venue) server-side, so a store never names its venue.
+
+The demo tenant's stores are `vieux-port` (Copper Lantern — Vieux-Port, the
+Android tablet) and `plateau` (Copper Lantern — Plateau). Cloud migration 014
+renamed the original venue id `main` to `vieux-port` in every venue-scoped
+table (history, projections, keys, devices, install identity); the tablet's
+key keeps working unchanged.
+
+Portal reads take an optional `?venue=<id>`: with it, exactly that store;
+without it, all of the tenant's stores combined (each over its own business
+days), with a per-store `byVenue` breakdown on the sales reports.

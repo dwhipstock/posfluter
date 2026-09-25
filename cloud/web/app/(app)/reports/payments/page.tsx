@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
+import { useStores } from "@/lib/store";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 import { MONO_COLORS, MONO_HEX } from "@/components/chart-colors";
@@ -88,6 +89,7 @@ function PaymentsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
+      {data && <PaymentsByStore report={data} />}
 
       {isLoading ? (
         <Card className="p-5">
@@ -162,5 +164,49 @@ function PaymentsPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/** "All stores": the tender mix of each store side by side. */
+function PaymentsByStore({ report }: { report: PaymentsReport }) {
+  const t = useT();
+  const { combined, nameOf } = useStores();
+  if (!combined) return null;
+  const types = [...new Set(report.byVenue.flatMap((v) => v.rows.map((r) => r.type)))];
+  return (
+    <Card>
+      <div className="border-b border-neutral-100 px-4 py-3">
+        <h2 className="text-sm font-semibold">{t("store_breakdown_title")}</h2>
+        <p className="text-xs text-neutral-500">{t("store_breakdown_sub")}</p>
+      </div>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("col_store")}</TableHead>
+              {types.map((type) => (
+                <TableHead key={type} className="text-right">
+                  {t(`tender_${type}` as MsgKey)}
+                </TableHead>
+              ))}
+              <TableHead className="text-right">{t("col_total_short")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {report.byVenue.map((v) => (
+              <TableRow key={v.venueId}>
+                <TableCell className="font-medium">{nameOf(v.venueId)}</TableCell>
+                {types.map((type) => (
+                  <TableCell key={type} className="text-right tabular-nums">
+                    {CAD(v.rows.find((r) => r.type === type)?.amountCents ?? 0)}
+                  </TableCell>
+                ))}
+                <TableCell className="text-right font-medium tabular-nums">{CAD(v.totalCents)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
   );
 }

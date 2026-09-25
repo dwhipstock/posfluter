@@ -2,7 +2,7 @@ package dev.dwhipstock.pos.base
 
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.javatime.datetime
+import dev.dwhipstock.pos.db.utcTimestamp
 
 /**
  * POS Base tier — everything a plain retail store needs. Complete on its own;
@@ -33,7 +33,7 @@ object Items : Table("items") {
     val isAlcohol = bool("is_alcohol").default(false)
     val active = bool("active").default(true) // 86'ing flips this at runtime (M2)
     val photoPath = varchar("photo_path", 300).nullable() // PhotoStore path (M5)
-    val deletedAt = datetime("deleted_at").nullable() // soft delete (M6); history keeps the row
+    val deletedAt = utcTimestamp("deleted_at").nullable() // soft delete (M6); history keeps the row
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -44,7 +44,7 @@ object ItemVariants : Table("item_variants") {
     val labelEn = varchar("label_en", 100)
     val priceCents = long("price_cents")
     val sortOrder = integer("sort_order").default(0)
-    val deletedAt = datetime("deleted_at").nullable() // soft delete (M6)
+    val deletedAt = utcTimestamp("deleted_at").nullable() // soft delete (M6)
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -62,7 +62,7 @@ object Tenders : IntIdTable("tenders") {
     // opaque settlement sub-scope (restaurant split checks); no FK by design —
     // base never references the add-on tiers. NULL = whole-transaction tender.
     val billGroupId = integer("bill_group_id").nullable()
-    val createdAt = datetime("created_at")
+    val createdAt = utcTimestamp("created_at")
 }
 
 object Users : Table("users") {
@@ -72,13 +72,13 @@ object Users : Table("users") {
     val pin = varchar("pin", 100) // BCrypt hash ($2a$...); plaintext auto-upgraded at startup
     val languageCode = varchar("language_code", 8).default("en")
     val active = bool("active").default(true) // cloud can deactivate (024)
-    val deletedAt = datetime("deleted_at").nullable() // cloud soft-delete (024); row kept for session/check FKs
+    val deletedAt = utcTimestamp("deleted_at").nullable() // cloud soft-delete (024); row kept for session/check FKs
     override val primaryKey = PrimaryKey(id)
 }
 
 /**
- * Local mirror of the cloud grant model (024, CONTRACT §7). Role defaults + per-staff
- * overrides sync down; the effective grant is computed and enforced offline. Query DSL
+ * Local grant model (024, CONTRACT §7), owned by the tablet. Role defaults + per-staff
+ * overrides are pushed up for display; the effective grant is enforced offline. Query DSL
  * only — see [dev.dwhipstock.pos.base.GrantsRepo] for the logic.
  */
 object RoleGrants : Table("role_grants") {
@@ -119,6 +119,9 @@ object VenueSettings : Table("venue_settings") {
     // Network thermal receipt printer (ESC/POS over raw TCP). Empty ip = unconfigured.
     val printerIp = varchar("printer_ip", 64).default("")
     val printerPort = integer("printer_port").default(9100)
+    // IANA zone (030): seeded from VENUE_TZ once, then authoritative for display,
+    // business days and reports. Timestamps themselves are UTC instants.
+    val timezone = varchar("timezone", 64).default("")
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -131,10 +134,10 @@ object VenueSettings : Table("venue_settings") {
 object Sessions : Table("sessions") {
     val token = varchar("token", 36)
     val userId = varchar("user_id", 64).references(Users.id)
-    val createdAt = datetime("created_at")
-    val revokedAt = datetime("revoked_at").nullable()
-    val expiresAt = datetime("expires_at").nullable() // absolute; null = legacy row → createdAt+12h
-    val lastUsedAt = datetime("last_used_at").nullable() // sliding; refreshed per authenticated call
+    val createdAt = utcTimestamp("created_at")
+    val revokedAt = utcTimestamp("revoked_at").nullable()
+    val expiresAt = utcTimestamp("expires_at").nullable() // absolute; null = legacy row → createdAt+12h
+    val lastUsedAt = utcTimestamp("last_used_at").nullable() // sliding; refreshed per authenticated call
     val deviceId = varchar("device_id", 36).nullable() // paired terminal that minted it (027); null = staff-app phone
     override val primaryKey = PrimaryKey(token)
 }
@@ -148,9 +151,9 @@ object Devices : Table("devices") {
     val id = varchar("id", 36)
     val name = varchar("name", 100)
     val tokenSha256 = varchar("token_sha256", 64).uniqueIndex()
-    val pairedAt = datetime("paired_at")
-    val lastSeenAt = datetime("last_seen_at").nullable()
-    val revokedAt = datetime("revoked_at").nullable()
+    val pairedAt = utcTimestamp("paired_at")
+    val lastSeenAt = utcTimestamp("last_seen_at").nullable()
+    val revokedAt = utcTimestamp("revoked_at").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -162,10 +165,10 @@ object Devices : Table("devices") {
 object StaffTotp : Table("staff_totp") {
     val userId = varchar("user_id", 64).references(Users.id)
     val secret = varchar("secret", 64)
-    val activatedAt = datetime("activated_at").nullable()
+    val activatedAt = utcTimestamp("activated_at").nullable()
     // last accepted 30s step index — a code is single-use within its window (replay guard)
     val lastStep = long("last_step").nullable()
-    val createdAt = datetime("created_at")
+    val createdAt = utcTimestamp("created_at")
     override val primaryKey = PrimaryKey(userId)
 }
 
@@ -177,9 +180,9 @@ object StaffTotp : Table("staff_totp") {
 object TrustedDevices : Table("trusted_devices") {
     val token = varchar("token", 36)
     val userId = varchar("user_id", 64).references(Users.id)
-    val createdAt = datetime("created_at")
-    val expiresAt = datetime("expires_at")
-    val lastUsedAt = datetime("last_used_at").nullable()
+    val createdAt = utcTimestamp("created_at")
+    val expiresAt = utcTimestamp("expires_at")
+    val lastUsedAt = utcTimestamp("last_used_at").nullable()
     val label = varchar("label", 100).nullable()
     override val primaryKey = PrimaryKey(token)
 }

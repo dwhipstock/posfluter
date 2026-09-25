@@ -15,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useT } from "@/lib/i18n/context";
+import { useStoreHref } from "@/lib/store";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
@@ -34,12 +35,13 @@ const REPORTS: { href: string; titleKey: MsgKey; descKey: MsgKey; icon: typeof L
 
 export default function ReportsPage() {
   const t = useT();
+  const storeHref = useStoreHref();
   return (
     <div>
       <PageHeader title={t("reports_title")} sub={t("reports_sub")} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {REPORTS.map(({ href, titleKey, descKey, icon: Icon }) => (
-          <Link key={href} href={href} className="group">
+          <Link key={href} href={storeHref(href)} className="group">
             <Card className="flex items-center gap-4 p-4 transition-colors group-hover:border-accent/50">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink text-white">
                 <Icon className="h-5 w-5" />

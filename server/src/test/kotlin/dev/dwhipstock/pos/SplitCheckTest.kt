@@ -100,7 +100,7 @@ class SplitCheckTest {
             .jsonObject["text"]!!.jsonPrimitive.content
         assertTrue("CUSTOMER BILL" in bill)
         assertTrue("Copper Amber Ale" in bill || "Ale ambrée" in bill)
-        assertTrue("Lantern House Lager" !in bill && "éléphant" !in bill, "group 1 bill must not show group 2's items")
+        assertTrue("Lantern House Lager" !in bill && "Lager de la Lanterne" !in bill, "group 1 bill must not show group 2's items")
         assertTrue("42.50" in bill, "group bill total is the group's own")
 
         // pay g1 → check locks, g2 still owes; finalize refused until every group covered

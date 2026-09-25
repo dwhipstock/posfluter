@@ -699,6 +699,40 @@ class Api {
   static Future<List<Staff>> staff() async =>
       ((await _get('/staff')) as List).map((s) => Staff.fromJson(s)).toList();
 
+  // --- staff administration (manage_staff). The tablet owns its staff; every
+  // change is pushed up to the portal for display (one-way sync). ---
+
+  static Future<List<ManagedStaff>> managedStaff() async =>
+      (((await _get('/staff/manage')) as Map)['staff'] as List)
+          .map((s) => ManagedStaff.fromJson(s))
+          .toList();
+
+  static Future<ManagedStaff> createStaff(
+    String name,
+    String role,
+    String pin,
+  ) async => ManagedStaff.fromJson(
+    await _post('/staff/manage', {'name': name, 'role': role, 'pin': pin}),
+  );
+
+  static Future<ManagedStaff> updateStaff(
+    String id, {
+    String? name,
+    String? role,
+    bool? active,
+  }) async => ManagedStaff.fromJson(
+    await _patch('/staff/manage/$id', {
+      'name': ?name,
+      'role': ?role,
+      'active': ?active,
+    }),
+  );
+
+  static Future<void> resetStaffPin(String id, String pin) =>
+      _post('/staff/manage/$id/pin', {'pin': pin});
+
+  static Future<void> deleteStaff(String id) => _delete('/staff/manage/$id');
+
   static Future<VenueSettings> settings() async =>
       VenueSettings.fromJson(await _get('/settings'));
 
@@ -1242,6 +1276,16 @@ class Staff {
   Staff(this.id, this.name, this.role);
   factory Staff.fromJson(Map<String, dynamic> j) =>
       Staff(j['id'], j['name'], j['role']);
+}
+
+/// A staff row as the manager's staff screen sees it (inactive ones included).
+class ManagedStaff {
+  final String id, name, role;
+  final bool active;
+  ManagedStaff(this.id, this.name, this.role, this.active);
+  factory ManagedStaff.fromJson(Map<String, dynamic> j) =>
+      ManagedStaff(j['id'], j['name'], j['role'], j['active'] ?? true);
+  bool get isManager => role == 'MANAGER';
 }
 
 class VenueSettings {

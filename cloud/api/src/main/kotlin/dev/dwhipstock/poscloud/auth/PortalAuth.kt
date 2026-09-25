@@ -25,7 +25,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 /**
  * Portal auth: email+password → mandatory TOTP → opaque session cookie.
@@ -88,7 +88,7 @@ fun requirePortal(call: ApplicationCall): Principal {
         val hash = sha256Hex(token)
         val row = PortalSessions.selectAll().where { PortalSessions.tokenSha256 eq hash }.firstOrNull()
             ?: throw UnauthorizedException()
-        val now = LocalDateTime.now()
+        val now = dev.dwhipstock.poscloud.CloudTime.now()
         if (now.isAfter(row[PortalSessions.expiresAt])) {
             PortalSessions.deleteWhere { tokenSha256 eq hash }
             throw UnauthorizedException()
@@ -183,7 +183,8 @@ private data class OkResponse(val ok: Boolean = true)
 private data class ConfirmResponse(val ok: Boolean = true, val backupCodes: List<String>)
 
 @Serializable
-private data class MeResponse(val email: String, val displayName: String, val venueName: String)
+/** venueName = the tenant's first store (kept for older portals); tenantName = the group. */
+private data class MeResponse(val email: String, val displayName: String, val venueName: String, val tenantName: String)
 
 fun Route.authRoutes(config: CloudConfig) {
 
@@ -197,7 +198,7 @@ fun Route.authRoutes(config: CloudConfig) {
             if (candidates.isEmpty()) verifyPassword(req.password, dummyHash)
             val user = candidates.firstOrNull { verifyPassword(req.password, it[PortalUsers.passwordHash]) }
                 ?: throw UnauthorizedException("wrong email or password", "bad_credentials")
-            val now = LocalDateTime.now()
+            val now = dev.dwhipstock.poscloud.CloudTime.now()
             val token = newToken()
             if (!config.totpRequired) {
                 LoginResponse(stage = "authenticated") to
@@ -208,7 +209,8 @@ fun Route.authRoutes(config: CloudConfig) {
             } else {
                 val secret = Totp.newSecret()
                 insertPending(token, user, "totp_setup", secret, now)
-                val issuer = venueNameOf(user[PortalUsers.tenantId]) ?: config.venueName
+                // the group (tenant), not one of its stores
+                val issuer = tenantNameOf(user[PortalUsers.tenantId]) ?: venueNameOf(user[PortalUsers.tenantId]) ?: config.venueName
                 LoginResponse(
                     stage = "totp_setup", pendingToken = token, secret = secret,
                     otpauthUri = Totp.otpauthUri(issuer, user[PortalUsers.email], secret),
@@ -252,7 +254,7 @@ fun Route.authRoutes(config: CloudConfig) {
             }
             TotpAttempts.clear(pending[LoginPending.tokenSha256])
             LoginPending.deleteWhere { tokenSha256 eq pending[LoginPending.tokenSha256] }
-            val now = LocalDateTime.now()
+            val now = dev.dwhipstock.poscloud.CloudTime.now()
             PortalUsers.update({ PortalUsers.id eq pending[LoginPending.userId] }) {
                 it[totpSecret] = secret
                 it[totpEnabled] = true
@@ -277,7 +279,8 @@ fun Route.authRoutes(config: CloudConfig) {
     get("/auth/me") {
         val principal = requirePortal(call)
         val venueName = transaction { venueNameOf(principal.tenantId) } ?: config.venueName
-        call.respond(MeResponse(principal.email, principal.displayName, venueName))
+        val tenantName = transaction { tenantNameOf(principal.tenantId) } ?: venueName
+        call.respond(MeResponse(principal.email, principal.displayName, venueName, tenantName))
     }
 }
 
@@ -293,13 +296,18 @@ private fun ApplicationCall.setSessionCookie(token: String, config: CloudConfig)
 
 // --- helpers (call inside a transaction) ---
 
+fun tenantNameOf(tenantId: String): String? =
+    dev.dwhipstock.poscloud.db.Tenants.selectAll()
+        .where { dev.dwhipstock.poscloud.db.Tenants.id eq tenantId }
+        .firstOrNull()?.get(dev.dwhipstock.poscloud.db.Tenants.name)
+
 fun venueNameOf(tenantId: String): String? =
     Venues.selectAll().where { Venues.tenantId eq tenantId }
         .orderBy(Venues.id).firstOrNull()?.get(Venues.name)
 
 private fun insertPending(
     token: String, user: org.jetbrains.exposed.sql.ResultRow, pendingPurpose: String,
-    pendingSecret: String, now: LocalDateTime,
+    pendingSecret: String, now: OffsetDateTime,
 ) {
     LoginPending.insert {
         it[tokenSha256] = sha256Hex(token)
@@ -321,7 +329,7 @@ private fun failTotpAttempt(pending: org.jetbrains.exposed.sql.ResultRow) {
  * Replace this user's backup codes with a fresh set (re-enrollment invalidates the
  * old ones) and return the plaintext for one-time display. Only the SHA-256 is kept.
  */
-private fun issueBackupCodes(tenant: String, userId: Long, now: LocalDateTime): List<String> {
+private fun issueBackupCodes(tenant: String, userId: Long, now: OffsetDateTime): List<String> {
     PortalBackupCodes.deleteWhere {
         (PortalBackupCodes.tenantId eq tenant) and (PortalBackupCodes.userId eq userId)
     }
@@ -345,7 +353,7 @@ private fun consumeBackupCode(tenant: String, userId: Long, entered: String): Bo
     val spent = PortalBackupCodes.update({
         (PortalBackupCodes.tenantId eq tenant) and (PortalBackupCodes.userId eq userId) and
             (PortalBackupCodes.codeSha256 eq hash) and PortalBackupCodes.usedAt.isNull()
-    }) { it[usedAt] = LocalDateTime.now() }
+    }) { it[usedAt] = dev.dwhipstock.poscloud.CloudTime.now() }
     return spent > 0
 }
 
@@ -353,7 +361,7 @@ private fun consumablePending(token: String, expectedPurpose: String): org.jetbr
     val row = LoginPending.selectAll().where {
         (LoginPending.tokenSha256 eq sha256Hex(token)) and (LoginPending.purpose eq expectedPurpose)
     }.firstOrNull() ?: throw UnauthorizedException("unknown or used login token", "bad_pending_token")
-    if (LocalDateTime.now().isAfter(row[LoginPending.expiresAt])) {
+    if (dev.dwhipstock.poscloud.CloudTime.now().isAfter(row[LoginPending.expiresAt])) {
         LoginPending.deleteWhere { tokenSha256 eq row[LoginPending.tokenSha256] }
         throw UnauthorizedException("login token expired", "bad_pending_token")
     }
@@ -364,7 +372,7 @@ private fun consumablePending(token: String, expectedPurpose: String): org.jetbr
 
 private fun createSession(tenant: String, user: Long): String {
     val token = newToken()
-    val now = LocalDateTime.now()
+    val now = dev.dwhipstock.poscloud.CloudTime.now()
     PortalSessions.insert {
         it[tokenSha256] = sha256Hex(token)
         it[tenantId] = tenant

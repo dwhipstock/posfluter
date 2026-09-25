@@ -76,12 +76,22 @@ class Prefs extends ChangeNotifier {
     await _storage.write(key: 'pref_lang', value: lang);
   }
 
-  /// "2026-07-08T00:12:34" → "08/07/2026 00:12".
+  /// "2026-07-08T00:12:34.000-04:00" → "08/07/2026 00:12".
+  ///
+  /// The store sends instants with the VENUE's offset, so the leading wall
+  /// clock is already venue-local: show it as-is. Parsing into a DateTime would
+  /// convert to the device's timezone, which is not the venue's.
   String fmtDateTime(String iso) {
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return iso;
-    String p2(int n) => n.toString().padLeft(2, '0');
-    return '${fmtDate(dt)} ${p2(dt.hour)}:${p2(dt.minute)}';
+    final m = RegExp(
+      r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})',
+    ).firstMatch(iso.trim());
+    if (m == null) return iso;
+    final wall = DateTime(
+      int.parse(m[1]!),
+      int.parse(m[2]!),
+      int.parse(m[3]!),
+    );
+    return '${fmtDate(wall)} ${m[4]}:${m[5]}';
   }
 
   /// Date-only with the standard Gregorian year.
@@ -582,6 +592,32 @@ class L {
   String get pinMismatch =>
       _t('Le nouveau code PIN ne correspond pas.', 'New PINs do not match');
 
+  // staff administration (the tablet owns its staff; the portal only shows them)
+  String get staffTitle => _t('Personnel', 'Staff');
+  String get staffAdd => _t('Ajouter un membre', 'Add staff');
+  String get staffEdit => _t('Modifier le membre', 'Edit staff');
+  String get staffName => _t('Nom', 'Name');
+  String get staffRole => _t('Poste', 'Role');
+  String get roleManager => _t('Gérant', 'Manager');
+  String get roleServer => _t('Serveur', 'Server');
+  String get staffActive => _t('Actif', 'Active');
+  String get staffInactive => _t('Désactivé', 'Inactive');
+  String get staffPin4 => _t('NIP (4 chiffres)', 'PIN (4 digits)');
+  String get staffResetPin => _t('Nouveau NIP', 'Reset PIN');
+  String get staffPinInvalid =>
+      _t('Le NIP doit comporter 4 chiffres.', 'PIN must be 4 digits');
+  String get staffNameRequired => _t('Entrez un nom.', 'A name is required');
+  String get staffDelete => _t('Supprimer', 'Delete');
+  String staffDeleteConfirm(String name) => _t(
+    'Supprimer $name ? L’historique des ventes est conservé.',
+    'Delete $name? Sales history is kept.',
+  );
+  String get staffSaved => _t('Enregistré', 'Saved');
+  String get staffSyncHint => _t(
+    'Les changements s’appliquent tout de suite sur cette tablette et sont envoyés au portail à la prochaine connexion.',
+    'Changes apply on this tablet at once and are sent to the owner portal when it next connects.',
+  );
+
   // settings
   String get settings => _t('Créer une boutique', 'Venue settings');
   String get sectionPayments => _t('Paiement', 'Payments');
@@ -829,6 +865,15 @@ class L {
   /// Server error codes → local language. Fallback: raw server message.
   String? apiError(String? code) => switch (code) {
     'invalid_pin' => _t('Code PIN invalide', 'Invalid PIN'),
+    'pin_in_use' => _t(
+      'Ce NIP est déjà utilisé par un autre membre du personnel.',
+      'That PIN is already used by another staff member',
+    ),
+    'bad_pin' => _t('Le NIP doit comporter 4 chiffres.', 'PIN must be 4 digits'),
+    'last_manager' => _t(
+      'Gardez au moins un gérant actif pouvant gérer le personnel.',
+      'Keep at least one active manager who can manage staff',
+    ),
     'login_required' => _t('Veuillez vous reconnecter.', 'Please log in again'),
     'manager_approval_required' => _t(
       'Doit être approuvé par le gestionnaire',

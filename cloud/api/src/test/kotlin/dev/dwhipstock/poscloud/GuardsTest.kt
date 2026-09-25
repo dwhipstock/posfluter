@@ -31,7 +31,7 @@ class GuardsTest {
     fun setUp() {
         TestSupport.reset()
         seedTenant("copperlantern")
-        seedStoreKey("copperlantern", "main", key)
+        seedStoreKey("copperlantern", "vieux-port", key)
     }
 
     private suspend fun ApplicationTestBuilder.ingestWith(installId: String?, vararg events: dev.dwhipstock.poscloud.store.IngestEvent): HttpResponse =
@@ -44,7 +44,7 @@ class GuardsTest {
     @Test
     fun bootstrapRestartPreservesStoreRoutingIdentity() {
         transaction {
-            Venues.update({ (Venues.tenantId eq "copperlantern") and (Venues.id eq "main") }) {
+            Venues.update({ (Venues.tenantId eq "copperlantern") and (Venues.id eq "vieux-port") }) {
                 it[subdomain] = "copperlantern"
                 it[storeInstallId] = "install-A"
             }
@@ -54,7 +54,7 @@ class GuardsTest {
 
         transaction {
             val venue = Venues.selectAll().where {
-                (Venues.tenantId eq "copperlantern") and (Venues.id eq "main")
+                (Venues.tenantId eq "copperlantern") and (Venues.id eq "vieux-port")
             }.first()
             assertEquals("copperlantern", venue[Venues.subdomain])
             assertEquals("install-A", venue[Venues.storeInstallId])
@@ -67,7 +67,7 @@ class GuardsTest {
         val e1 = event("check.closed", checkClosedPayload(1, 10000, storeTax(10000)), seq = 1)
         assertEquals(HttpStatusCode.OK, ingestWith("install-A", e1).status)
         transaction {
-            assertEquals("install-A", Venues.selectAll().where { Venues.id eq "main" }
+            assertEquals("install-A", Venues.selectAll().where { Venues.id eq "vieux-port" }
                 .first()[Venues.storeInstallId])
         }
         // same install keeps flowing; a DIFFERENT store database is refused
@@ -121,7 +121,7 @@ class GuardsTest {
         val snapshotWithPhoto = buildJsonObject {
             put("item", buildJsonObject {
                 put("id", "lantern-lager")
-                put("nameFr", "éléphant"); put("nameEn", "Lantern House Lager")
+                put("nameFr", "Lager de la Lanterne"); put("nameEn", "Lantern House Lager")
                 put("categoryId", "beer"); put("abbrev", "CH")
                 put("isAlcohol", true); put("active", true); put("deleted", false)
                 put("photoVersion", 12345L)
@@ -133,7 +133,7 @@ class GuardsTest {
         val snapshotWithout = buildJsonObject {
             put("item", buildJsonObject {
                 put("id", "lantern-lager")
-                put("nameFr", "nouvel éléphant"); put("nameEn", "Lantern House Lager New")
+                put("nameFr", "Nouvelle lager de la Lanterne"); put("nameEn", "Lantern House Lager New")
                 put("categoryId", "beer"); put("abbrev", "CH")
                 put("isAlcohol", true); put("active", true); put("deleted", false)
                 put("variants", buildJsonArray {})

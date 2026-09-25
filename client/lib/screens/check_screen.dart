@@ -732,7 +732,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     );
   }
 
-  /// "éléphant · lanceur" — the variant matters when the item has sizes.
+  /// "Lantern House Lager · 20 oz pint" — the variant matters when the item has sizes.
   String _lineTitle(CheckLine line, L l) {
     final name = l.name(line.nameFr, line.nameEn);
     if (line.variantLabelFr == null) return name;

@@ -19,6 +19,26 @@ Never commit `.env` files, TLS private keys, database dumps, device tokens, cust
 photos, or backups. Use `scripts/provision-venue.sh` for a new venue and the scripts in
 `scripts/e2e/` for validation against an isolated test deployment.
 
+## Deploying a new cloud API
+
+Cloud migrations run when the API starts, and they are forward-only. An old and a
+new API must never run against the same database at the same time: migration
+`013_timestamptz` converts every timestamp column to `timestamptz`, and an old API
+still writing zone-less local times during or after it would store wrong instants.
+So a cloud deploy is **stop, then start** — never a rolling or blue/green overlap:
+
+```sh
+docker compose stop api            # old API fully down (the store outboxes queue)
+docker compose pull api
+docker compose up -d api           # new API migrates, then serves
+```
+
+Stores lose nothing while the API is down: each keeps selling and queues in its
+outbox. Upgrade the cloud API **before** the stores: an upgraded store asks
+`GET /v1/store/capabilities` first and holds its pushes against an older cloud
+until it is upgraded (cloud/CONTRACT.md §0), so `scripts/upgrade-venue.sh`'s
+sync-caught-up gate would fail and roll the venue back.
+
 ## Independent manager portal
 
 `docker-compose.manager.yml` runs a reporting-only deployment on its own host and

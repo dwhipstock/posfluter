@@ -11,9 +11,12 @@ const API_ORIGIN = process.env.API_ORIGIN ?? "http://localhost:8081";
 
 export const dynamic = "force-dynamic"; // never cache: the LAN IP changes with DHCP
 
-export async function GET() {
+// Multi-store: /staff-app?store=<venueId> picks the store (one QR per store).
+export async function GET(req: Request) {
+  const store = new URL(req.url).searchParams.get("store");
+  const query = store ? `?venue=${encodeURIComponent(store)}` : "";
   try {
-    const res = await fetch(`${API_ORIGIN}/v1/staff-endpoint`, { cache: "no-store" });
+    const res = await fetch(`${API_ORIGIN}/v1/staff-endpoint${query}`, { cache: "no-store" });
     if (res.ok) {
       const data = (await res.json()) as { base?: string };
       const target = safeStaffUrl(data.base);

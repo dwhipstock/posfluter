@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Kpi } from "@/components/kpi";
 import { PageHeader } from "@/components/page-header";
+import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -72,6 +73,7 @@ function CashMovementsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
+      <StoreBreakdown />
 
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("cash_paid_in")} value={data && CAD(data.paidInCents)} loading={isLoading} />
@@ -101,9 +103,12 @@ function CashMovementsPage() {
               {data.rows.map((r) => {
                 const isIn = r.direction === "IN";
                 return (
-                  <TableRow key={r.movementId}>
+                  <TableRow key={`${r.venueId}/${r.movementId}`}>
                     <TableCell className="whitespace-nowrap text-xs text-neutral-500">
-                      {r.createdAt ? fmt.dateTime(r.createdAt) : "—"}
+                      <span className="flex items-center gap-1.5">
+                        {r.createdAt ? fmt.dateTime(r.createdAt) : "—"}
+                        <StoreTag venueId={r.venueId} />
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span

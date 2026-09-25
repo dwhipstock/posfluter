@@ -44,7 +44,7 @@ object Permissions {
 }
 
 /**
- * Local grant store, cloud-mirrored (CONTRACT §7): effective grant for a staff
+ * Local grant store, tablet-owned (CONTRACT §7): effective grant for a staff
  * member = per-staff override ?? role default ?? built-in default. Enforced offline
  * on the store. The read/apply helpers must run inside a transaction (like
  * [dev.dwhipstock.pos.db.SyncState] / [dev.dwhipstock.pos.sdk.Outbox]).

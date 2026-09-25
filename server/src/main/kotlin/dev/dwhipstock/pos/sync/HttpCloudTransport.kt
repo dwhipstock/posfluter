@@ -6,6 +6,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -111,15 +113,37 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
     private fun errorCode(body: String): String? =
         runCatching { Json.parseToJsonElement(body).jsonObject["code"]?.jsonPrimitive?.content }.getOrNull()
 
-    override fun fetchChanges(since: Long): ChangesPage {
-        val res = request("/v1/store/catalog/changes?since=$since")
-        check(res.status == 200) { "HTTP ${res.status} from catalog changes" }
+    override fun capabilities(): CloudCapabilities {
+        val res = request("/v1/store/capabilities")
+        // an older cloud has no such route: it speaks contract v1 (venue-local times)
+        if (res.status == 404) return CloudCapabilities.LEGACY
+        check(res.status == 200) { "HTTP ${res.status} from capabilities" }
+        val obj = Json.parseToJsonElement(res.text).jsonObject
+        val caps = CloudCapabilities(
+            contractVersion = obj["contractVersion"]?.jsonPrimitive?.intOrNull ?: 1,
+            timestampFormat = obj["timestampFormat"]?.jsonPrimitive?.contentOrNull ?: "venue-local",
+        )
+        if (caps.understandsInstants) legacyRevocations = false
+        return caps
+    }
+
+    /** Set once `/v1/store/revocations` answered 404 — an older cloud only has
+     *  the legacy path, which serves the same revocation feed (CONTRACT §4). */
+    @Volatile private var legacyRevocations = false
+
+    override fun fetchRevocations(since: Long): ChangesPage {
+        var res = request("${revocationsPath()}?since=$since")
+        if (res.status == 404 && !legacyRevocations) {
+            legacyRevocations = true
+            res = request("${revocationsPath()}?since=$since")
+        }
+        check(res.status == 200) { "HTTP ${res.status} from revocations" }
         val obj = Json.parseToJsonElement(res.text).jsonObject
         return ChangesPage(
             cursor = obj["cursor"]!!.jsonPrimitive.long,
             changes = (obj["changes"]?.jsonArray ?: emptyList()).map { el ->
                 val c = el.jsonObject
-                CatalogChange(
+                CloudChange(
                     version = c["version"]!!.jsonPrimitive.long,
                     kind = c["kind"]!!.jsonPrimitive.content,
                     op = c["op"]!!.jsonPrimitive.content,
@@ -129,15 +153,8 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
         )
     }
 
-    override fun fetchPhoto(itemId: String): FetchedPhoto? {
-        val res = request("/v1/store/photos/$itemId")
-        if (res.status == 404) return null
-        check(res.status == 200) { "HTTP ${res.status} fetching photo $itemId" }
-        return FetchedPhoto(
-            bytes = res.bytes,
-            contentType = res.contentType ?: "image/jpeg",
-        )
-    }
+    private fun revocationsPath() =
+        if (legacyRevocations) "/v1/store/catalog/changes" else "/v1/store/revocations"
 
     override fun pushPhoto(itemId: String, bytes: ByteArray, contentType: String): PushResult {
         val boundary = "----pos-photo-${UUID.randomUUID()}"

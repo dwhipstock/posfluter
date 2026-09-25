@@ -15,13 +15,34 @@ data class CloudConfig(
     // Break-glass lockout recovery: set to the owner's email, restart, and their
     // TOTP is wiped so the next login re-enrolls from scratch. Clear it afterwards.
     val resetTotpEmail: String? = env("RESET_TOTP_EMAIL"),
+    // The primary store's bearer key (→ the first of [stores]). Further stores get
+    // theirs from STORE_API_KEYS="<venueId>=<key>,<venueId>=<key>".
     val storeApiKey: String? = env("STORE_API_KEY"),
+    val storeApiKeys: Map<String, String> = parsePairs(env("STORE_API_KEYS")),
     val cookieSecure: Boolean = env("COOKIE_SECURE")?.toBoolean() ?: false,
     val venueName: String = env("VENUE_NAME") ?: "The Copper Lantern Pub",
     val venueTz: String = env("VENUE_TZ") ?: "America/New_York",
+    // The tenant's stores, seeded at boot: STORES="<venueId>=<name>,…" (order kept;
+    // the first is the primary store). Unset → one store, "vieux-port", named VENUE_NAME.
+    val stores: List<StoreSeed> = parsePairs(env("STORES")).map { (id, name) -> StoreSeed(id, name) }
+        .ifEmpty { listOf(StoreSeed(PRIMARY_VENUE, venueName)) },
     // Base domain for cloud-hosted venue stores (<subdomain>.<this>); unset = no
     // public store URLs are minted or accepted (pure on-prem deployment).
     val publicBaseDomain: String? = env("PUBLIC_BASE_DOMAIN"),
 )
+
+/** One store (venue) the boot seed provisions for the tenant. */
+data class StoreSeed(val venueId: String, val name: String)
+
+/** The primary store's venue id (formerly "main"; migration 014 renames it). */
+const val PRIMARY_VENUE = "vieux-port"
+
+/** "a=1,b=2" → ordered map; blank entries and entries without '=' are ignored. */
+internal fun parsePairs(raw: String?): Map<String, String> =
+    (raw ?: "").split(',').mapNotNull { part ->
+        val k = part.substringBefore('=', "").trim()
+        val v = part.substringAfter('=', "").trim()
+        if (k.isEmpty() || v.isEmpty()) null else k to v
+    }.toMap(LinkedHashMap())
 
 private fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }

@@ -3,7 +3,6 @@ package dev.dwhipstock.poscloud
 import dev.dwhipstock.poscloud.auth.hashPassword
 import dev.dwhipstock.poscloud.auth.sha256Hex
 import dev.dwhipstock.poscloud.catalog.Scope
-import dev.dwhipstock.poscloud.staff.seedStaffDefaults
 import dev.dwhipstock.poscloud.db.PortalBackupCodes
 import dev.dwhipstock.poscloud.db.PortalUsers
 import dev.dwhipstock.poscloud.db.StoreApiKeys
@@ -18,46 +17,60 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 /**
- * Idempotent boot seed (CONTRACT §6): tenant 'copperlantern', venue 'main', plus the
- * store key / portal admin when the env vars are set. Existing users are left
- * untouched; only their absence triggers creation.
+ * Idempotent boot seed (CONTRACT §6): tenant 'copperlantern' and its stores
+ * ([CloudConfig.stores]; default: 'vieux-port' alone), plus each store's API key
+ * and the portal admin when the env vars are set. Existing users are left
+ * untouched; only their absence triggers creation. Stores not listed are never
+ * touched (a store is only ever added here, never removed).
  */
 object Bootstrap {
 
     const val TENANT = "copperlantern"
-    const val VENUE = "main"
 
     private val log = LoggerFactory.getLogger(Bootstrap::class.java)
 
+    /** venueId → plaintext key: STORE_API_KEY for the primary store, then STORE_API_KEYS. */
+    fun storeKeys(config: CloudConfig): Map<String, String> = buildMap {
+        config.storeApiKey?.let { put(config.stores.first().venueId, it) }
+        putAll(config.storeApiKeys)
+    }
+
     fun run(config: CloudConfig): Unit = transaction {
-        val now = LocalDateTime.now()
+        val now = dev.dwhipstock.poscloud.CloudTime.now()
         Tenants.insertIgnore {
             it[id] = TENANT
             it[name] = config.venueName
             it[createdAt] = now
         }
-        // Do not use upsert here: PostgreSQL fills omitted columns from their
-        // defaults on the UPDATE path, which erased the store's subdomain,
-        // install identity, heartbeat, and LAN URL on every API restart.
-        Venues.insertIgnore {
-            it[tenantId] = TENANT
-            it[id] = VENUE
-            it[name] = config.venueName
-            it[timezone] = config.venueTz
+        for (store in config.stores) {
+            // Do not use upsert here: PostgreSQL fills omitted columns from their
+            // defaults on the UPDATE path, which erased the store's subdomain,
+            // install identity, heartbeat, and LAN URL on every API restart.
+            Venues.insertIgnore {
+                it[tenantId] = TENANT
+                it[id] = store.venueId
+                it[name] = store.name
+                it[timezone] = config.venueTz
+            }
+            // The name follows env; the timezone is set on insert only. It decides
+            // every business day and report hour, so a boot with a different or
+            // defaulted VENUE_TZ must never silently re-zone a venue's history.
+            Venues.update({ (Venues.tenantId eq TENANT) and (Venues.id eq store.venueId) }) {
+                it[name] = store.name
+            }
         }
-        Venues.update({ (Venues.tenantId eq TENANT) and (Venues.id eq VENUE) }) {
-            it[name] = config.venueName
-            it[timezone] = config.venueTz
-        }
-        // Default staff + grant matrix (CONTRACT §7), distributed to the store once.
-        seedStaffDefaults(Scope(TENANT, VENUE))
-        config.storeApiKey?.let { key ->
+        val known = config.stores.map { it.venueId }.toSet()
+        storeKeys(config).forEach { (venueId, key) ->
+            if (venueId !in known) {
+                log.warn("STORE_API_KEYS names '$venueId', which is not in STORES — key ignored")
+                return@forEach
+            }
             StoreApiKeys.insertIgnore {
                 it[tenantId] = TENANT
-                it[venueId] = VENUE
+                it[StoreApiKeys.venueId] = venueId
                 it[keySha256] = sha256Hex(key)
                 it[label] = "bootstrap"
                 it[createdAt] = now

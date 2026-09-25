@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Kpi } from "@/components/kpi";
 import { PageHeader } from "@/components/page-header";
+import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -72,6 +73,7 @@ function ExceptionsPage() {
         }
       />
       <DateRangePicker />
+      <StoreBreakdown />
 
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("exc_voids")} value={data && String(data.voidCount)} loading={isLoading} />
@@ -98,8 +100,13 @@ function ExceptionsPage() {
             </TableHeader>
             <TableBody>
               {data.voids.map((v) => (
-                <TableRow key={v.checkId}>
-                  <TableCell className="font-medium">#{v.checkId}</TableCell>
+                <TableRow key={`${v.venueId}/${v.checkId}`}>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-1.5">
+                      #{v.checkId}
+                      <StoreTag venueId={v.venueId} />
+                    </span>
+                  </TableCell>
                   <TableCell className="whitespace-nowrap text-xs text-neutral-500">
                     {fmt.dateTime(v.voidedAt)}
                   </TableCell>

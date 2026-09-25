@@ -31,11 +31,9 @@ class HttpCloudTransportTest {
                     exchange.reply(200, "{}")
                 }
                 "/v1/store/heartbeat" -> exchange.reply(200, "{}")
-                "/v1/store/catalog/changes" -> exchange.reply(200, """{"cursor":7,"changes":[]}""")
-                "/v1/store/photos/item-1" -> {
-                    exchange.responseHeaders.add("Content-Type", "image/jpeg")
-                    exchange.reply(200, "photo")
-                }
+                "/v1/store/capabilities" ->
+                    exchange.reply(200, """{"contractVersion":2,"timestampFormat":"instant"}""")
+                "/v1/store/revocations" -> exchange.reply(200, """{"cursor":7,"changes":[]}""")
                 "/v1/ingest/photos/item-1" -> {
                     photoUpload.set(exchange.requestBody.use { it.readBytes() })
                     exchange.reply(201, "{}")
@@ -55,13 +53,40 @@ class HttpCloudTransportTest {
             assertEquals("event-1", posted["events"]?.jsonArray?.single()?.jsonObject
                 ?.get("eventId")?.jsonPrimitive?.content)
             assertTrue(transport.heartbeat("install-1", "http://192.168.1.2:8080").ok)
-            assertEquals(7L, transport.fetchChanges(0).cursor)
-            assertEquals("photo", transport.fetchPhoto("item-1")?.bytes?.toString(Charsets.UTF_8))
+            assertTrue(transport.capabilities().understandsInstants)
+            assertEquals(7L, transport.fetchRevocations(0).cursor)
             assertTrue(transport.pushPhoto("item-1", "photo".toByteArray(), "image/jpeg").ok)
             assertTrue(photoUpload.get().toString(Charsets.UTF_8).contains("photo"))
             val refusal = transport.claimPairing("wrong")
             assertFalse(refusal.ok)
             assertEquals("bad_pairing_code", refusal.detail)
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
+    fun anOlderCloudReadsAsLegacyAndServesRevocationsOnTheLegacyPath() {
+        val paths = mutableListOf<String>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { exchange ->
+            paths += exchange.requestURI.path
+            when (exchange.requestURI.path) {
+                "/v1/store/catalog/changes" -> exchange.reply(200, """{"cursor":9,"changes":[]}""")
+                else -> exchange.reply(404, "{}") // no capabilities, no revocations route
+            }
+        }
+        server.start()
+        try {
+            val transport = HttpCloudTransport("http://127.0.0.1:${server.address.port}", "test-key")
+            val caps = transport.capabilities()
+            assertFalse(caps.understandsInstants)
+            assertEquals(1, caps.contractVersion)
+            assertEquals(9L, transport.fetchRevocations(0).cursor)
+            // the fallback sticks: the next pull goes straight to the legacy path
+            assertEquals(9L, transport.fetchRevocations(9).cursor)
+            assertEquals(listOf("/v1/store/capabilities", "/v1/store/revocations",
+                "/v1/store/catalog/changes", "/v1/store/catalog/changes"), paths)
         } finally {
             server.stop(0)
         }

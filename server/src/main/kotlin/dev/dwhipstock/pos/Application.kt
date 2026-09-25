@@ -14,6 +14,7 @@ import dev.dwhipstock.pos.api.photoRoutes
 import dev.dwhipstock.pos.api.posRoutes
 import dev.dwhipstock.pos.api.settingsRoutes
 import dev.dwhipstock.pos.api.shiftRoutes
+import dev.dwhipstock.pos.api.staffAdminRoutes
 import dev.dwhipstock.pos.api.tableRoutes
 import dev.dwhipstock.pos.api.zoneManagementRoutes
 import dev.dwhipstock.pos.base.AuthService
@@ -22,6 +23,7 @@ import dev.dwhipstock.pos.base.SettingsRepository
 import dev.dwhipstock.pos.restaurant.ShiftService
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternConfig
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternSeed
+import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.sdk.FilesystemPhotoStore
@@ -69,6 +71,8 @@ fun Application.module(
     requireDeviceTokenOverride: Boolean? = null,
     pairingTransport: dev.dwhipstock.pos.sync.CloudTransport? = null,
     seedMode: String = System.getenv("POS_SEED") ?: "copperlantern",
+    // which store this is (POS_VENUE=vieux-port|plateau): display name + first-boot seed
+    venue: CopperLanternVenue = CopperLanternVenue.fromEnv(),
     cloudSyncUrl: String? = System.getenv("CLOUD_SYNC_URL"),
     cloudSyncApiKey: String? = System.getenv("CLOUD_SYNC_API_KEY"),
     publicUrl: String? = System.getenv("POS_PUBLIC_URL"),
@@ -80,26 +84,29 @@ fun Application.module(
     // discover i18n message catalogs now so missing-key warnings surface at
     // boot, not on the first printed receipt
     dev.dwhipstock.pos.sdk.i18n.Messages.ensureLoaded()
-    // POS_SEED=none for cloud-provisioned venues: they start EMPTY and receive
-    // their catalog/staff from the cloud — anything present at first sync would
-    // be pushed UP into the venue's cloud catalog by ensureCatalogSnapshot().
-    // Skipping CopperLanternSeed is not enough: migrations 005/008/011/… INSERT the
-    // CopperLantern menu + floor plan directly (they mirror the seed for existing
-    // installs), so a never-synced empty-mode store also wipes that residue.
-    // Gate = no install_id yet: after the first sync the catalog is
-    // cloud-owned and must never be touched again.
+    // POS_SEED=none starts a store with an EMPTY menu and floor plan, which the
+    // owner builds on the tablet (sync is one-way: the tablet owns its menu and
+    // staff; anything present at first sync is pushed UP by the bootstrap
+    // snapshots). Skipping CopperLanternSeed is not enough: migrations
+    // 005/008/011/… INSERT the CopperLantern menu + floor plan directly (they
+    // mirror the seed for existing installs), so a never-synced empty-mode store
+    // also wipes that residue. Gate = no install_id yet: once a store has synced,
+    // its data is never touched here again.
     if (seedMode != "none") {
-        CopperLanternSeed.seedIfEmpty()
+        CopperLanternSeed.seedIfEmpty(venue)
     } else {
         wipeMigrationSeedResidueIfNeverSynced()
+        // nobody could ever sign in to an empty store (staff no longer arrive
+        // from the cloud), so it gets ONE bootstrap manager — PIN 1234, to be
+        // changed on first sign-in
+        CopperLanternSeed.seedBootstrapManagerIfNoStaff()
     }
     // pre-M5 databases carry plaintext PINs — hash them in place, once
     AuthService.upgradePlaintextPins()
     // seed the default role→grant matrix (CONTRACT §7) if absent — covers existing
     // stores too (migration 024 only creates the table). Cloud edits override it.
     dev.dwhipstock.pos.base.GrantsRepo.seedDefaultRoleGrantsIfEmpty()
-    // Customer tier wired statically for the single-tenant embedded deployment.
-    // TODO: config registry when a second customer exists.
+    // Customer tier: Copper Lantern, the store picked by POS_VENUE.
     // POS_PUBLIC_URL wins; otherwise auto-detect the LAN address so printed
     // table QRs work out of the box at the venue.
     val publicBaseUrl = publicUrl
@@ -119,6 +126,7 @@ fun Application.module(
         },
     )
     val config = CopperLanternConfig(
+        venue = venue,
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,
@@ -126,13 +134,14 @@ fun Application.module(
             publicUrl ?: detectLanIpv4()?.let { "http://$it:8080" } ?: publicBaseUrl
         },
     )
+    log.info("Store: ${venue.displayName} (POS_VENUE=${venue.id})")
     log.info("Customers scan: $publicBaseUrl/m/{zone}/{n} (e.g. /m/lower/8; /m/{tableId} still works)  — table slips: $publicBaseUrl/slips")
     val checkService = CheckService(config)
     val shiftService = ShiftService(config)
     val authService = AuthService(settingsRepo, staffAppMfaRequired)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
 
-    // Cloud sync (CONTRACT.md): outbox pusher + catalog puller. Never constructed
+    // Cloud sync (CONTRACT.md): one-way outbox pusher + revocation pull. Never constructed
     // unless both env vars are set — offline-first stays the default (and tests).
     val syncUrl = cloudSyncUrl
     val syncKey = cloudSyncApiKey
@@ -236,6 +245,7 @@ fun Application.module(
         }
         customerRoutes(checkService, config)
         authRoutes(authService)
+        staffAdminRoutes(authService)
         pairingRoutes(pairingService)
         posRoutes(checkService, authService, photoStore)
         tableRoutes(authService)

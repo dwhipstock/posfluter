@@ -3,7 +3,6 @@ package dev.dwhipstock.pos.sdk
 import dev.dwhipstock.pos.db.SyncOutbox
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.insert
-import java.time.LocalDateTime
 import java.util.UUID
 
 /**

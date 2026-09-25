@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
+import { StoreBreakdown, StoreTag } from "@/components/store-breakdown";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback, TableSkeleton } from "@/components/states";
 
@@ -44,7 +45,7 @@ function JournalPage() {
   const q = searchParams.get("q") ?? "";
   const page = Math.max(0, Number(searchParams.get("page") ?? "0") || 0);
   const [input, setInput] = useState(q);
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null); // venueId/checkId — ids repeat across stores
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -115,6 +116,7 @@ function JournalPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
+      <StoreBreakdown />
 
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
@@ -147,10 +149,10 @@ function JournalPage() {
               <TableBody>
                 {data.rows.map((r) => (
                   <JournalRowView
-                    key={`${r.checkId}-${r.status}`}
+                    key={`${r.venueId}/${r.checkId}-${r.status}`}
                     row={r}
-                    expanded={expanded === r.checkId}
-                    onToggle={() => setExpanded(expanded === r.checkId ? null : r.checkId)}
+                    expanded={expanded === `${r.venueId}/${r.checkId}`}
+                    onToggle={() => setExpanded(expanded === `${r.venueId}/${r.checkId}` ? null : `${r.venueId}/${r.checkId}`)}
                   />
                 ))}
               </TableBody>
@@ -217,6 +219,7 @@ function JournalRowView({
           <span className="flex items-center gap-2 font-medium">
             #{row.checkId}
             {voided && <Badge variant="destructive">{t("badge_void")}</Badge>}
+            <StoreTag venueId={row.venueId} />
           </span>
         </TableCell>
         <TableCell className="whitespace-nowrap text-xs text-neutral-500">

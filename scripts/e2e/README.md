@@ -1,4 +1,4 @@
-# Acceptance E2E (the 21 gates)
+# Acceptance E2E (the gates)
 
 The scripted end-to-end check for validating an isolated deployment after a
 deploy, restore, or infrastructure change.
@@ -22,7 +22,7 @@ customer-facing venue.
 | A — provisioning/pairing | A1–A7 | both venues in `/v1/venues`, stores online, HTTPS + `pairingRequired`, a pairing code pairs exactly once (re-use → 404) |
 | B — isolation | B1–B3 | venue A's device token → 401 on venue B (`/staff`, `/login`); no device → 401 |
 | C — money → reporting | C1–C5 | a cash sale on each venue closes; `/v1/reports/by-venue` sees both under the right venue; per-venue summary is correct |
-| D — cross-venue staff | D1–D4 | one staff member assigned to both venues logs in at both with the same PIN |
+| D — store-owned staff + menu | D1–D6 | the portal cannot create staff or edit the menu (404/405); each store's manager and menu item are created **on the store** (an empty store's bootstrap manager, PIN 1234, creates the e2e manager, PIN 4711), sign in and sell there, and then show up in the portal's read-only per-store view |
 | F — settings isolation | F1 | a fresh venue does **not** inherit another venue's payment settings (blank card processor + zero corkage) |
 
 ## Prerequisites (one-time)

@@ -18,7 +18,7 @@ import random
 
 
 TENANT = "copperlantern"
-VENUE = "main"
+VENUE = "vieux-port"  # cloud migration 014 renamed the original "main" store
 ID_BASE = 900_000
 
 # item id, variant id, category id, English display name, unit price (CAD cents)
@@ -60,17 +60,24 @@ def q(value: str | None) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+VENUE_TZ = "America/New_York"
+
+
 def ts(value: dt.datetime) -> str:
-    return q(value.isoformat(sep=" ", timespec="seconds"))
+    # columns are timestamptz: a venue wall time must name its zone explicitly
+    return f"({q(value.isoformat(sep=' ', timespec='seconds'))}::timestamp AT TIME ZONE {q(VENUE_TZ)})"
 
 
 def main() -> None:
+    global VENUE
     parser = argparse.ArgumentParser()
     parser.add_argument("--through", type=dt.date.fromisoformat, default=dt.date.today())
     parser.add_argument("--days", type=int, default=61)
+    parser.add_argument("--venue", default=VENUE, help="store (venue id): vieux-port or plateau")
     args = parser.parse_args()
     if not 1 <= args.days <= 366:
         parser.error("--days must be between 1 and 366")
+    VENUE = args.venue
 
     rng = random.Random(0xC0FFEE)
     first_day = args.through - dt.timedelta(days=args.days - 1)

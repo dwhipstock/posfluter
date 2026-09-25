@@ -7,7 +7,7 @@ import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.ColumnType
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.javatime.datetime
+import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 import org.postgresql.util.PGobject
 import java.util.concurrent.ConcurrentHashMap
 
@@ -50,7 +50,7 @@ object Db {
 object Tenants : Table("tenants") {
     val id = text("id")
     val name = text("name")
-    val createdAt = datetime("created_at")
+    val createdAt = timestampWithTimeZone("created_at")
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -64,7 +64,7 @@ object Venues : Table("venues") {
     // the store's current LAN base URL + last heartbeat (007): drives the portal's
     // /staff-app redirect to the in-store staff ordering app.
     val storeLanUrl = text("store_lan_url").nullable()
-    val storeSeenAt = datetime("store_seen_at").nullable()
+    val storeSeenAt = timestampWithTimeZone("store_seen_at").nullable()
     // hostname label of the venue's cloud-hosted store container (008); NULL = on-prem
     val subdomain = text("subdomain").nullable()
     override val primaryKey = PrimaryKey(tenantId, id)
@@ -76,8 +76,8 @@ object StoreApiKeys : Table("store_api_keys") {
     val venueId = text("venue_id")
     val keySha256 = text("key_sha256").uniqueIndex()
     val label = text("label")
-    val createdAt = datetime("created_at")
-    val lastSeenAt = datetime("last_seen_at").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+    val lastSeenAt = timestampWithTimeZone("last_seen_at").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -89,7 +89,7 @@ object PortalUsers : Table("portal_users") {
     val totpSecret = text("totp_secret").nullable()
     val totpEnabled = bool("totp_enabled")
     val displayName = text("display_name")
-    val createdAt = datetime("created_at")
+    val createdAt = timestampWithTimeZone("created_at")
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -97,9 +97,9 @@ object PortalSessions : Table("portal_sessions") {
     val tokenSha256 = text("token_sha256")
     val tenantId = text("tenant_id")
     val userId = long("user_id")
-    val createdAt = datetime("created_at")
-    val expiresAt = datetime("expires_at")
-    val lastUsedAt = datetime("last_used_at")
+    val createdAt = timestampWithTimeZone("created_at")
+    val expiresAt = timestampWithTimeZone("expires_at")
+    val lastUsedAt = timestampWithTimeZone("last_used_at")
     override val primaryKey = PrimaryKey(tokenSha256)
 }
 
@@ -108,8 +108,8 @@ object PortalBackupCodes : Table("portal_backup_codes") {
     val tenantId = text("tenant_id")
     val userId = long("user_id")
     val codeSha256 = text("code_sha256")
-    val createdAt = datetime("created_at")
-    val usedAt = datetime("used_at").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+    val usedAt = timestampWithTimeZone("used_at").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -119,8 +119,8 @@ object LoginPending : Table("login_pending") {
     val userId = long("user_id")
     val purpose = text("purpose")
     val secret = text("secret")
-    val createdAt = datetime("created_at")
-    val expiresAt = datetime("expires_at")
+    val createdAt = timestampWithTimeZone("created_at")
+    val expiresAt = timestampWithTimeZone("expires_at")
     override val primaryKey = PrimaryKey(tokenSha256)
 }
 
@@ -133,8 +133,8 @@ object Events : Table("events") {
     val aggregateId = text("aggregate_id")
     val payload = jsonb("payload")
     val storeSeq = long("store_seq")
-    val storeCreatedAt = datetime("store_created_at")
-    val receivedAt = datetime("received_at")
+    val storeCreatedAt = timestampWithTimeZone("store_created_at")
+    val receivedAt = timestampWithTimeZone("received_at")
     override val primaryKey = PrimaryKey(tenantId, eventId)
 }
 
@@ -149,8 +149,8 @@ object Checks : Table("checks") {
     val zoneNameFr = text("zone_name_fr").nullable()
     val zoneNameEn = text("zone_name_en").nullable()
     val shiftId = long("shift_id").nullable()
-    val openedAt = datetime("opened_at").nullable()
-    val closedAt = datetime("closed_at").nullable()
+    val openedAt = timestampWithTimeZone("opened_at").nullable()
+    val closedAt = timestampWithTimeZone("closed_at").nullable()
     val openedBy = text("opened_by").nullable()
     val grandTotalCents = long("grand_total_cents").nullable()
     val taxIncludedCents = long("tax_included_cents").nullable()
@@ -192,7 +192,7 @@ object CheckTenders : Table("check_tenders") {
     val amountAppliedCents = long("amount_applied_cents").nullable()
     val roundingAdjustmentCents = long("rounding_adjustment_cents").nullable()
     val changeCents = long("change_cents").nullable()
-    val tenderedAt = datetime("tendered_at").nullable()
+    val tenderedAt = timestampWithTimeZone("tendered_at").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, tenderId)
 }
 
@@ -201,10 +201,10 @@ object Shifts : Table("shifts") {
     val venueId = text("venue_id")
     val shiftId = long("shift_id")
     val status = text("status")
-    val openedAt = datetime("opened_at").nullable()
+    val openedAt = timestampWithTimeZone("opened_at").nullable()
     val openedBy = text("opened_by").nullable()
     val openingFloatCents = long("opening_float_cents").nullable()
-    val closedAt = datetime("closed_at").nullable()
+    val closedAt = timestampWithTimeZone("closed_at").nullable()
     val closedBy = text("closed_by").nullable()
     val revenueCents = long("revenue_cents").nullable()
     val transactionCount = integer("transaction_count").nullable()
@@ -233,7 +233,7 @@ object Refunds : Table("refunds") {
     val zoneId = text("zone_id").nullable()
     val zoneNameFr = text("zone_name_fr").nullable()
     val zoneNameEn = text("zone_name_en").nullable()
-    val createdAt = datetime("created_at").nullable()
+    val createdAt = timestampWithTimeZone("created_at").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, refundId)
 }
 
@@ -246,7 +246,7 @@ object CashMovements : Table("cash_movements") {
     val amountCents = long("amount_cents").nullable()
     val reason = text("reason").nullable()
     val createdBy = text("created_by").nullable()
-    val createdAt = datetime("created_at").nullable()
+    val createdAt = timestampWithTimeZone("created_at").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, movementId)
 }
 
@@ -299,7 +299,7 @@ object CatalogChanges : Table("catalog_changes") {
     val entityId = text("entity_id")
     val op = text("op")
     val data = jsonb("data")
-    val createdAt = datetime("created_at")
+    val createdAt = timestampWithTimeZone("created_at")
     override val primaryKey = PrimaryKey(version)
 }
 
@@ -310,36 +310,8 @@ object ItemPhotos : Table("item_photos") {
     val content = binary("content")
     val contentType = text("content_type")
     val version = long("version")
-    val updatedAt = datetime("updated_at")
+    val updatedAt = timestampWithTimeZone("updated_at")
     override val primaryKey = PrimaryKey(tenantId, venueId, itemId)
-}
-
-/**
- * Cloud-authoritative staff master (006, tenant-scoped since 008). One identity
- * per tenant — name/PIN/active are group-wide; venue membership and per-venue
- * role live in [StaffVenues]. pin_hash is BCrypt; plaintext never stored.
- */
-object Staff : Table("staff") {
-    val tenantId = text("tenant_id")
-    val id = text("id")
-    val name = text("name")
-    val pinHash = text("pin_hash")
-    val active = bool("active")
-    val languageCode = text("language_code")
-    val deleted = bool("deleted")
-    val createdAt = datetime("created_at")
-    val updatedAt = datetime("updated_at")
-    override val primaryKey = PrimaryKey(tenantId, id)
-}
-
-/** Per-venue staff assignment (008): which venues a staff member works at, and their role there. */
-object StaffVenues : Table("staff_venues") {
-    val tenantId = text("tenant_id")
-    val staffId = text("staff_id")
-    val venueId = text("venue_id")
-    val role = text("role") // MANAGER | SERVER
-    val createdAt = datetime("created_at")
-    override val primaryKey = PrimaryKey(tenantId, staffId, venueId)
 }
 
 /** Role default grants (006): one row per (role, permission). */
@@ -362,6 +334,22 @@ object StaffGrants : Table("staff_grants") {
     override val primaryKey = PrimaryKey(tenantId, venueId, staffId, permission)
 }
 
+/**
+ * Store-owned staff projection (012, one-way sync). Venue-scoped: each store's
+ * staff list is its own. Display-only — no PIN hash ever reaches the cloud.
+ */
+object StoreStaff : Table("store_staff") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val id = text("id")
+    val name = text("name")
+    val role = text("role")
+    val active = bool("active")
+    val deleted = bool("deleted")
+    val updatedAt = timestampWithTimeZone("updated_at")
+    override val primaryKey = PrimaryKey(tenantId, venueId, id)
+}
+
 /** Single-use terminal pairing codes (009); only the SHA-256 is stored. */
 object PairingCodes : Table("pairing_codes") {
     val id = long("id").autoIncrement()
@@ -370,9 +358,9 @@ object PairingCodes : Table("pairing_codes") {
     val codeSha256 = text("code_sha256").uniqueIndex()
     val label = text("label")
     val createdBy = text("created_by")
-    val createdAt = datetime("created_at")
-    val expiresAt = datetime("expires_at")
-    val usedAt = datetime("used_at").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+    val expiresAt = timestampWithTimeZone("expires_at")
+    val usedAt = timestampWithTimeZone("used_at").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -386,10 +374,10 @@ object Devices : Table("devices") {
     val venueId = text("venue_id")
     val deviceId = text("device_id")
     val name = text("name")
-    val pairedAt = datetime("paired_at").nullable()
-    val lastSeenAt = datetime("last_seen_at").nullable()
+    val pairedAt = timestampWithTimeZone("paired_at").nullable()
+    val lastSeenAt = timestampWithTimeZone("last_seen_at").nullable()
     val revoked = bool("revoked")
-    val revokeRequestedAt = datetime("revoke_requested_at").nullable()
-    val updatedAt = datetime("updated_at")
+    val revokeRequestedAt = timestampWithTimeZone("revoke_requested_at").nullable()
+    val updatedAt = timestampWithTimeZone("updated_at")
     override val primaryKey = PrimaryKey(tenantId, venueId, deviceId)
 }

@@ -1,7 +1,9 @@
 # Cloud portal API (cloud/api ⇄ cloud/web)
 
 REST surface the Next.js portal consumes. JSON everywhere; all money integer
-cents; dates `YYYY-MM-DD` (venue-local). In production Caddy serves the
+cents; dates `YYYY-MM-DD` (venue-local business days); timestamps are ISO-8601
+instants carrying the venue's offset (`2026-07-11T18:02:11.000-04:00`) — slice the
+leading wall clock for display, `Date.parse` for arithmetic. In production Caddy serves the
 portal at `/` and proxies `/v1/*` + `/health` to the API container, so the
 browser talks same-origin (no CORS). In dev, Next rewrites `/v1/*` →
 `http://localhost:8081`.
@@ -56,7 +58,7 @@ today/today). A check belongs to the day of its `closedAt`.
   ```
 - `GET /v1/reports/vat` — the tax-filing report.
   ```json
-  { "ratePercent": 7,
+  { "ratePercent": 13,
     "rows": [ { "date": "2026-07-11", "grossCents": 0, "netCents": 0,
                 "vatCents": 0, "checkCount": 0 } ],
     "totals": { "grossCents": 0, "netCents": 0, "vatCents": 0, "checkCount": 0 } }
@@ -109,42 +111,41 @@ today/today). A check belongs to the day of its `closedAt`.
                              "lineTotalCents" } ] } ] }
   ```
 
-## Menu (session-authed; cloud-authoritative catalog)
+## Menu (session-authed; READ-ONLY mirror of each store's menu)
+
+Each store's tablet owns its menu (one-way sync, CONTRACT.md). The portal only
+displays what the stores pushed up; there are no menu write endpoints.
 
 - `GET /v1/menu` →
   ```json
   { "categories": [ { "id", "nameFr", "nameEn", "sortOrder" } ],
     "items": [ { "id", "nameFr", "nameEn", "categoryId", "abbrev",
-                 "isAlcohol", "active", "photoVersion",
+                 "isAlcohol", "active", "photoVersion", "venueId",
                  "variants": [ { "id", "labelFr", "labelEn", "priceCents",
                                  "sortOrder" } ] } ] }
   ```
   (live rows only; `photoVersion` null when no photo — photo URL is
-  `/v1/menu/items/{id}/photo?v={photoVersion}`.)
-- `POST /v1/menu/categories` `{ nameFr, nameEn }` → 201 category
-- `PATCH /v1/menu/categories/{id}` `{ nameFr?, nameEn? }`
-- `DELETE /v1/menu/categories/{id}` — 409 `category_in_use` if items reference it
-- `PATCH /v1/menu/categories/order` `{ "orderedIds": [...] }`
-- `POST /v1/menu/items`
-  `{ nameFr, nameEn, categoryId, abbrev, isAlcohol,
-     variants: [ { labelFr, labelEn, priceCents } ] }` → 201 item
-  (id = slug of nameEn, uniquified — same rule as the store)
-- `PATCH /v1/menu/items/{id}` `{ nameFr?, nameEn?, categoryId?, abbrev?, isAlcohol?, active? }`
-- `DELETE /v1/menu/items/{id}` — soft delete
-- `POST /v1/menu/items/{id}/variants` `{ labelFr, labelEn, priceCents }`
-- `PATCH /v1/menu/items/{id}/variants/{variantId}` `{ labelFr?, labelEn?, priceCents? }`
-- `DELETE /v1/menu/items/{id}/variants/{variantId}` — 409 `last_variant` on the last live one
-- `PUT /v1/menu/items/{id}/photo` — multipart `photo`, jpeg/png ≤ 2 MB
+  `/v1/menu/items/{id}/photo?venue={venueId}&v={photoVersion}`.)
 - `GET /v1/menu/items/{id}/photo` — binary, ETag = photoVersion
 
-Every menu mutation bumps the tenant's catalog version and appends a
-`catalog_changes` row (see CONTRACT.md §4) so the store picks it up on its
-next poll. Item/variant ids are immutable once created.
+## Staff (session-authed; READ-ONLY mirror of each store's staff)
+
+- `GET /v1/staff` →
+  ```json
+  { "staff": [ { "id", "name", "role", "active", "overrides": { "refund": true },
+                 "venueId" } ],
+    "roleGrants": { "MANAGER": { "void": true, … }, "SERVER": { … } },
+    "venueGrants": [ { "venueId", "roleGrants": { … } } ],
+    "permissions": [ "void", … ] }
+  ```
+  Staff are per store and managed on the store's tablet; no PIN or PIN hash
+  ever reaches the cloud.
 
 ## Store-facing (Bearer store API key — never session)
 
-Documented in CONTRACT.md: `POST /v1/ingest`, `POST /v1/ingest/photos/{itemId}`,
-`GET /v1/store/catalog/changes?since=N`, `GET /v1/store/photos/{itemId}`.
+Documented in CONTRACT.md: `GET /v1/store/capabilities` (handshake), `POST /v1/ingest`, `POST /v1/ingest/photos/{itemId}`,
+`GET /v1/store/revocations?since=N` (device revocations only), `POST /v1/store/heartbeat`,
+`POST /v1/store/pairing/claim`.
 
 ## Misc
 

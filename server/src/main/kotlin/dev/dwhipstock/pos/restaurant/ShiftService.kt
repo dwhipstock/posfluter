@@ -42,7 +42,6 @@ import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
-import java.time.LocalDateTime
 
 /** The check/void services stamp closing checks with this. Call inside a transaction. */
 fun currentOpenShiftId(): Int? =
@@ -72,7 +71,7 @@ class ShiftService(private val config: CustomerConfig) {
             put("shiftId", id)
             put("openedBy", userId)
             put("openingFloatCents", openingFloatCents)
-            put("openedAt", now.toString())
+            put("openedAt", VenueClock.iso(now))
         })
         toView(Shifts.selectAll().where { Shifts.id eq id }.first())
     }
@@ -112,10 +111,10 @@ class ShiftService(private val config: CustomerConfig) {
             put("amountCents", amountCents)
             put("reason", reason)
             put("user", managerId)
-            put("createdAt", now.toString())
+            put("createdAt", VenueClock.iso(now))
         })
         CashMovementResult(
-            movement = CashMovementView(id, shift, dir, amountCents, reason, managerId, now.toString()),
+            movement = CashMovementView(id, shift, dir, amountCents, reason, managerId, VenueClock.iso(now)),
             slipText = renderCashSlip(dir, amountCents, reason, managerId, now),
         )
     }
@@ -129,7 +128,7 @@ class ShiftService(private val config: CustomerConfig) {
                 CashMovementView(
                     it[CashMovements.id].value, it[CashMovements.shiftId], it[CashMovements.direction],
                     it[CashMovements.amountCents], it[CashMovements.reason],
-                    it[CashMovements.createdBy], it[CashMovements.createdAt].toString(),
+                    it[CashMovements.createdBy], VenueClock.iso(it[CashMovements.createdAt]),
                 )
             }
     }
@@ -143,7 +142,7 @@ class ShiftService(private val config: CustomerConfig) {
     }
 
     /** 42-col till slip for a cash-in/out, same virtual printer as receipts. */
-    private fun renderCashSlip(dir: String, amount: Long, reason: String, userId: String, now: LocalDateTime): String {
+    private fun renderCashSlip(dir: String, amount: Long, reason: String, userId: String, now: java.time.Instant): String {
         val policy = policyFor(userId)
         fun msg(key: MessageKey) = Messages.get(key, policy.locale)
         val title = if (dir == "IN") msg(CASH_IN_HEADER) else msg(CASH_OUT_HEADER)
@@ -153,7 +152,7 @@ class ShiftService(private val config: CustomerConfig) {
             add(PrintLine.Blank)
             add(PrintLine.Header(title))
             add(PrintLine.Blank)
-            add(PrintLine.KeyValue(msg(SLIP_TIME), policy.formatDate(now)))
+            add(PrintLine.KeyValue(msg(SLIP_TIME), policy.formatDate(VenueClock.local(now))))
             add(PrintLine.Divider)
             add(PrintLine.KeyValue(
                 if (dir == "IN") msg(CASH_IN) else msg(CASH_OUT),
@@ -197,7 +196,7 @@ class ShiftService(private val config: CustomerConfig) {
             put("closingCountCents", closingCountCents)
             put("overShortCents", report.overShortCents)
             put("openedAt", report.openedAt)
-            put("closedAt", now.toString())
+            put("closedAt", VenueClock.iso(now))
             put("openedBy", report.openedBy)
             put("openingFloatCents", report.openingFloatCents)
             put("transactionCount", report.transactionCount)
@@ -227,8 +226,9 @@ class ShiftService(private val config: CustomerConfig) {
      */
     fun rangeReport(from: java.time.LocalDate, to: java.time.LocalDate): ShiftReport = transaction {
         require(!to.isBefore(from)) { "to must not be before from" }
-        val start = from.atStartOfDay()
-        val end = to.plusDays(1).atStartOfDay()
+        // venue business days (DST-aware midnights) as UTC instants
+        val start = VenueClock.startOfDay(from)
+        val end = VenueClock.startOfDay(to.plusDays(1))
         val closed = Checks.selectAll().where {
             (Checks.status eq "CLOSED") and
                 (Checks.closedAt greaterEq start) and (Checks.closedAt less end)
@@ -343,7 +343,7 @@ class ShiftService(private val config: CustomerConfig) {
         return ShiftReport(
             shiftId = shiftId,
             shiftStatus = shift[Shifts.status],
-            openedAt = shift[Shifts.openedAt].toString(),
+            openedAt = VenueClock.iso(shift[Shifts.openedAt]),
             openedBy = shift[Shifts.openedBy],
             openingFloatCents = shift[Shifts.openingFloatCents],
             revenueCents = agg.revenue,
@@ -366,10 +366,10 @@ class ShiftService(private val config: CustomerConfig) {
     private fun toView(row: ResultRow) = ShiftView(
         id = row[Shifts.id].value,
         status = row[Shifts.status],
-        openedAt = row[Shifts.openedAt].toString(),
+        openedAt = VenueClock.iso(row[Shifts.openedAt]),
         openedBy = row[Shifts.openedBy],
         openingFloatCents = row[Shifts.openingFloatCents],
-        closedAt = row[Shifts.closedAt]?.toString(),
+        closedAt = row[Shifts.closedAt]?.let(VenueClock::iso),
         closingCountCents = row[Shifts.closingCountCents],
         expectedCashCents = row[Shifts.expectedCashCents],
         overShortCents = row[Shifts.overShortCents],

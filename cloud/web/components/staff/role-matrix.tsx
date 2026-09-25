@@ -1,52 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { put, ApiError } from "@/lib/api";
-import { toast, toastError } from "@/lib/toast";
+import { Check, Minus } from "lucide-react";
 import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 
 const ROLES = ["MANAGER", "SERVER"] as const;
 
-/** The role-default grant matrix: permissions × roles, one Switch per cell. */
+/**
+ * The role-default grant matrix, read-only: each store's tablet owns its
+ * grants and pushes them up (one-way sync).
+ */
 export function RoleMatrix({
   roleGrants,
   permissions,
-  onChanged,
+  title,
 }: {
   roleGrants: Record<string, Record<string, boolean>>;
   permissions: string[];
-  onChanged: () => void;
+  /** Overrides the card title, e.g. with the store name in a combined view. */
+  title?: string;
 }) {
   const t = useT();
-  const [matrix, setMatrix] = useState(roleGrants);
-  const [saving, setSaving] = useState(false);
-
-  // resync when a refetch brings a new authoritative matrix
-  useEffect(() => setMatrix(roleGrants), [roleGrants]);
-
-  const toggle = async (role: string, perm: string, granted: boolean) => {
-    const next = { ...matrix, [role]: { ...matrix[role], [perm]: granted } };
-    setMatrix(next); // optimistic
-    setSaving(true);
-    try {
-      await put("/v1/roles/grants", { roles: next });
-      onChanged();
-    } catch (err) {
-      setMatrix(roleGrants); // revert
-      if (err instanceof ApiError && err.code === "last_manager") toast("error", t("staff_last_manager"));
-      else toastError(err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("grants_roles_title")}</CardTitle>
+        <CardTitle>{title ?? t("grants_roles_title")}</CardTitle>
         <CardDescription>{t("grants_roles_sub")}</CardDescription>
       </CardHeader>
       <CardContent className="pt-0">
@@ -69,11 +48,11 @@ export function RoleMatrix({
                   {ROLES.map((r) => (
                     <td key={r} className="px-2 py-2.5">
                       <div className="flex justify-center">
-                        <Switch
-                          checked={matrix[r]?.[p] ?? false}
-                          disabled={saving}
-                          onCheckedChange={(v) => toggle(r, p, v)}
-                        />
+                        {roleGrants[r]?.[p] ? (
+                          <Check className="h-4 w-4 text-accent" aria-label={t("grant_allow")} />
+                        ) : (
+                          <Minus className="h-4 w-4 text-neutral-300" aria-label={t("grant_deny")} />
+                        )}
                       </div>
                     </td>
                   ))}

@@ -198,6 +198,22 @@
   #toast.err { background: var(--danger); }
 
   .spinner { text-align: center; padding: 40px; color: var(--muted); }
+
+  /* Tablet width: the phone layout, centred and capped, so buttons, the cart bar
+     and bottom sheets don't stretch edge to edge across a 10" screen. */
+  @media (min-width: 720px) {
+    header { padding: 12px 24px; }
+    .screen { max-width: 960px; margin: 0 auto; padding: 20px 24px 96px; }
+    .tgrid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    .mgrid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .primary, .ghost { max-width: 480px; display: block; margin-left: auto; margin-right: auto; }
+    .cartbar { left: 50%; right: auto; width: min(912px, calc(100% - 48px)); transform: translateX(-50%); }
+    #sheet, #reset-sheet { left: 50%; right: auto; width: min(640px, 100%);
+                           transform: translate(-50%, 105%); }
+    #sheet.open, #reset-sheet.open { transform: translate(-50%, 0); }
+    .tabbar { justify-content: center; }
+    .tabbar button { flex: 0 1 280px; }
+  }
 </style>
 </head>
 <body>

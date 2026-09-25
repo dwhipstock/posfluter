@@ -6,7 +6,7 @@ import { post, del } from "@/lib/api";
 import { toast, toastError } from "@/lib/toast";
 import { useApi } from "@/lib/hooks";
 import { useFmt, useT } from "@/lib/i18n/context";
-import { naiveWallMs, type Fmt } from "@/lib/i18n/format";
+import type { Fmt } from "@/lib/i18n/format";
 import type { MsgKey } from "@/lib/i18n/messages";
 import type {
   DevicesResponse,
@@ -21,42 +21,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/states";
-
-// ── naive venue-local time helpers ──────────────────────────────────────
-// API timestamps are naive venue-local ISO strings; never route them through
-// Date parsing (lib/i18n/format.ts has the same rule). To diff against "now"
-// we put both wall clocks on the same UTC-frame axis. naiveWallMs is the shared
-// slicer from lib/i18n/format.ts; nowWallMs is page-local (needs the timezone).
-
-function nowWallMs(timeZone: string): number {
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date());
-    const g = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
-    return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute"), g("second"));
-  } catch {
-    // Unknown zone — fall back to the browser's wall clock.
-    const d = new Date();
-    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
-  }
-}
+import { useStoreId } from "@/lib/store";
 
 type T = (key: MsgKey, vars?: Record<string, string | number>) => string;
 
-function lastSeenLabel(t: T, fmt: Fmt, lastSeenAt: string | null, timezone: string): string {
+// API timestamps are instants carrying the venue offset: Date.parse gives the
+// exact instant for diffs, and the leading wall clock is venue-local for display.
+function lastSeenLabel(t: T, fmt: Fmt, lastSeenAt: string | null): string {
   if (!lastSeenAt) return t("devices_seen_never");
-  const diffMin = Math.floor((nowWallMs(timezone) - naiveWallMs(lastSeenAt)) / 60_000);
+  const diffMin = Math.floor((Date.now() - Date.parse(lastSeenAt)) / 60_000);
   let when: string;
   if (diffMin < 1) when = t("devices_seen_just_now");
   else if (diffMin < 60) when = t("devices_seen_min", { n: diffMin });
@@ -71,10 +46,12 @@ function lastSeenLabel(t: T, fmt: Fmt, lastSeenAt: string | null, timezone: stri
 export default function DevicesPage() {
   const t = useT();
   const { data, error, isLoading, mutate } = useApi<VenuesResponse>("/v1/venues");
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  // the header's store picker: one store, or every store's terminals in turn
+  const storeId = useStoreId();
 
-  const venues = data?.venues ?? [];
-  const venue = venues.find((v) => v.id === pickedId) ?? venues[0] ?? null;
+  const all = data?.venues ?? [];
+  const shown = storeId ? all.filter((v) => v.id === storeId) : all;
+  const venue = shown[0] ?? null;
 
   return (
     <div className="space-y-4">
@@ -93,28 +70,13 @@ export default function DevicesPage() {
           <EmptyState title={t("devices_no_venues")} />
         </Card>
       ) : (
-        <>
-          {venues.length > 1 && (
-            <div className="flex items-center gap-3">
-              <Label className="shrink-0">{t("devices_venue")}</Label>
-              <Select value={venue.id} onValueChange={setPickedId}>
-                <SelectTrigger className="md:w-72">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {venues.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <PairCard key={`pair-${venue.id}`} venue={venue} />
-          <DeviceList key={`devices-${venue.id}`} venue={venue} />
-        </>
+        shown.map((v) => (
+          <section key={v.id} className="space-y-4">
+            {shown.length > 1 && <h2 className="pt-2 text-sm font-semibold text-neutral-600">{v.name}</h2>}
+            <PairCard key={`pair-${v.id}`} venue={v} />
+            <DeviceList key={`devices-${v.id}`} venue={v} />
+          </section>
+        ))
       )}
     </div>
   );
@@ -127,7 +89,7 @@ const CODE_TTL_MS = 15 * 60_000;
 interface ActiveCode {
   code: string;
   url: string | null;
-  /** Browser-clock expiry; derived once from the server's venue-local expiresAt. */
+  /** Browser-clock expiry; derived once from the server's expiresAt instant. */
   expiryEpochMs: number;
 }
 
@@ -145,8 +107,8 @@ function PairCard({ venue }: { venue: Venue }) {
         label.trim() ? { label: label.trim() } : {}
       );
       // Trust the server's expiry when it lands inside a sane window; if the
-      // timezone math disagrees wildly, fall back to the fixed 15-minute TTL.
-      const raw = naiveWallMs(res.expiresAt) - nowWallMs(venue.timezone);
+      // clocks disagree wildly, fall back to the fixed 15-minute TTL.
+      const raw = Date.parse(res.expiresAt) - Date.now();
       const remaining = raw > 0 && raw <= CODE_TTL_MS + 60_000 ? raw : CODE_TTL_MS;
       setCode({ code: res.code, url: res.url, expiryEpochMs: Date.now() + remaining });
     } catch (err) {
@@ -286,7 +248,7 @@ function DeviceList({ venue }: { venue: Venue }) {
                     {status === "revoked" && <Badge variant="destructive">{t("devices_status_revoked")}</Badge>}
                   </div>
                   <span className="text-xs text-neutral-500">
-                    {lastSeenLabel(t, fmt, d.lastSeenAt, venue.timezone)}
+                    {lastSeenLabel(t, fmt, d.lastSeenAt)}
                     {d.pairedAt && <> · {t("devices_paired_on", { date: fmt.dayYear(d.pairedAt) })}</>}
                   </span>
                 </div>

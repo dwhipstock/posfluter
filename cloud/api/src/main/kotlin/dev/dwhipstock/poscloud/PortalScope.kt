@@ -8,48 +8,56 @@ import io.ktor.server.application.*
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.ZoneId
 
 /**
- * Portal session → (tenant, venue) scope. A multi-venue tenant picks the venue
- * with `?venue=<id>` (or a `{venueId}` path parameter on venue-nested routes).
+ * Portal session → which of the tenant's stores (venues) a request covers.
  *
- * Without an explicit venue the DEFAULT is the tenant's primary venue: the one
- * with id "main" (the Bootstrap default) if present, else the first by id. This
- * avoids silently changing the selected venue when another venue sorts before
- * `main`. Preferring `main` keeps the portal pinned to its designated primary
- * venue as new venue ids are added. (Full multi-venue
- * portal navigation — a picker on every page — is a later session; today only the
- * Devices page selects a venue explicitly.)
+ * Every portal page is the same page in two modes (the store picker):
+ *  - `?venue=<id>` (or a `{venueId}` path parameter) → exactly that store;
+ *  - no venue → **all stores** of the tenant, combined.
  *
  * A venue id that doesn't belong to the session's tenant is a 404 — never a
  * fall-through to someone else's venue.
  *
- * Call OUTSIDE a transaction (it opens its own, like requirePortal).
+ * Call OUTSIDE a transaction (they open their own, like requirePortal).
+ */
+
+/** One in-scope store with its display name and IANA zone. */
+data class VenueScope(val scope: Scope, val name: String, val zone: ZoneId) {
+    val venueId: String get() = scope.venueId
+}
+
+/** The stores this request covers: the one asked for, else all of the tenant's (ordered by id). */
+fun portalScopes(call: ApplicationCall): Pair<Principal, List<VenueScope>> {
+    val principal = requirePortal(call)
+    val requested = requestedVenue(call)
+    val venues = transaction {
+        Venues.selectAll().where {
+            if (requested != null) (Venues.tenantId eq principal.tenantId) and (Venues.id eq requested)
+            else Venues.tenantId eq principal.tenantId
+        }.orderBy(Venues.id).map {
+            VenueScope(Scope(principal.tenantId, it[Venues.id]), it[Venues.name], CloudTime.zone(it[Venues.timezone]))
+        }
+    }
+    if (venues.isEmpty()) {
+        throw if (requested != null) NotFoundException("no venue '$requested' for tenant", "bad_venue")
+        else NotFoundException("no venue for tenant")
+    }
+    return principal to venues
+}
+
+/**
+ * Single-store routes (a device registry, a pairing code, one photo): the
+ * requested store, else the tenant's first store by id.
  */
 fun portalVenueScope(call: ApplicationCall): Scope = portalScopeAndPrincipal(call).second
 
-/**
- * Same resolution as [portalVenueScope] but also returns the [Principal], for the
- * few routes that need the signed-in user (e.g. createdBy) — so they don't
- * re-run requirePortal() (a second session SELECT + last_used_at write) just to
- * read one field.
- */
+/** Same as [portalVenueScope] plus the [Principal] (one auth pass). */
 fun portalScopeAndPrincipal(call: ApplicationCall): Pair<Principal, Scope> {
-    val principal = requirePortal(call)
-    val requested = call.parameters["venueId"] ?: call.request.queryParameters["venue"]
-    val scope = transaction {
-        val venue = if (requested != null) {
-            Venues.selectAll().where {
-                (Venues.tenantId eq principal.tenantId) and (Venues.id eq requested)
-            }.firstOrNull() ?: throw NotFoundException("no venue '$requested' for tenant", "bad_venue")
-        } else {
-            val venues = Venues.selectAll().where { Venues.tenantId eq principal.tenantId }
-                .orderBy(Venues.id).toList()
-            venues.firstOrNull { it[Venues.id] == "main" }
-                ?: venues.firstOrNull()
-                ?: throw NotFoundException("no venue for tenant")
-        }
-        Scope(principal.tenantId, venue[Venues.id])
-    }
-    return principal to scope
+    val (principal, venues) = portalScopes(call)
+    return principal to venues.first().scope
 }
+
+private fun requestedVenue(call: ApplicationCall): String? =
+    (call.parameters["venueId"] ?: call.request.queryParameters["venue"])?.takeIf { it.isNotBlank() }

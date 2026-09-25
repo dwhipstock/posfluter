@@ -120,7 +120,7 @@ class ApplicationTest {
         val receiptText = json.parseToJsonElement(c.get("/checks/$checkId/receipt").bodyAsText())
             .jsonObject["text"]!!.jsonPrimitive.content
         assertEquals(receiptFiles[0].readText(), receiptText)
-        assertTrue("The Copper Lantern Pub" in receiptText)
+        assertTrue("Copper Lantern — Vieux-Port" in receiptText)
         assertTrue("Lantern House Lager (60 oz pitcher) ×1" in receiptText)
         // exactly ONE Lantern House Lager line — guards against variant-join fan-out
         assertEquals(1, receiptText.lines().count { it.startsWith("Lantern House Lager") })

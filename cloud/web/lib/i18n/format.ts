@@ -1,25 +1,12 @@
 import { presetKeyOf, type DateRange } from "@/lib/range";
 import type { Locale, MsgKey } from "./messages";
 
-// Timestamps are naive venue-local strings; never route them through Date.
+// API timestamps are instants carrying the venue's offset
+// ("2026-07-11T18:02:11.000-04:00"): the leading wall clock is already
+// venue-local, so display slices it instead of routing it through Date (which
+// would convert to the browser's timezone).
 function parts(s: string) {
   return { y: Number(s.slice(0, 4)), m: Number(s.slice(5, 7)), d: Number(s.slice(8, 10)), hm: s.slice(11, 16) };
-}
-
-// Epoch-ms of a naive venue-local timestamp placed on the UTC frame (so two
-// naive wall clocks can be diffed against each other). Shared so callers that
-// only need this axis (e.g. the devices page's last-seen diff + countdown)
-// don't re-slice the string; it deliberately reuses the same positional
-// parsing as parts() above.
-export function naiveWallMs(s: string): number {
-  return Date.UTC(
-    Number(s.slice(0, 4)),
-    Number(s.slice(5, 7)) - 1,
-    Number(s.slice(8, 10)),
-    Number(s.slice(11, 13) || 0),
-    Number(s.slice(14, 16) || 0),
-    Number(s.slice(17, 19) || 0)
-  );
 }
 
 const EN_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

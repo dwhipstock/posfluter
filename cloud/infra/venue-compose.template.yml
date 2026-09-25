@@ -33,6 +33,10 @@ services:
       CLOUD_SYNC_API_KEY: "${CLOUD_SYNC_API_KEY:?set in .env next to this file}"
       CLOUD_SYNC_INTERVAL_SECONDS: "10"
       TZ: __TZ__
+      # The venue's IANA zone: seeds venue_settings.timezone on the first boot
+      # and is the zone legacy (pre-UTC) rows are converted from. Same value the
+      # cloud's venues.timezone row gets, so both sides agree on business days.
+      VENUE_TZ: __TZ__
     volumes:
       - storedata:/data
     networks:

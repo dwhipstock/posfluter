@@ -38,11 +38,13 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.upsert
-import java.time.LocalDateTime
+import java.time.OffsetDateTime
 
 private const val MAX_PHOTO_BYTES = 2 * 1024 * 1024
 private val ALLOWED_PHOTO_TYPES = setOf("image/jpeg", "image/png")
 private const val CHANGES_PAGE = 200
+/** The one change kind the cloud still sends down (remote lock of a lost terminal). */
+const val REVOCATION_KIND = "device_revocation"
 // A heartbeat older than this → the store is treated as offline (its LAN IP is
 // not served for the /staff-app redirect). The store beats every sync tick (~10s).
 // shared with the portal venue picker (venues/VenueRoutes.kt) so "store online"
@@ -93,7 +95,7 @@ fun requireStore(call: ApplicationCall): Scope {
         val hash = sha256Hex(key)
         val row = StoreApiKeys.selectAll().where { StoreApiKeys.keySha256 eq hash }.firstOrNull()
             ?: throw UnauthorizedException("unknown api key", "bad_api_key")
-        StoreApiKeys.update({ StoreApiKeys.keySha256 eq hash }) { it[lastSeenAt] = LocalDateTime.now() }
+        StoreApiKeys.update({ StoreApiKeys.keySha256 eq hash }) { it[lastSeenAt] = dev.dwhipstock.poscloud.CloudTime.now() }
         Scope(row[StoreApiKeys.tenantId], row[StoreApiKeys.venueId])
     }
 }
@@ -126,6 +128,17 @@ data class HeartbeatRequest(
 @Serializable
 data class StaffEndpointResponse(val base: String, val seenAt: String)
 
+/** Contract capabilities a store checks before it pushes (CONTRACT §0). */
+@Serializable
+data class CapabilitiesResponse(
+    val contractVersion: Int = CONTRACT_VERSION,
+    val timestampFormat: String = "instant",
+    val revocationsPath: String = "/v1/store/revocations",
+)
+
+/** The store ⇄ cloud contract version this API speaks (cloud/CONTRACT.md). */
+const val CONTRACT_VERSION = 2
+
 @Serializable
 data class ChangeDto(val version: Long, val kind: String, val op: String, val data: JsonElement)
 
@@ -136,6 +149,16 @@ data class ChangesResponse(val cursor: Long, val changes: List<ChangeDto>)
 // config.publicBaseDomain, and a CloudConfig() default would silently read it
 // from the process env of whatever machine a call site ran on.
 fun Route.storeRoutes(config: CloudConfig) {
+
+    /**
+     * Capability handshake (CONTRACT §0): a v2 store holds its outbox until this
+     * says the cloud reads offset-carrying instants. A cloud without this route
+     * (404) is treated as v1 and gets no pushes until it is upgraded.
+     */
+    get("/store/capabilities") {
+        requireStore(call)
+        call.respond(CapabilitiesResponse())
+    }
 
     /**
      * At-least-once idempotent ingest (CONTRACT §1): one transaction per batch,
@@ -149,6 +172,7 @@ fun Route.storeRoutes(config: CloudConfig) {
         var duplicates = 0
         transaction {
             requireKnownInstall(scope, req.installId)
+            val zone = dev.dwhipstock.poscloud.CloudTime.venueZone(scope.tenantId, scope.venueId)
             for (event in req.events.sortedBy { it.seq }) {
                 val inserted = Events.insertIgnore {
                     it[tenantId] = scope.tenantId
@@ -159,14 +183,14 @@ fun Route.storeRoutes(config: CloudConfig) {
                     it[aggregateId] = event.aggregateId
                     it[payload] = event.payload.toString()
                     it[storeSeq] = event.seq
-                    it[storeCreatedAt] = parseCreatedAt(event.createdAt)
-                    it[receivedAt] = LocalDateTime.now()
+                    it[storeCreatedAt] = parseCreatedAt(event.createdAt, zone)
+                    it[receivedAt] = dev.dwhipstock.poscloud.CloudTime.now()
                 }.insertedCount
                 if (inserted == 0) {
                     duplicates++
                 } else {
                     accepted++
-                    Projections.apply(scope, event)
+                    Projections.apply(scope, event, zone)
                 }
             }
         }
@@ -182,17 +206,23 @@ fun Route.storeRoutes(config: CloudConfig) {
         call.respond(mapOf("itemId" to itemId, "photoVersion" to version.toString()))
     }
 
-    /** Distribution feed (CONTRACT §4): cursor = last version in the page, or `since` when empty. */
-    get("/store/catalog/changes") {
+    /**
+     * Revocation feed (CONTRACT §4) — the ONLY cloud → store data (one-way sync:
+     * menu and staff are tablet-owned). Cursor = last version in the page, or
+     * `since` when empty. The legacy `/store/catalog/changes` path serves the
+     * same revocation-only feed so a not-yet-updated tablet keeps its remote lock.
+     */
+    val revocations: suspend RoutingContext.() -> Unit = {
         val scope = requireStore(call)
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0
         val response = transaction {
-            // scoped to the key's VENUE, not just its tenant — a multi-venue group's
-            // stores must each receive exactly their own staff/catalog/revocations
+            // scoped to the key's VENUE, not just its tenant — each store receives
+            // exactly its own devices' revocations
             val rows = CatalogChanges.selectAll()
                 .where {
                     (CatalogChanges.tenantId eq scope.tenantId) and
                         (CatalogChanges.venueId eq scope.venueId) and
+                        (CatalogChanges.kind eq REVOCATION_KIND) and
                         (CatalogChanges.version greater since)
                 }
                 .orderBy(CatalogChanges.version)
@@ -210,18 +240,8 @@ fun Route.storeRoutes(config: CloudConfig) {
         }
         call.respond(response)
     }
-
-    get("/store/photos/{itemId}") {
-        val scope = requireStore(call)
-        val itemId = call.parameters["itemId"]!!
-        val row = transaction {
-            ItemPhotos.selectAll().where {
-                (ItemPhotos.tenantId eq scope.tenantId) and (ItemPhotos.venueId eq scope.venueId) and
-                    (ItemPhotos.itemId eq itemId)
-            }.firstOrNull()
-        } ?: throw NotFoundException("no photo for item $itemId")
-        call.respondBytes(row[ItemPhotos.content], ContentType.parse(row[ItemPhotos.contentType]))
-    }
+    get("/store/revocations", revocations)
+    get("/store/catalog/changes", revocations)
 
     /**
      * Store liveness + reachable LAN address (M7 / CONTRACT §8). The store posts
@@ -246,12 +266,13 @@ fun Route.storeRoutes(config: CloudConfig) {
                 sanePublicBaseUrl(req.lanBaseUrl, venue[Venues.subdomain], config.publicBaseDomain) != null
             if (!accepted) throw BadRequestException(
                 "lanBaseUrl must be a private LAN origin or this venue's public base", "bad_lan_url")
+            val zone = dev.dwhipstock.poscloud.CloudTime.zone(venue[Venues.timezone])
             val known = venue[Venues.storeInstallId]
             if (req.installId != null && known != null && known != req.installId)
                 throw ConflictException(
                     "store install id does not match this venue's recorded store database",
                     "install_mismatch")
-            val now = LocalDateTime.now()
+            val now = dev.dwhipstock.poscloud.CloudTime.now()
             Venues.update({ (Venues.tenantId eq scope.tenantId) and (Venues.id eq scope.venueId) }) {
                 // store_lan_url is the /staff-app redirect target and means "a private-LAN
                 // origin" — only an on-prem store populates it. A cloud venue is reached
@@ -268,8 +289,8 @@ fun Route.storeRoutes(config: CloudConfig) {
                     it[venueId] = scope.venueId
                     it[deviceId] = device.id
                     it[name] = device.name
-                    it[pairedAt] = device.pairedAt?.let { p -> runCatching { LocalDateTime.parse(p) }.getOrNull() }
-                    it[lastSeenAt] = device.lastSeenAt?.let { s -> runCatching { LocalDateTime.parse(s) }.getOrNull() }
+                    it[pairedAt] = dev.dwhipstock.poscloud.CloudTime.parse(device.pairedAt, zone)
+                    it[lastSeenAt] = dev.dwhipstock.poscloud.CloudTime.parse(device.lastSeenAt, zone)
                     it[revoked] = device.revoked
                     it[updatedAt] = now
                 }
@@ -293,7 +314,7 @@ fun Route.storeRoutes(config: CloudConfig) {
             throw NotFoundException("unknown or expired pairing code", "bad_pairing_code")
         val label = transaction {
             val hash = dev.dwhipstock.poscloud.auth.sha256Hex(normalized)
-            val now = LocalDateTime.now()
+            val now = dev.dwhipstock.poscloud.CloudTime.now()
             val updated = PairingCodes.update({
                 (PairingCodes.codeSha256 eq hash) and
                     (PairingCodes.tenantId eq scope.tenantId) and (PairingCodes.venueId eq scope.venueId) and
@@ -307,21 +328,25 @@ fun Route.storeRoutes(config: CloudConfig) {
 }
 
 /**
- * PUBLIC (no store key): the current in-store staff-app base URL for the single
- * venue, if a store has heartbeated recently. The portal's /staff-app route reads
- * this and 302-redirects staff phones to <base>/staff-app. Single-venue
- * assumption (like the catalog's menuScope) — returns the freshest live venue. A
- * stale/absent heartbeat → 404 (`store_offline`) so the portal shows an offline
- * page instead of bouncing phones to a dead IP. Only a private LAN address is
- * exposed, which is meaningless off the venue network.
+ * PUBLIC (no store key): the current in-store staff-app base URL, if a store has
+ * heartbeated recently. The portal's /staff-app route reads this and
+ * 302-redirects staff phones to <base>/staff-app. `?venue=<id>` picks one store
+ * (a multi-store group prints one QR per store); without it the freshest live
+ * store answers. A stale/absent heartbeat → 404 (`store_offline`) so the portal
+ * shows an offline page instead of bouncing phones to a dead IP. Only a private
+ * LAN address is exposed, which is meaningless off the venue network.
  */
 fun Route.staffEndpointRoute() {
     get("/staff-endpoint") {
+        val venue = call.request.queryParameters["venue"]?.takeIf { it.isNotBlank() }
         val fresh = transaction {
             Venues.selectAll()
-                .where { Venues.storeLanUrl.isNotNull() and Venues.storeSeenAt.isNotNull() }
+                .where {
+                    val live = Venues.storeLanUrl.isNotNull() and Venues.storeSeenAt.isNotNull()
+                    if (venue != null) live and (Venues.id eq venue) else live
+                }
                 .map { Triple(it[Venues.tenantId], it[Venues.storeLanUrl]!!, it[Venues.storeSeenAt]!!) }
-        }.filter { java.time.Duration.between(it.third, LocalDateTime.now()).toMinutes() <= STORE_FRESH_MINUTES }
+        }.filter { java.time.Duration.between(it.third, dev.dwhipstock.poscloud.CloudTime.now()).toMinutes() <= STORE_FRESH_MINUTES }
             // only ON-PREM stores (private-LAN base) participate: cloud-hosted venues
             // report their public host and are reached directly at it, never via this
             // single-tenant redirect — and must not trip its one-live-tenant guard
@@ -336,7 +361,8 @@ fun Route.staffEndpointRoute() {
             else "multiple live tenants; cannot resolve staff endpoint without tenant context",
             "store_offline")
         val newest = fresh.maxByOrNull { it.third }!!
-        call.respond(StaffEndpointResponse(base = newest.second, seenAt = newest.third.toString()))
+        call.respond(StaffEndpointResponse(base = newest.second,
+            seenAt = dev.dwhipstock.poscloud.CloudTime.iso(newest.third, java.time.ZoneOffset.UTC)))
     }
 }
 
@@ -364,8 +390,8 @@ private fun requireKnownInstall(scope: Scope, installId: String?) {
 
 // a malformed timestamp must not wedge the sync loop in a 400-retry cycle;
 // receive time is an honest fallback for an audit column
-private fun parseCreatedAt(value: String): LocalDateTime =
-    runCatching { LocalDateTime.parse(value) }.getOrElse { LocalDateTime.now() }
+private fun parseCreatedAt(value: String, zone: java.time.ZoneId): OffsetDateTime =
+    dev.dwhipstock.poscloud.CloudTime.parse(value, zone) ?: dev.dwhipstock.poscloud.CloudTime.now()
 
 suspend fun receivePhoto(call: ApplicationCall): Pair<ByteArray, String> {
     var bytes: ByteArray? = null
@@ -403,11 +429,7 @@ private suspend fun ByteReadChannel.readCapped(max: Int): ByteArray {
     return out.toByteArray()
 }
 
-/**
- * Upsert the binary + emit an item.photo change row. Re-distributing a
- * store-originated photo back to it is a harmless no-op download (CONTRACT §3
- * exception) — kept simple on purpose.
- */
+/** Upsert the store-pushed binary for portal display (nothing is redistributed). */
 fun storePhoto(scope: Scope, itemId: String, bytes: ByteArray, contentType: String): Long = transaction {
     val version = System.currentTimeMillis()
     ItemPhotos.upsert {
@@ -417,15 +439,11 @@ fun storePhoto(scope: Scope, itemId: String, bytes: ByteArray, contentType: Stri
         it[content] = bytes
         it[ItemPhotos.contentType] = contentType
         it[ItemPhotos.version] = version
-        it[updatedAt] = LocalDateTime.now()
+        it[updatedAt] = dev.dwhipstock.poscloud.CloudTime.now()
     }
     CatalogItems.update({
         (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and
             (CatalogItems.id eq itemId)
     }) { it[photoVersion] = version }
-    Catalog.appendChange(scope, "item.photo", itemId, "upsert", buildJsonObject {
-        put("itemId", itemId)
-        put("photoVersion", version)
-    })
     version
 }

@@ -1,11 +1,17 @@
 package dev.dwhipstock.pos.db
 
 import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.sql.Column
+import org.jetbrains.exposed.sql.ColumnType
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.javatime.datetime
 import org.jetbrains.exposed.sql.selectAll
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.update
 import org.sqlite.SQLiteConfig
@@ -19,6 +25,41 @@ import java.sql.Connection
  * with the migrations that create them.
  */
 
+/**
+ * A UTC instant stored as fixed-width ISO text (`2026-07-11T22:02:11.123Z`), so
+ * SQLite's text ordering is chronological and the value never depends on the
+ * JVM's or the device's timezone. Every business timestamp in the store uses
+ * this (migration 031 converted the older zone-less venue-local values). A
+ * zone-less value can only come from SQLite's own `datetime('now')`, which is
+ * UTC, so it is read as UTC.
+ */
+class UtcTimestampColumnType : ColumnType<Instant>() {
+    override fun sqlType(): String = "TEXT"
+
+    override fun valueFromDB(value: Any): Instant = when (value) {
+        is Instant -> value
+        is java.sql.Timestamp -> value.toInstant()
+        else -> parseStoredInstant(value.toString())
+    }
+
+    override fun notNullValueToDB(value: Instant): Any = UTC_TEXT.format(value)
+
+    override fun nonNullValueToString(value: Instant): String = "'${UTC_TEXT.format(value)}'"
+
+    companion object {
+        val UTC_TEXT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+
+        fun parseStoredInstant(raw: String): Instant {
+            val s = raw.trim().replace(' ', 'T')
+            return runCatching { OffsetDateTime.parse(s).toInstant() }
+                .getOrElse { LocalDateTime.parse(s).toInstant(ZoneOffset.UTC) }
+        }
+    }
+}
+
+fun Table.utcTimestamp(name: String): Column<Instant> = registerColumn(name, UtcTimestampColumnType())
+
 /** Every mutation writes here, same DB transaction. No consumer until M6. */
 object SyncOutbox : IntIdTable("sync_outbox") {
     val eventId = varchar("event_id", 36).uniqueIndex() // uuid
@@ -26,7 +67,7 @@ object SyncOutbox : IntIdTable("sync_outbox") {
     val aggregateType = varchar("aggregate_type", 32)
     val aggregateId = varchar("aggregate_id", 64)
     val payload = text("payload") // json
-    val createdAt = datetime("created_at")
+    val createdAt = utcTimestamp("created_at")
 }
 
 /**
@@ -69,5 +110,21 @@ fun initDatabase(dbPath: String): Database {
     // SQLite: one writer at a time, serializable is the honest level
     TransactionManager.manager.defaultIsolationLevel = Connection.TRANSACTION_SERIALIZABLE
     Migrations.run(db)
+    loadVenueZone(db)
     return db
+}
+
+/**
+ * The store's zone is the settings row's (seeded from VENUE_TZ by migration
+ * 031); the environment only matters for a brand-new database.
+ */
+private fun loadVenueZone(db: Database) {
+    val stored = org.jetbrains.exposed.sql.transactions.transaction(db) {
+        var zone: String? = null
+        exec("SELECT timezone FROM venue_settings WHERE id = 1") { rs -> if (rs.next()) zone = rs.getString(1) }
+        zone
+    }
+    val zone = stored?.takeIf { it.isNotBlank() }?.let { runCatching { java.time.ZoneId.of(it) }.getOrNull() }
+        ?: dev.dwhipstock.pos.sdk.VenueClock.configuredZone()
+    dev.dwhipstock.pos.sdk.VenueClock.use(zone)
 }

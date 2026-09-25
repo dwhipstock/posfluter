@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the 21-gate acceptance e2e against the qa staging venues (default).
+# Run the acceptance e2e against the qa staging venues (default).
 #
 # Prerequisites (one-time): qa1 + qa2 provisioned under the `qa` tenant with a
 # portal admin, e.g.

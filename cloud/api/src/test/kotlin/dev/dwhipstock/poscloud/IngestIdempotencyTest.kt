@@ -21,7 +21,7 @@ class IngestIdempotencyTest {
     fun setUp() {
         TestSupport.reset()
         seedTenant("copperlantern")
-        seedStoreKey("copperlantern", "main", key)
+        seedStoreKey("copperlantern", "vieux-port", key)
     }
 
     @Test
@@ -87,10 +87,11 @@ class IngestIdempotencyTest {
         transaction {
             val row = dev.dwhipstock.poscloud.db.Shifts.selectAll().single()
             assertEquals("CLOSED", row[dev.dwhipstock.poscloud.db.Shifts.status])
-            assertEquals("2026-07-10T17:00", row[dev.dwhipstock.poscloud.db.Shifts.openedAt]?.toString())
+            // a legacy zone-less time is venue-local (EDT here) and stored as its instant
+            assertEquals(java.time.Instant.parse("2026-07-10T21:00:00Z"), row[dev.dwhipstock.poscloud.db.Shifts.openedAt]?.toInstant())
             assertEquals("1234", row[dev.dwhipstock.poscloud.db.Shifts.openedBy])
             assertEquals(100000L, row[dev.dwhipstock.poscloud.db.Shifts.openingFloatCents])
-            assertEquals("2026-07-10T23:59", row[dev.dwhipstock.poscloud.db.Shifts.closedAt]?.toString())
+            assertEquals(java.time.Instant.parse("2026-07-11T03:59:00Z"), row[dev.dwhipstock.poscloud.db.Shifts.closedAt]?.toInstant())
             assertEquals(53500L, row[dev.dwhipstock.poscloud.db.Shifts.revenueCents])
         }
     }
@@ -115,7 +116,7 @@ class IngestIdempotencyTest {
             buildJsonObject {
                 put("item", buildJsonObject {
                     put("id", "lantern-lager")
-                    put("nameFr", "éléphant")
+                    put("nameFr", "Lager de la Lanterne")
                     put("nameEn", name)
                     put("categoryId", "beer")
                     put("variants", buildJsonArray { })

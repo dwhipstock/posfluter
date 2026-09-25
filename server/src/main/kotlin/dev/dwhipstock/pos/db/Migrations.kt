@@ -20,7 +20,16 @@ object Migrations {
     private val log = LoggerFactory.getLogger(Migrations::class.java)
     private const val DIR = "migrations"
 
-    data class Script(val version: Int, val name: String, val sql: String)
+    /** A numbered step: SQL text from resources, or (rarely) Kotlin when SQL can't do it. */
+    data class Script(
+        val version: Int, val name: String, val sql: String,
+        val code: (org.jetbrains.exposed.sql.Transaction.() -> Unit)? = null,
+    )
+
+    /** Kotlin-only steps, interleaved with the SQL scripts by version. */
+    private val codeMigrations = listOf(
+        Script(UtcTimestampMigration.VERSION, UtcTimestampMigration.NAME, "") { UtcTimestampMigration.run(this) },
+    )
 
     fun run(db: Database) {
         transaction(db) {
@@ -38,12 +47,16 @@ object Migrations {
             }
             versions
         }
-        val pending = discover().filter { it.version !in applied }.sortedBy { it.version }
+        val all = discover() + codeMigrations
+        all.groupBy { it.version }.forEach { (v, group) ->
+            require(group.size == 1) { "duplicate migration version $v: ${group.map { it.name }}" }
+        }
+        val pending = all.filter { it.version !in applied }.sortedBy { it.version }
         for (script in pending) {
             // one transaction per script: a failure stops startup with earlier
             // scripts committed, so a fixed re-run resumes where it stopped
             transaction(db) {
-                statements(script.sql).forEach { exec(it) }
+                script.code?.invoke(this) ?: statements(script.sql).forEach { exec(it) }
                 exec(
                     "INSERT INTO schema_migrations (version, name, applied_at) " +
                         "VALUES (${script.version}, '${script.name}', datetime('now'))"
