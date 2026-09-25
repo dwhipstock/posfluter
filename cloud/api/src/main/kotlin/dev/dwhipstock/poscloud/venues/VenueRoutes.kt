@@ -11,6 +11,7 @@ import dev.dwhipstock.poscloud.db.Devices
 import dev.dwhipstock.poscloud.db.PairingCodes
 import dev.dwhipstock.poscloud.db.Venues
 import dev.dwhipstock.poscloud.portalScopeAndPrincipal
+import dev.dwhipstock.poscloud.portalScopes
 import dev.dwhipstock.poscloud.portalVenueScope
 import dev.dwhipstock.poscloud.store.STORE_FRESH_MINUTES
 import io.ktor.http.*
@@ -89,6 +90,52 @@ data class DeviceDto(
 @Serializable
 data class DeviceListResponse(val devices: List<DeviceDto>)
 
+/**
+ * A store's POS as the Devices page shows it: its own heartbeat liveness plus the
+ * device registry that heartbeat mirrors. This is the everyday picture (one POS
+ * per store syncing with its store API key); pairing extra terminals is optional.
+ */
+@Serializable
+data class StorePosDto(
+    val venueId: String, val venueName: String,
+    /** "online" | "stale" | "offline" — see [storeLinkStatus]. */
+    val status: String,
+    val lastSeenAt: String?,
+    /** Whole seconds since the last heartbeat at response time; null = never. */
+    val secondsSinceSeen: Long?,
+    val lanUrl: String?,
+    val publicUrl: String?,
+    val installId: String?,
+    val appVersion: String?,
+    val contractVersion: Int?,
+    val devices: List<DeviceDto>,
+)
+
+@Serializable
+data class StorePosListResponse(
+    val stores: List<StorePosDto>,
+    val onlineSeconds: Long = STORE_ONLINE_SECONDS,
+    val staleMinutes: Long = STORE_FRESH_MINUTES,
+)
+
+/** A heartbeat younger than this → online. The store beats every sync tick (~10s). */
+const val STORE_ONLINE_SECONDS = 60L
+
+/**
+ * Liveness from the last heartbeat: online up to [STORE_ONLINE_SECONDS]; stale
+ * (amber) up to the shared [STORE_FRESH_MINUTES] freshness window, where the
+ * /staff-app redirect still trusts the LAN address; offline beyond it or never.
+ */
+fun storeLinkStatus(seenAt: OffsetDateTime?, now: OffsetDateTime): String {
+    if (seenAt == null) return "offline"
+    val age = Duration.between(seenAt, now)
+    return when {
+        age <= Duration.ofSeconds(STORE_ONLINE_SECONDS) -> "online"
+        age <= STORE_FRESH -> "stale"
+        else -> "offline"
+    }
+}
+
 fun Route.venueRoutes(config: CloudConfig) {
 
     /** Every venue of the signed-in tenant — the portal's venue picker. */
@@ -133,21 +180,43 @@ fun Route.venueRoutes(config: CloudConfig) {
         ))
     }
 
+    /**
+     * Each in-scope store's POS (PortalScope: `?venue=<id>` → that store, none →
+     * every store of the tenant): heartbeat liveness, LAN address, install id,
+     * reported versions, and the device registry its heartbeat mirrors.
+     */
+    get("/devices") {
+        val (_, venues) = portalScopes(call)
+        val now = dev.dwhipstock.poscloud.CloudTime.now()
+        val stores = transaction {
+            venues.map { vs ->
+                val row = venueRow(vs.scope)
+                fun iso(t: OffsetDateTime?) = t?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, vs.zone) }
+                val seenAt = row[Venues.storeSeenAt]
+                StorePosDto(
+                    venueId = vs.venueId,
+                    venueName = vs.name,
+                    status = storeLinkStatus(seenAt, now),
+                    lastSeenAt = iso(seenAt),
+                    secondsSinceSeen = seenAt?.let { Duration.between(it, now).seconds.coerceAtLeast(0) },
+                    lanUrl = row[Venues.storeLanUrl],
+                    publicUrl = publicStoreUrl(row, config),
+                    installId = row[Venues.storeInstallId],
+                    appVersion = row[Venues.storeAppVersion],
+                    contractVersion = row[Venues.storeContractVersion],
+                    devices = deviceRows(vs.scope, ::iso),
+                )
+            }
+        }
+        call.respond(StorePosListResponse(stores))
+    }
+
     /** The venue's device registry, as last reported by its store container. */
     get("/venues/{venueId}/devices") {
         val scope = portalVenueScope(call)
         val devices = transaction {
             val zone = dev.dwhipstock.poscloud.CloudTime.venueZone(scope.tenantId, scope.venueId)
-            fun iso(t: java.time.OffsetDateTime?) = t?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, zone) }
-            Devices.selectAll().where {
-                (Devices.tenantId eq scope.tenantId) and (Devices.venueId eq scope.venueId)
-            }.orderBy(Devices.name).map {
-                DeviceDto(
-                    it[Devices.deviceId], it[Devices.name],
-                    iso(it[Devices.pairedAt]), iso(it[Devices.lastSeenAt]),
-                    it[Devices.revoked], iso(it[Devices.revokeRequestedAt]),
-                )
-            }
+            deviceRows(scope) { t -> t?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, zone) } }
         }
         call.respond(DeviceListResponse(devices))
     }
@@ -197,7 +266,19 @@ fun Route.venueRoutes(config: CloudConfig) {
     }
 }
 
-private fun venueRow(scope: Scope) = Venues.selectAll().where {
+/** One venue's mirrored device registry (call inside a transaction). */
+private fun deviceRows(scope: Scope, iso: (OffsetDateTime?) -> String?): List<DeviceDto> =
+    Devices.selectAll().where {
+        (Devices.tenantId eq scope.tenantId) and (Devices.venueId eq scope.venueId)
+    }.orderBy(Devices.name).map {
+        DeviceDto(
+            it[Devices.deviceId], it[Devices.name],
+            iso(it[Devices.pairedAt]), iso(it[Devices.lastSeenAt]),
+            it[Devices.revoked], iso(it[Devices.revokeRequestedAt]),
+        )
+    }
+
+private fun venueRow(scope: Scope) =Venues.selectAll().where {
     (Venues.tenantId eq scope.tenantId) and (Venues.id eq scope.venueId)
 }.firstOrNull() ?: throw NotFoundException("no venue for tenant")
 

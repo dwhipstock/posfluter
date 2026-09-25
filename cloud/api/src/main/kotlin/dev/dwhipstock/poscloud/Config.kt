@@ -20,7 +20,8 @@ data class CloudConfig(
     val storeApiKey: String? = env("STORE_API_KEY"),
     val storeApiKeys: Map<String, String> = parsePairs(env("STORE_API_KEYS")),
     val cookieSecure: Boolean = env("COOKIE_SECURE")?.toBoolean() ?: false,
-    val venueName: String = env("VENUE_NAME") ?: "The Copper Lantern Pub",
+    // The group (tenant) name shown in the portal; synced onto the tenant row at boot.
+    val venueName: String = env("VENUE_NAME") ?: "Copper Lantern",
     val venueTz: String = env("VENUE_TZ") ?: "America/New_York",
     // The tenant's stores, seeded at boot: STORES="<venueId>=<name>,…" (order kept;
     // the first is the primary store). Unset → one store, "vieux-port", named VENUE_NAME.

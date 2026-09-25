@@ -45,6 +45,12 @@ object Bootstrap {
             it[name] = config.venueName
             it[createdAt] = now
         }
+        // The group name follows env (VENUE_NAME) on every boot, like the store
+        // names below: a tenant row seeded once under an older name would
+        // otherwise keep showing it in the portal forever. Name only.
+        Tenants.update({ Tenants.id eq TENANT }) {
+            it[name] = config.venueName
+        }
         for (store in config.stores) {
             // Do not use upsert here: PostgreSQL fills omitted columns from their
             // defaults on the UPDATE path, which erased the store's subdomain,

@@ -332,7 +332,8 @@ separate from POS staff.
 
 Bootstrap (idempotent, from cloud env): tenant `copperlantern` and its stores
 from `STORES="<venueId>=<name>,…"` (default: one store, `vieux-port`, named
-`VENUE_NAME`), created in `VENUE_TZ` (set on insert only — a later boot never re-zones an existing venue); one store API key per store (`STORE_API_KEY`
+`VENUE_NAME`); the tenant (group) name is `VENUE_NAME` (default `Copper Lantern`),
+re-applied on every boot like the store names; stores are created in `VENUE_TZ` (set on insert only — a later boot never re-zones an existing venue); one store API key per store (`STORE_API_KEY`
 for the first store, `STORE_API_KEYS="<venueId>=<key>,…"` for the rest); one
 portal admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, TOTP enrolled on first login).
 Every cloud row and every cloud query is scoped by `tenant_id`; the API key
@@ -347,3 +348,26 @@ key keeps working unchanged.
 Portal reads take an optional `?venue=<id>`: with it, exactly that store;
 without it, all of the tenant's stores combined (each over its own business
 days), with a per-store `byVenue` breakdown on the sales reports.
+
+## 8. Heartbeat (store → cloud, every sync tick)
+
+`POST {CLOUD_SYNC_URL}/v1/store/heartbeat` — `Authorization: Bearer {key}`
+
+```json
+{
+  "installId": "uuid",                 // refused 409 install_mismatch if it differs
+  "lanBaseUrl": "http://192.168.1.50:8080",
+  "devices": [ { "id": "…", "name": "Bar tablet", "pairedAt": "…", "lastSeenAt": "…", "revoked": false } ],
+  "appVersion": "1.4.0",               // optional
+  "contractVersion": 2                 // optional
+}
+```
+
+- `lanBaseUrl` must be a private-LAN origin, or the venue's own public host.
+- `devices` is sent only when it changed (and only after §0 confirms); omitted
+  = keep the cloud's mirror as is.
+- `appVersion` / `contractVersion` are optional and display-only (the portal's
+  Devices page); a beat without them clears them.
+- The portal reads the last beat as liveness: **online** under 60 s, **stale**
+  up to 10 min (the `/staff-app` redirect still trusts the LAN URL), **offline**
+  beyond that or never.
