@@ -1846,6 +1846,30 @@ class FeeLine {
       FeeLine(j['code'], j['labelFr'], j['labelEn'], j['amountCents']);
 }
 
+/// A tax added on top of the pre-tax subtotal (GST, QST). Server-computed;
+/// [ratePercent] is a decimal string ("9.975").
+class TaxLine {
+  final String code, labelFr, labelEn, ratePercent;
+  final int amountCents;
+  TaxLine(
+    this.code,
+    this.labelFr,
+    this.labelEn,
+    this.ratePercent,
+    this.amountCents,
+  );
+  factory TaxLine.fromJson(Map<String, dynamic> j) => TaxLine(
+    j['code'] ?? '',
+    j['labelFr'] ?? '',
+    j['labelEn'] ?? '',
+    j['ratePercent'] ?? '',
+    j['amountCents'] ?? 0,
+  );
+
+  static List<TaxLine> listFrom(dynamic json) =>
+      ((json ?? []) as List).map((t) => TaxLine.fromJson(t)).toList();
+}
+
 class Tender {
   final int id,
       amountTenderedCents,
@@ -1892,6 +1916,12 @@ class BillGroup {
   final List<Allocation> allocations;
   final int itemsSubtotalCents, grandTotalCents, paidCents, outstandingCents;
   final List<FeeLine> fees;
+
+  /// Pre-tax share; subtotal + taxes = grand total.
+  final int subtotalCents;
+
+  /// This bill's share of the check's taxes.
+  final List<TaxLine> taxes;
   BillGroup(
     this.id,
     this.number,
@@ -1902,8 +1932,10 @@ class BillGroup {
     this.fees,
     this.grandTotalCents,
     this.paidCents,
-    this.outstandingCents,
-  );
+    this.outstandingCents, {
+    int? subtotalCents,
+    this.taxes = const [],
+  }) : subtotalCents = subtotalCents ?? grandTotalCents;
   factory BillGroup.fromJson(Map<String, dynamic> j) => BillGroup(
     j['id'],
     j['number'],
@@ -1917,6 +1949,8 @@ class BillGroup {
     j['grandTotalCents'],
     j['paidCents'],
     j['outstandingCents'],
+    subtotalCents: j['subtotalCents'],
+    taxes: TaxLine.listFrom(j['taxes']),
   );
 
   /// Paid = money actually covered this group — an empty $0 group is NOT paid.
@@ -1955,6 +1989,12 @@ class Check {
 
   /// Settlement-time bill groups; null = not split (normal single-bill flow).
   final SplitInfo? split;
+
+  /// Pre-tax: items + fees. subtotal + taxes = grand total.
+  final int subtotalCents;
+
+  /// Taxes added on top of the subtotal (GST, QST), server-computed.
+  final List<TaxLine> taxes;
   Check(
     this.id,
     this.tableId,
@@ -1968,8 +2008,10 @@ class Check {
     this.paidCents,
     this.outstandingCents,
     this.tenders,
-    this.split,
-  );
+    this.split, {
+    int? subtotalCents,
+    this.taxes = const [],
+  }) : subtotalCents = subtotalCents ?? grandTotalCents;
   factory Check.fromJson(Map<String, dynamic> j) => Check(
     j['id'],
     j['tableId'],
@@ -1986,6 +2028,8 @@ class Check {
     j['outstandingCents'],
     (j['tenders'] as List).map((t) => Tender.fromJson(t)).toList(),
     j['split'] == null ? null : SplitInfo.fromJson(j['split']),
+    subtotalCents: j['subtotalCents'],
+    taxes: TaxLine.listFrom(j['taxes']),
   );
 }
 

@@ -14,13 +14,13 @@
     "id": "lantern-lager:pint",
     "labelFr": "Pinte 20 oz",
     "labelEn": "20 oz pint",
-    "priceCents": 825
+    "priceCents": 750
    },
    {
     "id": "lantern-lager:pitcher",
     "labelFr": "Pichet 60 oz",
     "labelEn": "60 oz pitcher",
-    "priceCents": 2250
+    "priceCents": 2025
    }
   ],
   "photoVersion": null
@@ -40,13 +40,13 @@
     "id": "amber-ale:pint",
     "labelFr": "Pinte 20 oz",
     "labelEn": "20 oz pint",
-    "priceCents": 875
+    "priceCents": 795
    },
    {
     "id": "amber-ale:pitcher",
     "labelFr": "Pichet 60 oz",
     "labelEn": "60 oz pitcher",
-    "priceCents": 2400
+    "priceCents": 2150
    }
   ],
   "photoVersion": null
@@ -66,13 +66,13 @@
     "id": "north-ipa:pint",
     "labelFr": "Pinte 20 oz",
     "labelEn": "20 oz pint",
-    "priceCents": 925
+    "priceCents": 825
    },
    {
     "id": "north-ipa:pitcher",
     "labelFr": "Pichet 60 oz",
     "labelEn": "60 oz pitcher",
-    "priceCents": 2550
+    "priceCents": 2295
    }
   ],
   "photoVersion": null
@@ -92,13 +92,13 @@
     "id": "maple-stout:pint",
     "labelFr": "Pinte 20 oz",
     "labelEn": "20 oz pint",
-    "priceCents": 950
+    "priceCents": 850
    },
    {
     "id": "maple-stout:pitcher",
     "labelFr": "Pichet 60 oz",
     "labelEn": "60 oz pitcher",
-    "priceCents": 2650
+    "priceCents": 2375
    }
   ],
   "photoVersion": null
@@ -118,13 +118,13 @@
     "id": "wheat-beer:pint",
     "labelFr": "Pinte 20 oz",
     "labelEn": "20 oz pint",
-    "priceCents": 850
+    "priceCents": 775
    },
    {
     "id": "wheat-beer:pitcher",
     "labelFr": "Pichet 60 oz",
     "labelEn": "60 oz pitcher",
-    "priceCents": 2350
+    "priceCents": 2125
    }
   ],
   "photoVersion": null
@@ -144,7 +144,7 @@
     "id": "copper-old-fashioned:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1550
+    "priceCents": 1395
    }
   ],
   "photoVersion": null
@@ -164,7 +164,7 @@
     "id": "lantern-mule:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1450
+    "priceCents": 1300
    }
   ],
   "photoVersion": null
@@ -184,7 +184,7 @@
     "id": "smoked-caesar:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1450
+    "priceCents": 1300
    }
   ],
   "photoVersion": null
@@ -204,7 +204,7 @@
     "id": "maple-sour:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1500
+    "priceCents": 1350
    }
   ],
   "photoVersion": null
@@ -224,7 +224,7 @@
     "id": "elderflower-gin:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1500
+    "priceCents": 1350
    }
   ],
   "photoVersion": null
@@ -244,7 +244,7 @@
     "id": "espresso-martini:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1550
+    "priceCents": 1395
    }
   ],
   "photoVersion": null
@@ -264,7 +264,7 @@
     "id": "dark-stormy:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1450
+    "priceCents": 1300
    }
   ],
   "photoVersion": null
@@ -284,7 +284,7 @@
     "id": "zero-gimlet:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 950
+    "priceCents": 850
    }
   ],
   "photoVersion": null
@@ -304,7 +304,7 @@
     "id": "pretzel:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1350
+    "priceCents": 1225
    }
   ],
   "photoVersion": null
@@ -324,7 +324,7 @@
     "id": "wings:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1850
+    "priceCents": 1675
    }
   ],
   "photoVersion": null
@@ -344,7 +344,7 @@
     "id": "nachos:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1950
+    "priceCents": 1750
    }
   ],
   "photoVersion": null
@@ -364,7 +364,7 @@
     "id": "calamari:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1850
+    "priceCents": 1675
    }
   ],
   "photoVersion": null
@@ -384,7 +384,7 @@
     "id": "spinach-dip:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1650
+    "priceCents": 1475
    }
   ],
   "photoVersion": null
@@ -404,7 +404,7 @@
     "id": "poutine:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1450
+    "priceCents": 1300
    }
   ],
   "photoVersion": null
@@ -424,7 +424,7 @@
     "id": "lantern-burger:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2150
+    "priceCents": 1925
    }
   ],
   "photoVersion": null
@@ -444,7 +444,7 @@
     "id": "mushroom-burger:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2200
+    "priceCents": 1975
    }
   ],
   "photoVersion": null
@@ -464,7 +464,7 @@
     "id": "veggie-burger:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1950
+    "priceCents": 1750
    }
   ],
   "photoVersion": null
@@ -484,7 +484,7 @@
     "id": "club:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2050
+    "priceCents": 1850
    }
   ],
   "photoVersion": null
@@ -504,7 +504,7 @@
     "id": "reuben:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2150
+    "priceCents": 1925
    }
   ],
   "photoVersion": null
@@ -524,7 +524,7 @@
     "id": "fish-sandwich:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1950
+    "priceCents": 1750
    }
   ],
   "photoVersion": null
@@ -544,7 +544,7 @@
     "id": "fish-chips:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2250
+    "priceCents": 2025
    }
   ],
   "photoVersion": null
@@ -564,7 +564,7 @@
     "id": "steak-frites:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2950
+    "priceCents": 2650
    }
   ],
   "photoVersion": null
@@ -584,7 +584,7 @@
     "id": "shepherd-pie:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2150
+    "priceCents": 1925
    }
   ],
   "photoVersion": null
@@ -604,7 +604,7 @@
     "id": "mac-cheese:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 1850
+    "priceCents": 1675
    }
   ],
   "photoVersion": null
@@ -624,7 +624,7 @@
     "id": "salmon:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2750
+    "priceCents": 2475
    }
   ],
   "photoVersion": null
@@ -644,7 +644,7 @@
     "id": "chicken-pot-pie:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 2050
+    "priceCents": 1850
    }
   ],
   "photoVersion": null
@@ -664,7 +664,7 @@
     "id": "sticky-pudding:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 950
+    "priceCents": 850
    }
   ],
   "photoVersion": null
@@ -684,7 +684,7 @@
     "id": "cheesecake:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 950
+    "priceCents": 850
    }
   ],
   "photoVersion": null
@@ -704,7 +704,7 @@
     "id": "brownie:regular",
     "labelFr": "Régulier",
     "labelEn": "Regular",
-    "priceCents": 900
+    "priceCents": 800
    }
   ],
   "photoVersion": null

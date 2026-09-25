@@ -9,6 +9,7 @@ import '../i18n.dart';
 import '../payments/card_reader.dart';
 import 'receipt_screen.dart';
 import 'stripe_payment_screen.dart';
+import '../widgets/tax_rows.dart';
 
 /// Split-tender payment. Three big method tiles across the top, outstanding
 /// prominent, quick-amount strip + numpad for cash. The check closes (and the
@@ -359,6 +360,16 @@ class _TenderScreenState extends State<TenderScreen> {
                       style: T.price(size: 44, weight: FontWeight.w700),
                     ),
                   ],
+                ),
+                // what the total is made of: pre-tax subtotal + GST / QST
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: TaxRows(
+                    subtotalCents:
+                        _group?.subtotalCents ?? _check.subtotalCents,
+                    taxes: _group?.taxes ?? _check.taxes,
+                    priceSize: 15,
+                  ),
                 ),
                 if ((_group?.paidCents ?? _check.paidCents) > 0)
                   Align(
