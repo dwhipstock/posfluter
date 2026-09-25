@@ -1,0 +1,38 @@
+[
+ {
+  "id": "draft-beer",
+  "nameFr": "Bières en fût",
+  "nameEn": "Draft Beer",
+  "sortOrder": 0
+ },
+ {
+  "id": "cocktails",
+  "nameFr": "Cocktails",
+  "nameEn": "Cocktails",
+  "sortOrder": 8
+ },
+ {
+  "id": "appetizers",
+  "nameFr": "Entrées",
+  "nameEn": "Appetizers",
+  "sortOrder": 9
+ },
+ {
+  "id": "burgers-sandwiches",
+  "nameFr": "Burgers et sandwichs",
+  "nameEn": "Burgers & Sandwiches",
+  "sortOrder": 10
+ },
+ {
+  "id": "mains",
+  "nameFr": "Plats principaux",
+  "nameEn": "Mains",
+  "sortOrder": 11
+ },
+ {
+  "id": "desserts",
+  "nameFr": "Desserts",
+  "nameEn": "Desserts",
+  "sortOrder": 13
+ }
+]

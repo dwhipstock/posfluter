@@ -1,0 +1,712 @@
+[
+ {
+  "id": "lantern-lager",
+  "nameFr": "Lager de la Lanterne",
+  "nameEn": "Lantern House Lager",
+  "descriptionFr": "Lager vive et maltée brassée en Ontario.",
+  "descriptionEn": "Crisp, malty lager brewed in Ontario.",
+  "category": "draft-beer",
+  "abbrev": "LL",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "lantern-lager:pint",
+    "labelFr": "Pinte 20 oz",
+    "labelEn": "20 oz pint",
+    "priceCents": 825
+   },
+   {
+    "id": "lantern-lager:pitcher",
+    "labelFr": "Pichet 60 oz",
+    "labelEn": "60 oz pitcher",
+    "priceCents": 2250
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "amber-ale",
+  "nameFr": "Ale ambrée",
+  "nameEn": "Copper Amber Ale",
+  "descriptionFr": "Ale ambrée aux notes de caramel et de noix.",
+  "descriptionEn": "Amber ale with caramel and toasted-nut notes.",
+  "category": "draft-beer",
+  "abbrev": "AA",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "amber-ale:pint",
+    "labelFr": "Pinte 20 oz",
+    "labelEn": "20 oz pint",
+    "priceCents": 875
+   },
+   {
+    "id": "amber-ale:pitcher",
+    "labelFr": "Pichet 60 oz",
+    "labelEn": "60 oz pitcher",
+    "priceCents": 2400
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "north-ipa",
+  "nameFr": "IPA du Nord",
+  "nameEn": "North Trail IPA",
+  "descriptionFr": "IPA houblonnée aux arômes d'agrumes et de pin.",
+  "descriptionEn": "Hop-forward IPA with citrus and pine.",
+  "category": "draft-beer",
+  "abbrev": "NI",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "north-ipa:pint",
+    "labelFr": "Pinte 20 oz",
+    "labelEn": "20 oz pint",
+    "priceCents": 925
+   },
+   {
+    "id": "north-ipa:pitcher",
+    "labelFr": "Pichet 60 oz",
+    "labelEn": "60 oz pitcher",
+    "priceCents": 2550
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "maple-stout",
+  "nameFr": "Stout à l'érable",
+  "nameEn": "Maple Oat Stout",
+  "descriptionFr": "Stout crémeux à l'avoine avec une touche d'érable.",
+  "descriptionEn": "Creamy oatmeal stout with a hint of maple.",
+  "category": "draft-beer",
+  "abbrev": "MS",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "maple-stout:pint",
+    "labelFr": "Pinte 20 oz",
+    "labelEn": "20 oz pint",
+    "priceCents": 950
+   },
+   {
+    "id": "maple-stout:pitcher",
+    "labelFr": "Pichet 60 oz",
+    "labelEn": "60 oz pitcher",
+    "priceCents": 2650
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "wheat-beer",
+  "nameFr": "Blanche aux agrumes",
+  "nameEn": "Citrus Wheat",
+  "descriptionFr": "Bière de blé légère, orange et coriandre.",
+  "descriptionEn": "Light wheat beer with orange and coriander.",
+  "category": "draft-beer",
+  "abbrev": "CW",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "wheat-beer:pint",
+    "labelFr": "Pinte 20 oz",
+    "labelEn": "20 oz pint",
+    "priceCents": 850
+   },
+   {
+    "id": "wheat-beer:pitcher",
+    "labelFr": "Pichet 60 oz",
+    "labelEn": "60 oz pitcher",
+    "priceCents": 2350
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "copper-old-fashioned",
+  "nameFr": "Old fashioned cuivré",
+  "nameEn": "Copper Old Fashioned",
+  "descriptionFr": "Whisky canadien, érable, amers et orange.",
+  "descriptionEn": "Canadian whisky, maple, bitters and orange.",
+  "category": "cocktails",
+  "abbrev": "OF",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "copper-old-fashioned:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1550
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "lantern-mule",
+  "nameFr": "Mule de la Lanterne",
+  "nameEn": "Lantern Mule",
+  "descriptionFr": "Vodka, bière de gingembre, lime et canneberge.",
+  "descriptionEn": "Vodka, ginger beer, lime and cranberry.",
+  "category": "cocktails",
+  "abbrev": "LM",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "lantern-mule:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1450
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "smoked-caesar",
+  "nameFr": "César fumé",
+  "nameEn": "Smoked Caesar",
+  "descriptionFr": "Vodka, clamato épicé et sel fumé.",
+  "descriptionEn": "Vodka, spiced clamato and smoked salt.",
+  "category": "cocktails",
+  "abbrev": "SC",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "smoked-caesar:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1450
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "maple-sour",
+  "nameFr": "Whisky sour à l'érable",
+  "nameEn": "Maple Whisky Sour",
+  "descriptionFr": "Whisky, citron, érable et blanc d'œuf.",
+  "descriptionEn": "Whisky, lemon, maple and egg white.",
+  "category": "cocktails",
+  "abbrev": "WS",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "maple-sour:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1500
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "elderflower-gin",
+  "nameFr": "Gin pétillant au sureau",
+  "nameEn": "Elderflower Gin Fizz",
+  "descriptionFr": "Gin, sureau, citron et soda.",
+  "descriptionEn": "Gin, elderflower, lemon and soda.",
+  "category": "cocktails",
+  "abbrev": "GF",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "elderflower-gin:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1500
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "espresso-martini",
+  "nameFr": "Martini espresso",
+  "nameEn": "Espresso Martini",
+  "descriptionFr": "Vodka, liqueur de café et espresso.",
+  "descriptionEn": "Vodka, coffee liqueur and espresso.",
+  "category": "cocktails",
+  "abbrev": "EM",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "espresso-martini:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1550
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "dark-stormy",
+  "nameFr": "Dark and Stormy",
+  "nameEn": "Dark and Stormy",
+  "descriptionFr": "Rhum brun, gingembre et lime.",
+  "descriptionEn": "Dark rum, ginger beer and lime.",
+  "category": "cocktails",
+  "abbrev": "DS",
+  "isAlcohol": true,
+  "active": true,
+  "variants": [
+   {
+    "id": "dark-stormy:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1450
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "zero-gimlet",
+  "nameFr": "Gimlet sans alcool",
+  "nameEn": "Zero-Proof Gimlet",
+  "descriptionFr": "Botanique sans alcool, lime et romarin.",
+  "descriptionEn": "Alcohol-free botanical spirit, lime and rosemary.",
+  "category": "cocktails",
+  "abbrev": "ZG",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "zero-gimlet:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 950
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "pretzel",
+  "nameFr": "Bretzel géant",
+  "nameEn": "Giant Pub Pretzel",
+  "descriptionFr": "Bretzel chaud, moutarde à la bière et fromage.",
+  "descriptionEn": "Warm pretzel with beer mustard and cheese dip.",
+  "category": "appetizers",
+  "abbrev": "PR",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "pretzel:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1350
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "wings",
+  "nameFr": "Ailes de poulet",
+  "nameEn": "Chicken Wings",
+  "descriptionFr": "Une livre d'ailes avec sauce au choix.",
+  "descriptionEn": "One pound of wings with your choice of sauce.",
+  "category": "appetizers",
+  "abbrev": "WG",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "wings:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1850
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "nachos",
+  "nameFr": "Nachos de la maison",
+  "nameEn": "Loaded Pub Nachos",
+  "descriptionFr": "Fromage, haricots, jalapeños, salsa et crème sure.",
+  "descriptionEn": "Cheese, beans, jalapeños, salsa and sour cream.",
+  "category": "appetizers",
+  "abbrev": "NC",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "nachos:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1950
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "calamari",
+  "nameFr": "Calmars croustillants",
+  "nameEn": "Crispy Calamari",
+  "descriptionFr": "Calmars frits, citron et aïoli.",
+  "descriptionEn": "Fried calamari with lemon and aioli.",
+  "category": "appetizers",
+  "abbrev": "CA",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "calamari:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1850
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "spinach-dip",
+  "nameFr": "Trempette épinards-artichauts",
+  "nameEn": "Spinach Artichoke Dip",
+  "descriptionFr": "Trempette chaude avec croustilles de pita.",
+  "descriptionEn": "Hot dip served with pita chips.",
+  "category": "appetizers",
+  "abbrev": "SD",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "spinach-dip:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1650
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "poutine",
+  "nameFr": "Poutine classique",
+  "nameEn": "Classic Poutine",
+  "descriptionFr": "Frites, fromage en grains et sauce brune.",
+  "descriptionEn": "Fries, cheese curds and savoury gravy.",
+  "category": "appetizers",
+  "abbrev": "PO",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "poutine:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1450
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "lantern-burger",
+  "nameFr": "Burger de la Lanterne",
+  "nameEn": "Copper Lantern Burger",
+  "descriptionFr": "Bœuf, cheddar, bacon, oignons et sauce maison.",
+  "descriptionEn": "Beef, cheddar, bacon, onions and house sauce.",
+  "category": "burgers-sandwiches",
+  "abbrev": "LB",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "lantern-burger:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2150
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "mushroom-burger",
+  "nameFr": "Burger aux champignons",
+  "nameEn": "Mushroom Swiss Burger",
+  "descriptionFr": "Bœuf, champignons, suisse et aïoli.",
+  "descriptionEn": "Beef, mushrooms, Swiss cheese and aioli.",
+  "category": "burgers-sandwiches",
+  "abbrev": "MB",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "mushroom-burger:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2200
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "veggie-burger",
+  "nameFr": "Burger végétarien",
+  "nameEn": "Garden Veggie Burger",
+  "descriptionFr": "Galette végétale, avocat et légumes marinés.",
+  "descriptionEn": "Plant-based patty, avocado and pickled vegetables.",
+  "category": "burgers-sandwiches",
+  "abbrev": "VB",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "veggie-burger:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1950
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "club",
+  "nameFr": "Club au poulet",
+  "nameEn": "Grilled Chicken Club",
+  "descriptionFr": "Poulet grillé, bacon, tomate et laitue.",
+  "descriptionEn": "Grilled chicken, bacon, tomato and lettuce.",
+  "category": "burgers-sandwiches",
+  "abbrev": "GC",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "club:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2050
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "reuben",
+  "nameFr": "Reuben montréalais",
+  "nameEn": "Montreal Reuben",
+  "descriptionFr": "Viande fumée, suisse, choucroute et sauce russe.",
+  "descriptionEn": "Smoked meat, Swiss cheese, sauerkraut and Russian dressing.",
+  "category": "burgers-sandwiches",
+  "abbrev": "RE",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "reuben:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2150
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "fish-sandwich",
+  "nameFr": "Sandwich au poisson",
+  "nameEn": "Crispy Fish Sandwich",
+  "descriptionFr": "Aiglefin pané, salade de chou et tartare.",
+  "descriptionEn": "Battered haddock, slaw and tartar sauce.",
+  "category": "burgers-sandwiches",
+  "abbrev": "FS",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "fish-sandwich:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1950
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "fish-chips",
+  "nameFr": "Poisson-frites",
+  "nameEn": "Beer-Battered Fish and Chips",
+  "descriptionFr": "Aiglefin, frites, salade de chou et tartare.",
+  "descriptionEn": "Haddock, fries, slaw and tartar sauce.",
+  "category": "mains",
+  "abbrev": "FC",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "fish-chips:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2250
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "steak-frites",
+  "nameFr": "Steak-frites",
+  "nameEn": "Steak Frites",
+  "descriptionFr": "Bavette grillée, beurre aux herbes et frites.",
+  "descriptionEn": "Grilled flank steak, herb butter and fries.",
+  "category": "mains",
+  "abbrev": "SF",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "steak-frites:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2950
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "shepherd-pie",
+  "nameFr": "Pâté chinois",
+  "nameEn": "Shepherd's Pie",
+  "descriptionFr": "Bœuf braisé, légumes et purée de pommes de terre.",
+  "descriptionEn": "Braised beef, vegetables and mashed potato.",
+  "category": "mains",
+  "abbrev": "SP",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "shepherd-pie:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2150
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "mac-cheese",
+  "nameFr": "Macaroni au fromage",
+  "nameEn": "Three-Cheese Mac",
+  "descriptionFr": "Macaroni crémeux gratiné avec chapelure.",
+  "descriptionEn": "Creamy baked macaroni with three cheeses.",
+  "category": "mains",
+  "abbrev": "MC",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "mac-cheese:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 1850
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "salmon",
+  "nameFr": "Saumon à l'érable",
+  "nameEn": "Maple-Glazed Salmon",
+  "descriptionFr": "Saumon, riz sauvage et légumes de saison.",
+  "descriptionEn": "Salmon, wild rice and seasonal vegetables.",
+  "category": "mains",
+  "abbrev": "SA",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "salmon:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2750
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "chicken-pot-pie",
+  "nameFr": "Pâté au poulet",
+  "nameEn": "Chicken Pot Pie",
+  "descriptionFr": "Poulet, légumes et pâte feuilletée.",
+  "descriptionEn": "Chicken and vegetables under puff pastry.",
+  "category": "mains",
+  "abbrev": "CP",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "chicken-pot-pie:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 2050
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "sticky-pudding",
+  "nameFr": "Pouding au caramel",
+  "nameEn": "Sticky Toffee Pudding",
+  "descriptionFr": "Gâteau aux dattes, caramel et crème glacée.",
+  "descriptionEn": "Date cake, toffee sauce and ice cream.",
+  "category": "desserts",
+  "abbrev": "ST",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "sticky-pudding:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 950
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "cheesecake",
+  "nameFr": "Gâteau au fromage",
+  "nameEn": "Maple Cheesecake",
+  "descriptionFr": "Gâteau au fromage à l'érable et noix de pacane.",
+  "descriptionEn": "Maple cheesecake with toasted pecans.",
+  "category": "desserts",
+  "abbrev": "CK",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "cheesecake:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 950
+   }
+  ],
+  "photoVersion": null
+ },
+ {
+  "id": "brownie",
+  "nameFr": "Brownie au stout",
+  "nameEn": "Stout Brownie",
+  "descriptionFr": "Brownie chaud, sauce chocolat et crème glacée.",
+  "descriptionEn": "Warm brownie with chocolate sauce and ice cream.",
+  "category": "desserts",
+  "abbrev": "BR",
+  "isAlcohol": false,
+  "active": true,
+  "variants": [
+   {
+    "id": "brownie:regular",
+    "labelFr": "Régulier",
+    "labelEn": "Regular",
+    "priceCents": 900
+   }
+  ],
+  "photoVersion": null
+ }
+]

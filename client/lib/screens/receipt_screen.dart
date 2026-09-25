@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../design/tokens.dart';
@@ -7,7 +6,7 @@ import '../i18n.dart';
 
 /// Receipt preview after close. Renders the server's 42-col text form on a
 /// paper-white card — the one intentionally light surface in the app.
-/// TODO: no true French monospace exists in google_fonts — Noto Sans with
+/// TODO: no true French monospace is bundled — Noto Sans with
 /// tabular figures keeps the number column straight; French label widths drift
 /// slightly. Revisit with the thermal printer work (M2).
 class ReceiptScreen extends StatelessWidget {
@@ -41,16 +40,7 @@ class ReceiptScreen extends StatelessWidget {
             borderRadius: T.radiusSmall,
             border: Border.all(color: T.border),
           ),
-          child: SingleChildScrollView(
-            child: Text(
-              text,
-              style: GoogleFonts.notoSans(
-                fontSize: 14,
-                color: T.receiptInk,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
+          child: SingleChildScrollView(child: Text(text, style: T.receipt())),
         ),
       ),
       bottomNavigationBar: SafeArea(

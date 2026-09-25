@@ -180,10 +180,43 @@ class Api {
       final res = await http.get(Uri.parse('$base/health')).timeout(timeout);
       if (res.statusCode != 200) return null;
       final body = jsonDecode(utf8.decode(res.bodyBytes));
-      return body is Map<String, dynamic> ? body : <String, dynamic>{};
+      if (body is! Map<String, dynamic>) return <String, dynamic>{};
+      // only the store this terminal uses names it — a LAN scan also probes
+      // other stores' /health on the way
+      final venue = body['venue'];
+      if (base == baseUrl && venue is String && venue.trim().isNotEmpty) {
+        venueName = venue.trim();
+      }
+      return body;
     } catch (_) {
       return null;
     }
+  }
+
+  /// The store's display name from GET /health ("Copper Lantern — Vieux-Port");
+  /// null until a health probe answered (or on a store too old to send it).
+  static String? venueName;
+
+  /// "Copper Lantern" — the brand half of [venueName].
+  static String get venueBrand => splitVenueName(venueName).$1;
+
+  /// "Vieux-Port" — the location half of [venueName]; null when unknown.
+  static String? get venueLocation => splitVenueName(venueName).$2;
+
+  /// "Brand — Location" → (brand, location). Falls back to the house brand.
+  static (String, String?) splitVenueName(String? name) {
+    const brand = 'Copper Lantern';
+    final n = name?.trim() ?? '';
+    if (n.isEmpty) return (brand, null);
+    final parts = n.split(RegExp(r'\s+[—–-]\s+'));
+    if (parts.length < 2) return (n, null);
+    return (parts.first.trim(), parts.sublist(1).join(' — ').trim());
+  }
+
+  /// Fetch the venue name if no probe has yet (sign-in screen header).
+  static Future<void> loadVenueName() async {
+    if (venueName != null) return;
+    await _getHealth(baseUrl, const Duration(seconds: 2));
   }
 
   /// Quick liveness probe of a base URL's /health — used by startup + discovery

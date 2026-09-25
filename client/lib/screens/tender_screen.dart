@@ -301,8 +301,8 @@ class _TenderScreenState extends State<TenderScreen> {
       child: SizedBox(
         height: 72,
         child: PosPanel(
-          color: selected ? T.accent.withValues(alpha: .14) : T.surface,
-          borderColor: selected ? T.accent : T.border,
+          color: selected ? T.surfaceAlt : T.surface,
+          borderColor: selected ? T.primary : T.border,
           onTap: () => setState(() {
             _method = value;
             _instructions = null;
@@ -310,12 +310,12 @@ class _TenderScreenState extends State<TenderScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 24, color: selected ? T.accent : T.textMuted),
+              Icon(icon, size: 24, color: selected ? T.primary : T.textMuted),
               const SizedBox(height: 4),
               Text(
                 label,
                 style: T.small(
-                  color: selected ? T.accent : T.textPrimary,
+                  color: selected ? T.primary : T.textPrimary,
                   weight: FontWeight.w600,
                 ),
               ),
@@ -360,14 +360,14 @@ class _TenderScreenState extends State<TenderScreen> {
                   style: OutlinedButton.styleFrom(
                     backgroundColor: T.surface,
                     side: BorderSide(
-                      color: amount == _due ? T.accent : T.border,
+                      color: amount == _due ? T.primary : T.border,
                     ),
                   ),
                   child: Text(
                     cad(amount),
                     style: T.price(
                       size: 18,
-                      color: amount == _due ? T.accent : T.textPrimary,
+                      color: amount == _due ? T.primary : T.textPrimary,
                     ),
                   ),
                 ),

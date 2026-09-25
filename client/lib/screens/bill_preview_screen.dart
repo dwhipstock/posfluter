@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
@@ -61,16 +60,7 @@ class _BillPreviewScreenState extends State<BillPreviewScreen> {
             borderRadius: T.radiusSmall,
             border: Border.all(color: T.border),
           ),
-          child: SingleChildScrollView(
-            child: Text(
-              _text,
-              style: GoogleFonts.notoSans(
-                fontSize: 14,
-                color: T.receiptInk,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
+          child: SingleChildScrollView(child: Text(_text, style: T.receipt())),
         ),
       ),
       bottomNavigationBar: SafeArea(

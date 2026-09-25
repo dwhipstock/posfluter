@@ -29,7 +29,11 @@ class ApplicationTest {
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)
         // pairingRequired (M8) tells terminals whether to show the pairing screen
-        assertEquals("""{"status":"ok","pairingRequired":false}""", response.bodyAsText())
+        // venue names the store on the sign-in screen
+        assertEquals(
+            """{"status":"ok","pairingRequired":false,"venue":"Copper Lantern — Vieux-Port"}""",
+            response.bodyAsText(),
+        )
     }
 
     /**

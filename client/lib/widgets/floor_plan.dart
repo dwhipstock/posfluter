@@ -12,47 +12,102 @@ import '../design/widgets.dart';
 const double kCanvasUnits = 1000;
 
 /// Status color shared by service + edit views. Same priority as the old
-/// cards: closed zone (red, a stopping state) > pending QR (amber) > open
-/// check (green) > free (null → neutral border).
+/// cards: closed zone (red, a stopping state) > pending guest order (gold) >
+/// open check (copper) > free (null → neutral border).
 Color? tableStatusColor(TableInfo t, {required bool zoneClosed}) {
   if (zoneClosed) return T.destructive;
-  if (t.pendingCount > 0) return T.attention;
+  if (t.pendingCount > 0) return T.pending;
   if (t.openCheckId != null) return T.accent;
   return null;
 }
 
-/// Scaled, centered canvas. [builder] gets the logical→pixel scale and returns
+/// Text colour for a table filled with [statusColor] (null = not filled).
+Color? _onStatus(Color? statusColor) => switch (statusColor) {
+  T.accent => T.onAccent,
+  T.pending => T.onPending,
+  _ => null,
+};
+
+/// Logical-unit bounding box of a room's tables and props, padded, so the
+/// service view can zoom to what is actually drawn instead of the whole
+/// 1000x1000 canvas. Null when the room is empty.
+Rect? floorContentBounds(Zone zone, {double pad = 30}) {
+  final boxes = [
+    for (final t in zone.tables)
+      Rect.fromLTWH(
+        t.x.toDouble(),
+        t.y.toDouble(),
+        t.width.toDouble(),
+        t.height.toDouble(),
+      ),
+    for (final o in zone.objects)
+      Rect.fromLTWH(
+        o.x.toDouble(),
+        o.y.toDouble(),
+        o.width.toDouble(),
+        o.height.toDouble(),
+      ),
+  ];
+  if (boxes.isEmpty) return null;
+  final r = boxes.reduce((a, b) => a.expandToInclude(b));
+  return Rect.fromLTRB(
+    math.max(0, r.left - pad),
+    math.max(0, r.top - pad),
+    math.min(kCanvasUnits, r.right + pad),
+    math.min(kCanvasUnits, r.bottom + pad),
+  );
+}
+
+/// Scaled, centered canvas. [builder] gets the logical->pixel scale and returns
 /// the Stack children (callers own gestures: service taps, edit drags).
 /// [interactive] enables pinch zoom + pan (service mode); edit mode turns it
 /// off so table drags never fight the viewer for the gesture arena.
+/// [contentBounds] (service mode) fits that logical rect to the viewport
+/// instead of the full square canvas, so no band of empty floor is drawn.
 class FloorPlanViewport extends StatelessWidget {
   final List<Widget> Function(double scale) builder;
   final bool interactive;
+  final Rect? contentBounds;
   const FloorPlanViewport({
     super.key,
     required this.builder,
     this.interactive = true,
+    this.contentBounds,
   });
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scale =
-            math.min(constraints.maxWidth, constraints.maxHeight) /
-            kCanvasUnits;
-        final side = kCanvasUnits * scale;
+        final bounds =
+            contentBounds ??
+            const Rect.fromLTWH(0, 0, kCanvasUnits, kCanvasUnits);
+        final scale = math.min(
+          constraints.maxWidth / bounds.width,
+          constraints.maxHeight / bounds.height,
+        );
         final canvas = Container(
-          width: side,
-          height: side,
+          width: bounds.width * scale,
+          height: bounds.height * scale,
           decoration: BoxDecoration(
-            color: T.surface.withValues(alpha: .45),
-            borderRadius: T.radiusMedium,
+            color: T.surface.withValues(alpha: .6),
+            borderRadius: T.radiusLarge,
             border: Border.all(color: T.border),
           ),
           child: ClipRRect(
-            borderRadius: T.radiusMedium,
-            child: Stack(children: builder(scale)),
+            borderRadius: T.radiusLarge,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: -bounds.left * scale,
+                  top: -bounds.top * scale,
+                  width: kCanvasUnits * scale,
+                  height: kCanvasUnits * scale,
+                  child: Stack(children: builder(scale)),
+                ),
+              ],
+            ),
           ),
         );
         if (!interactive) return Center(child: canvas);
@@ -176,13 +231,18 @@ class FloorObjectShape extends StatelessWidget {
   );
 }
 
-/// The table object itself: shape + status border + upright label. Pure
-/// visual — no gestures, no navigation.
+/// The table object itself: shape + status fill + upright label. Pure
+/// visual — no gestures, no navigation. Free tables are plain; an open check
+/// fills copper and a waiting guest order fills gold, both with a contrasting
+/// label so the room scans at a glance.
 class TableShape extends StatelessWidget {
   final TableInfo table;
   final double scale;
   final Color? statusColor;
   final String? subtitle;
+
+  /// Third line when the table is tall enough (time open).
+  final String? detail;
   final bool selected;
   const TableShape({
     super.key,
@@ -190,6 +250,7 @@ class TableShape extends StatelessWidget {
     required this.scale,
     this.statusColor,
     this.subtitle,
+    this.detail,
     this.selected = false,
   });
 
@@ -203,8 +264,19 @@ class TableShape extends StatelessWidget {
   Widget build(BuildContext context) {
     final w = table.width * scale;
     final h = table.height * scale;
-    final labelSize = (math.min(w, h) * .26).clamp(10.0, 20.0);
-    final border = statusColor ?? T.border;
+    final labelSize = (math.min(w, h) * .26).clamp(11.0, 22.0);
+    final subSize = math.max(labelSize * .64, 10.0);
+    final onFill = _onStatus(statusColor);
+    final filled = onFill != null;
+    final fill = filled
+        ? statusColor!
+        : statusColor?.withValues(alpha: .12) ??
+              (table.shape == 'BAR' ? T.surfaceAlt : T.surface);
+    final ink = onFill ?? statusColor ?? T.textPrimary;
+    final inkMuted = onFill ?? T.textMuted;
+    final border = filled
+        ? Color.lerp(statusColor, T.textPrimary, .25)!
+        : statusColor ?? T.border;
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -213,11 +285,7 @@ class TableShape extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: T.text(
-            size: labelSize,
-            weight: FontWeight.w700,
-            color: statusColor ?? T.textPrimary,
-          ),
+          style: T.text(size: labelSize, weight: FontWeight.w700, color: ink),
         ),
         if (subtitle != null && h > 36)
           Text(
@@ -225,65 +293,87 @@ class TableShape extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: T.text(
-              size: math.max(labelSize * .62, 9),
-              color: T.textMuted,
-            ),
+            style: T
+                .price(
+                  size: subSize,
+                  weight: filled ? FontWeight.w600 : FontWeight.w400,
+                  color: inkMuted,
+                )
+                .copyWith(height: 1.15),
+          ),
+        if (detail != null && h > 58)
+          Text(
+            detail!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: T
+                .text(size: math.max(subSize * .9, 9), color: inkMuted)
+                .copyWith(height: 1.15),
           ),
       ],
     );
     final pending = table.pendingCount > 0;
     final box = Container(
       decoration: BoxDecoration(
-        color: table.shape == 'BAR'
-            ? T.surfaceAlt
-            : (statusColor?.withValues(alpha: .13) ?? T.surface),
+        color: fill,
         borderRadius: _radius,
         border: Border.all(
           color: selected ? T.textPrimary : border,
           width: selected || statusColor != null ? 2 : 1,
         ),
+        boxShadow: filled ? T.raised : null,
       ),
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              // counter-rotate so the label stays upright on rotated tables
-              child: table.rotation == 0
-                  ? content
-                  : Transform.rotate(
-                      angle: -table.rotation * math.pi / 180,
-                      child: content,
-                    ),
+              // scale down rather than clip when a small table gets 3 lines
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                // counter-rotate so the label stays upright on rotated tables
+                child: table.rotation == 0
+                    ? content
+                    : Transform.rotate(
+                        angle: -table.rotation * math.pi / 180,
+                        child: content,
+                      ),
+              ),
             ),
           ),
+          // small tables: the badge sits on the corner, clear of the label
           if (pending)
             Positioned(
-              right: 3,
-              top: 3,
+              right: math.min(w, h) < 70 ? -7 : 3,
+              top: math.min(w, h) < 70 ? -7 : 3,
               child: PendingBadge(table.pendingCount),
             ),
           // VIP: the name_override already replaces the label; the star makes
           // "why is this table called Alex Morgan" legible at a glance
           if (table.isVip)
-            const Positioned(
+            Positioned(
               left: 5,
               top: 5,
-              child: Icon(LucideIcons.star, size: 12, color: T.attention),
+              child: Icon(
+                LucideIcons.star,
+                size: 12,
+                color: onFill ?? T.attention,
+              ),
             ),
           // sub-table: same physical spot as its parent, independent bill
           if (table.parentTableId != null)
-            const Positioned(
+            Positioned(
               left: 5,
               bottom: 5,
-              child: Icon(LucideIcons.link, size: 11, color: T.textMuted),
+              child: Icon(LucideIcons.link, size: 11, color: inkMuted),
             ),
         ],
       ),
     );
     // orders waiting to be verified need to catch the eye across the room —
-    // a slow amber breathing glow around the whole table, not just the badge
+    // a slow gold breathing glow around the whole table, not just the badge
     return pending ? PulsingGlow(radius: _radius, child: box) : box;
   }
 }

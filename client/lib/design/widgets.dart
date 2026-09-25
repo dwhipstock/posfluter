@@ -15,6 +15,9 @@ class PosPanel extends StatelessWidget {
   /// Colored strip on the left edge (occupied tables, status accents).
   final Color? edgeStrip;
 
+  /// Soft shadow for tiles meant to be tapped (menu items, staff cards).
+  final bool raised;
+
   const PosPanel({
     super.key,
     required this.child,
@@ -24,6 +27,7 @@ class PosPanel extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.edgeStrip,
+    this.raised = false,
   });
 
   @override
@@ -39,24 +43,30 @@ class PosPanel extends StatelessWidget {
         ],
       );
     }
-    final box = ClipRRect(
-      borderRadius: T.radiusMedium,
-      child: Container(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: T.radiusMedium,
-          border: Border.all(color: borderColor),
-        ),
-        child: onTap == null && onLongPress == null
-            ? content
-            : Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: onTap,
-                  onLongPress: onLongPress,
-                  child: content,
+    final box = Container(
+      decoration: BoxDecoration(
+        borderRadius: T.radiusMedium,
+        boxShadow: raised ? T.raised : null,
+      ),
+      child: ClipRRect(
+        borderRadius: T.radiusMedium,
+        child: Container(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: T.radiusMedium,
+            border: Border.all(color: borderColor),
+          ),
+          child: onTap == null && onLongPress == null
+              ? content
+              : Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onTap,
+                    onLongPress: onLongPress,
+                    child: content,
+                  ),
                 ),
-              ),
+        ),
       ),
     );
     return box;
@@ -84,18 +94,18 @@ class Pill extends StatelessWidget {
   );
 }
 
-/// Amber dot for QR-pending markers.
+/// Gold dot for QR-pending markers.
 class AttentionDot extends StatelessWidget {
   const AttentionDot({super.key});
   @override
   Widget build(BuildContext context) => Container(
     width: 10,
     height: 10,
-    decoration: const BoxDecoration(color: T.attention, shape: BoxShape.circle),
+    decoration: const BoxDecoration(color: T.pending, shape: BoxShape.circle),
   );
 }
 
-/// Pulsing amber count badge for orders waiting to be verified — a calm
+/// Pulsing gold count badge for orders waiting to be verified — a calm
 /// ~1.6s breathe (glow + slight scale), not a strobe. Shared by the
 /// floor-plan table corner marker and the room-switcher chip.
 class PendingBadge extends StatefulWidget {
@@ -132,12 +142,12 @@ class _PendingBadgeState extends State<PendingBadge>
             padding: const EdgeInsets.symmetric(horizontal: 5),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: T.attention,
+              color: T.pending,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: T.background, width: 2),
+              border: Border.all(color: T.onPending, width: 1.5),
               boxShadow: [
                 BoxShadow(
-                  color: T.attention.withValues(alpha: 0.25 + t * 0.35),
+                  color: T.pending.withValues(alpha: 0.35 + t * 0.4),
                   blurRadius: 6 + t * 8,
                   spreadRadius: 1 + t * 2,
                 ),
@@ -146,8 +156,8 @@ class _PendingBadgeState extends State<PendingBadge>
             child: Text(
               '${widget.count}',
               style: T
-                  .small(color: T.background, weight: FontWeight.w700)
-                  .copyWith(fontSize: 10, height: 1),
+                  .small(color: T.onPending, weight: FontWeight.w700)
+                  .copyWith(fontSize: 11, height: 1),
             ),
           ),
         );
@@ -156,7 +166,7 @@ class _PendingBadgeState extends State<PendingBadge>
   }
 }
 
-/// Gentle amber breathing glow around a pending table or room chip (~1.6s,
+/// Gentle gold breathing glow around a pending table or room chip (~1.6s,
 /// calm heartbeat not a strobe) — purely a decorative shadow ring, doesn't
 /// affect layout. Same pulse as [PendingBadge], just wrapping a whole shape.
 class PulsingGlow extends StatefulWidget {
@@ -192,7 +202,7 @@ class _PulsingGlowState extends State<PulsingGlow>
             borderRadius: widget.radius,
             boxShadow: [
               BoxShadow(
-                color: T.attention.withValues(alpha: 0.18 + t * 0.28),
+                color: T.pending.withValues(alpha: 0.35 + t * 0.4),
                 blurRadius: 8 + t * 10,
                 spreadRadius: 1 + t * 2,
               ),
@@ -213,27 +223,17 @@ class AbbrevSquare extends StatelessWidget {
   const AbbrevSquare(this.abbrev, {super.key, this.size = 48});
 
   // stable per-abbrev hue so tiles are tellable-apart at a glance
-  Color get _color {
-    const palette = [
-      Color(0xFF3B82F6),
-      Color(0xFF8B5CF6),
-      Color(0xFFEC4899),
-      Color(0xFF14B8A6),
-      Color(0xFFF97316),
-      Color(0xFF84CC16),
-      Color(0xFF06B6D4),
-      Color(0xFFA855F7),
-    ];
-    return palette[abbrev.hashCode.abs() % palette.length];
-  }
+  Color get _color =>
+      T.tilePalette[abbrev.hashCode.abs() % T.tilePalette.length];
 
   @override
   Widget build(BuildContext context) => Container(
     width: size,
     height: size,
     decoration: BoxDecoration(
-      color: _color.withValues(alpha: .22),
+      color: _color.withValues(alpha: .14),
       borderRadius: T.radiusSmall,
+      border: Border.all(color: _color.withValues(alpha: .35)),
     ),
     alignment: Alignment.center,
     child: Text(

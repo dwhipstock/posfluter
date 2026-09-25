@@ -1,0 +1,84 @@
+{
+ "id": 1,
+ "tableId": "t5",
+ "status": "OPEN",
+ "openedAt": "2026-09-25T09:18:33.564-04:00",
+ "corkageBottles": 0,
+ "lines": [
+  {
+   "id": 1,
+   "itemId": "lantern-lager",
+   "variantId": "lantern-lager:pint",
+   "nameFr": "Lager de la Lanterne",
+   "nameEn": "Lantern House Lager",
+   "variantLabelFr": "Pinte 20 oz",
+   "variantLabelEn": "20 oz pint",
+   "qty": 2,
+   "unitPriceCents": 825,
+   "lineTotalCents": 1650,
+   "note": null
+  },
+  {
+   "id": 2,
+   "itemId": "wings",
+   "variantId": "wings:regular",
+   "nameFr": "Ailes de poulet",
+   "nameEn": "Chicken Wings",
+   "variantLabelFr": null,
+   "variantLabelEn": null,
+   "qty": 1,
+   "unitPriceCents": 1850,
+   "lineTotalCents": 1850,
+   "note": null
+  },
+  {
+   "id": 3,
+   "itemId": "lantern-burger",
+   "variantId": "lantern-burger:regular",
+   "nameFr": "Burger de la Lanterne",
+   "nameEn": "Copper Lantern Burger",
+   "variantLabelFr": null,
+   "variantLabelEn": null,
+   "qty": 1,
+   "unitPriceCents": 2150,
+   "lineTotalCents": 2150,
+   "note": null
+  },
+  {
+   "id": 4,
+   "itemId": "poutine",
+   "variantId": "poutine:regular",
+   "nameFr": "Poutine classique",
+   "nameEn": "Classic Poutine",
+   "variantLabelFr": null,
+   "variantLabelEn": null,
+   "qty": 1,
+   "unitPriceCents": 1450,
+   "lineTotalCents": 1450,
+   "note": null
+  }
+ ],
+ "pendingLines": [
+  {
+   "id": 11,
+   "itemId": "pretzel",
+   "variantId": "pretzel:regular",
+   "nameFr": "Bretzel géant",
+   "nameEn": "Giant Pub Pretzel",
+   "variantLabelFr": null,
+   "variantLabelEn": null,
+   "qty": 1,
+   "unitPriceCents": 1350,
+   "lineTotalCents": 1350,
+   "note": null
+  }
+ ],
+ "itemsSubtotalCents": 7100,
+ "fees": [],
+ "grandTotalCents": 7100,
+ "taxIncludedCents": 0,
+ "paidCents": 0,
+ "outstandingCents": 7100,
+ "tenders": [],
+ "split": null
+}

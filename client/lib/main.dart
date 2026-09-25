@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -24,10 +25,27 @@ class _EmbeddedStoreStartupException implements Exception {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // bundled fonts ship under the SIL Open Font License; list it in-app
+  LicenseRegistry.addLicense(() async* {
+    for (final (family, file) in const [
+      ('Inter', 'OFL-Inter.txt'),
+      ('Noto Sans', 'OFL-NotoSans.txt'),
+    ]) {
+      yield LicenseEntryWithLineBreaks([
+        family,
+      ], await rootBundle.loadString('assets/fonts/$file'));
+    }
+  });
   // Kiosk mode: hide status + navigation bars everywhere; a swipe from the
   // edge peeks them and immersiveSticky re-hides them on its own — no
   // per-screen or on-resume re-assertion needed.
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  // The counter tablet is used in landscape (either way up); the layouts are
+  // designed for it. The manifest locks the activity the same way.
+  await SystemChrome.setPreferredOrientations(const [
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
   // A POS terminal must never sleep mid-shift. Re-asserted on every resume by
   // [_WakelockObserver] — Android can drop the lock while backgrounded.
   await WakelockPlus.enable();

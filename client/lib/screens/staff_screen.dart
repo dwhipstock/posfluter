@@ -254,10 +254,7 @@ class _StaffDialogState extends State<_StaffDialog> {
           onPressed: _busy ? null : () => Navigator.pop(context, false),
           child: Text(l.cancel),
         ),
-        FilledButton(
-          onPressed: _busy ? null : _save,
-          child: Text(l.save),
-        ),
+        FilledButton(onPressed: _busy ? null : _save, child: Text(l.save)),
       ],
     );
   }

@@ -414,7 +414,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: T.destructive,
-              foregroundColor: Colors.white,
+              foregroundColor: T.onDestructive,
             ),
             onPressed: () => Navigator.pop(context, true),
             child: Text(l.deleteItem),
@@ -453,7 +453,6 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
     final l = L.of(context);
     final isNew = widget.item == null;
     return Dialog(
-      backgroundColor: T.surfaceAlt,
       shape: RoundedRectangleBorder(
         borderRadius: T.radiusLarge,
         side: const BorderSide(color: T.border),
@@ -746,7 +745,6 @@ class _CategoriesEditorDialogState extends State<_CategoriesEditorDialog> {
   Widget build(BuildContext context) {
     final l = L.of(context);
     return Dialog(
-      backgroundColor: T.surfaceAlt,
       shape: RoundedRectangleBorder(
         borderRadius: T.radiusLarge,
         side: const BorderSide(color: T.border),

@@ -366,7 +366,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ),
     SwitchListTile(
       contentPadding: EdgeInsets.zero,
-      activeThumbColor: T.accent,
+      activeThumbColor: T.primary,
       title: Text(l.wifiHiddenLabel, style: T.text(size: 16)),
       value: _wifiHidden,
       onChanged: (v) => setState(() => _wifiHidden = v),
@@ -599,7 +599,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SectionLabel(l.sectionAlerts),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      activeThumbColor: T.accent,
+                      activeThumbColor: T.primary,
                       title: Text(
                         l.alertsEnabledLabel,
                         style: T.text(size: 16),
