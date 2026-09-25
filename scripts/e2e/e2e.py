@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Acceptance E2E against a LIVE cloud + two venues (stdlib only).
 
-This is the 21-gate suite that defines "healthy after an intervention." It was
+This is the gate suite that defines "healthy after an intervention." It was
 un-versioned and only lived on the author's laptop; committing it here (S5c /
 rec 6) kills that bus-factor gap.
 
@@ -22,7 +22,9 @@ Gates:
   B. terminal paired to venue A CANNOT reach venue B (routing + token)
   C. a sale on a paired terminal computes money and lands in reporting under
      the right venue; combined/group query sees both venues
-  D. staff assigned to two venues can log in at both
+  D. staff and menu are owned by each store: created on the store (the portal
+     cannot edit them), they sign in / sell there and sync UP to the portal's
+     read-only per-store view
   F. a fresh cloud venue must not inherit another venue's payment settings
 """
 import json, os, sys, time, urllib.request, urllib.error
@@ -110,37 +112,11 @@ def main():
         st, h = req(base, "GET", "/health")
         check(f"A4 {tag} https health + pairingRequired", st == 200 and h.get("pairingRequired") is True)
 
-    # -- staff on BOTH venues + menu on each --
-    st, staff = p.req("GET", f"/v1/staff?venue={VA}")
-    have = {s["id"]: s for s in staff["staff"]} if st == 200 else {}
-    if "demo-manager" not in have:
-        st, s = p.req("POST", f"/v1/staff?venue={VA}",
-                      {"name": "Demo Manager", "role": "MANAGER", "pin": "4711"})
-        assert st == 201, f"staff create: {st} {s}"
-        sid = s["id"]
-    else:
-        sid = "demo-manager"
-    st, s = p.req("PUT", f"/v1/staff/{sid}/venues?venue={VA}",
-                  {"venues": [{"venueId": VA, "role": "MANAGER"},
-                              {"venueId": VB, "role": "MANAGER"}]})
-    check("D1 staff assigned to both venues", st == 200 and set(s["venues"]) == {VA, VB})
-
-    items = {}
-    for venue, fr, en in [(VA, "Bière Lantern House Lager", "Lantern House Lager"), (VB, "Bière Maple Oat Stout", "Maple Oat Stout")]:
-        st, menu = p.req("GET", f"/v1/menu?venue={venue}")
-        existing = [i for i in menu.get("items", []) if i["nameEn"] == en]
-        if existing:
-            items[venue] = existing[0]
-            continue
-        st, cat = p.req("POST", f"/v1/menu/categories?venue={venue}",
-                        {"nameFr": "boire", "nameEn": "Drinks"})
-        assert st == 201, f"cat {venue}: {st} {cat}"
-        st, item = p.req("POST", f"/v1/menu/items?venue={venue}", {
-            "nameFr": fr, "nameEn": en, "categoryId": cat["id"], "abbrev": en[:3].upper(),
-            "isAlcohol": True,
-            "variants": [{"labelFr": "bouteille", "labelEn": "Bottle", "priceCents": 12000}]})
-        assert st == 201, f"item {venue}: {st} {item}"
-        items[venue] = item
+    # -- the portal is read-only for staff and menu (one-way sync) --
+    st, _ = p.req("POST", f"/v1/staff?venue={VA}", {"name": "X", "role": "SERVER", "pin": "4711"})
+    check("D1 portal cannot create staff", st in (404, 405), str(st))
+    st, _ = p.req("POST", f"/v1/menu/items?venue={VA}", {"nameFr": "x", "nameEn": "x"})
+    check("D2 portal cannot edit the menu", st in (404, 405), str(st))
 
     # -- pairing codes (one per venue) --
     def mint(venue):
@@ -148,11 +124,8 @@ def main():
         assert st == 201, f"pairing code {venue}: {st} {pc}"
         return pc["code"]
 
-    code1 = mint(VA)
-    print("… waiting 20s for staff/menu to sync down to the stores")
-    time.sleep(20)
-
     # -- pair to venue A --
+    code1 = mint(VA)
     st, pr = req(D1, "POST", "/pair", {"code": code1, "deviceName": "E2E-A"})
     check(f"A5 pair to {VA}", st == 200 and "deviceToken" in pr, str(st))
     dev1 = pr.get("deviceToken", "")
@@ -167,12 +140,42 @@ def main():
     st, _ = req(D1, "GET", "/staff")
     check(f"B3 {VA} /staff without device rejected", st == 401)
 
-    # -- staff tiles + login on venue A --
-    st, tiles = req(D1, "GET", "/staff", None, store_headers(dev1))
-    check(f"D2 cloud staff distributed to {VA}", st == 200 and any(x["id"] == sid for x in tiles), str(tiles)[:120])
-    st, lg = req(D1, "POST", "/login", {"pin": "4711"}, store_headers(dev1))
-    check(f"D3 PIN login on {VA}", st == 200 and "token" in lg)
+    # -- staff + menu are created ON the store (tablet-owned) --
+    def store_manager(base, dev, tag):
+        """Sign in as the e2e manager (PIN 4711), creating it on the store first
+        with the empty store's bootstrap manager (PIN 1234) if it is missing."""
+        st, lg = req(base, "POST", "/login", {"pin": "4711"}, store_headers(dev))
+        if st != 200:
+            st, boot = req(base, "POST", "/login", {"pin": "1234"}, store_headers(dev))
+            assert st == 200, f"bootstrap login {tag}: {st} {boot}"
+            st, s = req(base, "POST", "/staff/manage",
+                        {"name": "E2E Manager", "role": "MANAGER", "pin": "4711"},
+                        store_headers(dev, boot["token"]))
+            assert st == 201, f"staff create {tag}: {st} {s}"
+            st, lg = req(base, "POST", "/login", {"pin": "4711"}, store_headers(dev))
+        return st, lg
+
+    def store_item(base, dev, session, fr, en, tag):
+        st, menu = req(base, "GET", "/items", None, store_headers(dev, session))
+        assert st == 200, f"items {tag}: {st} {menu}"
+        existing = [i for i in menu if i["nameEn"] == en]
+        if existing:
+            return existing[0]
+        st, cat = req(base, "POST", "/categories", {"nameFr": "boire", "nameEn": "Drinks"},
+                      store_headers(dev, session))
+        assert st == 201, f"cat {tag}: {st} {cat}"
+        st, item = req(base, "POST", "/items", {
+            "nameFr": fr, "nameEn": en, "categoryId": cat["id"], "abbrev": en[:3].upper(),
+            "isAlcohol": True,
+            "variants": [{"labelFr": "bouteille", "labelEn": "Bottle", "priceCents": 12000}]},
+            store_headers(dev, session))
+        assert st == 201, f"item {tag}: {st} {item}"
+        return item
+
+    st, lg = store_manager(D1, dev1, VA)
+    check(f"D3 PIN login on {VA} (staff created on the store)", st == 200 and "token" in lg)
     sess1 = lg.get("token", "")
+    items = {VA: store_item(D1, dev1, sess1, "Bière Lantern House Lager", "Lantern House Lager", VA)}
 
     # -- review F1: a fresh cloud venue must NOT inherit another venue's payment data --
     st, settings = req(D1, "GET", "/settings", None, store_headers(dev1, sess1))
@@ -188,14 +191,15 @@ def main():
     check(f"C1 sale on {VA} (2×$120 cash)", tender.get("check", {}).get("status") == "CLOSED"
           or tender.get("status") in ("CLOSED", "ok") or True, f"check {check_id} tender {str(tender)[:150]}")
 
-    # -- pair + staff login + sale on venue B (same staff member) --
+    # -- pair + its own staff + menu + sale on venue B (staff are per store) --
     code2 = mint(VB)
     st, prb = req(D2, "POST", "/pair", {"code": code2, "deviceName": "E2E-B"})
     check(f"A7 pair to {VB}", st == 200 and "deviceToken" in prb)
     dev2 = prb.get("deviceToken", "")
-    st, lg2 = req(D2, "POST", "/login", {"pin": "4711"}, store_headers(dev2))
-    check(f"D4 SAME staff logs in at {VB}", st == 200 and "token" in lg2)
+    st, lg2 = store_manager(D2, dev2, VB)
+    check(f"D4 PIN login on {VB} (its own store staff)", st == 200 and "token" in lg2)
     sess2 = lg2.get("token", "")
+    items[VB] = store_item(D2, dev2, sess2, "Bière Maple Oat Stout", "Maple Oat Stout", VB)
     it2 = items[VB]
     check_id2, tender2 = sale(D2, dev2, sess2, it2["id"], it2["variants"][0]["id"], 12000,
                               "Zone de démonstration deux", "Demo Zone 2")
@@ -213,6 +217,15 @@ def main():
     st, sm = p.req("GET", f"/v1/reports/summary?venue={VA}")
     check(f"C5 {VA} summary gross ≥ $240",
           st == 200 and sm.get("grossCents", 0) >= 24000, str(sm.get("grossCents")))
+
+    # -- store-owned staff + menu synced UP to the portal, per store --
+    for venue, en in [(VA, "Lantern House Lager"), (VB, "Maple Oat Stout")]:
+        st, staff = p.req("GET", f"/v1/staff?venue={venue}")
+        names = [x["name"] for x in staff.get("staff", [])] if st == 200 else []
+        check(f"D5 {venue} store staff visible in the portal", "E2E Manager" in names, str(names)[:120])
+        st, menu = p.req("GET", f"/v1/menu?venue={venue}")
+        en_names = [i["nameEn"] for i in menu.get("items", [])] if st == 200 else []
+        check(f"D6 {venue} store menu visible in the portal", en in en_names, str(en_names)[:120])
 
     print(f"\n===== {len(PASS)} passed, {len(FAIL)} failed =====")
     if FAIL:
