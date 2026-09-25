@@ -58,7 +58,7 @@ class PortalScopeTest {
             checkId, gross, storeTax(gross), closedAt = closedAt, tableLabel = "U-1", zoneId = "upper",
             lines = buildJsonArray {
                 add(buildJsonObject {
-                    put("lineId", checkId); put("itemId", "lantern-lager"); put("categoryId", "draft-beer")
+                    put("lineId", checkId); put("itemId", "lantern-lager"); put("categoryId", "beer-cider")
                     put("nameFr", "Lager de la Lanterne"); put("nameEn", "Lantern House Lager")
                     put("qty", 1); put("unitPriceCents", gross); put("lineTotalCents", gross)
                 })

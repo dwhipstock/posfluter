@@ -8,8 +8,11 @@ Two fictional Montréal stores of one owner (tenant `copperlantern`), both in
 | Copper Lantern — Vieux-Port | `vieux-port` | the Android tablet | `STORE_API_KEY` |
 | Copper Lantern — Plateau | `plateau` | this Mac (`DesktopMain.kt`, `POS_VENUE=plateau`) | `STORE_API_KEY_PLATEAU` |
 
-Plateau has the shared pub menu plus a Sushi Bar zone (tables S-1…S-11), a
-"Sushi & Sake" category (maki, nigiri, sake) and Plateau Specials.
+Both stores share the pub menu in seven categories (Beer & Cider, Wine,
+Cocktails, Starters, Burgers & Sandwiches, Mains & Salads, Desserts). Plateau
+has the shared pub menu plus a Sushi Bar zone (tables S-1…S-11), a
+"Sushi & Sake" category (maki, nigiri, sake) and Plateau Specials, listed
+after the seven.
 
 ## Bring-up (one command)
 

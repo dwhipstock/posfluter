@@ -49,7 +49,7 @@ For the complete local stack, see `docs/demo-runbook.md`.
 
 ## Sample catalog
 
-The seed creates a large bilingual pub menu: draft, bottled, canned, local craft and imported beer; lager, IPA, stout, cider and alcohol-free options; red, white, rosé, sparkling and dessert wine by glass or bottle; cocktails and mixed drinks; and a broad food menu of appetizers, burgers, sandwiches, mains, salads, vegetarian dishes, desserts and late-night snacks.
+The seed creates a large bilingual pub menu: draft, bottled, canned, local craft and imported beer; lager, IPA, stout, cider and alcohol-free options; red, white, rosé, sparkling and dessert wine by glass or bottle; cocktails and mixed drinks; and a broad food menu of appetizers, burgers, sandwiches, mains, salads, vegetarian dishes, desserts and late-night snacks. They are grouped into seven categories: Beer & Cider, Wine, Cocktails, Starters, Burgers & Sandwiches, Mains & Salads and Desserts (stores seeded with the older fifteen-category layout are converted in place by migration 034).
 
 ## Data safety
 
