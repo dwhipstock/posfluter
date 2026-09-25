@@ -37,6 +37,10 @@ Open the portal at `http://<Mac LAN IP>:3000`. The header's store picker offers
 reports) or one store; the choice is kept in the URL (`?store=plateau`). Menu
 and staff are read-only in the portal — each store edits them on its own POS.
 
+Portal sign-in enrolls MFA (TOTP) on first login by default. For a local demo
+only, set `TOTP_REQUIRED=false` in `.env.local` (passed to the API by
+`docker-compose.local.yml`) to skip it; never set it on a hosted deploy.
+
 Plateau's POS: `cd client && flutter run -d macos` (it talks to `localhost:8080`),
 or the staff app at `http://<Mac LAN IP>:8080/staff-app`. PINs: manager `1234`,
 server `9999`.
