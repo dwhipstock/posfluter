@@ -19,7 +19,7 @@ class EscPosRasterTest {
 
     private val frenchReceipt = listOf(
         PrintLine.LogoPlaceholder("The Copper Lantern Pub"),
-        PrintLine.Text("téléphone. 096-951-9822", Align.CENTER),
+        PrintLine.Text("téléphone. 514-555-0142", Align.CENTER),
         PrintLine.Divider,
         PrintLine.KeyValue("soupe épicée aux crevettes ×1", "180"),
         PrintLine.KeyValue("Total", "$704", emphasized = true),

@@ -12,7 +12,7 @@ class VenueClockTest {
     fun `venue day is independent of device timezone`() {
         val previous = TimeZone.getDefault()
         try {
-            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Bangkok"))
+            TimeZone.setDefault(TimeZone.getTimeZone("Pacific/Auckland"))
             val instant = Instant.parse("2026-09-23T23:30:00Z")
             assertEquals(ZoneId.of("America/New_York"), VenueClock.zone)
             assertEquals("2026-09-23T19:30", VenueClock.now(Clock.fixed(instant, ZoneId.of("UTC"))).toString())

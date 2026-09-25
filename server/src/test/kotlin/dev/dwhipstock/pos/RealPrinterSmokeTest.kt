@@ -27,7 +27,7 @@ class RealPrinterSmokeTest {
         val port = System.getenv("PRINTER_PORT")?.toIntOrNull() ?: 9100
         val lines = listOf(
             PrintLine.LogoPlaceholder("The Copper Lantern Pub"),
-            PrintLine.Text("Lasrsphop 31/3", Align.CENTER),
+            PrintLine.Text("1234 rue Saint-Denis, Montréal", Align.CENTER),
             PrintLine.Blank,
             PrintLine.Header("Test de dactylographie français"),
             PrintLine.Text("French raster · POS ↔ printer", Align.CENTER),

@@ -85,3 +85,6 @@ bills/
 
 # Uploaded item photos — never in git (manager uploads through the app)
 server/data/
+
+# Internal working notes — private, never in git (kept out of any published/demo repo)
+_handoff/

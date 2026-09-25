@@ -827,7 +827,7 @@ class L {
   String get moveRoomLeft => _t('se déplacer vers la gauche', 'Move left');
   String get moveRoomRight => _t('aller à droite', 'Move right');
   String get roomNameFrField =>
-      _t('Nom de la zone (thaïlandais)', 'Room name (French)');
+      _t('Nom de la zone (français)', 'Room name (French)');
   String get roomNameEnField =>
       _t('Nom de la zone (anglais)', 'Room name (English)');
 
