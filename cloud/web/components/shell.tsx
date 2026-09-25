@@ -93,19 +93,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [me.error, router]);
 
   return (
-    <div className="min-h-dvh bg-paper">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-navy text-white md:flex">
-        <div className="flex h-16 items-center bg-navy-deep px-5">
-          <BrandMark />
-        </div>
-        <nav className="flex-1 space-y-1 px-3 py-4">
-          <Suspense fallback={null}>
-            <NavLinks variant="side" />
-          </Suspense>
-        </nav>
-        <div className="space-y-2 border-t border-white/10 px-5 py-4 text-xs text-navy-muted">
-          <LangToggle tone="dark" />
-          <div className="truncate">{groupName || " "}</div>
+    <div className="min-h-dvh bg-paper md:flex">
+      {/* The navy column stretches to the full page height; its content is a
+          viewport-tall sticky panel whose nav scrolls on its own if needed. */}
+      <aside className="z-40 hidden w-60 shrink-0 bg-navy text-white md:block">
+        <div className="sticky top-0 flex h-dvh flex-col">
+          <div className="flex h-16 items-center bg-navy-deep px-5">
+            <BrandMark />
+          </div>
+          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
+            <Suspense fallback={null}>
+              <NavLinks variant="side" />
+            </Suspense>
+          </nav>
+          <div className="shrink-0 space-y-2 border-t border-white/10 px-5 py-4 text-xs text-navy-muted">
+            <LangToggle tone="dark" />
+            <div className="truncate">{groupName || " "}</div>
+          </div>
         </div>
       </aside>
 
@@ -119,7 +123,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="pb-24 md:pb-12 md:pl-60">
+      <main className="min-w-0 flex-1 pb-24 md:pb-12">
         {/* desktop header: the store picker sits above every page */}
         <div className="sticky top-0 z-30 hidden h-16 items-center justify-between gap-3 border-b border-neutral-200 bg-surface/95 px-8 backdrop-blur md:flex">
           <span className="truncate text-sm font-semibold text-navy">{groupName}</span>
