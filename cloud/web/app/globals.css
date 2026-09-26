@@ -11,12 +11,12 @@
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    /* warm cream page, like the tablet; Inter is bundled (app/fonts), never fetched */
+    /* the brand's page colour and face (both from the brand pack; fonts are bundled in app/fonts, never fetched) */
     @apply bg-paper font-sans text-ink antialiased;
     font-feature-settings: "cv11", "ss01";
   }
   ::selection {
-    background: #f3e3d3;
+    background: var(--c-selection);
   }
   /* French labels run longer than English. overflow-wrap is a last-resort
      fallback so a long unbroken word wraps instead of overflowing its card at

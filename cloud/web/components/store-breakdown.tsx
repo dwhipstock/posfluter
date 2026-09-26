@@ -5,6 +5,7 @@ import { RetailBadge } from "@/components/money-scope";
 import { reportKey, useApi, useRange } from "@/lib/hooks";
 import { useT } from "@/lib/i18n/context";
 import { useStores } from "@/lib/store";
+import { useChartTheme } from "@/lib/brand/context";
 import type { ByVenueReport, VenueSummaryRow } from "@/lib/types";
 import { BarChart } from "@/components/charts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -220,6 +221,7 @@ export function StoreTag({ venueId }: { venueId: string }) {
 /** Chart series: one per in-scope store in "All stores", else a single named series. */
 export function useStoreSeries(singleLabel: string, singleKey = "value") {
   const { combined, venues, nameOf, colorOf, storeId } = useStores();
+  const first = useChartTheme().series[0];
   if (combined) return venues.map((v) => ({ key: v.id, label: nameOf(v.id), color: colorOf(v.id) }));
-  return [{ key: singleKey, label: singleLabel, color: storeId ? colorOf(storeId) : "#1F5F99" }];
+  return [{ key: singleKey, label: singleLabel, color: storeId ? colorOf(storeId) : first }];
 }

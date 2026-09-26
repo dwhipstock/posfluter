@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
 import { useStores } from "@/lib/store";
-import { SERIES } from "@/lib/theme";
+import { useChartTheme } from "@/lib/brand/context";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { EmptyState, ErrorState, PageFallback } from "@/components/states";
 import { BarChart, Donut } from "@/components/charts";
@@ -32,6 +32,7 @@ export default function Page() {
 type VenuePay = PaymentsReport["byVenue"][number];
 
 function PaymentsPage() {
+  const SERIES = useChartTheme().series;
   const t = useT();
   const fmt = useFmt();
   const range = useRange();

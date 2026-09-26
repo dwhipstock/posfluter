@@ -7,16 +7,25 @@ import type {
   TDocumentDefinitions,
   CustomTableLayout,
 } from "pdfmake/interfaces";
-import type { Cell, ExportDoc, Kpi, Section } from "./doc";
+import type { Cell, ExportColors, ExportDoc, Kpi, Section } from "./doc";
 import { moneyCents } from "@/lib/format";
 
-const INK = "#1C2733";
-const ACCENT = "#17456E"; // logo navy (lib/theme.ts)
-const MUTED = "#62574B";
-const FAINT = "#6F6456";
-const HEADER_FILL = "#EFE6D6";
-const LINE = "#DCCFB9";
-const RULE = "#DCCFB9";
+// the defaults; each export carries its client's brand colours (doc.colors)
+const DEFAULT_COLORS: ExportColors = {
+  text: "#1C2733",
+  accent: "#17456E",
+  muted: "#62574B",
+  faint: "#6F6456",
+  headerFill: "#EFE6D6",
+  rule: "#DCCFB9",
+};
+let INK = DEFAULT_COLORS.text;
+let ACCENT = DEFAULT_COLORS.accent;
+let MUTED = DEFAULT_COLORS.muted;
+let FAINT = DEFAULT_COLORS.faint;
+let HEADER_FILL = DEFAULT_COLORS.headerFill;
+let LINE = DEFAULT_COLORS.rule;
+let RULE = DEFAULT_COLORS.rule;
 const CONTENT_WIDTH = 515; // A4 (595pt) minus 40pt margins each side
 
 function moneyStr(cents: number, currency = "CAD", unambiguous = false, approximate = false): string {
@@ -112,6 +121,14 @@ function kpiContent(kpis: Kpi[]): Content[] {
 
 export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
   unambiguousDollars = !!doc.multiCurrency;
+  const c = { ...DEFAULT_COLORS, ...doc.colors };
+  INK = c.text;
+  ACCENT = c.accent;
+  MUTED = c.muted;
+  FAINT = c.faint;
+  HEADER_FILL = c.headerFill;
+  LINE = c.rule;
+  RULE = c.rule;
   docLocale = doc.locale === "fr" ? "fr" : "en";
   const content: Content[] = [
     { text: doc.venue || " ", style: "venue" },
@@ -141,7 +158,10 @@ export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
     pageSize: "A4",
     pageMargins: [40, 44, 40, 52],
     defaultStyle: { font: "Roboto", fontSize: 9, color: INK, lineHeight: 1.15 },
-    info: { title: `${doc.reportTitle} · ${doc.scopeLabel} — ${doc.rangeLabel}` },
+    info: {
+      title: `${doc.reportTitle} · ${doc.scopeLabel} — ${doc.rangeLabel}`,
+      ...(doc.producer ? { creator: doc.producer, producer: doc.producer } : {}),
+    },
     footer: (currentPage, pageCount) => ({
       margin: [40, 8, 40, 0],
       columns: [

@@ -9,19 +9,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-/** The retail store (the bottle shop): its kind, or its venue id for an older API. */
+/** A retail store (a shop, with stock): its kind, as the API reports it. */
 export function isRetail(v?: Pick<Venue, "id" | "kind"> | null): boolean {
-  return !!v && (v.kind === "retail" || v.id === "sage-poppy");
+  return !!v && v.kind === "retail";
 }
 
 /**
- * The bottle shop's small sage/poppy badge, next to its name wherever the
- * portal names a store. The portal keeps its own look otherwise.
+ * A small "shop" badge next to a retail store's name, for a group that mixes
+ * restaurants and shops. A group of shops only (every store retail) needs no
+ * badge at all.
  */
 export function RetailBadge({ venueId, className }: { venueId: string; className?: string }) {
   const t = useT();
   const { venues } = useStores();
   if (!isRetail(venues.find((v) => v.id === venueId) ?? { id: venueId })) return null;
+  if (venues.length > 0 && venues.every((v) => isRetail(v))) return null;
   return (
     <span
       className={cn(

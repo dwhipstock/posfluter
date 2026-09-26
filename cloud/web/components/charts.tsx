@@ -9,7 +9,7 @@
 // legend name every series).
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { CHART } from "@/lib/theme";
+import { useChartTheme } from "@/lib/brand/context";
 import { cn } from "@/lib/utils";
 
 export interface Series {
@@ -115,6 +115,7 @@ function Tooltip({
 const PAD = { top: 12, right: 8, bottom: 26 };
 
 function YAxis({ ticks, y, width, left, format }: { ticks: number[]; y: (v: number) => number; width: number; left: number; format: Fmt }) {
+  const CHART = useChartTheme();
   return (
     <g>
       {ticks.map((t) => (
@@ -130,6 +131,7 @@ function YAxis({ ticks, y, width, left, format }: { ticks: number[]; y: (v: numb
 }
 
 function XLabels({ labels, x, bottom, bandWidth }: { labels: string[]; x: (i: number) => number; bottom: number; bandWidth: number }) {
+  const CHART = useChartTheme();
   const every = Math.max(1, Math.ceil(46 / Math.max(1, bandWidth)));
   return (
     <g>
@@ -167,6 +169,7 @@ export function BarChart({
   ariaLabel: string;
   className?: string;
 }) {
+  const CHART = useChartTheme();
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const totals = data.map((d) => series.reduce((s, se) => s + Math.max(0, d.values[se.key] ?? 0), 0));
@@ -279,6 +282,7 @@ export function LineChart({
   ariaLabel: string;
   className?: string;
 }) {
+  const CHART = useChartTheme();
   const gid = useId().replace(/:/g, "");
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
@@ -382,6 +386,7 @@ export function Donut({
   size?: number;
   ariaLabel: string;
 }) {
+  const CHART = useChartTheme();
   const [hover, setHover] = useState<string | null>(null);
   const total = items.reduce((s, i) => s + Math.max(0, i.value), 0);
   const r = size / 2 - 4;
@@ -425,7 +430,7 @@ export function Donut({
       <text x={size / 2} y={size / 2 - 7} textAnchor="middle" fontSize={11} fill={CHART.axis}>
         {shown ? shown.label : ""}
       </text>
-      <text x={size / 2} y={size / 2 + (shown ? 10 : 5)} textAnchor="middle" fontSize={15} fontWeight={600} fill="#1C2733">
+      <text x={size / 2} y={size / 2 + (shown ? 10 : 5)} textAnchor="middle" fontSize={15} fontWeight={600} fill={CHART.text}>
         {shown ? format(shown.value) : center}
       </text>
     </svg>

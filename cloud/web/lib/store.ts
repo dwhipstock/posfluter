@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { get } from "./api";
 import type { Venue, VenuesResponse } from "./types";
-import { STORE_SERIES } from "./theme";
+import { useBrand } from "./brand/context";
 
 // The store picker lives in the URL (?store=<venueId>) so every view is
 // linkable. No param = "All stores": the same page, combined across the
@@ -61,6 +61,7 @@ export function useStores(): {
 } {
   const storeId = useStoreId();
   const { data } = useVenues();
+  const storeSeries = useBrand().series;
   return useMemo(() => {
     const venues = data?.venues ?? [];
     const byId = new Map(venues.map((v) => [v.id, v]));
@@ -71,9 +72,9 @@ export function useStores(): {
       store: storeId ? byId.get(storeId) ?? null : null,
       combined: !storeId && venues.length > 1,
       nameOf: (id: string) => shortStoreName(byId.get(id)?.name ?? id),
-      colorOf: (id: string) => STORE_SERIES[(index.get(id) ?? 0) % STORE_SERIES.length],
+      colorOf: (id: string) => storeSeries[(index.get(id) ?? 0) % storeSeries.length],
     };
-  }, [data, storeId]);
+  }, [data, storeId, storeSeries]);
 }
 
 /** "Copper Lantern — Plateau" → "plateau": a filename-safe slug. */

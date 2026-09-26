@@ -10,11 +10,12 @@ import { useCallback } from "react";
 import { useMe, useRange } from "@/lib/hooks";
 import { shortStoreName, slugify, useStores } from "@/lib/store";
 import { useI18n, useFmt, useT } from "@/lib/i18n/context";
+import { useBrand } from "@/lib/brand/context";
 import { col, type Col, type ExportDoc, type Section } from "./doc";
 
 export type DocMeta = Pick<
   ExportDoc,
-  "filenameBase" | "venue" | "scopeLabel" | "rangeLabel" | "generatedLabel" | "locale"
+  "filenameBase" | "venue" | "scopeLabel" | "rangeLabel" | "generatedLabel" | "locale" | "colors" | "producer"
 >;
 
 // Local wall-clock "now" as a naive ISO string, so the export fmt (which never
@@ -34,6 +35,7 @@ export function useExportMeta() {
   const me = useMe();
   const range = useRange();
   const { store, venues } = useStores();
+  const brand = useBrand();
   // the picked store, else the group across all its stores
   const venue = store?.name ?? me.data?.tenantName ?? "";
   const scopeLabel = store
@@ -50,9 +52,18 @@ export function useExportMeta() {
         rangeLabel: fmt.rangeLabel(range),
         generatedLabel: t("export_generated", { when: `${fmt.dayYear(iso)} ${fmt.time(iso)}` }),
         locale,
+        producer: brand.name,
+        colors: {
+          accent: brand.palette.primary,
+          text: brand.palette.text,
+          muted: brand.palette.textMuted,
+          faint: brand.neutral["400"],
+          headerFill: brand.palette.surfaceAlt,
+          rule: brand.palette.border,
+        },
       };
     },
-    [locale, fmt, t, venue, scopeLabel, storeSlug, range]
+    [locale, fmt, t, venue, scopeLabel, storeSlug, range, brand]
   );
 }
 

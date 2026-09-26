@@ -1,48 +1,62 @@
 import type { Config } from "tailwindcss";
 import colors from "tailwindcss/colors";
-import { BRAND } from "./lib/theme";
 
-// One palette with the POS tablet (client/lib/design/tokens.dart), via
-// lib/theme.ts: the logo's navy as the primary, a copper accent kept for the
-// few things that must pop, warm cream surfaces. `neutral` is a warm ramp, so
-// the existing neutral-* classes read as cream/umber instead of cool grey.
-// Every text step used on cream (400 and darker) meets WCAG AA (≥ 4.5:1).
+// The portal's colour, radius, shadow and font names resolve to CSS custom
+// properties that the root layout sets from THIS client's brand pack at run
+// time (lib/brand/brand.ts → brandCssVars). The class names stay the same for
+// every client — `bg-navy` is "the brand's chrome colour", `copper` its one
+// accent, `accent` its action colour — so one build serves every brand.
+// Copper Lantern's pack (brands/copperlantern) keeps the values this file used
+// to hard-code: the logo navy, a copper accent, warm cream surfaces.
+const v = (name: string) => `rgb(var(${name}) / <alpha-value>)`;
+
 const config: Config = {
   darkMode: "class", // never enabled — the portal is light-only, like the till
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        sans: ["var(--font-brand)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
       },
       colors: {
-        ink: BRAND.textPrimary,
-        paper: BRAND.background,
-        surface: { DEFAULT: BRAND.surface, alt: BRAND.surfaceAlt },
-        navy: { DEFAULT: BRAND.navy, deep: BRAND.navyDeep, muted: BRAND.onNavyMuted },
-        copper: { DEFAULT: BRAND.copper, soft: BRAND.accentSoft, text: BRAND.copperText },
-        attention: BRAND.attention,
-        // primary actions, focus rings, selected chips: the logo navy
-        accent: { DEFAULT: BRAND.navy, hover: BRAND.navyDeep },
+        ink: v("--c-ink"),
+        paper: v("--c-paper"),
+        surface: { DEFAULT: v("--c-surface"), alt: v("--c-surface-alt") },
+        navy: { DEFAULT: v("--c-navy"), deep: v("--c-navy-deep"), muted: v("--c-navy-muted") },
+        copper: { DEFAULT: v("--c-copper"), soft: v("--c-copper-soft"), text: v("--c-copper-text") },
+        attention: v("--c-attention"),
+        accent: { DEFAULT: v("--c-accent"), hover: v("--c-accent-hover") },
         neutral: {
-          50: "#FBF7F0",
-          100: "#F2EADC",
-          200: BRAND.border,
-          300: "#BFAF95",
-          400: "#6F6456",
-          500: BRAND.textMuted,
-          600: "#51473C",
-          700: "#3E362D",
-          800: "#2B2520",
-          900: BRAND.textPrimary,
-          950: "#121A23",
+          50: v("--c-n-50"),
+          100: v("--c-n-100"),
+          200: v("--c-n-200"),
+          300: v("--c-n-300"),
+          400: v("--c-n-400"),
+          500: v("--c-n-500"),
+          600: v("--c-n-600"),
+          700: v("--c-n-700"),
+          800: v("--c-n-800"),
+          900: v("--c-n-900"),
+          950: v("--c-n-950"),
         },
-        // status colours re-stepped for AA on cream
-        red: { ...colors.red, 600: BRAND.destructive, 700: "#8F1E18" },
-        emerald: { ...colors.emerald, 600: "#2F6B45", 700: "#245236" },
+        // status colours re-stepped per brand for AA on its surfaces
+        red: { ...colors.red, 600: v("--c-red-600"), 700: v("--c-red-700") },
+        emerald: { ...colors.emerald, 600: v("--c-emerald-600"), 700: v("--c-emerald-700") },
+      },
+      borderRadius: {
+        sm: "var(--radius-sm)",
+        DEFAULT: "var(--radius)",
+        md: "var(--radius-md)",
+        lg: "var(--radius-lg)",
+        xl: "var(--radius-xl)",
+        "2xl": "var(--radius-2xl)",
+        // buttons and inputs: pills for one brand, rounded rectangles for another
+        control: "var(--radius-control)",
+        "control-sm": "var(--radius-control-sm)",
+        "control-lg": "var(--radius-control-lg)",
       },
       boxShadow: {
-        raised: "0 3px 10px rgba(23, 69, 110, 0.10)",
+        raised: "var(--shadow-raised)",
       },
     },
   },

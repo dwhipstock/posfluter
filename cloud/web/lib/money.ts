@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { money } from "./format";
 import { useStores, useVenues } from "./store";
 import { useI18n } from "./i18n/context";
+import { useBrand } from "./brand/context";
 import type { Currency, FxRate, MoneyScope } from "./types";
 import { Money, T, type Cell } from "./export/doc";
 
@@ -86,19 +87,21 @@ export function useMoney(): MoneyApi {
   const { data } = useVenues();
   const { storeId } = useStores();
   const { locale } = useI18n();
+  // the client's own currency (brand pack): what a figure is in when the API doesn't say
+  const home = useBrand().currency;
   return useMemo(() => {
     const venues = data?.venues ?? [];
-    const reportingCurrency = (data?.reportingCurrency ?? "CAD").toUpperCase();
+    const reportingCurrency = (data?.reportingCurrency ?? home).toUpperCase();
     const rates = data?.rates ?? [];
-    const byId = new Map(venues.map((v) => [v.id, (v.currency ?? "CAD").toUpperCase()]));
-    const currencies = Array.from(new Set(venues.map((v) => (v.currency ?? "CAD").toUpperCase())));
+    const byId = new Map(venues.map((v) => [v.id, (v.currency ?? home).toUpperCase()]));
+    const currencies = Array.from(new Set(venues.map((v) => (v.currency ?? home).toUpperCase())));
     const multi = currencies.length > 1;
-    const currencyOf = (id: string) => byId.get(id) ?? "CAD";
+    const currencyOf = (id: string) => byId.get(id) ?? home;
     const scopeCurrency = storeId ? currencyOf(storeId) : currencies.length === 1 ? currencies[0] : reportingCurrency;
     const mixedScope = !storeId && multi;
-    const fmtIn = (c: Currency | undefined, cents: number) => money(cents, c ?? "CAD", { unambiguous: multi, locale });
+    const fmtIn = (c: Currency | undefined, cents: number) => money(cents, c ?? home, { unambiguous: multi, locale });
     const shortIn = (c: Currency | undefined, cents: number) =>
-      money(cents, c ?? "CAD", { unambiguous: multi, short: true, locale });
+      money(cents, c ?? home, { unambiguous: multi, short: true, locale });
     const rateOf = (from: string, to: string): number | null => {
       if (from === to) return 1;
       const direct = rates.find((r) => r.from === from && r.to === to);
@@ -107,14 +110,14 @@ export function useMoney(): MoneyApi {
       return reverse && Number(reverse.rate) > 0 ? 1 / Number(reverse.rate) : null;
     };
     const toReporting = (cents: number, c: Currency | undefined) => {
-      const r = rateOf((c ?? "CAD").toUpperCase(), reportingCurrency);
+      const r = rateOf((c ?? home).toUpperCase(), reportingCurrency);
       return r == null ? null : Math.round(cents * r);
     };
     const scopeCur = (scope?: MoneyScope) => scope?.currency ?? scopeCurrency;
     const perCurrency = <R,>(rows: R[], cur: (r: R) => Currency | undefined, value: (r: R) => number) => {
       const sums = new Map<string, number>();
       for (const r of rows) {
-        const c = (cur(r) ?? "CAD").toUpperCase();
+        const c = (cur(r) ?? home).toUpperCase();
         sums.set(c, (sums.get(c) ?? 0) + value(r));
       }
       return Array.from(sums.entries())
@@ -148,5 +151,5 @@ export function useMoney(): MoneyApi {
       rateText: (scope) =>
         (scope?.rates ?? rates.filter((r) => r.to === reportingCurrency)).map((r) => `1 ${r.from} = ${r.rate} ${r.to}`).join(", "),
     };
-  }, [data, storeId, locale]);
+  }, [data, storeId, locale, home]);
 }

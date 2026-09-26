@@ -1,6 +1,8 @@
 # Runtime-only portal image, built by CI and pushed as pos-cloud-web:<git-sha>.
 # COPYs the Next.js standalone output produced on an x64 runner. Build context:
-# a staged dir with standalone/, static/, public/ (see build.yml).
+# a staged dir with standalone/, static/, public/, brands/ (see build.yml).
+# brands/ holds every client's brand pack; PORTAL_BRAND picks one at run time
+# (or PORTAL_BRAND_DIR points at a pack mounted into the container).
 #
 # NOTE: the portal has no native npm deps, so the x64-built standalone bundle runs
 # unchanged on arm64. If a native dependency is ever added, this image must build
@@ -12,6 +14,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --chown=node:node standalone ./
 COPY --chown=node:node static ./.next/static
 COPY --chown=node:node public ./public
+COPY --chown=node:node brands ./brands
 USER node
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0

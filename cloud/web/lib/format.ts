@@ -71,7 +71,8 @@ function frSuffix(currency: string, unambiguous: boolean): string {
   }
 }
 
-export type MoneyLocale = "fr" | "en";
+/** Money follows the UI locale; Spanish (US) writes dollars like English ("$1,234.50"). */
+export type MoneyLocale = "fr" | "en" | "es";
 
 /**
  * Currency-aware house style: cents only when nonzero. English puts the

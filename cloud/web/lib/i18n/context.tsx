@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { messages, type Locale, type MsgKey } from "./messages";
+import type { Locale, MsgKey } from "./messages";
+import { translate } from "./translate";
 import { makeFmt, type Fmt } from "./format";
 
 export type { Locale } from "./messages";
@@ -10,11 +11,13 @@ type Vars = Record<string, string | number>;
 
 interface I18n {
   locale: Locale;
+  /** The locales this client's portal offers (its brand pack), in display order. */
+  available: Locale[];
   setLocale: (l: Locale) => void;
   toggleLocale: () => void;
   t: (key: MsgKey, vars?: Vars) => string;
   fmt: Fmt;
-  /** Data-driven bilingual names (items, categories, zones): locale first. */
+  /** Data-driven bilingual names (items, categories, zones): locale first (Spanish reads the English name). */
   name: (fr?: string | null, en?: string | null) => string;
   /** The other language — the small secondary line; "" when redundant. */
   nameAlt: (fr?: string | null, en?: string | null) => string;
@@ -30,9 +33,11 @@ function writeCookie(name: string, value: string) {
 
 export function LocaleProvider({
   initialLocale,
+  available,
   children,
 }: {
   initialLocale: Locale;
+  available: Locale[];
   children: React.ReactNode;
 }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
@@ -45,10 +50,7 @@ export function LocaleProvider({
 
   const t = useCallback(
     (key: MsgKey, vars?: Vars) => {
-      const entry = messages[key];
-      let s: string = entry ? entry[locale] : key;
-      if (vars) s = s.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? `{${k}}`));
-      return s;
+      return translate(locale, key, vars);
     },
     [locale]
   );
@@ -56,29 +58,34 @@ export function LocaleProvider({
   const fmt = useMemo(() => makeFmt(locale, t), [locale, t]);
 
   const name = useCallback(
-    (fr?: string | null, en?: string | null) => (locale === "en" ? en || fr || "" : fr || en || ""),
+    (fr?: string | null, en?: string | null) => (locale === "fr" ? fr || en || "" : en || fr || ""),
     [locale]
   );
   const nameAlt = useCallback(
     (fr?: string | null, en?: string | null) => {
+      // the second line is the pub's other official language; a Spanish
+      // reader (or a client without French) gets no French subtitle
+      if (locale === "es" || !available.includes("fr")) return "";
       const primary = locale === "en" ? en : fr;
       const alt = locale === "en" ? fr : en;
       return alt && alt !== primary ? alt : "";
     },
-    [locale]
+    [locale, available]
   );
 
   const value = useMemo<I18n>(
     () => ({
       locale,
+      available,
       setLocale,
-      toggleLocale: () => setLocale(locale === "fr" ? "en" : "fr"),
+      // the next of this client's locales (two locales: a simple flip)
+      toggleLocale: () => setLocale(available[(available.indexOf(locale) + 1) % available.length] ?? locale),
       t,
       fmt,
       name,
       nameAlt,
     }),
-    [locale, setLocale, t, fmt, name, nameAlt]
+    [locale, available, setLocale, t, fmt, name, nameAlt]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -101,5 +108,5 @@ export function useFmt() {
 /** A message as a node, for shared UI primitives; English outside a provider. */
 export function Msg({ k }: { k: MsgKey }) {
   const ctx = useContext(Ctx);
-  return <>{ctx ? ctx.t(k) : messages[k].en}</>;
+  return <>{ctx ? ctx.t(k) : translate("en", k)}</>;
 }

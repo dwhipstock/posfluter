@@ -6,7 +6,8 @@ import { ChevronRight, LogOut, Loader2, TabletSmartphone } from "lucide-react";
 import { post } from "@/lib/api";
 import { useMe } from "@/lib/hooks";
 import { toastError } from "@/lib/toast";
-import { useI18n, useT } from "@/lib/i18n/context";
+import { useI18n, useT, type Locale } from "@/lib/i18n/context";
+import { useBrand } from "@/lib/brand/context";
 import { SegmentedToggle } from "@/components/lang-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,9 +16,13 @@ import { PageHeader } from "@/components/page-header";
 
 const APP_VERSION = "0.1.0";
 
+// each language named in itself, whatever the page's language
+const LANGUAGE_NAMES: Record<Locale, string> = { fr: "Français", en: "English", es: "Español" };
+
 export default function AccountPage() {
   const t = useT();
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, available } = useI18n();
+  const brand = useBrand();
   const me = useMe();
   const [busy, setBusy] = useState(false);
 
@@ -70,10 +75,7 @@ export default function AccountPage() {
               value={locale}
               onChange={setLocale}
               ariaLabel={t("account_language")}
-              options={[
-                { value: "fr", label: "Français" },
-                { value: "en", label: "English" },
-              ]}
+              options={available.map((l) => ({ value: l, label: LANGUAGE_NAMES[l] }))}
             />
           </div>
         </CardContent>
@@ -99,7 +101,7 @@ export default function AccountPage() {
       </Button>
 
       <p className="pt-6 text-center text-xs text-neutral-400">
-        {t("account_footer", { version: APP_VERSION })}
+        {t("account_footer", { brand: brand.name, version: APP_VERSION })}
       </p>
     </div>
   );

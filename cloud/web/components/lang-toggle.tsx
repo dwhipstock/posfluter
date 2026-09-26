@@ -19,7 +19,7 @@ export function LangToggle({ tone = "light" }: { tone?: "light" | "dark" }) {
   return (
     <div className="flex items-center gap-0.5">
       <button type="button" onClick={toggleLocale} className={btn} aria-label={t("switch_language")}>
-        {locale === "en" ? "EN" : "FR"}
+        {locale.toUpperCase()}
       </button>
     </div>
   );

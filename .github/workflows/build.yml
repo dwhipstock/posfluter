@@ -96,6 +96,7 @@ jobs:
           cp -r cloud/web/.next/standalone        ci-context/web/standalone
           cp -r cloud/web/.next/static            ci-context/web/static
           cp -r cloud/web/public                  ci-context/web/public
+          cp -r cloud/web/brands                  ci-context/web/brands
 
       # --- assemble the arm64 runtime images and push :<git-sha> ---
       - uses: docker/setup-qemu-action@v3   # apt-get in the jar images runs under arm64 emulation

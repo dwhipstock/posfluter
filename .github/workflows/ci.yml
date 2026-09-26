@@ -1,6 +1,7 @@
-# CI — runs on every PR and on pushes to main. Four tiers, one job each, in
+# CI — runs on every PR and on pushes to main. One job per tier, in
 # parallel: the store server, the cloud API (against a real Postgres service
-# container), the Flutter client, and the Next.js portal. This is the gate rec 6
+# container), the Flutter client, the Next.js portal (with its brand tests).
+# This is the gate rec 6
 # (S5c) exists to add: a commit that breaks any tier fails here instead of
 # shipping silently to the box.
 #
@@ -100,7 +101,7 @@ jobs:
         run: flutter test
 
   portal:
-    name: portal build + typecheck
+    name: portal build + typecheck + brand tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -116,6 +117,12 @@ jobs:
       - name: tsc typecheck
         working-directory: cloud/web
         run: npx tsc --noEmit
+      - name: unit tests (brand config, locale completeness)
+        working-directory: cloud/web
+        run: npm test
       - name: next build
         working-directory: cloud/web
         run: npm run build
+      - name: no-leak test (every brand pack, key pages + bundles)
+        working-directory: cloud/web
+        run: npm run test:brands
