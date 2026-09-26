@@ -38,7 +38,7 @@ class Cloud:
     # ------------------------------------------------------------ Postgres
 
     def start_pg(self) -> None:
-        docker("rm", "-f", PG_NAME, check=False)  # a previous run's container (and its port)
+        docker("rm", "-f", "-v", PG_NAME, check=False)  # a previous run's container (and its port)
         time.sleep(1)
         check_port(PORTS["pg"])
         log(f"cloud: Postgres in Docker ({self.cpus} CPUs, {self.memory}) on :{PORTS['pg']}")
@@ -64,7 +64,7 @@ class Cloud:
         return rows[0][0] if rows and rows[0] else None
 
     def stop_pg(self) -> None:
-        docker("rm", "-f", PG_NAME, check=False)
+        docker("rm", "-f", "-v", PG_NAME, check=False)
 
     # ------------------------------------------------------------ the API
 

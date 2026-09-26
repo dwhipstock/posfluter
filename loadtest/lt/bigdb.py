@@ -103,6 +103,11 @@ def grow(db: str, target: int, days: int = 365) -> dict:
                     exprs.append(f"CASE WHEN \"{c}\" IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', \"{c}\", '-{secs} seconds') END")
                 elif t == "checks" and c == "shift_id":
                     exprs.append(str(shift_id))
+                # history is done with: the kitchen bumped it, the printer printed it
+                elif t == "kitchen_tickets" and c == "bumped_at":
+                    exprs.append(f"strftime('%Y-%m-%dT%H:%M:%fZ', coalesce(\"bumped_at\", \"created_at\"), '-{secs} seconds')")
+                elif t == "kitchen_print_jobs" and c == "status":
+                    exprs.append("'DONE'")
                 else:
                     exprs.append(f'"{c}"')
             if t == "sync_outbox":
