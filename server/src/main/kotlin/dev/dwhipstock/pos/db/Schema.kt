@@ -89,29 +89,51 @@ object SyncState : Table("sync_state") {
 }
 
 fun initDatabase(dbPath: String): Database {
-    // WAL + a busy timeout are what keep this single-writer SQLite file from
-    // throwing SQLITE_BUSY under concurrent load (the sync loop, request
-    // handlers, and the staff app all hit it at once). Exposed opens a fresh
-    // connection per transaction, so both must be set by the driver on *every*
-    // connection — SQLiteConfig applies them at connection open, before any
-    // transaction, so no connection can miss them and WAL is switched outside a
-    // transaction (the only place PRAGMA journal_mode may run):
-    //   journal_mode=WAL  readers and the single writer stop blocking each
-    //                     other; persisted in the file header and reasserted
-    //                     per connection, so it self-heals.
-    //   busy_timeout=5000 a connection that meets the write lock waits up to 5s
-    //                     for it instead of failing immediately.
+    // The sync loop, request handlers and the staff app all hit this
+    // single-writer SQLite file at once. The store's transactions take turns on
+    // one connection (OneWriterDataSource: that is what stops SQLITE_BUSY under
+    // load). The driver applies these when it opens a connection, before any
+    // transaction, so WAL is switched outside a transaction (the only place
+    // PRAGMA journal_mode may run):
+    //   journal_mode=WAL  readers (a backup, the sqlite3 shell) and the writer
+    //                     stop blocking each other; persisted in the file header.
+    //   busy_timeout=5000 a connection that meets another process's write lock
+    //                     waits up to 5s for it instead of failing immediately.
+    //   IMMEDIATE         a transaction takes the write lock when it begins, so
+    //                     it never has to upgrade a stale read snapshot (which
+    //                     fails at once, whatever the busy timeout).
     val config = SQLiteConfig().apply {
         setJournalMode(SQLiteConfig.JournalMode.WAL)
         setBusyTimeout(5000)
+        setTransactionMode(SQLiteConfig.TransactionMode.IMMEDIATE)
     }
-    val dataSource = SQLiteDataSource(config).apply { url = "jdbc:sqlite:$dbPath" }
-    val db = Database.connect(dataSource)
+    val sqlite = SQLiteDataSource(config).apply { url = "jdbc:sqlite:$dbPath" }
+    val db = Database.connect(OneWriterDataSource(sqlite))
+    warmUp(db)
     // SQLite: one writer at a time, serializable is the honest level
     TransactionManager.manager.defaultIsolationLevel = Connection.TRANSACTION_SERIALIZABLE
     Migrations.run(db)
     loadVenueZone(db)
     return db
+}
+
+/**
+ * Exposed reads the driver's metadata lazily, the first time a query needs it,
+ * behind a synchronized lazy, and asks for a connection to do so. With one
+ * connection for the whole store ([OneWriterDataSource]) two first requests at
+ * once would deadlock: one holds the connection and waits for the lazy, the
+ * other holds the lazy and waits for the connection. Resolve all of it here,
+ * on one thread, before anything else runs.
+ */
+private fun warmUp(db: Database) = org.jetbrains.exposed.sql.transactions.transaction(db) {
+    db.url
+    db.vendor
+    db.version
+    db.dialect
+    db.supportsAlterTableWithAddColumn
+    db.supportsMultipleResultSets
+    db.identifierManager.quoteIfNecessary("order") // a keyword: loads the keyword list
+    db.identifierManager.needQuotes("x")
 }
 
 /**
