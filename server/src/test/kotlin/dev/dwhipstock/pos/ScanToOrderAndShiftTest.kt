@@ -120,7 +120,8 @@ class ScanToOrderAndShiftTest {
         assertEquals(HttpStatusCode.Conflict, c.get("/shifts/current/report").status)
 
         // h. range report: today sees the same revenue, no cash reconciliation fields
-        val today = java.time.LocalDate.now().toString()
+        // the venue's business day, not the machine's: they differ in the evening (e.g. CI on UTC)
+        val today = dev.dwhipstock.pos.sdk.VenueClock.today().toString()
         val range = json.parseToJsonElement(
             c.get("/reports/range?from=$today&to=$today").bodyAsText()).jsonObject
         assertEquals("RANGE", range["shiftStatus"]!!.jsonPrimitive.content)
@@ -130,7 +131,7 @@ class ScanToOrderAndShiftTest {
             range["expectedCashCents"] is kotlinx.serialization.json.JsonNull)
 
         // yesterday is empty; bad dates are rejected
-        val yesterday = java.time.LocalDate.now().minusDays(1).toString()
+        val yesterday = dev.dwhipstock.pos.sdk.VenueClock.today().minusDays(1).toString()
         val empty = json.parseToJsonElement(
             c.get("/reports/range?from=$yesterday&to=$yesterday").bodyAsText()).jsonObject
         assertEquals(0L, empty["revenueCents"]!!.jsonPrimitive.long)
