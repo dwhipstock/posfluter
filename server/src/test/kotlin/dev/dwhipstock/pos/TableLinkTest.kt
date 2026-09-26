@@ -141,7 +141,7 @@ class TableLinkTest {
         }
         val page = client.get("/m/lower/8").bodyAsText()
         assertTrue("Please scan the QR code at your table." in page)
-        assertTrue("Veuillez scanner le code QR sur votre table." in page)
+        assertTrue("Veuillez balayer le code QR sur votre table." in page)
         // the old unauthenticated order submit by table id is gone
         assertEquals(HttpStatusCode.Unauthorized, client.postJson("/tables/t5/pending-lines", order).status)
         assertEquals(HttpStatusCode.NotFound, client.postJson("/m/t/AAAAAAAAAAAAAAAAAAAAAA/pending-lines", order).status)

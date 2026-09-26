@@ -10,8 +10,8 @@ package dev.dwhipstock.pos
  * nothing is fetched from the internet), bright sage-and-poppy colours, and
  * its own sign-in composition: a left-aligned greeting, staff as a list of
  * avatar pills, a flat round-key PIN pad and a segmented PIN indicator.
- * English only for now (the page speaks French and English; Spanish is a
- * later pass), so its language button is hidden.
+ * The page takes the store's languages from GET /health (English and Spanish
+ * here), so the injected greeting carries ids the page fills per language.
  */
 object StaffAppBrand {
     fun apply(html: String, brand: String): String = when (brand) {
@@ -21,9 +21,8 @@ object StaffAppBrand {
 
     private fun sagePoppy(html: String): String = html
         .replace("<title>Copper Lantern POS — Staff</title>", "<title>Sage &amp; Poppy — Staff</title>")
-        .replace("<h1>Copper Lantern POS</h1>", "<div class=\"sp-kicker\">Sage &amp; Poppy · Bottle Shop</div><h1>Welcome back</h1>")
+        .replace("<h1>Copper Lantern POS</h1>", "<div class=\"sp-kicker\" id=\"sp-kicker\">Sage &amp; Poppy · Bottle Shop</div><h1 id=\"sp-welcome\">Welcome back</h1>")
         .replace("<div class=\"brand\">Copper Lantern POS</div>", "<div class=\"brand\">Sage &amp; Poppy</div>")
-        .replace("let lang = localStorage.getItem(\"staff_lang\") || \"en\";", "let lang = \"en\";")
         .replace("<body>", "<body class=\"brand-sp\">")
         .replace("</head>", SAGE_POPPY_CSS + "\n</head>")
 
@@ -42,7 +41,6 @@ object StaffAppBrand {
   body.brand-sp header { border-bottom: 0; background: var(--paper-alt); }
   body.brand-sp header .brand { color: var(--deep); font-weight: 800; letter-spacing: -.2px; }
   body.brand-sp .hbtn { border: 0; border-radius: 40px; background: var(--accent-soft); color: var(--deep); }
-  body.brand-sp #login-lang, body.brand-sp #app-lang { display: none; }
   body.brand-sp .tabbar { box-shadow: none; }
   body.brand-sp .tabbar button.on { color: var(--deep); }
   body.brand-sp .tcard, body.brand-sp .tile { box-shadow: none; }

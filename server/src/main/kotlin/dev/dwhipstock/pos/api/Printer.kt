@@ -143,7 +143,7 @@ fun Route.printerRoutes(printer: NetworkThermalPrinter, config: CustomerConfig, 
         require(copies in 1..MAX_WIFI_SLIP_COPIES) { "copies must be 1–$MAX_WIFI_SLIP_COPIES" }
         val wifi = settings.guestWifi()
             ?: throw ConflictException("guest Wi-Fi is not configured", "wifi_not_configured")
-        val lines = wifiSlipLines(config.displayName, wifi)
+        val lines = wifiSlipLines(config.displayName, wifi, slipLocales(config))
         var printed = 0
         var status = printer.status()
         if (status.configured) {
@@ -162,37 +162,46 @@ fun Route.printerRoutes(printer: NetworkThermalPrinter, config: CustomerConfig, 
 
 private val wifiPrintJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
-/** Guests read these: each message printed in English, then French. */
-private fun bilingual(key: MessageKey): List<String> =
-    listOf(Messages.get(key, LocaleCode.EN), Messages.get(key, LocaleCode.FR)).distinct()
+/** The pubs' pair; guest slips print English first, then the store's other languages. */
+internal val SLIP_LOCALES = listOf(LocaleCode.EN, LocaleCode.FR)
 
-private fun bilingualLines(key: MessageKey): List<PrintLine> =
-    bilingual(key).map { PrintLine.Text(it, Align.CENTER) }
+/** A store's languages in slip order: English first (guests from anywhere), then the rest. */
+internal fun slipLocales(config: CustomerConfig): List<LocaleCode> =
+    config.profile.locales.sortedBy { if (it == LocaleCode.EN) 0 else 1 }
+
+/** Guests read these: each message printed in every one of [locales]. */
+private fun bilingual(key: MessageKey, locales: List<LocaleCode>): List<String> =
+    locales.map { Messages.get(key, it) }.distinct()
+
+private fun bilingualLines(key: MessageKey, locales: List<LocaleCode>): List<PrintLine> =
+    bilingual(key, locales).map { PrintLine.Text(it, Align.CENTER) }
 
 /**
  * The join QR plus the network name and password in text, for guests whose
  * camera won't read it. Printed straight to the thermal printer (printNow), never
  * spooled to disk, so the password isn't left in receipts/ or bills/.
  */
-private fun wifiJoinBlock(wifi: GuestWifi): List<PrintLine> = buildList {
+private fun wifiJoinBlock(wifi: GuestWifi, locales: List<LocaleCode>): List<PrintLine> = buildList {
     add(PrintLine.QrCode(wifi.qrPayload()))
-    add(PrintLine.Text(bilingual(MessageKey.WIFI_NETWORK).joinToString(" / "), Align.CENTER))
+    add(PrintLine.Text(bilingual(MessageKey.WIFI_NETWORK, locales).joinToString(" / "), Align.CENTER))
     add(PrintLine.Header(wifi.ssid, exact = true))
     if (wifi.security == WifiSecurity.NOPASS) {
-        add(PrintLine.Text(bilingual(MessageKey.WIFI_NO_PASSWORD).joinToString(" / "), Align.CENTER))
+        add(PrintLine.Text(bilingual(MessageKey.WIFI_NO_PASSWORD, locales).joinToString(" / "), Align.CENTER))
     } else {
-        add(PrintLine.Text(bilingual(MessageKey.WIFI_PASSWORD).joinToString(" / "), Align.CENTER))
+        add(PrintLine.Text(bilingual(MessageKey.WIFI_PASSWORD, locales).joinToString(" / "), Align.CENTER))
         add(PrintLine.Header(wifi.password, exact = true))
     }
 }
 
 /** The stand-alone guest Wi-Fi slip. */
-internal fun wifiSlipLines(venueName: String, wifi: GuestWifi): List<PrintLine> = buildList {
+internal fun wifiSlipLines(
+    venueName: String, wifi: GuestWifi, locales: List<LocaleCode> = SLIP_LOCALES,
+): List<PrintLine> = buildList {
     add(PrintLine.LogoPlaceholder(venueName))
     add(PrintLine.Blank)
-    add(PrintLine.Header(bilingual(MessageKey.WIFI_FREE).joinToString(" / ")))
-    addAll(bilingualLines(MessageKey.WIFI_SCAN_TO_CONNECT))
-    addAll(wifiJoinBlock(wifi))
+    add(PrintLine.Header(bilingual(MessageKey.WIFI_FREE, locales).joinToString(" / ")))
+    addAll(bilingualLines(MessageKey.WIFI_SCAN_TO_CONNECT, locales))
+    addAll(wifiJoinBlock(wifi, locales))
     add(PrintLine.Blank)
 }
 
@@ -205,7 +214,7 @@ internal fun wifiSlipLines(venueName: String, wifi: GuestWifi): List<PrintLine> 
 private fun slipLines(row: ResultRow, config: CustomerConfig, wifi: GuestWifi?): List<PrintLine> {
     val label = row[DiningTables.nameOverride] ?: row[DiningTables.label]
     val url = config.publicBaseUrl + TableTokens.menuPath(row[DiningTables.publicToken]!!)
-    return tableSlipLines(config.displayName, label, "${row[Zones.nameFr]} / ${row[Zones.nameEn]}", url, wifi)
+    return tableSlipLines(config.displayName, label, "${row[Zones.nameFr]} / ${row[Zones.nameEn]}", url, wifi, slipLocales(config))
 }
 
 /**
@@ -216,6 +225,7 @@ private fun slipLines(row: ResultRow, config: CustomerConfig, wifi: GuestWifi?):
  */
 internal fun tableSlipLines(
     venueName: String, label: String, zone: String, menuUrl: String, wifi: GuestWifi?,
+    locales: List<LocaleCode> = SLIP_LOCALES,
 ): List<PrintLine> {
     val head = listOf(
         PrintLine.LogoPlaceholder(venueName),
@@ -226,17 +236,14 @@ internal fun tableSlipLines(
     )
     if (wifi == null) return head + listOf(
         PrintLine.QrCode(menuUrl),
-        PrintLine.Text("Scannez pour commander de la nourriture", Align.CENTER),
-        PrintLine.Text("Scan to order", Align.CENTER),
-        PrintLine.Blank,
-    )
+    ) + bilingualLines(MessageKey.SLIP_SCAN_TO_ORDER, locales) + PrintLine.Blank
     return head + buildList {
-        addAll(bilingualLines(MessageKey.SLIP_STEP_JOIN_WIFI))
-        addAll(wifiJoinBlock(wifi))
+        addAll(bilingualLines(MessageKey.SLIP_STEP_JOIN_WIFI, locales))
+        addAll(wifiJoinBlock(wifi, locales))
         add(PrintLine.Blank)
         add(PrintLine.Divider)
         add(PrintLine.Blank)
-        addAll(bilingualLines(MessageKey.SLIP_STEP_SCAN_TO_ORDER))
+        addAll(bilingualLines(MessageKey.SLIP_STEP_SCAN_TO_ORDER, locales))
         add(PrintLine.QrCode(menuUrl))
         add(PrintLine.Blank)
     }

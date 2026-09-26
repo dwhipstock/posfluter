@@ -158,7 +158,7 @@ class ShiftService(private val config: CustomerConfig) {
             add(PrintLine.Divider)
             add(PrintLine.KeyValue(
                 if (dir == "IN") msg(CASH_IN) else msg(CASH_OUT),
-                Money(amount).format(), emphasized = true,
+                policy.money(Money(amount)), emphasized = true,
             ))
             add(PrintLine.Blank)
             add(PrintLine.Text(msg(SLIP_REASON) + " " + reason))

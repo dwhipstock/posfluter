@@ -31,8 +31,16 @@ void main() {
     expect(money(101000), '\$1,010'); // default profile: the pubs, unchanged
     expect(money(21550), '\$215.50');
     expect(cad(21550), '\$215.50');
-    expect(formatMoney(1299, 'CAD', lang: 'fr-CA'), '12,99 \$');
-    expect(formatMoney(123450, 'CAD', lang: 'fr-CA'), '1 234,50 \$');
+    expect(formatMoney(1299, 'CAD', lang: 'fr-CA'), '12,99\u00A0\$');
+    expect(formatMoney(123450, 'CAD', lang: 'fr-CA'), '1\u00A0234,50\u00A0\$');
+    expect(formatMoney(101000, 'CAD', lang: 'fr'), '1\u00A0010\u00A0\$');
+    expect(formatMoney(-50, 'CAD', lang: 'fr'), '-0,50\u00A0\$');
+    // money() follows the UI language; USD stays the US way in every language
+    Prefs.instance.lang = 'fr';
+    expect(money(4000), '40\u00A0\$');
+    expect(money(1050), '10,50\u00A0\$');
+    expect(money(1050, lang: 'en'), '\$10.50');
+    expect(money(1299, currency: 'USD'), '\$12.99');
   });
 
   test('the store describes itself from /health', () {
@@ -62,7 +70,7 @@ void main() {
   test('Spanish strings where translated, English otherwise', () {
     const es = L.forLang('es');
     expect(es.es, isTrue);
-    expect(es.retry, 'Retry'); // not translated: English
+    expect(es.retry, 'Reintentar');
     expect(es.name('Bière', 'Beer'), 'Beer'); // catalog data: English side
     expect(es.nameAlt('Bière', 'Beer'), '');
     expect(const L(false).name('Bière', 'Beer'), 'Bière');

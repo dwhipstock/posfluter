@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { Msg } from "@/lib/i18n/context";
 
 // The round lantern badge (client/assets/copper_lantern_logo.png, the tablet's
 // circle asset) served as pre-sized WebP: 192px for the shell, 384px for the
@@ -18,7 +21,7 @@ export function BrandMark({ compact = false, large = false }: { compact?: boolea
     );
   }
   return (
-    <span className="inline-flex items-center gap-2.5" aria-label="Copper Lantern Manager">
+    <span className="inline-flex items-center gap-2.5" aria-label="Copper Lantern">
       <Image
         src="/lantern-badge-192.webp"
         alt=""
@@ -31,7 +34,7 @@ export function BrandMark({ compact = false, large = false }: { compact?: boolea
         <span className="text-[13px] font-bold uppercase tracking-[0.16em]">Copper Lantern</span>
         {!compact && (
           <span className="mt-1 text-[9px] font-semibold uppercase tracking-[0.32em] text-copper-soft">
-            Manager
+            <Msg k="brand_sub" />
           </span>
         )}
       </span>

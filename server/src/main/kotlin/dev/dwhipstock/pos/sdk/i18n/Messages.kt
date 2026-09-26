@@ -56,6 +56,8 @@ enum class MessageKey(val id: String) {
     // retail counter receipts: "Register 1 · Sale #12" instead of table / bill
     RECEIPT_REGISTER("receipt.register"),
     RECEIPT_SALE("receipt.sale"),
+    /** {0} = a bill / sale / refund number: "#12", "n° 12". */
+    RECEIPT_NUMBER("receipt.number"),
     /** {0} = the legal age the customer's ID was checked against (21). */
     RECEIPT_AGE_VERIFIED("receipt.age_verified"),
     REFUND_HEADER("refund.header"),
@@ -80,6 +82,8 @@ enum class MessageKey(val id: String) {
     WIFI_NO_PASSWORD("wifi.no_password"),
     SLIP_STEP_JOIN_WIFI("slip.step_join_wifi"),
     SLIP_STEP_SCAN_TO_ORDER("slip.step_scan_to_order"),
+    /** The one-QR table slip (no guest Wi-Fi): the caption under the menu QR. */
+    SLIP_SCAN_TO_ORDER("slip.scan_to_order"),
 }
 
 /**

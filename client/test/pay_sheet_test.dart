@@ -40,14 +40,17 @@ void main() {
   });
   tearDown(() => StoreProfile.current = StoreProfile.pub);
 
-  testWidgets('cash, change, then the receipt closes the sheet', (tester) async {
+  testWidgets('cash, change, then the receipt closes the sheet', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1920, 1200);
     tester.view.devicePixelRatio = 1.5;
     addTearDown(tester.view.reset);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
-      (_) async => null,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+          (_) async => null,
+        );
     final store = MockClient((req) async {
       http.Response json(Object b, [int s = 200]) => http.Response.bytes(
         utf8.encode(jsonEncode(b)),
@@ -80,8 +83,10 @@ void main() {
               builder: (context) => Scaffold(
                 body: Center(
                   child: TextButton(
-                    onPressed: () async =>
-                        result = await PaySheet.show(context, Check.fromJson(check(1081, 'OPEN'))),
+                    onPressed: () async => result = await PaySheet.show(
+                      context,
+                      Check.fromJson(check(1081, 'OPEN')),
+                    ),
                     child: const Text('open'),
                   ),
                 ),

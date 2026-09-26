@@ -145,7 +145,7 @@ additive.
       "registrationNumber": "1234567890 TQ0001", "amountCents": 4640 }
   ],
   "corkageBottles": 0,
-  "fees": [ { "code": "corkage", "labelFr": "Frais de bouchon de bouteille", "labelEn": "Corkage", "amountCents": 20000 } ],
+  "fees": [ { "code": "corkage", "labelFr": "Droit de bouchon", "labelEn": "Corkage", "amountCents": 20000 } ],
   "lines": [
     {
       "lineId": 91, "itemId": "lantern-lager", "variantId": "lantern-lager:pint",

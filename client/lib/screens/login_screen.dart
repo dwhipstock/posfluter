@@ -442,7 +442,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final sp = SpColors.of(context);
     final ink = _ink(context);
     return SizedBox(
-      width: 208, // fits "directeur (Manager)" untruncated
+      width: 208, // fits the longest name and role untruncated
       child: PosPanel(
         raised: !selected,
         color: branded
@@ -482,7 +482,8 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              s.role,
+              (manager ? L.of(context).roleManager : L.of(context).roleServer)
+                  .toUpperCase(),
               style: T
                   .small(weight: FontWeight.w600)
                   .copyWith(fontSize: 11, letterSpacing: 1.1),
@@ -507,7 +508,7 @@ class _BrandPanel extends StatelessWidget {
     // Sage & Poppy: its own name, its own colours (sage band, poppy accent)
     final brand = sagePoppy ? 'Sage & Poppy' : Api.venueBrand;
     final location = sagePoppy
-        ? 'Bottle Shop · Los Angeles'
+        ? '${R.of(context).bottleShop} · Los Angeles'
         : Api.venueLocation;
     final names = Column(
       mainAxisSize: MainAxisSize.min,

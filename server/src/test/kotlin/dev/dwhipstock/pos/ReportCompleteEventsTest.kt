@@ -115,7 +115,7 @@ class ReportCompleteEventsTest {
         val fees = closed["fees"]!!.jsonArray.map { it.jsonObject }
         assertEquals(1, fees.size)
         assertEquals("corkage", fees[0]["code"]!!.jsonPrimitive.content)
-        assertEquals("Frais de bouchon de bouteille", fees[0]["labelFr"]!!.jsonPrimitive.content)
+        assertEquals("Droit de bouchon", fees[0]["labelFr"]!!.jsonPrimitive.content)
         assertEquals("Corkage", fees[0]["labelEn"]!!.jsonPrimitive.content)
         assertEquals(20000L, fees[0]["amountCents"]!!.jsonPrimitive.long)
 

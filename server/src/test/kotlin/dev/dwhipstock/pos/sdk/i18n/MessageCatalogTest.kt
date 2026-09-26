@@ -37,14 +37,14 @@ class MessageCatalogTest {
             ReceiptItem("Bière Lantern House Lager", "Lantern House Lager", "bouteille", "Bottle", 2, Money.cad(120), Money.cad(240), null),
             ReceiptItem("Poutine classique", "Classic Poutine", null, null, 1, Money.cad(120), Money.cad(120), "Moins épicé"),
         ),
-        fees = listOf(ReceiptFee("Frais de bouchon de bouteille", "Corkage", Money.cad(100))),
+        fees = listOf(ReceiptFee("Droit de bouchon", "Corkage", Money.cad(100))),
         grandTotal = Money(46050),
         taxIncluded = Money(5298),
         taxRatePercent = 13,
-        tenders = listOf(ReceiptTender("espèces", "Cash", Money.cad(500), Money(46050), Money(-50), Money.cad(39))),
+        tenders = listOf(ReceiptTender("Comptant", "Cash", Money.cad(500), Money(46050), Money(-50), Money.cad(39))),
     )
     private val policy = ReceiptPolicy.Standard(
-        "COPPERLANTERN", listOf("123 route d'essai", "téléphone. 514-555-0142"), "merci",
+        "Copper Lantern — Vieux-Port", listOf("47 Lantern Lane, Montréal, QC", "Tél. / Tel. +1 514 555 0142"), "Merci\u00A0!",
         showTax = true,
     )
 
@@ -59,8 +59,8 @@ class MessageCatalogTest {
     fun frenchReceiptsUseTheCompleteFrenchCatalog() {
         val final = render(LocaleCode.FR, ReceiptKind.FINAL)
         val bill = render(LocaleCode.FR, ReceiptKind.PROVISIONAL)
-        assertTrue("Ouverture" in final && "Fermeture" in final && "Monnaie" in final)
-        assertTrue("Déclaration" in bill && "Pas un reçu" in bill)
+        assertTrue("Ouverture" in final && "Fermeture" in final && "Monnaie rendue" in final)
+        assertTrue("ADDITION" in bill && "CECI N’EST PAS UN REÇU" in bill)
     }
 
     @Test
@@ -119,7 +119,7 @@ class MessageCatalogTest {
         val second = mapOf("es" to ("NO ES UN RECIBO" to "CUENTA"))
         for (tag in Messages.supportedTags()) {
             val locale = LocaleCode(tag)
-            val (notReceipt2, bill2) = second[tag] ?: ("Pas un reçu" to "Déclaration")
+            val (notReceipt2, bill2) = second[tag] ?: ("PAS UN REÇU" to "ADDITION")
             val notAReceipt = Messages.get(MessageKey.RECEIPT_NOT_A_RECEIPT, locale)
             assertTrue("NOT A RECEIPT" in notAReceipt && notReceipt2 in notAReceipt,
                 "locale '$tag' de-bilingualized the NOT-A-RECEIPT banner")
@@ -156,7 +156,7 @@ class MessageCatalogTest {
 
     @Test
     fun placeholdersSubstitute() {
-        assertEquals("Taxe de vente 13% (incluse)", Messages.get(MessageKey.RECEIPT_TAX_INCLUDED, LocaleCode.FR, 13))
+        assertEquals("Taxe de vente 13\u00A0% (incluse)", Messages.get(MessageKey.RECEIPT_TAX_INCLUDED, LocaleCode.FR, 13))
         assertEquals("Sales tax 13% (included)", Messages.get(MessageKey.RECEIPT_TAX_INCLUDED, LocaleCode.EN, 13))
     }
 

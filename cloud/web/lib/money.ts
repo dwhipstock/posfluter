@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { money } from "./format";
 import { useStores, useVenues } from "./store";
+import { useI18n } from "./i18n/context";
 import type { Currency, FxRate, MoneyScope } from "./types";
 import { Money, T, type Cell } from "./export/doc";
 
@@ -84,6 +85,7 @@ export interface MoneyApi {
 export function useMoney(): MoneyApi {
   const { data } = useVenues();
   const { storeId } = useStores();
+  const { locale } = useI18n();
   return useMemo(() => {
     const venues = data?.venues ?? [];
     const reportingCurrency = (data?.reportingCurrency ?? "CAD").toUpperCase();
@@ -94,9 +96,9 @@ export function useMoney(): MoneyApi {
     const currencyOf = (id: string) => byId.get(id) ?? "CAD";
     const scopeCurrency = storeId ? currencyOf(storeId) : currencies.length === 1 ? currencies[0] : reportingCurrency;
     const mixedScope = !storeId && multi;
-    const fmtIn = (c: Currency | undefined, cents: number) => money(cents, c ?? "CAD", { unambiguous: multi });
+    const fmtIn = (c: Currency | undefined, cents: number) => money(cents, c ?? "CAD", { unambiguous: multi, locale });
     const shortIn = (c: Currency | undefined, cents: number) =>
-      money(cents, c ?? "CAD", { unambiguous: multi, short: true });
+      money(cents, c ?? "CAD", { unambiguous: multi, short: true, locale });
     const rateOf = (from: string, to: string): number | null => {
       if (from === to) return 1;
       const direct = rates.find((r) => r.from === from && r.to === to);
@@ -146,5 +148,5 @@ export function useMoney(): MoneyApi {
       rateText: (scope) =>
         (scope?.rates ?? rates.filter((r) => r.to === reportingCurrency)).map((r) => `1 ${r.from} = ${r.rate} ${r.to}`).join(", "),
     };
-  }, [data, storeId]);
+  }, [data, storeId, locale]);
 }

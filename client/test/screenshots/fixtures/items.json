@@ -3,8 +3,8 @@
   "id": "lantern-lager",
   "nameFr": "Lager de la Lanterne",
   "nameEn": "Lantern House Lager",
-  "descriptionFr": "Lager vive et maltée brassée en Ontario.",
-  "descriptionEn": "Crisp, malty lager brewed in Ontario.",
+  "descriptionFr": "Lager désaltérante et maltée, brassée à Montréal.",
+  "descriptionEn": "Crisp, malty lager brewed in Montréal.",
   "category": "draft-beer",
   "abbrev": "LL",
   "isAlcohol": true,
@@ -27,9 +27,9 @@
  },
  {
   "id": "amber-ale",
-  "nameFr": "Ale ambrée",
+  "nameFr": "Ambrée cuivrée",
   "nameEn": "Copper Amber Ale",
-  "descriptionFr": "Ale ambrée aux notes de caramel et de noix.",
+  "descriptionFr": "Rousse aux notes de caramel et de noix grillées.",
   "descriptionEn": "Amber ale with caramel and toasted-nut notes.",
   "category": "draft-beer",
   "abbrev": "AA",
@@ -107,7 +107,7 @@
   "id": "wheat-beer",
   "nameFr": "Blanche aux agrumes",
   "nameEn": "Citrus Wheat",
-  "descriptionFr": "Bière de blé légère, orange et coriandre.",
+  "descriptionFr": "Blanche légère à l'orange et à la coriandre.",
   "descriptionEn": "Light wheat beer with orange and coriander.",
   "category": "draft-beer",
   "abbrev": "CW",
@@ -131,7 +131,7 @@
  },
  {
   "id": "copper-old-fashioned",
-  "nameFr": "Old fashioned cuivré",
+  "nameFr": "Old Fashioned cuivré",
   "nameEn": "Copper Old Fashioned",
   "descriptionFr": "Whisky canadien, érable, amers et orange.",
   "descriptionEn": "Canadian whisky, maple, bitters and orange.",
@@ -142,7 +142,7 @@
   "variants": [
    {
     "id": "copper-old-fashioned:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1395
    }
@@ -162,7 +162,7 @@
   "variants": [
    {
     "id": "lantern-mule:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1300
    }
@@ -173,8 +173,8 @@
   "id": "smoked-caesar",
   "nameFr": "César fumé",
   "nameEn": "Smoked Caesar",
-  "descriptionFr": "Vodka, clamato épicé et sel fumé.",
-  "descriptionEn": "Vodka, spiced clamato and smoked salt.",
+  "descriptionFr": "Vodka, jus de tomate et de palourde épicé, sel fumé.",
+  "descriptionEn": "Vodka, spiced tomato-clam juice and smoked salt.",
   "category": "cocktails",
   "abbrev": "SC",
   "isAlcohol": true,
@@ -182,7 +182,7 @@
   "variants": [
    {
     "id": "smoked-caesar:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1300
    }
@@ -202,7 +202,7 @@
   "variants": [
    {
     "id": "maple-sour:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1350
    }
@@ -211,7 +211,7 @@
  },
  {
   "id": "elderflower-gin",
-  "nameFr": "Gin pétillant au sureau",
+  "nameFr": "Gin fizz au sureau",
   "nameEn": "Elderflower Gin Fizz",
   "descriptionFr": "Gin, sureau, citron et soda.",
   "descriptionEn": "Gin, elderflower, lemon and soda.",
@@ -222,7 +222,7 @@
   "variants": [
    {
     "id": "elderflower-gin:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1350
    }
@@ -242,7 +242,7 @@
   "variants": [
    {
     "id": "espresso-martini:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1395
    }
@@ -253,7 +253,7 @@
   "id": "dark-stormy",
   "nameFr": "Dark and Stormy",
   "nameEn": "Dark and Stormy",
-  "descriptionFr": "Rhum brun, gingembre et lime.",
+  "descriptionFr": "Rhum brun, bière de gingembre et lime.",
   "descriptionEn": "Dark rum, ginger beer and lime.",
   "category": "cocktails",
   "abbrev": "DS",
@@ -262,7 +262,7 @@
   "variants": [
    {
     "id": "dark-stormy:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1300
    }
@@ -273,7 +273,7 @@
   "id": "zero-gimlet",
   "nameFr": "Gimlet sans alcool",
   "nameEn": "Zero-Proof Gimlet",
-  "descriptionFr": "Botanique sans alcool, lime et romarin.",
+  "descriptionFr": "Spiritueux botanique sans alcool, lime et romarin.",
   "descriptionEn": "Alcohol-free botanical spirit, lime and rosemary.",
   "category": "cocktails",
   "abbrev": "ZG",
@@ -282,7 +282,7 @@
   "variants": [
    {
     "id": "zero-gimlet:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 850
    }
@@ -293,7 +293,7 @@
   "id": "pretzel",
   "nameFr": "Bretzel géant",
   "nameEn": "Giant Pub Pretzel",
-  "descriptionFr": "Bretzel chaud, moutarde à la bière et fromage.",
+  "descriptionFr": "Bretzel chaud, moutarde à la bière et trempette au fromage.",
   "descriptionEn": "Warm pretzel with beer mustard and cheese dip.",
   "category": "appetizers",
   "abbrev": "PR",
@@ -302,7 +302,7 @@
   "variants": [
    {
     "id": "pretzel:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1225
    }
@@ -313,7 +313,7 @@
   "id": "wings",
   "nameFr": "Ailes de poulet",
   "nameEn": "Chicken Wings",
-  "descriptionFr": "Une livre d'ailes avec sauce au choix.",
+  "descriptionFr": "Une livre d'ailes, sauce au choix.",
   "descriptionEn": "One pound of wings with your choice of sauce.",
   "category": "appetizers",
   "abbrev": "WG",
@@ -322,7 +322,7 @@
   "variants": [
    {
     "id": "wings:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1675
    }
@@ -342,7 +342,7 @@
   "variants": [
    {
     "id": "nachos:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1750
    }
@@ -362,7 +362,7 @@
   "variants": [
    {
     "id": "calamari:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1675
    }
@@ -373,7 +373,7 @@
   "id": "spinach-dip",
   "nameFr": "Trempette épinards-artichauts",
   "nameEn": "Spinach Artichoke Dip",
-  "descriptionFr": "Trempette chaude avec croustilles de pita.",
+  "descriptionFr": "Trempette chaude servie avec croustilles de pita.",
   "descriptionEn": "Hot dip served with pita chips.",
   "category": "appetizers",
   "abbrev": "SD",
@@ -382,7 +382,7 @@
   "variants": [
    {
     "id": "spinach-dip:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1475
    }
@@ -402,7 +402,7 @@
   "variants": [
    {
     "id": "poutine:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1300
    }
@@ -422,7 +422,7 @@
   "variants": [
    {
     "id": "lantern-burger:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1925
    }
@@ -433,7 +433,7 @@
   "id": "mushroom-burger",
   "nameFr": "Burger aux champignons",
   "nameEn": "Mushroom Swiss Burger",
-  "descriptionFr": "Bœuf, champignons, suisse et aïoli.",
+  "descriptionFr": "Bœuf, champignons, fromage suisse et aïoli.",
   "descriptionEn": "Beef, mushrooms, Swiss cheese and aioli.",
   "category": "burgers-sandwiches",
   "abbrev": "MB",
@@ -442,7 +442,7 @@
   "variants": [
    {
     "id": "mushroom-burger:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1975
    }
@@ -462,7 +462,7 @@
   "variants": [
    {
     "id": "veggie-burger:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1750
    }
@@ -482,7 +482,7 @@
   "variants": [
    {
     "id": "club:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1850
    }
@@ -502,7 +502,7 @@
   "variants": [
    {
     "id": "reuben:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1925
    }
@@ -513,7 +513,7 @@
   "id": "fish-sandwich",
   "nameFr": "Sandwich au poisson",
   "nameEn": "Crispy Fish Sandwich",
-  "descriptionFr": "Aiglefin pané, salade de chou et tartare.",
+  "descriptionFr": "Aiglefin frit, salade de chou et sauce tartare.",
   "descriptionEn": "Battered haddock, slaw and tartar sauce.",
   "category": "burgers-sandwiches",
   "abbrev": "FS",
@@ -522,7 +522,7 @@
   "variants": [
    {
     "id": "fish-sandwich:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1750
    }
@@ -533,7 +533,7 @@
   "id": "fish-chips",
   "nameFr": "Poisson-frites",
   "nameEn": "Beer-Battered Fish and Chips",
-  "descriptionFr": "Aiglefin, frites, salade de chou et tartare.",
+  "descriptionFr": "Aiglefin en pâte à la bière, frites, salade de chou et sauce tartare.",
   "descriptionEn": "Haddock, fries, slaw and tartar sauce.",
   "category": "mains",
   "abbrev": "FC",
@@ -542,7 +542,7 @@
   "variants": [
    {
     "id": "fish-chips:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 2025
    }
@@ -562,7 +562,7 @@
   "variants": [
    {
     "id": "steak-frites:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 2650
    }
@@ -582,7 +582,7 @@
   "variants": [
    {
     "id": "shepherd-pie:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1925
    }
@@ -591,9 +591,9 @@
  },
  {
   "id": "mac-cheese",
-  "nameFr": "Macaroni au fromage",
+  "nameFr": "Macaroni aux trois fromages",
   "nameEn": "Three-Cheese Mac",
-  "descriptionFr": "Macaroni crémeux gratiné avec chapelure.",
+  "descriptionFr": "Macaroni crémeux gratiné aux trois fromages.",
   "descriptionEn": "Creamy baked macaroni with three cheeses.",
   "category": "mains",
   "abbrev": "MC",
@@ -602,7 +602,7 @@
   "variants": [
    {
     "id": "mac-cheese:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1675
    }
@@ -622,7 +622,7 @@
   "variants": [
    {
     "id": "salmon:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 2475
    }
@@ -642,7 +642,7 @@
   "variants": [
    {
     "id": "chicken-pot-pie:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 1850
    }
@@ -653,7 +653,7 @@
   "id": "sticky-pudding",
   "nameFr": "Pouding au caramel",
   "nameEn": "Sticky Toffee Pudding",
-  "descriptionFr": "Gâteau aux dattes, caramel et crème glacée.",
+  "descriptionFr": "Gâteau aux dattes, sauce au caramel et crème glacée.",
   "descriptionEn": "Date cake, toffee sauce and ice cream.",
   "category": "desserts",
   "abbrev": "ST",
@@ -662,7 +662,7 @@
   "variants": [
    {
     "id": "sticky-pudding:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 850
    }
@@ -671,9 +671,9 @@
  },
  {
   "id": "cheesecake",
-  "nameFr": "Gâteau au fromage",
+  "nameFr": "Gâteau au fromage à l'érable",
   "nameEn": "Maple Cheesecake",
-  "descriptionFr": "Gâteau au fromage à l'érable et noix de pacane.",
+  "descriptionFr": "Garni de pacanes grillées.",
   "descriptionEn": "Maple cheesecake with toasted pecans.",
   "category": "desserts",
   "abbrev": "CK",
@@ -682,7 +682,7 @@
   "variants": [
    {
     "id": "cheesecake:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 850
    }
@@ -702,7 +702,7 @@
   "variants": [
    {
     "id": "brownie:regular",
-    "labelFr": "Régulier",
+    "labelFr": "Standard",
     "labelEn": "Regular",
     "priceCents": 800
    }

@@ -258,7 +258,7 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          '${l.splitBill} — ${l.table} ${widget.tableLabel} · ${l.bill} #${_check.id}',
+          '${l.splitBill} — ${l.table} ${widget.tableLabel} · ${l.billNo(_check.id)}',
         ),
         actions: [
           if (split != null && !_locked) ...[

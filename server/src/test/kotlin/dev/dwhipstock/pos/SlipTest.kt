@@ -32,7 +32,7 @@ class SlipTest {
         assertEquals(HttpStatusCode.OK, slip.status)
         val slipHtml = slip.bodyAsText()
         assertTrue("data:image/png;base64," in slipHtml) // QR inline, no extra fetch
-        assertTrue("Scannez pour commander de la nourriture" in slipHtml && "Scan to order" in slipHtml)
+        assertTrue("Balayez pour commander" in slipHtml && "Scan to order" in slipHtml)
         // titled with the store this process runs, not a hardcoded name
         assertTrue("<title>Table slips — Copper Lantern — Vieux-Port</title>" in slipHtml)
         assertTrue("Copper Lantern Pub" !in slipHtml)

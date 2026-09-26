@@ -50,10 +50,10 @@ function safeStaffUrl(base: string | undefined): string | null {
 // only ever hit when there's nothing to redirect to.
 function offlinePage(): string {
   return `<!doctype html>
-<html lang="en"><head>
+<html lang="fr"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CopperLantern POS — employé</title>
+<title>Copper Lantern — Personnel / Staff</title>
 <style>
   *{box-sizing:border-box;margin:0;font-family:'Noto Sans',system-ui,sans-serif}
   body{background:#fafafa;color:#121212;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -66,9 +66,9 @@ function offlinePage(): string {
 </style></head><body>
   <div class="card">
     <div class="icon">📶</div>
-    <div class="fr">Je ne parviens toujours pas à me connecter au magasin.<br>Veuillez vous connecter Wi-Fi du magasin et réessayez.</div>
+    <div class="fr">Impossible de joindre l’établissement pour l’instant.<br>Connectez-vous au Wi-Fi de l’établissement, puis réessayez.</div>
     <div class="en">Can't reach the store right now.<br>Connect to the store Wi-Fi and try again.</div>
-    <div class="hint">Ouvrez l'application des employés directement depuis le magasin à<br>Or open it directly on the store network:<br><code>http://&lt;store-ip&gt;:8080/staff-app</code></div>
+    <div class="hint">Ou ouvrez l’appli du personnel directement sur le réseau de l’établissement&nbsp;:<br>Or open it directly on the store network:<br><code>http://&lt;store-ip&gt;:8080/staff-app</code></div>
   </div>
 </body></html>`;
 }

@@ -773,7 +773,7 @@ class CheckService(private val config: CustomerConfig) {
     }
 
     /**
-     * Provisional customer bill ("Vérifiez la facture" / check please): render the check's current
+     * Provisional customer bill ("L’addition, s’il vous plaît" / check please): render the check's current
      * state and spool it to the bills/ directory. Deliberately non-mutating — the check
      * stays OPEN and editable, so this is callable any number of times as items come and
      * go. Refuses on a check that's no longer live (400 check_not_billable) and on
@@ -880,7 +880,7 @@ class CheckService(private val config: CustomerConfig) {
         val tt = runCatching { TenderType.valueOf(type) }.getOrNull()
         if (tt == TenderType.STRIPE) return "Carte (Stripe)" to "Card (Stripe)"
         val method = tt?.let { runCatching { config.tenderMethod(it) }.getOrNull() }
-        return (method?.labelFr ?: "espèces") to (method?.labelEn ?: "Cash")
+        return (method?.labelFr ?: "Comptant") to (method?.labelEn ?: "Cash")
     }
 
     fun receiptText(checkId: Int): String = transaction {
@@ -1375,27 +1375,27 @@ class CheckService(private val config: CustomerConfig) {
             add(PrintLine.Header(msg(REFUND_HEADER)))
             add(PrintLine.Blank)
             add(PrintLine.KeyValue(
-                msg(REFUND_REF_BILL) + " #" + check[Checks.id].value,
-                msg(REFUND_NUMBER) + " #" + refundId,
+                msg(REFUND_REF_BILL) + " " + msg(MessageKey.RECEIPT_NUMBER, check[Checks.id].value),
+                msg(REFUND_NUMBER) + " " + msg(MessageKey.RECEIPT_NUMBER, refundId),
             ))
             add(PrintLine.KeyValue(msg(SLIP_TIME), policy.formatDate(VenueClock.local(now))))
             add(PrintLine.Divider)
             // the added taxes handed back, then the total they are part of
             if (addedTaxes.isNotEmpty()) {
                 val reversed = addedTaxes.sumOf { it.amount.cents }
-                add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), Money(gross - reversed).format()))
+                add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), policy.money(Money(gross - reversed))))
                 addedTaxes.forEach {
-                    add(PrintLine.KeyValue(ReceiptRenderer.taxLineLabel(it.component, locale), it.amount.format()))
+                    add(PrintLine.KeyValue(ReceiptRenderer.taxLineLabel(it.component, locale), policy.money(it.amount)))
                 }
             }
-            add(PrintLine.KeyValue(msg(REFUND_TOTAL), Money(gross).format(), emphasized = true))
+            add(PrintLine.KeyValue(msg(REFUND_TOTAL), policy.money(Money(gross)), emphasized = true))
             if (policy.showTax && taxRate != null) {
-                add(PrintLine.KeyValue(msg(RECEIPT_TAX_INCLUDED, taxRate), Money(tax - addedTaxes.sumOf { it.amount.cents }).format()))
+                add(PrintLine.KeyValue(msg(RECEIPT_TAX_INCLUDED, taxRate), policy.money(Money(tax - addedTaxes.sumOf { it.amount.cents }))))
             }
             // cash handed back rounds to the nickel: show the adjustment and the cash
             if (rounding != 0L) {
-                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), ReceiptRenderer.signed(Money(rounding)) { it.format() }))
-                add(PrintLine.KeyValue(msg(REFUND_CASH_BACK), Money(gross + rounding).format(), emphasized = true))
+                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), ReceiptRenderer.signed(Money(rounding), policy::money)))
+                add(PrintLine.KeyValue(msg(REFUND_CASH_BACK), policy.money(Money(gross + rounding)), emphasized = true))
             }
             add(PrintLine.KeyValue(msg(REFUND_VIA), tenderLabel))
             add(PrintLine.Blank)

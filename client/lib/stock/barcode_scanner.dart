@@ -121,7 +121,7 @@ class _CameraScanPageState extends State<CameraScanPage> {
         title: Text(s.scanWithCamera),
         actions: [
           IconButton(
-            tooltip: 'Torch',
+            tooltip: s.torch,
             icon: const Icon(LucideIcons.flashlight),
             onPressed: () => _controller.toggleTorch(),
           ),

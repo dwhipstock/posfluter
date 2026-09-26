@@ -1,3 +1,5 @@
+import 'i18n.dart';
+
 /// What this terminal's store is: which screens, brand, languages and money
 /// format it uses. Read from the store's public `GET /health` (before
 /// sign-in), so a retail counter, a US store or a Québec pub each come up
@@ -69,11 +71,17 @@ class StoreProfile {
 /// Money for people, in this store's currency. Cents on the wire everywhere.
 ///
 /// - CAD (the pubs): the house style they always had — `$1,010` for whole
-///   dollars, `$10.50` otherwise, in both French and English.
+///   dollars, `$10.50` otherwise — in English; in French the Québec way,
+///   `1 010 $` and `10,50 $` (no-break spaces, the symbol after).
 /// - USD: `$12.99`, `$5.00` — US shelf style, always with cents, in English
 ///   and US Spanish alike.
-String money(int cents, {String? currency}) =>
-    formatMoney(cents, currency ?? StoreProfile.current.currency);
+///
+/// [lang] defaults to the terminal's current UI language.
+String money(int cents, {String? currency, String? lang}) => formatMoney(
+  cents,
+  currency ?? StoreProfile.current.currency,
+  lang: lang ?? Prefs.instance.lang,
+);
 
 /// A signed adjustment (cash rounding): `+$0.01`, `−$0.02`. Always shows the
 /// sign so the cashier reads it as a correction, not an amount.
@@ -82,6 +90,7 @@ String signedMoney(int cents, {String? currency}) {
   return cents < 0 ? '−$abs' : '+$abs';
 }
 
+/// [lang] is a UI language (`en`, `fr`, `es`) or a tag (`fr-CA`).
 String formatMoney(int cents, String currency, {String lang = 'en'}) {
   final sign = cents < 0 ? '-' : '';
   final abs = cents.abs();
@@ -94,7 +103,11 @@ String formatMoney(int cents, String currency, {String lang = 'en'}) {
   final cc = frac.toString().padLeft(2, '0');
   switch (currency.toUpperCase()) {
     case 'CAD':
-      if (lang == 'fr-CA') return '$sign${grouped(' ')},$cc \$';
+      if (lang.toLowerCase().startsWith('fr')) {
+        // Québec French: 1 010 $ / 10,50 $ (no-break spaces keep it on one line)
+        final figure = frac == 0 ? grouped(_nbsp) : '${grouped(_nbsp)},$cc';
+        return '$sign$figure$_nbsp\$';
+      }
       return frac == 0
           ? '$sign\$${grouped(',')}'
           : '$sign\$${grouped(',')}.$cc';
@@ -104,3 +117,5 @@ String formatMoney(int cents, String currency, {String lang = 'en'}) {
       return '$sign${currency.toUpperCase()} ${grouped(',')}.$cc';
   }
 }
+
+const _nbsp = '\u00A0';

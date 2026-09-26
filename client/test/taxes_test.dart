@@ -51,7 +51,7 @@ void main() {
     final qst = _check().taxes[1];
     expect(const L(true).taxLine(_check().taxes[0]), 'GST 5%');
     expect(const L(true).taxLine(qst), 'QST 9.975%');
-    expect(const L(false).taxLine(qst), 'TVQ 9,975 %');
+    expect(const L(false).taxLine(qst), 'TVQ 9,975\u00A0%');
   });
 
   testWidgets('tax rows show subtotal, GST and QST', (tester) async {

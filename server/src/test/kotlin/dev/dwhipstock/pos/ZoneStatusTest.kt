@@ -100,7 +100,7 @@ class ZoneStatusTest {
         val menu = client.get(customerPath("t3"))
         assertEquals(HttpStatusCode.OK, menu.status)
         val body = menu.bodyAsText()
-        assertTrue("Cette zone est temporairement fermée." in body, "missing French closed banner")
+        assertTrue("Cette section est fermée pour le moment." in body, "missing French closed banner")
         assertTrue("temporarily closed" in body, "missing English closed banner")
         assertTrue("<title>Copper Lantern — Vieux-Port</title>" in body, "closed page titled with the store")
 

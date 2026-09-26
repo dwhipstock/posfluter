@@ -179,7 +179,7 @@ class CashRoundingTest {
         // French and Spanish name it too; a positive adjustment carries its sign
         val up = ReceiptTender("Espèces", "Cash", Money(1010), Money(1008), Money(2), Money.ZERO, "CASH")
         val fr = kv(ReceiptRenderer.render(receipt(listOf(up)), policy.withLocale(dev.dwhipstock.pos.sdk.i18n.LocaleCode.FR)))
-        assertTrue("Arrondi | +0.02" in fr && "Total comptant | 10.10" in fr, fr.joinToString("\n"))
+        assertTrue("Arrondi | +0,02" in fr && "Total comptant | 10,10" in fr, fr.joinToString("\n"))
         val es = kv(ReceiptRenderer.render(receipt(listOf(up)), policy.withLocale(dev.dwhipstock.pos.sdk.i18n.LocaleCode.ES)))
         assertTrue("Redondeo | +0.02" in es && "Total en efectivo | 10.10" in es, es.joinToString("\n"))
         // a card payment is exact: no rounding lines at all

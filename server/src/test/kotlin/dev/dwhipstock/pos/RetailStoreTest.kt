@@ -225,7 +225,7 @@ class RetailStoreTest {
         c.post("/checks/$sale/finalize").let { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
         val receipt = obj(c.get("/checks/$sale/receipt").bodyAsText())["text"]!!.jsonPrimitive.content
         assertTrue("Caja 1" in receipt && "Venta #$sale" in receipt, receipt)
-        assertTrue("Impuesto sobre la venta 9.5%" in receipt, receipt)
+        assertTrue("Impuesto sobre las ventas 9.5%" in receipt, receipt)
         assertTrue("CRV (depósito de envases)" in receipt, receipt)
         assertTrue("Efectivo" in receipt && "Cambio" in receipt, receipt)
         assertTrue("Subtotal" in receipt && "Total" in receipt, receipt)

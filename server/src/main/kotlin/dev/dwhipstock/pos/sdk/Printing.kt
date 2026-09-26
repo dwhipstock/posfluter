@@ -14,7 +14,7 @@ import java.time.format.DateTimeFormatter
 @Serializable
 sealed interface PrintLine {
     /**
-     * Emphasized centered text (shop name, Le projet de loi a été clôturé...). Thermal: large bold.
+     * Emphasized centered text (shop name, the CUSTOMER BILL / NOT A RECEIPT banners). Thermal: large bold.
      * [exact]: never word-wrap (a Wi-Fi password) — it shrinks, then breaks between characters.
      */
     @Serializable

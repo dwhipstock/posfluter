@@ -212,7 +212,7 @@ void main() {
     addTearDown(() => Prefs.instance.lang = 'en');
     await pumpTender(tester, StripeStatus.unavailable('stripe_unavailable'));
     expect(find.text('Carte (Stripe)'), findsOneWidget);
-    expect(find.textContaining('Pas d\'Internet'), findsOneWidget);
+    expect(find.textContaining('Pas d’Internet'), findsOneWidget);
   });
 
   group('payment screen', () {

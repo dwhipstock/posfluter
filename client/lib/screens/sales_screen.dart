@@ -93,7 +93,7 @@ class _SalesScreenState extends State<SalesScreen> {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         title: Text(
-          '${l.bill} #${c.id}  ·  ${c.tableLabel}',
+          '${l.billNo(c.id)}  ·  ${c.tableLabel}',
           style: T.text(size: 16, weight: FontWeight.w600),
         ),
         subtitle: Text(
@@ -300,7 +300,9 @@ class _RefundScreenState extends State<RefundScreen> {
     final check = _check;
     final info = _info;
     return Scaffold(
-      appBar: AppBar(title: Text('${l.refundTitle} #${widget.checkId}')),
+      appBar: AppBar(
+        title: Text('${l.refundTitle} ${l.numbered(widget.checkId)}'),
+      ),
       body: _error != null
           ? Center(
               child: Column(

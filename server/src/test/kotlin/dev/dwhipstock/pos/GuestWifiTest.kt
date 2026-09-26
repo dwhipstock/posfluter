@@ -221,7 +221,7 @@ class GuestWifiTest {
         val texts = lines.filterIsInstance<dev.dwhipstock.pos.sdk.PrintLine.Header>().map { it.text } +
             lines.filterIsInstance<dev.dwhipstock.pos.sdk.PrintLine.Text>().map { it.text }
         assertTrue("Free Wi-Fi / Wi-Fi gratuit" in texts)
-        assertTrue("Scan to connect" in texts && "Scannez pour vous connecter" in texts)
+        assertTrue("Scan to connect" in texts && "Balayez pour vous connecter" in texts)
         assertTrue("Lantern Guests" in texts && SECRET in texts)
         val img = ThermalReceiptRenderer.renderImage(lines)
         assertEquals(setOf("WIFI:T:WPA;S:Lantern Guests;P:$SECRET;H:true;;"), decodeAll(img))
@@ -232,7 +232,7 @@ class GuestWifiTest {
         val lines = tableSlipLines("Copper Lantern", "L-8", "Bas / Lower", menuUrl, wifi)
         val texts = lines.filterIsInstance<dev.dwhipstock.pos.sdk.PrintLine.Text>().map { it.text }
         assertTrue("1. Join Wi-Fi" in texts && "1. Connectez-vous au Wi-Fi" in texts)
-        assertTrue("2. Scan to order" in texts && "2. Scannez pour commander" in texts)
+        assertTrue("2. Scan to order" in texts && "2. Balayez pour commander" in texts)
         val qrs = lines.filterIsInstance<dev.dwhipstock.pos.sdk.PrintLine.QrCode>().map { it.data }
         assertEquals(listOf(wifi.qrPayload(), menuUrl), qrs) // Wi-Fi first, stacked
         val img = ThermalReceiptRenderer.renderImage(lines)

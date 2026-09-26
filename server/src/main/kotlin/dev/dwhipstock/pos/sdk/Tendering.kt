@@ -69,7 +69,7 @@ data class BankTransferMethod(
         displayFields = listOf(
             DisplayField("Banque", "Bank", bankName),
             DisplayField("Numéro de compte", "Account no.", accountNumber),
-            DisplayField("Titulaire", "Account name", accountName),
+            DisplayField("Titulaire du compte", "Account name", accountName),
         ),
     )
 }
