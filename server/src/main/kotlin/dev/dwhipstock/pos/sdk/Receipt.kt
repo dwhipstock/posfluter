@@ -95,6 +95,31 @@ data class ReceiptTender(
     val change: Money,
     /** CASH | CARD | …: lets a locale pack name the tender ([Messages.dataLabel]). */
     val type: String = "",
+    /** Card-present tenders: the card slip fields (null = print the tender line only). */
+    val card: ReceiptCard? = null,
+)
+
+/**
+ * What a card receipt shows about the card, like a terminal's own slip: brand
+ * and masked last four, how it was read, the auth code and the EMV fields.
+ * Never a full card number.
+ */
+data class ReceiptCard(
+    val brand: String? = null,
+    val last4: String? = null,
+    /** tap | insert | swipe | keyed | unknown */
+    val entryMode: String = "unknown",
+    val authCode: String? = null,
+    val aid: String? = null,
+    val tvr: String? = null,
+    val tsi: String? = null,
+    val appLabel: String? = null,
+    val cvm: String? = null,
+    /** Tip added on the reader, charged on top of the tender amount. */
+    val tip: Money = Money.ZERO,
+    /** The processor's transaction id and name ("J.P. Morgan sandbox"). */
+    val processorRef: String? = null,
+    val processor: String? = null,
 )
 
 /**
@@ -284,6 +309,7 @@ object ReceiptRenderer {
             if (!tender.change.isZero) {
                 add(PrintLine.KeyValue(msg(RECEIPT_CHANGE), tender.change.let(policy::money)))
             }
+            tender.card?.let { card -> addAll(cardLines(card, tender.amountTendered, policy::money) { msg(it) }) }
         }
 
         receipt.ageVerifiedAt?.let {
@@ -293,6 +319,41 @@ object ReceiptRenderer {
 
         add(PrintLine.Blank)
         add(PrintLine.Text(policy.footerText, Align.CENTER))
+    }
+
+    /**
+     * The card slip block under a card tender, laid out like a terminal's own
+     * receipt: "VISA **** 4242 · Contactless", the auth code, EMV AID / TVR /
+     * TSI (chip and tap only), the application label and CVM, then APPROVED.
+     * A tip added on the reader prints with the total charged.
+     */
+    fun cardLines(
+        card: ReceiptCard, amount: Money, money: (Money) -> String, msg: (MessageKey) -> String,
+    ): List<PrintLine> = buildList {
+        val entry = when (card.entryMode) {
+            "tap" -> msg(MessageKey.RECEIPT_CARD_ENTRY_TAP)
+            "insert" -> msg(MessageKey.RECEIPT_CARD_ENTRY_INSERT)
+            "swipe" -> msg(MessageKey.RECEIPT_CARD_ENTRY_SWIPE)
+            "keyed" -> msg(MessageKey.RECEIPT_CARD_ENTRY_KEYED)
+            else -> ""
+        }
+        if (!card.tip.isZero) {
+            add(PrintLine.KeyValue(msg(MessageKey.RECEIPT_CARD_TIP), money(card.tip)))
+            add(PrintLine.KeyValue(msg(MessageKey.RECEIPT_CARD_TOTAL), money(amount + card.tip), emphasized = true))
+        }
+        val cardName = listOfNotNull(card.brand?.uppercase(), card.last4?.let { "**** $it" }).joinToString(" ")
+        if (cardName.isNotEmpty() || entry.isNotEmpty()) add(PrintLine.KeyValue(cardName, entry))
+        card.authCode?.let { add(PrintLine.KeyValue(msg(MessageKey.RECEIPT_CARD_AUTH), it)) }
+        card.aid?.let { add(PrintLine.KeyValue("AID", it)) }
+        if (card.tvr != null || card.tsi != null)
+            add(PrintLine.KeyValue(card.tvr?.let { "TVR $it" } ?: "", card.tsi?.let { "TSI $it" } ?: ""))
+        if (card.appLabel != null || card.cvm != null)
+            add(PrintLine.KeyValue(card.appLabel ?: "", card.cvm ?: ""))
+        card.processorRef?.let {
+            card.processor?.let { p -> add(PrintLine.Text(p)) }
+            add(PrintLine.KeyValue("Ref", it))
+        }
+        add(PrintLine.Text(msg(MessageKey.RECEIPT_CARD_APPROVED), Align.CENTER))
     }
 
     /** A rounding adjustment with its sign: "-0.02", "+0.01". */

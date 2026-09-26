@@ -464,6 +464,7 @@ fun Route.posRoutes(
     auth: dev.dwhipstock.pos.base.AuthService,
     photos: dev.dwhipstock.pos.sdk.PhotoStore,
     stripe: dev.dwhipstock.pos.payments.StripeService? = null,
+    terminals: dev.dwhipstock.pos.payments.TerminalPaymentService? = null,
 ) {
 
     post("/checks/{id}/pending-lines/{lineId}/accept") {
@@ -740,6 +741,12 @@ fun Route.posRoutes(
         if (req.tenderType == TenderType.STRIPE.name && stripe != null) {
             val id = checkId(call)
             call.respond(HttpStatusCode.Created, onIo { stripe.refund(id, req.amountCents, req.lines, req.reason, approverId) })
+            return@post
+        }
+        // back to the card on the integrated terminal: refunded ON the terminal first, likewise
+        if (req.tenderType == TenderType.TERMINAL.name && terminals?.drivesPayments == true) {
+            val id = checkId(call)
+            call.respond(HttpStatusCode.Created, onIo { terminals.refund(id, req.amountCents, req.lines, req.reason, approverId) })
             return@post
         }
         call.respond(HttpStatusCode.Created, checkService.refundCheck(

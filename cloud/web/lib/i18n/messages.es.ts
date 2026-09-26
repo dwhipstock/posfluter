@@ -88,6 +88,7 @@ export const es: Record<MsgKey, string> = {
   tender_CARD: "Tarjeta",
   tender_BANK_TRANSFER: "Transferencia bancaria",
   tender_STRIPE: "Tarjeta (Stripe)",
+  tender_TERMINAL: "Tarjeta (terminal)",
   dash_title: "Panel",
   kpi_gross: "Bruto",
   kpi_net: "Neto (antes de impuestos)",

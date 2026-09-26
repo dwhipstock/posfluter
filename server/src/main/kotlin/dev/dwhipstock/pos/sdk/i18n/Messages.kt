@@ -68,6 +68,15 @@ enum class MessageKey(val id: String) {
     RECEIPT_FUEL_PREPAY("receipt.fuel_prepay"),
     /** Fuel prices include the fuel taxes (no sales tax is added on fuel). */
     RECEIPT_FUEL_TAX("receipt.fuel_tax"),
+    // card-present tenders: the card slip block under the tender line
+    RECEIPT_CARD_ENTRY_TAP("receipt.card_entry_tap"),
+    RECEIPT_CARD_ENTRY_INSERT("receipt.card_entry_insert"),
+    RECEIPT_CARD_ENTRY_SWIPE("receipt.card_entry_swipe"),
+    RECEIPT_CARD_ENTRY_KEYED("receipt.card_entry_keyed"),
+    RECEIPT_CARD_AUTH("receipt.card_auth"),
+    RECEIPT_CARD_TIP("receipt.card_tip"),
+    RECEIPT_CARD_TOTAL("receipt.card_total"),
+    RECEIPT_CARD_APPROVED("receipt.card_approved"),
     REFUND_HEADER("refund.header"),
     REFUND_REF_BILL("refund.ref_bill"),
     REFUND_NUMBER("refund.number"),

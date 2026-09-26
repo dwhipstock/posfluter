@@ -74,13 +74,13 @@ class UrlStripeHttp(
  * Messages are scrubbed of anything that looks like a key.
  */
 class StripeException(
-    val status: Int,
-    val code: String,
+    status: Int,
+    code: String,
     message: String,
-    val declineCode: String? = null,
+    declineCode: String? = null,
     cause: Throwable? = null,
-) : RuntimeException(scrub(message), cause) {
-    val unreachable: Boolean get() = code == UNAVAILABLE
+) : dev.dwhipstock.pos.payments.terminal.TerminalException(status, code, scrub(message), declineCode, cause) {
+    override val unreachable: Boolean get() = code == UNAVAILABLE
 
     companion object {
         const val UNAVAILABLE = "stripe_unavailable"
@@ -129,8 +129,8 @@ class StripeClient(private val http: StripeHttp) {
     fun createPaymentIntent(params: List<Pair<String, String>>, idempotencyKey: String) =
         call("POST", "/v1/payment_intents", params, idempotencyKey)
     fun retrievePaymentIntent(id: String) = call("GET", "/v1/payment_intents/$id")
-    fun capturePaymentIntent(id: String, idempotencyKey: String) =
-        call("POST", "/v1/payment_intents/$id/capture", emptyList(), idempotencyKey)
+    fun capturePaymentIntent(id: String, idempotencyKey: String, params: List<Pair<String, String>> = emptyList()) =
+        call("POST", "/v1/payment_intents/$id/capture", params, idempotencyKey)
     fun cancelPaymentIntent(id: String, idempotencyKey: String) =
         call("POST", "/v1/payment_intents/$id/cancel", emptyList(), idempotencyKey)
     fun createRefund(params: List<Pair<String, String>>, idempotencyKey: String) =

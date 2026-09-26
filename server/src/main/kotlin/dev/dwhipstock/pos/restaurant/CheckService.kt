@@ -123,6 +123,8 @@ data class RefundInfo(
     val refunds: List<RefundView>,
     /** Still refundable back to the card through Stripe (0 = no Stripe tender). */
     val stripeRefundableCents: Long = 0,
+    /** Still refundable back to the card through the integrated terminal (0 = no TERMINAL tender). */
+    val terminalRefundableCents: Long = 0,
 )
 
 /** A CLOSED check in the refund picker: what it was, what's left to refund. */
@@ -144,6 +146,25 @@ data class ClosedCheckSummary(
  * reason and no manager gate; see cancelIfEmpty), or → MERGED (its lines were
  * folded into another table's check; see mergeCheck).
  */
+private val CARD_JSON = Json { ignoreUnknownKeys = true }
+
+/** A tender's card fields as stored in tenders.card_json. */
+internal fun encodeCard(card: dev.dwhipstock.pos.payments.terminal.CardDetails): String =
+    CARD_JSON.encodeToString(dev.dwhipstock.pos.payments.terminal.CardDetails.serializer(), card)
+
+internal fun decodeCard(json: String?): dev.dwhipstock.pos.payments.terminal.CardDetails? = json?.let {
+    runCatching { CARD_JSON.decodeFromString(dev.dwhipstock.pos.payments.terminal.CardDetails.serializer(), it) }.getOrNull()
+}
+
+/** What the receipt prints under a card tender. */
+internal fun receiptCardOf(json: String?): dev.dwhipstock.pos.sdk.ReceiptCard? = decodeCard(json)?.let { c ->
+    dev.dwhipstock.pos.sdk.ReceiptCard(
+        brand = c.brand, last4 = c.last4, entryMode = c.entryMode.wire, authCode = c.authCode,
+        aid = c.aid, tvr = c.tvr, tsi = c.tsi, appLabel = c.appLabel, cvm = c.cvm, tip = Money(c.tipCents),
+        processorRef = c.processorRef, processor = c.processor,
+    )
+}
+
 class CheckService(private val config: CustomerConfig) {
 
     private val log = LoggerFactory.getLogger(CheckService::class.java)
@@ -736,11 +757,29 @@ class CheckService(private val config: CustomerConfig) {
      * captured. Exact cents, no rounding, through the ordinary tender path (same
      * outbox event as any confirmed electronic tender, type STRIPE + the PI id).
      */
-    fun recordStripeTender(checkId: Int, amountCents: Long, paymentIntentId: String, groupId: Int? = null): TenderView = transaction {
+    fun recordStripeTender(
+        checkId: Int, amountCents: Long, paymentIntentId: String, groupId: Int? = null,
+        card: dev.dwhipstock.pos.payments.terminal.CardDetails? = null,
+    ): TenderView = transaction {
         val outstanding = lockAndOutstanding(checkId, groupId)
         val applied = TransactionPipeline.tenderElectronic(outstanding, Money(amountCents))
         recordTender(checkId, TenderType.STRIPE, "check.tender_confirmed", amountCents, applied,
-            Money.ZERO, Money.ZERO, groupId, stripePaymentIntentId = paymentIntentId)
+            Money.ZERO, Money.ZERO, groupId, stripePaymentIntentId = paymentIntentId, card = card)
+    }
+
+    /**
+     * Integrated terminal (simulator, J.P. Morgan) final step: record the
+     * tender for a payment the terminal approved. Same path and outbox event as
+     * a Stripe tender, type TERMINAL + the terminal's payment id + [provider].
+     */
+    fun recordTerminalTender(
+        checkId: Int, amountCents: Long, terminalRef: String, provider: String, groupId: Int? = null,
+        card: dev.dwhipstock.pos.payments.terminal.CardDetails? = null,
+    ): TenderView = transaction {
+        val outstanding = lockAndOutstanding(checkId, groupId)
+        val applied = TransactionPipeline.tenderElectronic(outstanding, Money(amountCents))
+        recordTender(checkId, TenderType.TERMINAL, "check.tender_confirmed", amountCents, applied,
+            Money.ZERO, Money.ZERO, groupId, terminalPaymentRef = terminalRef, terminalProvider = provider, card = card)
     }
 
     private fun lockAndOutstanding(checkId: Int, groupId: Int? = null): Money {
@@ -780,9 +819,14 @@ class CheckService(private val config: CustomerConfig) {
         tenderedCents: Long, applied: Money, rounding: Money, change: Money,
         groupId: Int? = null,
         stripePaymentIntentId: String? = null,
+        terminalPaymentRef: String? = null,
+        terminalProvider: String? = null,
+        card: dev.dwhipstock.pos.payments.terminal.CardDetails? = null,
     ): TenderView {
         val tenderId = Tenders.insertAndGetId {
             it[Tenders.stripePaymentIntentId] = stripePaymentIntentId
+            it[Tenders.terminalPaymentRef] = terminalPaymentRef
+            it[Tenders.cardJson] = card?.let(::encodeCard)
             it[transactionId] = checkId
             it[Tenders.type] = type.name
             it[amountTenderedCents] = tenderedCents
@@ -803,6 +847,9 @@ class CheckService(private val config: CustomerConfig) {
             groupId?.let { g -> put("groupId", g) }
             // processor reference only — never a key, card data or client secret
             stripePaymentIntentId?.let { pi -> put("processor", "stripe"); put("stripePaymentIntentId", pi) }
+            terminalPaymentRef?.let { ref -> put("processor", terminalProvider ?: "terminal"); put("terminalPaymentRef", ref) }
+            // brand + last 4 only (what the receipt shows); never a full card number
+            card?.let { c -> c.brand?.let { put("cardBrand", it) }; c.last4?.let { put("cardLast4", it) }; put("entryMode", c.entryMode.wire) }
         })
         if (groupId != null) {
             val group = BillGroups.selectAll().where { BillGroups.id eq groupId }.first()
@@ -935,6 +982,7 @@ class CheckService(private val config: CustomerConfig) {
                     roundingAdjustment = Money(row[Tenders.roundingAdjustmentCents]),
                     change = Money(row[Tenders.changeCents]),
                     type = row[Tenders.type],
+                    card = receiptCardOf(row[Tenders.cardJson]),
                 )
             }
         return Receipt(
@@ -958,6 +1006,7 @@ class CheckService(private val config: CustomerConfig) {
     private fun tenderLabels(type: String): Pair<String, String> {
         val tt = runCatching { TenderType.valueOf(type) }.getOrNull()
         if (tt == TenderType.STRIPE) return "Carte (Stripe)" to "Card (Stripe)"
+        if (tt == TenderType.TERMINAL) return "Carte" to "Card"
         val method = tt?.let { runCatching { config.tenderMethod(it) }.getOrNull() }
         return (method?.labelFr ?: "Comptant") to (method?.labelEn ?: "Cash")
     }
@@ -1024,6 +1073,7 @@ class CheckService(private val config: CustomerConfig) {
                 roundingAdjustment = Money(row[Tenders.roundingAdjustmentCents]),
                 change = Money(row[Tenders.changeCents]),
                 type = row[Tenders.type],
+                card = receiptCardOf(row[Tenders.cardJson]),
             )
         }
         return Receipt(
@@ -1128,6 +1178,9 @@ class CheckService(private val config: CustomerConfig) {
         // a card refund through Stripe must happen AT Stripe first — see payments.StripePayments.refund
         if (plan.tenderType == TenderType.STRIPE)
             throw ConflictException("Stripe refunds go through the Stripe refund path", "stripe_refund_via_stripe")
+        // likewise a card taken on an integrated terminal is refunded ON the terminal first
+        if (plan.tenderType == TenderType.TERMINAL)
+            throw ConflictException("terminal card refunds go through the terminal", "terminal_refund_via_terminal")
         recordRefund(plan)
     }
 
@@ -1252,11 +1305,14 @@ class CheckService(private val config: CustomerConfig) {
         stripeRefundId: String? = null,
         /** A forecourt refund (unused prepay): the fuel sale it belongs to. */
         fuelSaleId: Int? = null,
+        terminalPaymentRef: String? = null,
+        terminalRefundRef: String? = null,
+        terminalProvider: String? = null,
     ): RefundResult = transaction {
         val checkId = plan.checkId
         val check = requireCheck(checkId)
         val grandTotal = check[Checks.lockedGrandTotalCents] ?: 0L
-        if (stripeRefundId == null && refundedSoFar(checkId) + plan.gross > grandTotal)
+        if (stripeRefundId == null && terminalRefundRef == null && refundedSoFar(checkId) + plan.gross > grandTotal)
             throw ConflictException(
                 "refund exceeds remaining refundable (${grandTotal - refundedSoFar(checkId)} cents left on check $checkId)",
                 "refund_exceeds_total",
@@ -1284,6 +1340,8 @@ class CheckService(private val config: CustomerConfig) {
             it[createdAt] = now
             it[Refunds.stripePaymentIntentId] = stripePaymentIntentId
             it[Refunds.stripeRefundId] = stripeRefundId
+            it[Refunds.terminalPaymentRef] = terminalPaymentRef
+            it[Refunds.terminalRefundRef] = terminalRefundRef
             it[taxesJson] = if (plan.taxLines.isEmpty()) null else taxLinesToJson(plan.taxLines).toString()
             it[roundingAdjustmentCents] = plan.rounding
         }.value
@@ -1318,6 +1376,11 @@ class CheckService(private val config: CustomerConfig) {
                 put("processor", "stripe")
                 put("stripePaymentIntentId", stripePaymentIntentId)
                 put("stripeRefundId", r)
+            }
+            terminalRefundRef?.let { r ->
+                put("processor", terminalProvider ?: "terminal")
+                put("terminalPaymentRef", terminalPaymentRef)
+                put("terminalRefundRef", r)
             }
         })
 
@@ -1361,8 +1424,41 @@ class CheckService(private val config: CustomerConfig) {
             .map { refundView(it) }
         val refunded = refunds.sumOf { it.grossCents }
         val stripeLeft = stripeRefundCapacity(checkId).sumOf { it.remainingCents }
+        val terminalLeft = terminalRefundCapacity(checkId).sumOf { it.remainingCents }
         RefundInfo(checkId, grand, refunded, grand - refunded, refunds,
-            stripeRefundableCents = minOf(stripeLeft, grand - refunded))
+            stripeRefundableCents = minOf(stripeLeft, grand - refunded),
+            terminalRefundableCents = minOf(terminalLeft, grand - refunded))
+    }
+
+    /**
+     * Per integrated-terminal payment on this check (TERMINAL tenders): what
+     * its tenders applied minus what was already refunded through the terminal
+     * against it. A terminal refunds one payment at a time.
+     */
+    fun terminalRefundCapacity(checkId: Int): List<TerminalCapacity> = transaction {
+        val rows = Tenders.selectAll()
+            .where { (Tenders.transactionId eq checkId) and (Tenders.type eq TenderType.TERMINAL.name) }
+            .filter { it[Tenders.terminalPaymentRef] != null }
+        val paid = rows.groupBy({ it[Tenders.terminalPaymentRef]!! }, { it[Tenders.amountAppliedCents] }).mapValues { it.value.sum() }
+        val processorRefs = rows.associate { it[Tenders.terminalPaymentRef]!! to decodeCard(it[Tenders.cardJson])?.processorRef }
+        val refunded = Refunds.selectAll()
+            .where { (Refunds.checkId eq checkId) and Refunds.terminalPaymentRef.isNotNull() }
+            .groupBy({ it[Refunds.terminalPaymentRef]!! }, { it[Refunds.grossCents] })
+            .mapValues { it.value.sum() }
+        paid.map { (ref, amount) ->
+            TerminalCapacity(ref, amount, (amount - (refunded[ref] ?: 0L)).coerceAtLeast(0L), processorRefs[ref])
+        }
+    }
+
+    data class TerminalCapacity(
+        val terminalRef: String, val paidCents: Long, val remainingCents: Long,
+        /** The processor's transaction id behind the reader (J.P. Morgan), if any. */
+        val processorRef: String? = null,
+    )
+
+    /** The tender already recorded for an integrated terminal's payment id, if any. */
+    fun tenderIdForTerminalRef(terminalRef: String): Int? = transaction {
+        Tenders.selectAll().where { Tenders.terminalPaymentRef eq terminalRef }.firstOrNull()?.get(Tenders.id)?.value
     }
 
     /**
@@ -1456,7 +1552,7 @@ class CheckService(private val config: CustomerConfig) {
         val method = runCatching { config.tenderMethod(tt) }.getOrNull()
         val tenderLabel = when (tt) {
             TenderType.CASH -> msg(TENDER_CASH)
-            TenderType.STRIPE -> tenderLabels(tt.name).let { (fr, en) -> locale.dataText(fr, en) }
+            TenderType.STRIPE, TenderType.TERMINAL -> tenderLabels(tt.name).let { (fr, en) -> locale.dataText(fr, en) }
             else -> method?.let { locale.dataText(it.labelFr, it.labelEn) } ?: tt.name
         }
         val taxRate = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent

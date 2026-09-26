@@ -409,6 +409,8 @@ class _RefundScreenState extends State<RefundScreen> {
               'BANK_TRANSFER',
               // back to the Stripe card: only when this bill was paid that way
               if (info.stripeRefundableCents > 0) 'STRIPE',
+              // back to the card on the store's terminal (simulator / J.P. Morgan)
+              if (info.terminalRefundableCents > 0) 'TERMINAL',
             ])
               ChoiceChip(
                 label: Text(_tenderLabel(l, t)),
@@ -476,6 +478,7 @@ class _RefundScreenState extends State<RefundScreen> {
     'CARD' => l.card,
     'BANK_TRANSFER' => l.bankTransfer,
     'STRIPE' => l.cardStripe,
+    'TERMINAL' => l.cardTerminalTender,
     _ => t,
   };
 

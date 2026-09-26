@@ -2131,8 +2131,288 @@ class L {
       'That product is off sale',
       'Ese producto no está a la venta',
     ),
+    'terminal_unavailable' ||
+    'terminal_not_paired' ||
+    'terminal_busy' ||
+    'terminal_off' ||
+    'jpm_not_configured' => terminalUnavailableHint(code),
+    'terminal_pairing_code_wrong' => _t(
+      'Ce n’est pas le code affiché sur le terminal',
+      'That is not the code shown on the terminal',
+      'Ese no es el código que muestra la terminal',
+    ),
+    'terminal_pairing_code_required' => _t(
+      'Entrez le code affiché sur le terminal',
+      'Enter the code shown on the terminal',
+      'Escribe el código que muestra la terminal',
+    ),
+    'terminal_bad_host' => _t(
+      'Entrez l’adresse IP du terminal, par exemple 192.168.1.50',
+      'Enter the terminal’s IP address, like 192.168.1.50',
+      'Escribe la dirección IP de la terminal, por ejemplo 192.168.1.50',
+    ),
+    'terminal_pairing_unsupported' => _t(
+      'Ce terminal ne s’associe pas depuis la caisse',
+      'This terminal doesn’t pair from the POS',
+      'Esta terminal no se vincula desde la caja',
+    ),
+    'terminal_cancel_unavailable' => _t(
+      'La carte est en cours de traitement — impossible d’annuler maintenant',
+      'The card is being processed — it can’t be cancelled now',
+      'La tarjeta se está procesando: no se puede cancelar ahora',
+    ),
+    'terminal_already_recorded' => _t(
+      'Ce paiement est déjà enregistré — faites un remboursement',
+      'That payment is already recorded — refund it instead',
+      'Ese pago ya está registrado: haz un reembolso',
+    ),
+    'terminal_no_card_tender' => _t(
+      'Cette addition n’a pas été payée par carte au terminal',
+      'This bill wasn’t paid by card on the terminal',
+      'Esta cuenta no se pagó con tarjeta en la terminal',
+    ),
+    'terminal_refund_exceeds_card' => _t(
+      'Le remboursement dépasse ce qui a été payé par carte au terminal',
+      'The refund is more than was paid by card on the terminal',
+      'El reembolso supera lo pagado con tarjeta en la terminal',
+    ),
+    'terminal_refund_split_required' => _t(
+      'Remboursez chaque paiement par carte séparément',
+      'Refund each card payment separately',
+      'Reembolsa cada pago con tarjeta por separado',
+    ),
+    'terminal_refund_failed' => _t(
+      'Le terminal n’a pas fait le remboursement. Rien n’a été enregistré.',
+      'The terminal didn’t make the refund. Nothing was recorded.',
+      'La terminal no hizo el reembolso. No se registró nada.',
+    ),
     _ => null,
   };
+
+  // --- Card terminal (payment.terminal): simulator / J.P. Morgan ------------
+
+  String get cardTerminalTender =>
+      _t('Carte (terminal)', 'Card (terminal)', 'Tarjeta (terminal)');
+  String get chargeCardTerminal => _t(
+    'Encaisser au terminal',
+    'Charge card on the terminal',
+    'Cobrar en la terminal',
+  );
+  String get terminalTitle => _t(
+    'Paiement par carte au terminal',
+    'Card payment on the terminal',
+    'Pago con tarjeta en la terminal',
+  );
+  String get terminalStarting => _t(
+    'Envoi du montant au terminal…',
+    'Sending the amount to the terminal…',
+    'Enviando el monto a la terminal…',
+  );
+  String get terminalPresentCard => _t(
+    'Le client présente, insère ou glisse sa carte au terminal',
+    'Customer taps, inserts or swipes on the terminal',
+    'El cliente acerca, inserta o desliza su tarjeta en la terminal',
+  );
+  String get terminalEnterPin => _t(
+    'Le client entre son NIP au terminal',
+    'Customer enters their PIN on the terminal',
+    'El cliente escribe su PIN en la terminal',
+  );
+  String get terminalChooseTip => _t(
+    'Le client choisit le pourboire au terminal',
+    'Customer is choosing a tip on the terminal',
+    'El cliente elige la propina en la terminal',
+  );
+  String get terminalProcessing =>
+      _t('Traitement de la carte…', 'Processing the card…', 'Procesando…');
+  String get terminalOfflineNow => _t(
+    'Le terminal ne répond pas — vérifiez qu’il est allumé et sur le Wi-Fi',
+    'The terminal isn’t answering — check it’s on and on the Wi-Fi',
+    'La terminal no responde: revisa que esté encendida y en el Wi-Fi',
+  );
+  String get terminalApproved =>
+      _t('Paiement approuvé', 'Payment approved', 'Pago aprobado');
+  String get terminalDeclined =>
+      _t('Carte refusée', 'Card declined', 'Tarjeta rechazada');
+  String get terminalTimedOut => _t(
+    'Délai dépassé — aucune carte présentée',
+    'Timed out — no card presented',
+    'Se agotó el tiempo: no se presentó ninguna tarjeta',
+  );
+  String get terminalCancelled =>
+      _t('Paiement annulé', 'Payment cancelled', 'Pago cancelado');
+  String get terminalFailed => _t(
+    'Échec du paiement par carte',
+    'Card payment failed',
+    'Falló el pago con tarjeta',
+  );
+  String get payAnotherWay =>
+      _t('Payer autrement', 'Pay another way', 'Pagar de otra forma');
+  String get authCodeLabel =>
+      _t('N° d’autorisation', 'Auth code', 'Cód. de autorización');
+  String get processorRefLabel => _t('Référence', 'Reference', 'Referencia');
+  String followTerminal(String? address) => address == null
+      ? _t(
+          'Suivez les étapes sur le terminal',
+          'Follow the steps on the terminal',
+          'Sigue los pasos en la terminal',
+        )
+      : _t(
+          'Suivez les étapes sur le terminal ($address)',
+          'Follow the steps on the terminal ($address)',
+          'Sigue los pasos en la terminal ($address)',
+        );
+  String get playReaderHere => _t(
+    'Jouer le lecteur de carte ici',
+    'Play the card reader here',
+    'Usar el lector de tarjetas aquí',
+  );
+
+  /// Why a terminal card payment was declined.
+  String terminalDeclineMessage(String? code) => switch (code) {
+    'insufficient_funds' => stripeDeclineMessage('insufficient_funds'),
+    'do_not_honor' || 'do_not_honour' => _t(
+      'La banque a refusé la carte (« ne pas honorer »). Essayez une autre carte.',
+      'The bank declined the card (do not honour). Try another card.',
+      'El banco rechazó la tarjeta (no aceptar). Prueba con otra tarjeta.',
+    ),
+    'processor_unavailable' => _t(
+      'Le processeur de paiement est injoignable. Prenez le comptant ou le terminal du comptoir.',
+      'The card processor can’t be reached. Take cash or use the counter terminal.',
+      'No se puede conectar con el procesador de pagos. Cobra en efectivo o con la terminal del mostrador.',
+    ),
+    'jpm_not_configured' => terminalUnavailableHint('jpm_not_configured'),
+    _ => stripeDeclineMessage(null),
+  };
+
+  /// Why "Card (terminal)" is greyed out.
+  String terminalUnavailableHint(String? reason) => switch (reason) {
+    'terminal_not_paired' => _t(
+      'Terminal non associé — associez-le dans Réglages',
+      'Terminal not paired — pair it in Settings',
+      'Terminal sin vincular: vincúlala en Ajustes',
+    ),
+    'terminal_busy' => _t(
+      'Le terminal est occupé par un autre paiement',
+      'The terminal is busy with another payment',
+      'La terminal está ocupada con otro pago',
+    ),
+    'terminal_off' => _t(
+      'Aucun terminal de carte intégré dans cet établissement',
+      'No integrated card terminal on this store',
+      'Esta tienda no tiene terminal de tarjetas integrada',
+    ),
+    'jpm_not_configured' => _t(
+      'J.P. Morgan n’est pas configuré dans cet établissement',
+      'J.P. Morgan is not set up on this store',
+      'J.P. Morgan no está configurado en esta tienda',
+    ),
+    _ => _t(
+      'Le terminal de carte est injoignable — payez comptant ou au terminal du comptoir',
+      'The card terminal can’t be reached — take cash or the counter terminal',
+      'No se puede conectar con la terminal: cobra en efectivo o con la terminal del mostrador',
+    ),
+  };
+
+  // the reader sheet (the built-in simulator played on this tablet)
+  String get readerTitle => _t(
+    'Lecteur de carte (simulateur)',
+    'Card reader (simulator)',
+    'Lector de tarjetas (simulador)',
+  );
+  String get readerTestCard =>
+      _t('Carte de test', 'Test card', 'Tarjeta de prueba');
+  String get readerOutcome =>
+      _t('Réponse de la banque', 'Bank answer', 'Respuesta del banco');
+  String get readerApprove => _t('Approuver', 'Approve', 'Aprobar');
+  String get readerInsufficient => _t(
+    'Refus — fonds insuffisants',
+    'Decline — insufficient funds',
+    'Rechazo: fondos insuficientes',
+  );
+  String get readerDoNotHonour => _t(
+    'Refus — ne pas honorer',
+    'Decline — do not honour',
+    'Rechazo: no aceptar',
+  );
+  String get readerTimeout => _t('Délai dépassé', 'Time out', 'Tiempo agotado');
+  String get readerCustomerCancels =>
+      _t('Le client annule', 'Customer cancels', 'El cliente cancela');
+  String get readerTap => _t('Sans contact', 'Tap', 'Acercar');
+  String get readerInsert =>
+      _t('Insérer (NIP)', 'Insert (PIN)', 'Insertar (PIN)');
+  String get readerSwipe => _t('Glisser', 'Swipe', 'Deslizar');
+  String get readerTapInsertSwipe => _t(
+    'Présentez, insérez ou glissez',
+    'Tap, insert or swipe',
+    'Acerca, inserta o desliza',
+  );
+  String get readerEnterPin =>
+      _t('Entrez votre NIP', 'Enter your PIN', 'Escribe tu PIN');
+  String get readerAddTip =>
+      _t('Ajouter un pourboire', 'Add a tip', 'Agregar propina');
+  String get readerNoTip => _t('Sans pourboire', 'No tip', 'Sin propina');
+  String get readerReady => _t(
+    'Prêt pour le prochain paiement',
+    'Ready for the next payment',
+    'Listo para el siguiente pago',
+  );
+  String get readerApprovedBig => _t('APPROUVÉE', 'APPROVED', 'APROBADA');
+  String get readerDeclinedBig => _t('REFUSÉE', 'DECLINED', 'RECHAZADA');
+  String get readerCancelledBig => _t('ANNULÉE', 'CANCELLED', 'CANCELADA');
+  String get readerTimeoutBig =>
+      _t('DÉLAI DÉPASSÉ', 'TIMED OUT', 'TIEMPO AGOTADO');
+  String get readerNoRealCards => _t(
+    'Cartes de test seulement — aucune vraie carte',
+    'Test cards only — no real card data',
+    'Solo tarjetas de prueba: ningún dato real',
+  );
+
+  // settings: the card terminal
+  String get sectionCardTerminal =>
+      _t('Terminal de carte', 'Card terminal', 'Terminal de tarjetas');
+  String terminalKindName(String kind) => switch (kind) {
+    'simulator' => _t('Simulateur', 'Simulator', 'Simulador'),
+    'jpmorgan' => _t(
+      'J.P. Morgan (bac à sable)',
+      'J.P. Morgan (sandbox)',
+      'J.P. Morgan (entorno de pruebas)',
+    ),
+    'stripe' => cardStripe,
+    'off' => _t('Aucun', 'None', 'Ninguno'),
+    _ => _t('Terminal externe', 'External terminal', 'Terminal externa'),
+  };
+  String terminalStateName(String? state) => switch (state) {
+    'idle' => _t('Prêt', 'Ready', 'Lista'),
+    'busy' => _t('Occupé', 'Busy', 'Ocupada'),
+    'not_paired' => _t('Non associé', 'Not paired', 'Sin vincular'),
+    'offline' => _t('Injoignable', 'Unreachable', 'Sin conexión'),
+    _ => _t('Sur la tablette', 'On the tablet', 'En la tableta'),
+  };
+  String get terminalBuiltIn => _t(
+    'Intégré à la caisse (page /terminal ou lecteur sur la tablette)',
+    'Built into the POS (the /terminal page, or the reader on the tablet)',
+    'Integrada en la caja (la página /terminal o el lector en la tableta)',
+  );
+  String get pairTerminal =>
+      _t('Associer un terminal', 'Pair a terminal', 'Vincular una terminal');
+  String get terminalAddressLabel => _t(
+    'Adresse IP du terminal (ex. 192.168.1.50:8090)',
+    'Terminal IP address (e.g. 192.168.1.50:8090)',
+    'Dirección IP de la terminal (p. ej. 192.168.1.50:8090)',
+  );
+  String get terminalCodeLabel => _t(
+    'Code affiché sur le terminal',
+    'Code shown on the terminal',
+    'Código que muestra la terminal',
+  );
+  String get useBuiltInTerminal => _t(
+    'Utiliser le terminal intégré',
+    'Use the built-in terminal',
+    'Usar la terminal integrada',
+  );
+  String get terminalPaired =>
+      _t('Terminal associé', 'Terminal paired', 'Terminal vinculada');
 }
 
 /// Show an API error as a snackbar — except session expiry, which already
