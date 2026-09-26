@@ -37,7 +37,16 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.LongColumnType
+import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder
+import org.jetbrains.exposed.sql.castTo
+import org.jetbrains.exposed.sql.count
+import org.jetbrains.exposed.sql.min
+import org.jetbrains.exposed.sql.or
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.sum
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.selectAll
@@ -233,15 +242,11 @@ class ShiftService(private val config: CustomerConfig) {
         // venue business days (DST-aware midnights) as UTC instants
         val start = VenueClock.startOfDay(from)
         val end = VenueClock.startOfDay(to.plusDays(1))
-        val closed = Checks.selectAll().where {
-            (Checks.status eq "CLOSED") and
-                (Checks.closedAt greaterEq start) and (Checks.closedAt less end)
-        }.toList()
         val voids = Checks.selectAll().where {
             (Checks.status eq "VOID") and
                 (Checks.closedAt greaterEq start) and (Checks.closedAt less end)
         }.map { VoidEntry(it[Checks.id].value, it[Checks.voidReason] ?: "-", it[Checks.voidedBy] ?: "-") }
-        val agg = aggregate(closed)
+        val agg = aggregate { (Checks.closedAt greaterEq start) and (Checks.closedAt less end) }
         ShiftReport(
             shiftId = 0,
             shiftStatus = "RANGE",
@@ -267,39 +272,70 @@ class ShiftService(private val config: CustomerConfig) {
         val cashRounding: Long,
     )
 
-    /** Shared X/Z/range math over a set of CLOSED check rows. */
-    private fun aggregate(closed: List<ResultRow>): Aggregates {
-        val closedIds = closed.map { it[Checks.id].value }
-        val revenue = closed.sumOf { it[Checks.lockedGrandTotalCents] ?: 0 }
+    /**
+     * Shared X/Z/range math over the CLOSED checks matching [where].
+     *
+     * Summed by SQLite, over a subquery: this used to load every check, tender
+     * and line of the range and pass the check ids as a list, which ran the
+     * store out of memory on a year's range report (load test, 100,000 sales:
+     * docs/load-test-report.md). Only the checks that charged corkage are read
+     * one by one.
+     */
+    private fun aggregate(where: SqlExpressionBuilder.() -> Op<Boolean>): Aggregates {
+        val closedOnly: SqlExpressionBuilder.() -> Op<Boolean> = { where() and (Checks.status eq "CLOSED") }
+        val ids = Checks.select(Checks.id).where(closedOnly)
+        val revenueSum = Checks.lockedGrandTotalCents.sum()
+        val checkCount = Checks.id.count()
+        val head = Checks.select(revenueSum, checkCount).where(closedOnly).first()
+        val revenue = head[revenueSum] ?: 0L
 
-        val tenderRows = if (closedIds.isEmpty()) emptyList()
-        else Tenders.selectAll().where { Tenders.transactionId inList closedIds }.toList()
-        val tenderBreakdown = tenderRows.groupBy { it[Tenders.type] }.map { (type, rows) ->
-            TenderSummary(type, rows.sumOf { it[Tenders.amountAppliedCents] }, rows.size)
+        val applied = Tenders.amountAppliedCents.sum()
+        val tendered = Tenders.amountTenderedCents.sum()
+        val change = Tenders.changeCents.sum()
+        val rounding = Tenders.roundingAdjustmentCents.sum()
+        val tenderCount = Tenders.id.count()
+        val firstTender = Tenders.id.min()
+        val tenderRows = Tenders.select(Tenders.type, applied, tendered, change, rounding, tenderCount, firstTender)
+            .where { Tenders.transactionId inSubQuery ids }
+            .groupBy(Tenders.type)
+            .toList()
+            .sortedBy { it[firstTender]?.value ?: 0 } // first seen first, as the tenders were listed
+        val tenderBreakdown = tenderRows.map {
+            TenderSummary(it[Tenders.type], it[applied] ?: 0L, it[tenderCount].toInt())
         }.sortedByDescending { it.amountCents }
 
         // item mix over ACTIVE lines of closed checks. TODO: separate top-by-qty view
-        val itemMix = if (closedIds.isEmpty()) emptyList()
-        else (CheckLines innerJoin Items).selectAll()
-            .where { (CheckLines.checkId inList closedIds) and (CheckLines.status eq "ACTIVE") }
-            .groupBy { it[CheckLines.itemId] }
-            .map { (itemId, rows) ->
+        // inner join to Items: open lines (null item_id) drop out of the mix on
+        // purpose (revenue still counts them via the locked grand total)
+        val qty = CheckLines.qty.sum()
+        val lineRevenue = with(SqlExpressionBuilder) {
+            CheckLines.unitPriceCents.times(CheckLines.qty.castTo<Long>(LongColumnType()))
+        }.sum()
+        val firstLine = CheckLines.id.min()
+        val itemMix = (CheckLines innerJoin Items)
+            .select(CheckLines.itemId, Items.nameFr, Items.nameEn, qty, lineRevenue, firstLine)
+            .where { (CheckLines.checkId inSubQuery ids) and (CheckLines.status eq "ACTIVE") }
+            .groupBy(CheckLines.itemId, Items.nameFr, Items.nameEn)
+            .toList()
+            .sortedBy { it[firstLine]?.value ?: 0 }
+            .map {
                 ItemMixEntry(
-                    // inner join to Items → never null here; open lines (null
-                    // item_id) drop out of the mix on purpose (revenue still
-                    // counts them via the locked grand total)
-                    itemId = itemId!!,
-                    nameFr = rows.first()[Items.nameFr],
-                    nameEn = rows.first()[Items.nameEn],
-                    qty = rows.sumOf { it[CheckLines.qty] },
-                    revenueCents = rows.sumOf { it[CheckLines.unitPriceCents] * it[CheckLines.qty] },
+                    itemId = it[CheckLines.itemId]!!,
+                    nameFr = it[Items.nameFr],
+                    nameEn = it[Items.nameEn],
+                    qty = it[qty] ?: 0,
+                    revenueCents = it[lineRevenue] ?: 0L,
                 )
             }.sortedByDescending { it.revenueCents }.take(10)
 
         // corkage collected: the lock-time fee lines (021) are what the locked
         // grand totals actually charged — a per-bottle price change mid-shift
         // must not re-price earlier checks. Pre-021 rows fall back to re-assessment.
-        val corkage = closed.sumOf { row ->
+        val corkageRows = Checks.select(Checks.lockedFeesJson, Checks.corkageBottles).where {
+            closedOnly() and ((Checks.lockedFeesJson like "%corkage%") or
+                (Checks.lockedFeesJson.isNull() and (Checks.corkageBottles greater 0)))
+        }.toList()
+        val corkage = corkageRows.sumOf { row ->
             row[Checks.lockedFeesJson]?.let { json ->
                 Json.parseToJsonElement(json).jsonArray
                     .filter { it.jsonObject["code"]?.jsonPrimitive?.content == "corkage" }
@@ -313,22 +349,20 @@ class ShiftService(private val config: CustomerConfig) {
         val cashRows = tenderRows.filter { it[Tenders.type] == "CASH" }
         return Aggregates(
             revenue = revenue,
-            count = closed.size,
+            count = head[checkCount].toInt(),
             tenderBreakdown = tenderBreakdown,
             itemMix = itemMix,
             corkage = corkage,
             // tendered − change = the ROUNDED cash each settling payment took
-            cashIn = cashRows.sumOf { it[Tenders.amountTenderedCents] },
-            changeOut = cashRows.sumOf { it[Tenders.changeCents] },
-            cashRounding = cashRows.sumOf { it[Tenders.roundingAdjustmentCents] },
+            cashIn = cashRows.sumOf { it[tendered] ?: 0L },
+            changeOut = cashRows.sumOf { it[change] ?: 0L },
+            cashRounding = cashRows.sumOf { it[rounding] ?: 0L },
         )
     }
 
     private fun buildReport(shift: ResultRow, closingCountCents: Long?): ShiftReport {
         val shiftId = shift[Shifts.id].value
-        val closed = Checks.selectAll()
-            .where { (Checks.shiftId eq shiftId) and (Checks.status eq "CLOSED") }.toList()
-        val agg = aggregate(closed)
+        val agg = aggregate { Checks.shiftId eq shiftId }
 
         val voids = Checks.selectAll()
             .where { (Checks.shiftId eq shiftId) and (Checks.status eq "VOID") }
