@@ -84,12 +84,19 @@ picked; rows from a specific store carry `venueId`):
   ```
 - `GET /v1/reports/tax` — the tax-filing report.
   ```json
-  { "ratePercent": 13,
+  { "rates": [ { "code": "GST", "labelFr": "TPS", "labelEn": "GST", "ratePercent": "5" },
+               { "code": "QST", "labelFr": "TVQ", "labelEn": "QST", "ratePercent": "9.975" } ],
     "rows": [ { "date": "2026-07-11", "grossCents": 0, "netCents": 0,
-                "taxCents": 0, "checkCount": 0 } ],
-    "totals": { "grossCents": 0, "netCents": 0, "taxCents": 0, "checkCount": 0 } }
+                "taxCents": 0, "gstCents": 0, "qstCents": 0, "checkCount": 0 } ],
+    "totals": { "grossCents": 0, "netCents": 0, "taxCents": 0,
+                "gstCents": 0, "qstCents": 0, "checkCount": 0 } }
   ```
-  (`taxCents` = Σ store-computed `taxIncludedCents`; `netCents` = gross − tax.)
+  (`taxCents` = Σ store-computed `taxIncludedCents`; `netCents` = gross − tax;
+  `gstCents` / `qstCents` = Σ the per-sale GST / QST the stores charged, less
+  what refunds reversed — 0 for sales synced without a breakdown, never
+  estimated. `rates` lists the taxes the in-range sales carry, from the stores'
+  own breakdown. Summary / by-venue rows and each day's `byVenue` entry carry
+  `gstCents` / `qstCents` too.)
 - `GET /v1/reports/payments` →
   `{ "rows": [ { "type": "CASH", "amountCents": 0, "count": 0 } ], "totalCents": 0 }`
   (type ∈ CASH | CARD | BANK_TRANSFER | STRIPE; amount = Σ amountApplied.)

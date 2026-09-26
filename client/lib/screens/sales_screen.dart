@@ -171,11 +171,23 @@ class _RefundScreenState extends State<RefundScreen> {
         final lines = {
           for (final ln in _check!.lines) ln.id: ln.unitPriceCents,
         };
-        return _lineQty.entries.fold(
+        final preTax = _lineQty.entries.fold(
           0,
           (sum, e) => sum + (lines[e.key] ?? 0) * e.value,
         );
+        return _withTax(preTax);
     }
+  }
+
+  /// Line prices are pre-tax; a by-line refund also returns the lines' share
+  /// of the taxes added on top — the same math the server applies (half-up,
+  /// capped at what is still refundable). Preview only; the server decides.
+  int _withTax(int preTax) {
+    final c = _check!;
+    final subtotal = c.subtotalCents;
+    if (c.taxes.isEmpty || subtotal <= 0 || preTax <= 0) return preTax;
+    final gross = (preTax * c.grandTotalCents * 2 + subtotal) ~/ (subtotal * 2);
+    return _refundable > 0 && gross > _refundable ? _refundable : gross;
   }
 
   bool get _canRefund =>

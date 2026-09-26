@@ -190,15 +190,21 @@ export const messages = {
 
   // ── tax report ────────────────────────────────────────────────────────
   tax_title: m("Rapport des taxes", "Sales tax report"),
-  tax_included_badge: m("Taxes incluses {rate} %", "Sales tax {rate}% included"),
+  tax_rate_badge: m("{label} {rate} %", "{label} {rate}%"),
   tax_note: m(
-    "Taxes extraites des prix TTC au moment de la vente — net = brut − taxes",
-    "Decomposed from tax-inclusive prices at sale time — net = gross − sales tax."
+    "TPS et TVQ ajoutées aux prix avant taxes, telles que facturées à chaque vente — net = brut − taxes",
+    "GST and QST added on top of pre-tax prices, as charged on each sale — net = gross − tax."
+  ),
+  tax_no_breakdown: m(
+    "Les ventes synchronisées sans détail des taxes comptent pour 0 en TPS et TVQ.",
+    "Sales synced without a tax breakdown count as 0 GST and QST."
   ),
   col_date: m("date", "Date"),
   col_gross: m("Total", "Gross"),
   col_net: m("filet", "Net"),
   col_tax: m("Taxe", "Tax"),
+  col_gst: m("TPS", "GST"),
+  col_qst: m("TVQ", "QST"),
   col_checks: m("facture", "Checks"),
   col_total: m("Total", "Total"),
   tax_empty: m("Il n'y a pas de vente pendant cette période.", "No sales in this range"),
@@ -313,7 +319,7 @@ export const messages = {
   col_closed: m("fermé quand", "Closed"),
   badge_void: m("Annuler", "VOID"),
   journal_open_item: m("Articles spéciaux", "Open item"),
-  journal_tax_included: m("Taxes incluses :", "Tax included:"),
+  journal_tax_included: m("Taxes :", "Tax:"),
   journal_pagination: m("{from}–{to} depuis {total}", "{from}–{to} of {total}"),
   journal_empty_search: m("Aucune facture trouvée correspondant à votre recherche.", "No checks match your search"),
   journal_empty_search_hint: m(

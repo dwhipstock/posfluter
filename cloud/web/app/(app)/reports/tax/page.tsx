@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
 import { CAD } from "@/lib/format";
-import { useT, useFmt } from "@/lib/i18n/context";
+import { useI18n } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
 import { col, Int, Money, T, type ExportDoc } from "@/lib/export/doc";
@@ -37,8 +37,7 @@ export default function Page() {
 type TaxDay = Omit<DayRow, "byVenue"> & { venueId: string };
 
 function TaxPage() {
-  const t = useT();
-  const fmt = useFmt();
+  const { t, fmt, locale, name } = useI18n();
   const range = useRange();
   const meta = useExportMeta();
   const storeExport = useStoreExport();
@@ -50,10 +49,12 @@ function TaxPage() {
     return {
       ...meta("tax"),
       reportTitle: t("tax_title"),
-      notes: [t("tax_note")],
+      notes: [t("tax_note"), t("tax_no_breakdown")],
       kpis: [
         { label: t("col_gross"), value: CAD(data.totals.grossCents) },
         { label: t("col_net"), value: CAD(data.totals.netCents) },
+        { label: t("col_gst"), value: CAD(data.totals.gstCents) },
+        { label: t("col_qst"), value: CAD(data.totals.qstCents) },
         { label: t("col_tax"), value: CAD(data.totals.taxCents) },
         { label: t("col_checks"), value: String(data.totals.checkCount) },
       ],
@@ -62,11 +63,21 @@ function TaxPage() {
           [
             col.money(t("col_gross"), (r) => r.grossCents),
             col.money(t("col_net"), (r) => r.netCents),
+            col.money(t("col_gst"), (r) => r.gstCents),
+            col.money(t("col_qst"), (r) => r.qstCents),
             col.money(t("col_tax"), (r) => r.taxCents),
             col.int(t("col_checks"), (r) => r.checkCount),
           ],
           data.byVenue,
-          [T(t("col_total")), Money(data.totals.grossCents), Money(data.totals.netCents), Money(data.totals.taxCents), Int(data.totals.checkCount)]
+          [
+            T(t("col_total")),
+            Money(data.totals.grossCents),
+            Money(data.totals.netCents),
+            Money(data.totals.gstCents),
+            Money(data.totals.qstCents),
+            Money(data.totals.taxCents),
+            Int(data.totals.checkCount),
+          ]
         ),
         {
           title: t("tax_title"),
@@ -75,6 +86,8 @@ function TaxPage() {
             ...storeExport.withStore<TaxDay>([
               col.money(t("col_gross"), (r) => r.grossCents),
               col.money(t("col_net"), (r) => r.netCents),
+              col.money(t("col_gst"), (r) => r.gstCents),
+              col.money(t("col_qst"), (r) => r.qstCents),
               col.money(t("col_tax"), (r) => r.taxCents),
               col.int(t("col_checks"), (r) => r.checkCount),
             ]),
@@ -88,6 +101,8 @@ function TaxPage() {
             ...(combined ? [T("")] : []),
             Money(data.totals.grossCents),
             Money(data.totals.netCents),
+            Money(data.totals.gstCents),
+            Money(data.totals.qstCents),
             Money(data.totals.taxCents),
             Int(data.totals.checkCount),
           ],
@@ -109,7 +124,14 @@ function TaxPage() {
 
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-neutral-100 px-5 py-3">
-          {data && <Badge variant="pink">{t("tax_included_badge", { rate: data.ratePercent })}</Badge>}
+          {data?.rates.map((r) => (
+            <Badge key={`${r.code}-${r.ratePercent}`} variant="pink">
+              {t("tax_rate_badge", {
+                label: name(r.labelFr, r.labelEn) || r.code,
+                rate: locale === "fr" ? r.ratePercent.replace(".", ",") : r.ratePercent,
+              })}
+            </Badge>
+          ))}
           <span className="text-xs text-neutral-500">{t("tax_note")}</span>
         </div>
         {isLoading ? (
@@ -123,6 +145,8 @@ function TaxPage() {
                 <TableHead>{t("col_date")}</TableHead>
                 <TableHead className="text-right">{t("col_gross")}</TableHead>
                 <TableHead className="text-right">{t("col_net")}</TableHead>
+                <TableHead className="text-right">{t("col_gst")}</TableHead>
+                <TableHead className="text-right">{t("col_qst")}</TableHead>
                 <TableHead className="text-right">{t("col_tax")}</TableHead>
                 {combined &&
                   venues.map((v) => (
@@ -142,6 +166,8 @@ function TaxPage() {
                   <TableCell className="font-medium">{fmt.day(r.date)}</TableCell>
                   <TableCell className="text-right tabular-nums">{CAD(r.grossCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{CAD(r.netCents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{CAD(r.gstCents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{CAD(r.qstCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{CAD(r.taxCents)}</TableCell>
                   {combined &&
                     venues.map((v) => (
@@ -158,6 +184,8 @@ function TaxPage() {
                 <TableCell>{t("col_total")}</TableCell>
                 <TableCell className="text-right tabular-nums">{CAD(data.totals.grossCents)}</TableCell>
                 <TableCell className="text-right tabular-nums">{CAD(data.totals.netCents)}</TableCell>
+                <TableCell className="text-right tabular-nums">{CAD(data.totals.gstCents)}</TableCell>
+                <TableCell className="text-right tabular-nums">{CAD(data.totals.qstCents)}</TableCell>
                 <TableCell className="text-right tabular-nums text-accent">
                   {CAD(data.totals.taxCents)}
                 </TableCell>

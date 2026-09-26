@@ -14,8 +14,8 @@
    "variantLabelFr": "Pinte 20 oz",
    "variantLabelEn": "20 oz pint",
    "qty": 2,
-   "unitPriceCents": 825,
-   "lineTotalCents": 1650,
+   "unitPriceCents": 750,
+   "lineTotalCents": 1500,
    "note": null
   },
   {
@@ -27,8 +27,8 @@
    "variantLabelFr": null,
    "variantLabelEn": null,
    "qty": 1,
-   "unitPriceCents": 1850,
-   "lineTotalCents": 1850,
+   "unitPriceCents": 1675,
+   "lineTotalCents": 1675,
    "note": null
   },
   {
@@ -40,8 +40,8 @@
    "variantLabelFr": null,
    "variantLabelEn": null,
    "qty": 1,
-   "unitPriceCents": 2150,
-   "lineTotalCents": 2150,
+   "unitPriceCents": 1925,
+   "lineTotalCents": 1925,
    "note": null
   },
   {
@@ -53,8 +53,8 @@
    "variantLabelFr": null,
    "variantLabelEn": null,
    "qty": 1,
-   "unitPriceCents": 1450,
-   "lineTotalCents": 1450,
+   "unitPriceCents": 1300,
+   "lineTotalCents": 1300,
    "note": null
   }
  ],
@@ -68,17 +68,36 @@
    "variantLabelFr": null,
    "variantLabelEn": null,
    "qty": 1,
-   "unitPriceCents": 1350,
-   "lineTotalCents": 1350,
+   "unitPriceCents": 1225,
+   "lineTotalCents": 1225,
    "note": null
   }
  ],
- "itemsSubtotalCents": 7100,
+ "itemsSubtotalCents": 6400,
  "fees": [],
- "grandTotalCents": 7100,
+ "grandTotalCents": 7358,
  "taxIncludedCents": 0,
  "paidCents": 0,
- "outstandingCents": 7100,
+ "outstandingCents": 7358,
  "tenders": [],
- "split": null
+ "split": null,
+ "subtotalCents": 6400,
+ "taxes": [
+  {
+   "code": "GST",
+   "labelFr": "TPS",
+   "labelEn": "GST",
+   "ratePercent": "5",
+   "registrationNumber": "123456789 RT0001",
+   "amountCents": 320
+  },
+  {
+   "code": "QST",
+   "labelFr": "TVQ",
+   "labelEn": "QST",
+   "ratePercent": "9.975",
+   "registrationNumber": "1234567890 TQ0001",
+   "amountCents": 638
+  }
+ ]
 }

@@ -8,6 +8,7 @@ import '../i18n.dart';
 import '../widgets/resume_refresh.dart';
 import 'bill_preview_screen.dart';
 import 'tender_screen.dart';
+import '../widgets/tax_rows.dart';
 
 /// Settlement-time split view: left = the check's not-yet-assigned lines,
 /// right = bill-group cards. Tap a group card to select it, tap an unassigned
@@ -521,6 +522,13 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
+                // this bill's share of the check's taxes
+                TaxRows(
+                  subtotalCents: group.subtotalCents,
+                  taxes: group.taxes,
+                  priceSize: 15,
+                ),
+                if (group.taxes.isNotEmpty) const SizedBox(height: 4),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

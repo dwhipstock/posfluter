@@ -162,6 +162,10 @@ object Checks : Table("checks") {
     val serviceChargeCents = long("service_charge_cents").nullable()
     val voidReason = text("void_reason").nullable()
     val voidedBy = text("voided_by").nullable()
+    // per-sale taxes added on top (016); NULL = no breakdown sent (older store)
+    val gstCents = long("gst_cents").nullable()
+    val qstCents = long("qst_cents").nullable()
+    val taxes = jsonb("taxes").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, checkId)
 }
 
@@ -237,6 +241,9 @@ object Refunds : Table("refunds") {
     val zoneNameFr = text("zone_name_fr").nullable()
     val zoneNameEn = text("zone_name_en").nullable()
     val createdAt = timestampWithTimeZone("created_at").nullable()
+    // the added taxes this refund reversed (016); NULL = no breakdown sent
+    val gstCents = long("gst_cents").nullable()
+    val qstCents = long("qst_cents").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, refundId)
 }
 

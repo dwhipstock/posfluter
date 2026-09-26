@@ -10,8 +10,10 @@ import dev.dwhipstock.pos.sdk.Money
 import dev.dwhipstock.pos.sdk.PrinterAdapter
 import dev.dwhipstock.pos.sdk.ReceiptPolicy
 import dev.dwhipstock.pos.sdk.RoundingPolicy
+import dev.dwhipstock.pos.sdk.TaxComponent
 import dev.dwhipstock.pos.sdk.TaxPolicy
 import dev.dwhipstock.pos.sdk.TenderMethod
+import java.math.BigDecimal
 
 /**
  * Copper Lantern — fictional Canadian venue configuration, one per store
@@ -36,8 +38,9 @@ class CopperLanternConfig(
     override val displayName = venue.displayName
 
     // ---- policy: typed, changing these is a deploy, on purpose ----
-    // The demo makes no jurisdiction-specific tax assumption.
-    override val taxPolicy = TaxPolicy.NoTax
+    // Québec: menu prices are pre-tax; GST (TPS) and QST (TVQ) are added on
+    // top. Registration numbers are fictional, in the real formats.
+    override val taxPolicy = TaxPolicy.AddedTaxes(QUEBEC_TAXES)
     // Canadian cash transactions round to the nearest five cents.
     override val roundingPolicy =
         RoundingPolicy.RoundToUnit(unit = Money(5), mode = RoundingPolicy.RoundToUnit.Mode.NEAREST)
@@ -70,4 +73,14 @@ class CopperLanternConfig(
                 BankTransferMethod(s.bankName, s.bankAccountNumber, s.bankAccountName),
             )
         }
+
+    companion object {
+        /** GST 5% and QST 9.975%, both on the same pre-tax base (QST is not charged on GST). */
+        val QUEBEC_TAXES = listOf(
+            TaxComponent("GST", labelFr = "TPS", labelEn = "GST", ratePercent = BigDecimal("5"),
+                registrationNumber = "123456789 RT0001"),
+            TaxComponent("QST", labelFr = "TVQ", labelEn = "QST", ratePercent = BigDecimal("9.975"),
+                registrationNumber = "1234567890 TQ0001"),
+        )
+    }
 }

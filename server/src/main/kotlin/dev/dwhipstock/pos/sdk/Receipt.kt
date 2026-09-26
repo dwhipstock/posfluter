@@ -10,9 +10,12 @@ import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_NOT_A_RECEIPT
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_OPEN
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_PRINTED_AT
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_ROUNDING
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_SUBTOTAL
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TABLE
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TOTAL
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_INCLUDED
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_LINE
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_REGISTRATION
 import dev.dwhipstock.pos.sdk.i18n.Messages
 import dev.dwhipstock.pos.sdk.i18n.dataText
 import dev.dwhipstock.pos.sdk.i18n.dataTextOrNull
@@ -35,7 +38,12 @@ data class Receipt(
     val taxIncluded: Money,
     val taxRatePercent: Int?,
     val tenders: List<ReceiptTender>,
-)
+    /** Taxes added on top of the pre-tax subtotal, one line each; empty = none. */
+    val taxes: List<TaxLine> = emptyList(),
+) {
+    /** Pre-tax subtotal: the total less the taxes added on top. */
+    val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
+}
 
 data class ReceiptItem(
     val nameFr: String,
@@ -141,6 +149,12 @@ object ReceiptRenderer {
         }
         add(PrintLine.Divider)
 
+        // taxes added on top always print (they change the total): subtotal,
+        // one line per tax with its rate, then the total
+        if (receipt.taxes.isNotEmpty()) {
+            add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), receipt.subtotal.format()))
+            receipt.taxes.forEach { add(PrintLine.KeyValue(taxLineLabel(it.component, locale), it.amount.format())) }
+        }
         add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.format(), emphasized = true))
         if (policy.showTax && receipt.taxRatePercent != null) {
             add(PrintLine.KeyValue(
@@ -148,6 +162,7 @@ object ReceiptRenderer {
                 receipt.taxIncluded.format(),
             ))
         }
+        receipt.taxes.forEach { add(PrintLine.Text(taxRegistrationLine(it.component, locale))) }
         add(PrintLine.Blank)
 
         // A provisional bill has no payment yet — omit the tender section, and
@@ -170,4 +185,20 @@ object ReceiptRenderer {
         add(PrintLine.Blank)
         add(PrintLine.Text(policy.footerText, Align.CENTER))
     }
+
+    /** Both languages' names, the print locale's first: "GST/TPS" in English, "TPS/GST" in French. */
+    fun taxName(tax: TaxComponent, locale: LocaleCode): String =
+        locale.dataText("${tax.labelFr}/${tax.labelEn}", "${tax.labelEn}/${tax.labelFr}")
+
+    /** "GST/TPS 5%", "TVQ/QST 9,975 %". */
+    fun taxLineLabel(tax: TaxComponent, locale: LocaleCode): String =
+        Messages.get(RECEIPT_TAX_LINE, locale, taxName(tax, locale), rateText(tax, locale))
+
+    /** "GST/TPS no. 123456789 RT0001". */
+    fun taxRegistrationLine(tax: TaxComponent, locale: LocaleCode): String =
+        Messages.get(RECEIPT_TAX_REGISTRATION, locale, taxName(tax, locale), tax.registrationNumber)
+
+    /** The rate with the locale's decimal mark ("9.975" / "9,975"). */
+    private fun rateText(tax: TaxComponent, locale: LocaleCode): String =
+        locale.dataText(tax.rateText.replace('.', ','), tax.rateText)
 }

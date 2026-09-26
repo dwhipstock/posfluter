@@ -80,7 +80,7 @@ class CustomerBillTest {
         assertEquals(1, pending.size)
         assertEquals("Copper Amber Ale", pending[0]["nameEn"]!!.jsonPrimitive.content)
         assertEquals(2, pending[0]["qty"]!!.jsonPrimitive.int)
-        assertEquals(1750L, pending[0]["lineTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(1590L, pending[0]["lineTotalCents"]!!.jsonPrimitive.long)
 
         // customer DTO carries display fields only — no line/item/check ids
         for (line in pending) assertTrue(line.keys.none { it in setOf("id", "itemId", "variantId", "unitPriceCents") },
@@ -101,14 +101,20 @@ class CustomerBillTest {
         assertEquals(0, accepted["pendingLines"]!!.jsonArray.size)
         val lines = accepted["lines"]!!.jsonArray.map { it.jsonObject }
         assertEquals(1, lines.size)
-        assertEquals(1750L, lines[0]["lineTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(1590L, lines[0]["lineTotalCents"]!!.jsonPrimitive.long)
         val fees = accepted["fees"]!!.jsonArray.map { it.jsonObject }
         assertEquals(1, fees.size)
         assertEquals("Corkage", fees[0]["labelEn"]!!.jsonPrimitive.content)
         assertEquals(2500L, fees[0]["amountCents"]!!.jsonPrimitive.long)
-        assertEquals(4250L, accepted["grandTotalCents"]!!.jsonPrimitive.long)
+        // subtotal 40.90; GST 2.045 → 2.05 (half-up), QST 4.079775 → 4.08; total 47.03
+        assertEquals(4090L, accepted["subtotalCents"]!!.jsonPrimitive.long)
+        val taxes = accepted["taxes"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("GST" to 205L, "QST" to 408L), taxes.map {
+            it["labelEn"]!!.jsonPrimitive.content to it["amountCents"]!!.jsonPrimitive.long })
+        assertEquals(listOf("5", "9.975"), taxes.map { it["ratePercent"]!!.jsonPrimitive.content })
+        assertEquals(4703L, accepted["grandTotalCents"]!!.jsonPrimitive.long)
         assertFalse(accepted["locked"]!!.jsonPrimitive.boolean)
-        // hidden tax: the customer payload never carries a tax field
-        assertTrue(accepted.keys.none { "tax" in it.lowercase() })
+        // tax lines are display fields only, like the rest of the customer DTO
+        assertTrue(taxes.all { it.keys == setOf("labelFr", "labelEn", "ratePercent", "amountCents") })
     }
 }

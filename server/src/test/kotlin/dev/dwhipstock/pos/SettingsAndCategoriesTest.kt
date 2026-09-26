@@ -86,7 +86,7 @@ class SettingsAndCategoriesTest {
             setBody("""{"openingFloatCents":0,"managerPin":"1234"}""")
         }.let { assertEquals(HttpStatusCode.Created, it.status) }
 
-        // next transaction: $1000 basket + 1 corkage bottle → 10% SC $100 + corkage $150
+        // next transaction: $43.25 bottle + 1 corkage bottle → 10% SC $4.32 + corkage $150
         val checkId = Json.parseToJsonElement(manager.post("/tables/t5/checks").bodyAsText())
             .jsonObject["id"]!!.jsonPrimitive.content
         manager.post("/checks/$checkId/lines") {
@@ -101,7 +101,7 @@ class SettingsAndCategoriesTest {
             it.jsonObject["code"]!!.jsonPrimitive.content to
                 it.jsonObject["amountCents"]!!.jsonPrimitive.content
         }
-        assertEquals("480", fees["service_charge"], "10% service charge on the $48 bottle")
+        assertEquals("432", fees["service_charge"], "10% service charge on the $43.25 bottle (floored)")
         assertEquals("15000", fees["corkage"], "new $150 rate")
 
         // Card instructions identify the configured terminal.

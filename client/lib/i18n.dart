@@ -281,6 +281,12 @@ class L {
   String get emptyBillClosed =>
       _t('La facture gratuite a été clôturée.', 'Empty bill closed');
   String get total => _t('Total', 'Total');
+  String get subtotal => _t('Sous-total', 'Subtotal');
+
+  /// A tax added on top, e.g. "GST 5%" / "TPS 5 %" (rate is a decimal string).
+  String taxLine(TaxLine tax) => en
+      ? '${tax.labelEn} ${tax.ratePercent}%'
+      : '${tax.labelFr} ${tax.ratePercent.replaceAll('.', ',')} %';
   String get pay => _t('Effectuer le paiement', 'Pay');
   String get ordersAwaiting => _t(
     'Il y a une commande en attente de confirmation.',
@@ -1220,6 +1226,10 @@ class L {
     'no_split' => _t(
       'Ce projet de loi n\'a pas encore été séparé.',
       'Bill is not split',
+    ),
+    'split_stale' => _t(
+      'La facture a changé depuis le partage égal — partagez-la de nouveau.',
+      'The bill changed since it was split evenly — split it again',
     ),
     'split_unassigned_lines' => _t(
       'Il y a encore des objets qui n’ont pas été séparés – séparez-les complètement avant de collecter de l’argent.',

@@ -14,6 +14,7 @@ import 'bill_preview_screen.dart';
 import 'split_screen.dart';
 import 'table_picker_screen.dart';
 import 'tender_screen.dart';
+import '../widgets/tax_rows.dart';
 
 /// Three-column workspace: nav rail | menu grid | sticky bill panel.
 /// The bill is always visible while ordering — no separate basket screen.
@@ -681,7 +682,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             ),
             child: Column(
               children: [
-                // This demo has no configured sales-tax row.
+                // pre-tax subtotal + GST / QST added on top, then the total
+                TaxRows(subtotalCents: check.subtotalCents, taxes: check.taxes),
+                if (check.taxes.isNotEmpty) const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,

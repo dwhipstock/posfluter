@@ -107,6 +107,9 @@ private fun voidChecks(ctx: ReportCtx): List<ResultRow> =
 
 private fun gross(row: ResultRow): Long = row[Checks.grandTotalCents] ?: 0
 private fun checkTax(row: ResultRow): Long = row[Checks.taxIncludedCents] ?: 0
+// per-tax amounts as the store charged them; a sale without a breakdown counts 0
+private fun checkGst(row: ResultRow): Long = row[Checks.gstCents] ?: 0
+private fun checkQst(row: ResultRow): Long = row[Checks.qstCents] ?: 0
 
 /**
  * Refunds posted in the range, keyed off refund date (a refund is recognised
@@ -119,6 +122,23 @@ private fun refundsInRange(ctx: ReportCtx): List<ResultRow> =
 private fun rGross(row: ResultRow): Long = row[Refunds.grossCents] ?: 0
 private fun rNet(row: ResultRow): Long = row[Refunds.netCents] ?: 0
 private fun refundTax(row: ResultRow): Long = row[Refunds.taxIncludedCents] ?: 0
+private fun refundGst(row: ResultRow): Long = row[Refunds.gstCents] ?: 0
+private fun refundQst(row: ResultRow): Long = row[Refunds.qstCents] ?: 0
+
+/** GST and QST of closed sales less refunds: (gst, qst). */
+private fun gstQst(closed: List<ResultRow>, refunds: List<ResultRow>): Pair<Long, Long> =
+    (closed.sumOf(::checkGst) - refunds.sumOf(::refundGst)) to (closed.sumOf(::checkQst) - refunds.sumOf(::refundQst))
+
+/**
+ * The taxes the in-scope sales were charged at, as the store stamped them
+ * (code, labels, rate) — no rate is assumed here. Empty when no sale in the
+ * range carries a breakdown.
+ */
+private fun taxRates(closed: List<ResultRow>): List<TaxRateRow> =
+    closed.mapNotNull { it[Checks.taxes] }
+        .flatMap { runCatching { lenientJson.decodeFromString<List<TaxRateRow>>(it) }.getOrDefault(emptyList()) }
+        .distinctBy { it.code to it.ratePercent }
+        .sortedWith(compareBy({ it.code }, { it.ratePercent }))
 
 /** Rows of a per-check child table for exactly these (venue, check) pairs — check ids repeat across stores. */
 private fun childRowsOf(
@@ -158,11 +178,14 @@ data class DayRow(
     val date: String, val grossCents: Long, val netCents: Long,
     val taxCents: Long, val checkCount: Int,
     /** The same day split by store (one entry per in-scope store, zeros included). */
-    val byVenue: List<VenueDayRow> = emptyList())
+    val byVenue: List<VenueDayRow> = emptyList(),
+    /** GST and QST inside [taxCents], as charged (0 for sales without a breakdown). */
+    val gstCents: Long = 0, val qstCents: Long = 0)
 
 @Serializable
 data class VenueDayRow(
-    val venueId: String, val grossCents: Long, val netCents: Long, val taxCents: Long, val checkCount: Int)
+    val venueId: String, val grossCents: Long, val netCents: Long, val taxCents: Long, val checkCount: Int,
+    val gstCents: Long = 0, val qstCents: Long = 0)
 
 /** Per business day (each row's own store zone): closed sales less refunds issued that day. */
 private fun byDay(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultRow>): List<DayRow> {
@@ -175,13 +198,15 @@ private fun byDay(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultR
         val v = crows.sumOf(::checkTax) - rrows.sumOf(::refundTax)
         val cBy = crows.groupBy { it[Checks.venueId] }
         val rBy = rrows.groupBy { it[Refunds.venueId] }
+        val (gst, qst) = gstQst(crows, rrows)
         DayRow(date.toString(), g, g - v, v, crows.size, ctx.venues.map { venue ->
             val vc = cBy[venue.id].orEmpty()
             val vr = rBy[venue.id].orEmpty()
             val vg = vc.sumOf(::gross) - vr.sumOf(::rGross)
             val vt = vc.sumOf(::checkTax) - vr.sumOf(::refundTax)
-            VenueDayRow(venue.id, vg, vg - vt, vt, vc.size)
-        })
+            val (vgst, vqst) = gstQst(vc, vr)
+            VenueDayRow(venue.id, vg, vg - vt, vt, vc.size, vgst, vqst)
+        }, gst, qst)
     }
 }
 
@@ -191,7 +216,8 @@ data class VenueSummaryRow(
     val venueId: String, val venueName: String,
     val grossCents: Long, val netCents: Long, val taxCents: Long,
     val checkCount: Int, val avgCheckCents: Long,
-    val voidCount: Int, val refundAmountCents: Long)
+    val voidCount: Int, val refundAmountCents: Long,
+    val gstCents: Long = 0, val qstCents: Long = 0)
 
 private fun venueSummaries(
     ctx: ReportCtx, closed: List<ResultRow>, voids: List<ResultRow>, refunds: List<ResultRow>,
@@ -205,11 +231,13 @@ private fun venueSummaries(
         val closedGross = c.sumOf(::gross)
         val g = closedGross - r.sumOf(::rGross)
         val tax = c.sumOf(::checkTax) - r.sumOf(::refundTax)
+        val (gst, qst) = gstQst(c, r)
         VenueSummaryRow(
             venueId = v.id, venueName = v.venue.name,
             grossCents = g, netCents = g - tax, taxCents = tax,
             checkCount = c.size, avgCheckCents = if (c.isEmpty()) 0 else closedGross / c.size,
             voidCount = voidsBy[v.id].orEmpty().size, refundAmountCents = r.sumOf(::rGross),
+            gstCents = gst, qstCents = qst,
         )
     }
 }
@@ -230,10 +258,18 @@ data class ByVenueResponse(val venues: List<VenueSummaryRow>, val grossCents: Lo
 
 @Serializable
 data class TaxReportResponse(
-    val ratePercent: Int, val rows: List<DayRow>, val totals: TaxTotals, val byVenue: List<VenueSummaryRow>)
+    /** The taxes (and rates) the in-range sales were charged, from the store's own breakdown. */
+    val rates: List<TaxRateRow>,
+    val rows: List<DayRow>, val totals: TaxTotals, val byVenue: List<VenueSummaryRow>)
 
 @Serializable
-data class TaxTotals(val grossCents: Long, val netCents: Long, val taxCents: Long, val checkCount: Int)
+data class TaxTotals(
+    val grossCents: Long, val netCents: Long, val taxCents: Long, val checkCount: Int,
+    val gstCents: Long = 0, val qstCents: Long = 0)
+
+/** One tax as the store labelled it; [ratePercent] is a decimal string ("9.975"). */
+@Serializable
+data class TaxRateRow(val code: String, val labelFr: String = "", val labelEn: String = "", val ratePercent: String = "")
 
 @Serializable
 data class PaymentRow(val type: String, val amountCents: Long, val count: Int)
@@ -447,10 +483,11 @@ fun Route.reportRoutes() {
             warnIfUndercounting(ctx, closed)
             val grossTotal = closed.sumOf(::gross) - refunds.sumOf(::rGross)
             val taxTotal = closed.sumOf(::checkTax) - refunds.sumOf(::refundTax)
+            val (gst, qst) = gstQst(closed, refunds)
             TaxReportResponse(
-                ratePercent = 13,
+                rates = taxRates(closed),
                 rows = byDay(ctx, closed, refunds),
-                totals = TaxTotals(grossTotal, grossTotal - taxTotal, taxTotal, closed.size),
+                totals = TaxTotals(grossTotal, grossTotal - taxTotal, taxTotal, closed.size, gst, qst),
                 byVenue = venueSummaries(ctx, closed, voids, refunds),
             )
         }

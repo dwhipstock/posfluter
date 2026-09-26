@@ -81,11 +81,16 @@ data class CustomerBillLineDto(
 @Serializable
 data class CustomerBillFeeDto(val labelFr: String, val labelEn: String, val amountCents: Long)
 
+/** A tax added on top of the guest's subtotal: label pair, rate ("9.975") and amount. */
+@Serializable
+data class CustomerBillTaxDto(val labelFr: String, val labelEn: String, val ratePercent: String, val amountCents: Long)
+
 /**
  * The running bill a guest sees at /m/{tableId}/bill. Strictly the table's
  * CURRENT open check — `open=false` (all else empty) when there is none; a
  * closed/previous party's check is never served. Totals are the server
- * pipeline's, tax-inclusive and hidden, exactly like the printed bill.
+ * pipeline's, exactly like the printed bill: subtotal, the taxes added on
+ * top, then the total.
  */
 @Serializable
 data class CustomerBillDto(
@@ -97,6 +102,9 @@ data class CustomerBillDto(
     /** Customer-submitted, awaiting staff confirmation. Not in the total. */
     val pendingLines: List<CustomerBillLineDto> = emptyList(),
     val grandTotalCents: Long = 0,
+    /** Pre-tax subtotal; subtotalCents + sum(taxes) = grandTotalCents. */
+    val subtotalCents: Long = 0,
+    val taxes: List<CustomerBillTaxDto> = emptyList(),
 )
 
 /**
@@ -788,6 +796,8 @@ private fun customerBill(check: CheckView?): CustomerBillDto {
         fees = check.fees.map { CustomerBillFeeDto(it.labelFr, it.labelEn, it.amountCents) },
         pendingLines = check.pendingLines.map(::line),
         grandTotalCents = check.grandTotalCents,
+        subtotalCents = check.subtotalCents,
+        taxes = check.taxes.map { CustomerBillTaxDto(it.labelFr, it.labelEn, it.ratePercent, it.amountCents) },
     )
 }
 

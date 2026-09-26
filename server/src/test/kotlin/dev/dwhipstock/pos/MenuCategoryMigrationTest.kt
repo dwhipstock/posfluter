@@ -84,9 +84,11 @@ class MenuCategoryMigrationTest {
             ItemVariants.update({ ItemVariants.id eq "malbec:bottle" }) { it[priceCents] = 5250 }
             Items.update({ Items.id eq "onion-rings" }) { it[active] = false; it[deletedAt] = VenueClock.now() }
             Items.update({ Items.id eq "saison" }) { it[active] = false }
-            val checkId = Checks.insertAndGetId {
-                it[tableId] = "t1"; it[status] = "OPEN"; it[openedBy] = "manager"; it[openedAt] = VenueClock.now()
-            }.value
+            // raw SQL: the Checks table object has columns later migrations add (036)
+            exec("INSERT INTO checks (table_id, status, opened_by, opened_at, corkage_bottles) " +
+                "VALUES ('t1', 'OPEN', 'manager', '${VenueClock.now()}', 0)")
+            var checkId = 0
+            exec("SELECT MAX(id) FROM checks") { rs -> if (rs.next()) checkId = rs.getInt(1) }
             CheckLines.insert {
                 it[CheckLines.checkId] = checkId; it[itemId] = "late-fries"; it[variantId] = "late-fries:regular"
                 it[qty] = 2; it[unitPriceCents] = 850; it[createdAt] = VenueClock.now()

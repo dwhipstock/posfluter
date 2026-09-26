@@ -84,6 +84,10 @@ object Checks : IntIdTable("checks") {
     // fee lines assessed at lock time (021): [{code,labelFr,labelEn,amountCents}].
     // Fees read from live settings would re-price history; this freezes them.
     val lockedFeesJson = text("locked_fees_json").nullable()
+    // taxes added on top, frozen at lock time (036): their sum, and one entry
+    // per tax [{code,labelFr,labelEn,ratePercent,registrationNumber,amountCents}]
+    val lockedTaxAddedCents = long("locked_tax_added_cents").nullable()
+    val lockedTaxesJson = text("locked_taxes_json").nullable()
     // stamped when the check closes or voids; null = closed outside any shift
     val shiftId = integer("shift_id").nullable()
     val voidReason = varchar("void_reason", 300).nullable()
@@ -117,6 +121,7 @@ object BillGroups : IntIdTable("bill_groups") {
     val includesCorkage = bool("includes_corkage").default(false) // exactly one group carries the check-level corkage fee
     val fixedAmountCents = long("fixed_amount_cents").nullable() // even-split (÷N) money-only group; null = by-item
     val lockedTotalCents = long("locked_total_cents").nullable() // stamped at first group tender, like checks.locked_grand_total_cents
+    val lockedTaxesJson = text("locked_taxes_json").nullable() // the group's share of the check's taxes (036)
     val createdAt = utcTimestamp("created_at")
 }
 
@@ -150,6 +155,8 @@ object Refunds : IntIdTable("refunds") {
     // STRIPE refunds only (035): written after Stripe confirmed the refund
     val stripePaymentIntentId = varchar("stripe_payment_intent_id", 64).nullable()
     val stripeRefundId = varchar("stripe_refund_id", 64).nullable()
+    // the added taxes this refund reverses, one entry per tax (036); NULL = none
+    val taxesJson = text("taxes_json").nullable()
 }
 
 /**
