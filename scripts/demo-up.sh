@@ -33,6 +33,14 @@ PLATEAU_PORT="${PLATEAU_PORT:-8080}"
 SAGE_POPPY_DIR="$REPO_ROOT/.demo/sage-poppy"
 # not 8081: that's the cloud API
 SAGE_POPPY_PORT="${SAGE_POPPY_PORT:-8082}"
+# Sage & Poppy is its own client with its own portal. By default it syncs to the
+# local cloud started here; point it at its own portal instead with
+#   SAGE_POPPY_SYNC_URL=… SAGE_POPPY_API_KEY_FILE=<clients/<id>/stores/sage-poppy.env> scripts/demo-up.sh
+# (the key file is what cloud/infra/new-client.sh writes; its CLOUD_SYNC_API_KEY is used,
+# never printed). SAGE_POPPY_PORTAL_URL defaults to the sync URL.
+SAGE_POPPY_SYNC_URL="${SAGE_POPPY_SYNC_URL:-}"
+SAGE_POPPY_API_KEY_FILE="${SAGE_POPPY_API_KEY_FILE:-}"
+SAGE_POPPY_PORTAL_URL="${SAGE_POPPY_PORTAL_URL:-$SAGE_POPPY_SYNC_URL}"
 SEED=1
 [[ "${1:-}" == "--no-seed" ]] && SEED=0
 
@@ -80,6 +88,12 @@ for key in STORE_API_KEY STORE_API_KEY_PLATEAU STORE_API_KEY_SAGE_POPPY; do
 done
 STORE_API_KEY_PLATEAU="$(env_get STORE_API_KEY_PLATEAU)"
 STORE_API_KEY_SAGE_POPPY="$(env_get STORE_API_KEY_SAGE_POPPY)"
+if [[ -n "$SAGE_POPPY_SYNC_URL" ]]; then
+  [[ -f "$SAGE_POPPY_API_KEY_FILE" ]] || { echo "ERROR: SAGE_POPPY_SYNC_URL needs SAGE_POPPY_API_KEY_FILE (a store file from cloud/infra/new-client.sh)" >&2; exit 1; }
+  STORE_API_KEY_SAGE_POPPY="$(grep '^CLOUD_SYNC_API_KEY=' "$SAGE_POPPY_API_KEY_FILE" | tail -1 | cut -d= -f2-)"
+  [[ -n "$STORE_API_KEY_SAGE_POPPY" ]] || { echo "ERROR: no CLOUD_SYNC_API_KEY in $SAGE_POPPY_API_KEY_FILE" >&2; exit 1; }
+fi
+SP_SYNC_URL="${SAGE_POPPY_SYNC_URL:-http://localhost:8081}"
 VENUE_TZ="$(env_get VENUE_TZ)"; VENUE_TZ="${VENUE_TZ:-America/New_York}"
 
 # --- detect the Mac's LAN IP -----------------------------------------------------
@@ -213,10 +227,10 @@ else
     VENUE_TZ="America/Los_Angeles" \
     POS_STAFF_APP_MFA="$STAFF_APP_MFA" \
     POS_LEGAL_AGE="${POS_LEGAL_AGE:-21}" \
-    CLOUD_SYNC_URL="http://localhost:8081" \
+    CLOUD_SYNC_URL="$SP_SYNC_URL" \
     CLOUD_SYNC_API_KEY="$STORE_API_KEY_SAGE_POPPY" \
     CLOUD_SYNC_INTERVAL_SECONDS=10 \
-    REPORTING_PORTAL_URL="$PORTAL_URL" \
+    REPORTING_PORTAL_URL="${SAGE_POPPY_PORTAL_URL:-$PORTAL_URL}" \
     nohup java -jar "$JAR" >> "$SAGE_POPPY_DIR/store.log" 2>&1 &
     echo $! > "$SP_PID_FILE"
   )
@@ -264,7 +278,7 @@ cat <<BANNER
   Store sync (tenant copperlantern, one key per store, keys in $ENV_FILE):
     vieux-port   CLOUD_SYNC_URL=${SYNC_URL}   key: STORE_API_KEY          (Android tablet)
     plateau      CLOUD_SYNC_URL=http://localhost:8081   key: STORE_API_KEY_PLATEAU  (this Mac)
-    sage-poppy   CLOUD_SYNC_URL=http://localhost:8081   key: STORE_API_KEY_SAGE_POPPY (this Mac)
+    sage-poppy   CLOUD_SYNC_URL=${SP_SYNC_URL}   key: $([[ -n "$SAGE_POPPY_SYNC_URL" ]] && echo "in $SAGE_POPPY_API_KEY_FILE (its own portal)" || echo "STORE_API_KEY_SAGE_POPPY") (this Mac)
 
   Plateau store  : http://${LAN_IP}:${PLATEAU_PORT}/health   (PIN 1234 manager, 9999 server)
                    staff app: http://${LAN_IP}:${PLATEAU_PORT}/staff-app   (MFA: ${STAFF_APP_MFA})

@@ -22,6 +22,18 @@ container is stopped. The tablet connects to the existing cloud ingest and
 owner portal asynchronously. Additional independent tablet uploads and
 combined reporting remain Milestone 2.
 
+## Clients and their portals
+
+Each client (a restaurant group, a shop) has its **own** manager portal: its
+own domain, sign-in, brand, languages, currency and database — one cloud
+database per client, holding one tenant. Every client runs the same API and
+web images; the differences are runtime config (`cloud/infra/new-client.sh`,
+the brand packs in `cloud/web/brands/`). One edge proxy per server routes each
+client's hostname to its own instance. Runbook: `docs/new-client-in-a-day.md`.
+The two demo clients are **Copper Lantern** (tenant `copperlantern`, two
+Montréal pubs, CAD, French/English) and **Sage & Poppy** (tenant `sagepoppy`,
+one Los Angeles bottle shop, USD, English/Spanish).
+
 ## Stores
 
 One owner (tenant) has many stores (venues), and each store has exactly one

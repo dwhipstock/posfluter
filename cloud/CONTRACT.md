@@ -489,7 +489,12 @@ separate from POS staff.
 
 ## 6. Cloud identifiers
 
-Bootstrap (idempotent, from cloud env): tenant `copperlantern` and its stores
+**One client = one portal instance** (its own database, API, portal and
+domain; `cloud/infra/README.md`). A database therefore holds one tenant: its id
+is `TENANT_ID` (default `copperlantern`, the first client's; never change it on
+an existing database).
+
+Bootstrap (idempotent, from cloud env): the tenant `TENANT_ID` and its stores
 from `STORES="<venueId>=<name>,…"` (default: one store, `vieux-port`, named
 `VENUE_NAME`); the tenant (group) name is `VENUE_NAME` (default `Copper Lantern`),
 re-applied on every boot like the store names; stores are created in `VENUE_TZ` (set on insert only — a later boot never re-zones an existing venue); one store API key per store (`STORE_API_KEY`
@@ -498,7 +503,7 @@ portal admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, TOTP enrolled on first login).
 Every cloud row and every cloud query is scoped by `tenant_id`; the API key
 resolves to (tenant, venue) server-side, so a store never names its venue.
 
-The demo tenant's stores are `vieux-port` (Copper Lantern — Vieux-Port, the
+The first client's (Copper Lantern, tenant `copperlantern`) stores are `vieux-port` (Copper Lantern — Vieux-Port, the
 Android tablet) and `plateau` (Copper Lantern — Plateau). Cloud migration 014
 renamed the original venue id `main` to `vieux-port` in every venue-scoped
 table (history, projections, keys, devices, install identity); the tablet's

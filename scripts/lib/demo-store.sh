@@ -8,9 +8,12 @@
 #
 #   DEMO_DATA_DIR=.demo/sage-poppy-hosted   # pos.db, photos/, receipts/, bills/, store.log
 #   DEMO_CLOUD=hosted                       # hosted | local | offline
-#   DEMO_HOSTED_SYNC_URL=https://…          # the hosted cloud + this store's key
-#   DEMO_HOSTED_API_KEY=…
-#   DEMO_HOSTED_PORTAL_URL=https://…
+#   DEMO_HOSTED_SYNC_URL=https://…          # the hosted cloud + this store's key: the
+#   DEMO_HOSTED_API_KEY=…                   # store's OWN client portal (each client has
+#   DEMO_HOSTED_PORTAL_URL=https://…        # its own; scripts/demo-point-store.sh sets these)
+#   DEMO_LOCAL_SYNC_URL=http://…            # optional: a local client portal instead of
+#   DEMO_LOCAL_API_KEY=…                    # demo-up.sh's shared one (localhost:8081 +
+#   DEMO_LOCAL_PORTAL_URL=http://…          # the .env.local key); see scripts/demo-clients.sh
 #   DEMO_HOSTED_INSTALL_ID=…                # the store identity the hosted cloud pinned
 #   DEMO_LOCAL_INSTALL_ID=…                 # same, for the local Docker cloud (demo-up.sh)
 #   DEMO_JAVA=/opt/homebrew/opt/openjdk@17/bin/java
@@ -149,6 +152,13 @@ demo_cloud_settings() {
       [[ -n "$DEMO_SYNC_URL" && -n "$DEMO_SYNC_KEY" ]] || { demo_err "no hosted cloud URL/key in $(demo_env_file "$DEMO_STORE") (DEMO_HOSTED_SYNC_URL / DEMO_HOSTED_API_KEY)"; return 1; }
       ;;
     local)
+      if [[ -n "${DEMO_LOCAL_SYNC_URL:-}" ]]; then
+        # this store's own local client portal (scripts/demo-point-store.sh --local)
+        DEMO_SYNC_URL="$DEMO_LOCAL_SYNC_URL"; DEMO_SYNC_KEY="${DEMO_LOCAL_API_KEY:-}"
+        DEMO_PORTAL_URL="${DEMO_LOCAL_PORTAL_URL:-$DEMO_SYNC_URL}"
+        [[ -n "$DEMO_SYNC_KEY" ]] || { demo_err "DEMO_LOCAL_SYNC_URL is set but DEMO_LOCAL_API_KEY is not ($(demo_env_file "$DEMO_STORE"))"; return 1; }
+        return 0
+      fi
       keyname="$(demo_local_key_name "$DEMO_STORE")"
       DEMO_SYNC_URL="http://localhost:8081"
       DEMO_SYNC_KEY="$(demo_file_get "$keyname" "$DEMO_ROOT/.env.local")"

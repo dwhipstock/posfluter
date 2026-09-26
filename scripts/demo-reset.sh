@@ -152,7 +152,7 @@ desktop_plan() {
     echo "    - menu, staff and photos are re-sent from the fresh seed (same item ids, so nothing doubles)"
     echo "    - devices paired to the old database stay on the Devices page until you remove them"
     echo "    MANUAL (you, not this script): to show only the fresh data, delete this venue's pre-reset"
-    echo "    history on the hosted database — tenant copperlantern, venue ${POS_VENUE:-$store}, check ids <= $max_check"
+    echo "    history on its portal's database ($DEMO_SYNC_URL) — venue ${POS_VENUE:-$store}, check ids <= $max_check"
     echo "    (and their lines/tenders/refunds), shifts and cash movements from before the reset."
   elif [[ "$TARGET" == local ]]; then
     echo "  the local portal (:3000) keeps its old history the same way; scripts/demo-down.sh --reset wipes it"
