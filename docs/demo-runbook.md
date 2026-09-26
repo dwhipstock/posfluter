@@ -246,6 +246,73 @@ rows, and the combined figure is an **approximate** CAD total at the fixed
 rate `FX_USD_CAD` (default 1.37 locally), with the rate shown. Pick the store
 to see it on its own, all in US$. Exports carry a currency column.
 
+## Pronghorn Fuel & Market (the gas station)
+
+The third client: a fictional Texas Hill Country gas station with a
+convenience store (`POS_VENUE=pronghorn`), its own brand (black, signal
+yellow, Barlow), **USD**, **English + Spanish**, `America/Chicago`, a retail
+counter with **eight pumps** on it. The pumps are the **forecourt simulator**
+(`forecourt/simulator`, Node, no dependencies), which plays the forecourt
+controller and the customers at the pumps (`docs/forecourt.md`).
+
+```sh
+scripts/demo-gas.sh            # simulator :8086 + store :8084 + the counter :8085 in Chrome
+scripts/demo-gas.sh status
+scripts/demo-gas.sh down       # --reset deletes .demo/pronghorn
+```
+
+It starts the simulator, builds and starts the store (DB under
+`.demo/pronghorn/`, `FORECOURT_URL` pointing at the simulator), seeds a
+morning's sales once (`scripts/demo-seed-fuel.py`: most sales carry fuel,
+many buy from the shop too), builds the counter for the web and opens the
+**pump panel** and the **counter** in Chrome. PINs: manager `1234`, cashier
+`9999`, `5555` (Cajera Demo, Spanish).
+
+| | |
+| --- | --- |
+| shelf | ~900 fictional c-store products (drinks, beer, snacks, candy, grocery, automotive, health, general, tobacco & vape, ice) with in-store UPC-A codes, plus the counter's own fountain, coffee and hot food (quick keys, no barcode) |
+| money | 8.25% Texas sales tax on taxable goods (candy, soft drinks, prepared food, general goods); groceries, snack foods, water, milk, OTC medicine and ice exempt; **fuel: no sales tax** (fuel taxes are in the pump price); cash rounds to the nickel |
+| age | ID check at 21 for beer, tobacco and vape. `age.check=always` (default) or `looks-under:40` (`POS_AGE_CHECK`): a cashier may pass a customer who clearly looks over 40 without an ID, never for tobacco and vape |
+| deals | 2 for $5 on 16 oz energy drinks, hot dog + fountain drink $3, $1 off a coffee with 8+ gallons of (postpay) fuel — discount lines before tax |
+| payments | cash, and card on the counter's own terminal (no Stripe: CAD only) |
+
+### Demo steps
+
+1. **Postpay.** Pump panel: on pump 3 tap **87 Regular** (lift the nozzle):
+   the counter's tile 3 flashes **CALLING**. Counter: tap tile 3 → **Authorise
+   · pay after**. Panel: **HOLD TO PUMP** (or **LATCH**; **5×/10×** speeds it
+   up) — the tile ticks dollars and gallons. **HANG UP**: tile 3 shows **PAY
+   $xx.xx**. Tap it → **Add $xx.xx to the sale**; scan a soda (or tap a quick
+   key), **Pay**. The receipt shows `Pump 3 · 10.052 gal @ 2.899/gal`, sales
+   tax only on the soda.
+2. **Prepay with change.** Counter: tap tile 5 → **Prepay…** → **$40** → add;
+   add a coffee (Fountain & hot food → Coffee → size, flavour) and **Pay**.
+   Tile 5 turns **AUTHORISED · Prepaid $40.00**. Panel: lift a grade on pump 5,
+   pump ~$30, hang up. The store refunds the rest on that sale; the tile shows
+   **CHANGE $x.xx** until you tap it → **Change given**.
+3. **Deals.** Scan two 16 oz energy drinks, a hot dog and a fountain drink:
+   the basket shows *2 for $5 energy drinks* and *Hot dog + fountain drink $3*
+   as discount lines, and the tax is on what's left.
+4. **Stop.** While a pump runs, tile → **Stop the pump** / **Resume**, or
+   **STOP ALL** (emergency stop every pump; each needs **Reset the pump**).
+5. **Offline.** Stop the simulator (`kill $(cat .demo/pronghorn/sim.pid)`):
+   the tiles go **OFFLINE** with "Pumps offline — the shop keeps selling", and
+   in-store sales still go through. Start it again (`scripts/demo-gas.sh`)
+   and the tiles come back; anything owed to the pumps is retried.
+
+Screenshots: `docs/screenshots/gas-station/` — `pump-panel-fuelling.png`
+(the simulator, real), `pos-*.png` (the counter, rendered by
+`client/test/screenshots/pronghorn_screens_test.dart` against a fixture
+captured from a real store and simulator), `portal-*.png`.
+
+### Its own portal
+
+Pronghorn has its own portal (brand pack `cloud/web/brands/pronghorn`, fuel
+by grade with gallons and margin next to in-store sales and margin). Locally:
+`scripts/demo-clients.sh up --stores` (pf.localhost:8088). Hosted (not done
+here): see `docs/new-client-in-a-day.md` for the `new-client.sh pronghorn …`
+line and the DNS record to create.
+
 ## Vieux-Port tablet → this Mac
 
 The tablet reads its cloud settings from app-private

@@ -30,9 +30,20 @@ database per client, holding one tenant. Every client runs the same API and
 web images; the differences are runtime config (`cloud/infra/new-client.sh`,
 the brand packs in `cloud/web/brands/`). One edge proxy per server routes each
 client's hostname to its own instance. Runbook: `docs/new-client-in-a-day.md`.
-The two demo clients are **Copper Lantern** (tenant `copperlantern`, two
-Montréal pubs, CAD, French/English) and **Sage & Poppy** (tenant `sagepoppy`,
-one Los Angeles bottle shop, USD, English/Spanish).
+The three demo clients are **Copper Lantern** (tenant `copperlantern`, two
+Montréal pubs, CAD, French/English), **Sage & Poppy** (tenant `sagepoppy`,
+one Los Angeles bottle shop, USD, English/Spanish) and **Pronghorn Fuel &
+Market** (tenant `pronghorn`, one Texas gas station with a convenience store,
+USD, English/Spanish).
+
+## The forecourt (a gas station)
+
+A gas station's store also drives its pumps, still on its own: the store
+server talks to the forecourt controller on the LAN through a
+`ForecourtAdapter` (the demo's is the forecourt simulator), keeps its own
+record of every fuelling it takes money for, and syncs fuel sales up like any
+other sale. If the controller can't be reached the pumps show offline and
+the shop keeps selling. See `docs/forecourt.md`.
 
 ## Stores
 
