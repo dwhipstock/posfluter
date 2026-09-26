@@ -336,12 +336,14 @@ def recover(c: Client, dev: dict, rec: Recorder) -> None:
 
 def staff_pins(base: str, n: int) -> list[str]:
     """One cashier per device (PINs 7001…), as on a real floor: a store caps
-    the live sessions of one user, so 25 devices can't all share one login."""
+    the live sessions of one user, so 25 devices can't all share one login.
+    One more than [n]: the last is the colleague who keeps signing in during
+    the run (they must not push a device's session out)."""
     m = Client(base)
     m.login(MANAGER)
     have = {s.get("name"): s["id"] for s in m.call("GET", "/staff/manage")["staff"]}
     pins = []
-    for i in range(n):
+    for i in range(n + 1):
         name, pin = f"Load Cashier {i + 1}", str(7001 + i)
         sid = have.get(name) or m.call("POST", "/staff/manage", {"name": name, "role": "SERVER", "pin": pin})["id"]
         # the void grant, so clearing up after a failed sale needs no manager PIN
