@@ -71,10 +71,10 @@ case "$cmd" in
     needs_node; needs_docker; build; charts_python
     q=(); [[ "$cmd" == quick ]] && q=(--quick)
     rm -rf "$WORK/results"
-    run store "${q[@]}"
-    run bigdb restaurant retail gas "${q[@]}"
-    run sync "${q[@]}"
-    run soak "${q[@]}"
+    run store ${q[@]+"${q[@]}"}
+    run bigdb restaurant retail gas ${q[@]+"${q[@]}"}
+    run sync ${q[@]+"${q[@]}"}
+    run soak ${q[@]+"${q[@]}"}
     LT_QUICK=$([[ "$cmd" == quick ]] && echo 1 || echo "") run report
     ;;
   *) die "unknown scenario '$cmd' (all | quick | store | bigdb | sync | soak | report | clean)" ;;
