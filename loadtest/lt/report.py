@@ -47,6 +47,13 @@ FIXES = [
      "With 27 staff, a manager-PIN approval did 27 bcrypt checks (~0.8 s) while holding the database.",
      "An approval does 1-2 checks; other devices keep selling during a sign-in.",
      "`server/.../base/AuthService.kt`, test `PinCheckOutsideTransactionTest`"),
+    ("A year's sales report ran the store out of memory",
+     "The X / Z report and the date-range report loaded every sale of the range, then its payments and "
+     "lines. They are now sums in SQLite.",
+     "Restaurant with a year of sales (100,000): the year's range report failed with \"Java heap space\" "
+     "(on a tablet that is an app crash).",
+     "The same report answers (see the history table below).",
+     "`server/.../restaurant/ShiftService.kt`, test `RangeReportScaleTest`"),
     ("The portal's \"All stores\" dashboard crashed the cloud API with 200 stores",
      "Every dashboard call read every sale in range into the API (512 MB) and added them up there. It "
      "now asks Postgres for the sums, grouped by store and business day (or hour, tender type, item), "
@@ -76,11 +83,9 @@ FINDINGS = [
      "it is a decision, not a fix. Not changed."),
     ("A PIN sign-in gets slower with every staff member",
      "PIN-only sign-in has to try the PIN against each staff member's bcrypt hash: ~30 ms per person on "
-     "this Mac, several times that on a tablet. With 27 staff the slowest sign-in is ~0.7 s here. Fine for "
-     "a store's own staff; a very large store would want a staff picker before the PIN. Not changed."),
-    ("A year's sales report on the tablet takes a while",
-     "The store's own date-range report (X-report layout) over a whole year reads every sale; see the "
-     "history table below. It is a rare, manager-only screen. Not changed."),
+     "this Mac, several times that on a tablet. With 28 staff the slowest sign-in takes about 1.5 s here "
+     "while the store is busy (see \"sign-in during load\"). Fine for a store's own staff; a very large "
+     "store would want a staff picker before the PIN. Not changed."),
 ]
 
 
