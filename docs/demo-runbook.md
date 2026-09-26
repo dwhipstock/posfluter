@@ -105,6 +105,110 @@ On a tablet, `store.venue=sage-poppy` in
 `/sdcard/Android/data/dev.dwhipstock.pos_client/files/store.properties` makes it
 this store (one tablet per store).
 
+### Counting and receiving stock (the stock app)
+
+Stock is counted and received **in the store**, on a phone in the aisles
+(the stock app) or on the counter tablet (⋮ → **Count stock** /
+**Receive a delivery**) — the same screens. It all works with no internet:
+the phone only needs the store's Wi-Fi, and it keeps every count on the
+phone until the store has it.
+
+- **Count**: start a count (or pick an open one — two phones can count the
+  same session, their figures add up), scan each unit (camera or a Bluetooth
+  scanner) or tap − / + / the number. Each product shows "expected 12" when
+  the store has a figure from the cloud (else "no expected qty"); a warning
+  flags a difference. **Review** lists counted vs expected per product;
+  **Submit**. A variance needs a manager: signed in as one, or their PIN.
+- **Receive**: supplier and invoice (optional), scan each product, **Save**.
+- Offline: the bar says "saved on this phone"; it sends by itself when the
+  Wi-Fi is back (or tap **Send now**). Something the store refused (a
+  variance without a manager) stays listed under "Needs attention" with
+  **Try again**.
+- The portal's Stock page shows the counts (who, when, variances) and the
+  deliveries after sync; a count sets on hand as of the count time.
+
+The screens (`docs/screenshots/stock/`, rendered by
+`client/test/stock_app_test.dart` with `--dart-define=SHOTS_DIR=…`): phone home,
+counting, review, manager PIN, offline, receiving, and the tablet's count
+screen.
+
+#### Android phone: install, join, pair, count
+
+1. Build the APK on the Mac (or take it from whoever built it):
+
+   ```sh
+   cd client
+   flutter build apk --release --dart-define=POS_APP=stock
+   # → build/app/outputs/flutter-apk/app-release.apk (installs as "Stock",
+   #   dev.dwhipstock.pos_stock, next to the POS — never over it)
+   # smaller, one per CPU: add --split-per-abi and install the arm64-v8a one
+   ```
+
+2. Install it: `adb install -r build/app/outputs/flutter-apk/app-release.apk`
+   with the phone on USB (Developer options → USB debugging), or copy the APK
+   to the phone and open it (allow "Install unknown apps" for the file
+   manager).
+3. Join the **store's Wi-Fi** (the same network as the counter tablet / the
+   Mac running the store).
+4. Open **Stock**. It looks for the store on the Wi-Fi (a scan for port
+   `8080`; the counter tablet serves there). The Mac demo store is on `:8082`,
+   so after a few seconds tap **Connection help** and type
+   `http://<Mac LAN IP>:8082` (the IP is in the `demo-up.sh` banner).
+5. **Pair / sign in**: the same as the terminals. A store on the LAN (the
+   demo) needs no pairing — sign in with a staff PIN: cashier `9999`,
+   manager `1234`. A cloud-hosted store (device gate on) first shows the
+   pairing screen: enter the store address and a pairing code from the
+   portal's **Devices** page.
+6. **Count**: Count → Start a count → name it → scan (Camera, or pair a
+   Bluetooth scanner in the phone's settings — it types like a keyboard) →
+   Review → Submit (a variance asks for the manager PIN `1234`).
+7. The store sends it up with its next sync; the portal's **Stock** page
+   shows it under Counts, with the new on hand.
+
+The camera needs no setup beyond allowing it on first use. A browser page
+can't do this on the store's plain-HTTP LAN (browsers only open the camera
+on HTTPS), which is why this is an app.
+
+#### iPhone (needs Xcode — not buildable on this Mac today)
+
+The iOS project is ready (`client/ios/`): an iOS build **is** the stock app
+(bundle id `dev.dwhipstock.posStock`, name "Stock", portrait), with the
+camera and local-network permission texts and App Transport Security's
+`NSAllowsLocalNetworking` for the plain-HTTP LAN. Once Xcode is installed:
+
+1. Install Xcode from the App Store, open it once (accept the licence, let it
+   install components), then `sudo xcode-select -s /Applications/Xcode.app`
+   and `flutter doctor`.
+2. Open `client/ios/Runner.xcworkspace` in Xcode → Runner target → **Signing &
+   Capabilities** → pick your Team (sign in with an Apple ID under Xcode →
+   Settings → Accounts). Change the bundle id if Xcode says it's taken.
+3. Plug in the iPhone, trust the Mac, turn on **Developer Mode** on the phone
+   (Settings → Privacy & Security), then:
+
+   ```sh
+   cd client
+   flutter run --release -d <iPhone>        # or: flutter build ios --release
+   ```
+
+   (`--dart-define=POS_APP=stock` is implied on iOS; `POS_APP=terminal`
+   would build the counter UI instead.)
+4. On the phone: Settings → General → VPN & Device Management → trust the
+   developer. Open **Stock**, allow **Local Network** (without it the store
+   can't be found or reached) and the camera when asked, then steps 4–7
+   above.
+
+A **free Apple ID** can install on your own devices, but the app **expires
+after 7 days** (re-run step 3 to reinstall) and is limited to a few apps per
+device. A **paid Apple Developer account** ($99/year) gives a year-long
+provisioning profile, more devices, and TestFlight / ad-hoc distribution to
+other staff phones.
+
+Not verified (no Xcode here): the iOS build itself; the Swift Package
+Manager resolution of the plugins (the Stripe terminal plugin needs iOS 15,
+set as the deployment target; the stock app never uses it); the camera on a
+real iPhone; the Local Network prompt appearing on first discovery; and the
+app icon (still Flutter's default on iOS).
+
 ### The portal with two currencies
 
 "All stores" never adds CAD and USD together: each store is shown exactly in

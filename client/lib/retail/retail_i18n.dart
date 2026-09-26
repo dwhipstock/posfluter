@@ -39,6 +39,15 @@ class R {
   String get open => _t('Open', 'Abrir', 'Ouvrir');
   String get cancel => _t('Cancel', 'Cancelar', 'Annuler');
   String get more => _t('More', 'Más', 'Plus');
+  String get countStock =>
+      _t('Count stock', 'Contar inventario', 'Compter le stock');
+  String get receiveDelivery =>
+      _t('Receive a delivery', 'Recibir una entrega', 'Recevoir une livraison');
+  String get scanWithCamera => _t(
+    'Scan with the camera',
+    'Escanear con la cámara',
+    'Scanner avec la caméra',
+  );
 
   // catalog
   String get searchHint => _t(

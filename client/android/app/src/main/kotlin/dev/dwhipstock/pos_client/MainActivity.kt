@@ -13,7 +13,8 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        startForegroundService(Intent(this, TabletStoreService::class.java))
+        // the stock app (POS_APP=stock) is a phone on the LAN: it never hosts a store
+        if (BuildConfig.EMBEDDED_STORE) startForegroundService(Intent(this, TabletStoreService::class.java))
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -23,7 +24,7 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "startupFailure" -> result.success(TabletStoreService.lastFailure)
                     "restart" -> {
-                        startForegroundService(Intent(this, TabletStoreService::class.java))
+                        if (BuildConfig.EMBEDDED_STORE) startForegroundService(Intent(this, TabletStoreService::class.java))
                         result.success(null)
                     }
                     // Card (Stripe) diagnostics: `adb logcat -s StripeTerminal`.

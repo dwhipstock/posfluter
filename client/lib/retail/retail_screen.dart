@@ -8,6 +8,9 @@ import '../i18n.dart';
 import '../screens/login_screen.dart';
 import '../screens/receipt_screen.dart';
 import '../screens/shift_screen.dart';
+import '../stock/barcode_scanner.dart';
+import '../stock/count_screens.dart';
+import '../stock/receive_screen.dart';
 import '../widgets/brand.dart';
 import 'add_product_dialog.dart';
 import 'age_check_dialog.dart';
@@ -24,10 +27,14 @@ import 'sp_theme.dart';
 /// Scanning: a USB / Bluetooth HID scanner types the code and Enter. Every key
 /// on this screen goes through a [HidScanner]: a fast burst ending in Enter
 /// is a scan (even while the search box has focus — the burst is taken back
-/// out of it); anything slower is a person typing. The tablet camera can plug
-/// in later as another [BarcodeSource].
+/// out of it); anything slower is a person typing. The tablet's camera
+/// scans too (the header's camera button, on Android / iOS — not on the web,
+/// where a browser only opens the camera over HTTPS).
+///
+/// The ⋮ menu also opens the stock screens (Count / Receive) — the same ones
+/// the stock app uses on a phone.
 class RetailScreen extends StatefulWidget {
-  /// Extra barcode sources (the camera, later). The HID scanner is built in.
+  /// Extra barcode sources. The HID scanner and the camera are built in.
   final List<BarcodeSource> sources;
   const RetailScreen({super.key, this.sources = const []});
 
@@ -390,6 +397,18 @@ class _RetailScreenState extends State<RetailScreen> {
     }
   }
 
+  /// The tablet camera as a scanner: one code, rung up like a HID scan.
+  Future<void> _cameraScan() async {
+    _dialogOpen = true;
+    String? code;
+    try {
+      code = await CameraScanner.scanOnce(context);
+    } finally {
+      _dialogOpen = false;
+    }
+    if (code != null && mounted) await _scan(code);
+  }
+
   Future<void> _signOut() async {
     await Api.logout();
     if (!mounted) return;
@@ -482,6 +501,13 @@ class _RetailScreenState extends State<RetailScreen> {
             fg: Colors.white,
             bg: Colors.white.withValues(alpha: .12),
           ),
+          if (CameraScanner.supported)
+            IconButton(
+              key: const Key('retail-camera'),
+              tooltip: r.scanWithCamera,
+              icon: const Icon(LucideIcons.camera, color: Colors.white),
+              onPressed: _cameraScan,
+            ),
           const SizedBox(width: 12),
           if (user != null) ...[
             Icon(LucideIcons.user, size: 18, color: const Color(0xFFD7E4D3)),
@@ -509,6 +535,20 @@ class _RetailScreenState extends State<RetailScreen> {
                 final shift = await Api.currentShift();
                 if (mounted) setState(() => _shift = shift);
               }
+              if ((v == 'count' || v == 'receive') && context.mounted) {
+                _dialogOpen = true; // the stock screens own the scanner
+                try {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => v == 'count'
+                          ? const CountListScreen()
+                          : const ReceiveScreen(),
+                    ),
+                  );
+                } finally {
+                  _dialogOpen = false;
+                }
+              }
               if (v == 'out') await _signOut();
             },
             itemBuilder: (_) => [
@@ -516,6 +556,16 @@ class _RetailScreenState extends State<RetailScreen> {
                 PopupMenuItem(value: 'open', child: Text(r.openRegister)),
               if (_shift != null)
                 PopupMenuItem(value: 'close', child: Text(r.closeRegister)),
+              PopupMenuItem(
+                key: const Key('menu-count'),
+                value: 'count',
+                child: Text(r.countStock),
+              ),
+              PopupMenuItem(
+                key: const Key('menu-receive'),
+                value: 'receive',
+                child: Text(r.receiveDelivery),
+              ),
               PopupMenuItem(value: 'out', child: Text(r.signOut)),
             ],
           ),

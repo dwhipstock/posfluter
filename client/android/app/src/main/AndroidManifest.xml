@@ -2,7 +2,9 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
-    <!-- Cleartext: client talks to the embedded/localhost store server, not the internet -->
+    <!-- Cleartext: the POS talks to its embedded/localhost store, and the stock
+         app to the store on the Wi-Fi (plain HTTP on the LAN), not the internet.
+         The camera (barcode scanning) permission comes from mobile_scanner. -->
     <application
         android:label="${appLabel}"
         android:name=".PosApplication"
@@ -12,7 +14,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="${screenOrientation}"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"

@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -18,6 +20,19 @@ val stageEmbeddedStoreSources by tasks.registering(Sync::class) {
 // staff-app MFA bypass cannot be toggled from the app or a runtime settings UI.
 val posDemoBuild = providers.environmentVariable("POS_DEMO_BUILD")
     .map { it.equals("true", ignoreCase = true) }.getOrElse(false)
+
+// The stock app (a phone that counts and receives stock) is the same Flutter
+// code built with --dart-define=POS_APP=stock (lib/app_mode.dart). Flutter
+// hands the defines to Gradle base64-encoded; read the same switch here so the
+// phone app gets its own id and label, portrait, and never starts the store.
+val dartDefines: Map<String, String> = (project.findProperty("dart-defines") as String?)
+    ?.split(",")
+    ?.mapNotNull { encoded ->
+        runCatching { String(Base64.getDecoder().decode(encoded), Charsets.UTF_8) }.getOrNull()
+    }
+    ?.mapNotNull { pair -> pair.split("=", limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
+    ?.toMap() ?: emptyMap()
+val stockApp = dartDefines["POS_APP"] == "stock"
 
 val sqliteJdbcNative by configurations.creating
 val stageSqliteNative by tasks.registering(Sync::class) {
@@ -48,9 +63,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "dev.dwhipstock.pos_client"
+        // The stock app installs next to the POS, never over it.
+        applicationId = if (stockApp) "dev.dwhipstock.pos_stock" else "dev.dwhipstock.pos_client"
+        // The counter tablet hosts the store; the stock app is a LAN client.
+        buildConfigField("boolean", "EMBEDDED_STORE", (!stockApp).toString())
+        manifestPlaceholders["screenOrientation"] = if (stockApp) "portrait" else "sensorLandscape"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Stripe Terminal SDK (Card (Stripe) tender) needs Android 8.0 / API 26+
@@ -63,8 +86,8 @@ android {
     buildTypes {
         debug {
             // Side-by-side verification must never overwrite the working POS.
-            applicationIdSuffix = ".embeddedtest"
-            manifestPlaceholders["appLabel"] = "Copper Lantern Test"
+            applicationIdSuffix = if (stockApp) ".debug" else ".embeddedtest"
+            manifestPlaceholders["appLabel"] = if (stockApp) "Stock Test" else "Copper Lantern Test"
         }
         release {
             // TODO: Add your own signing config for the release build.
@@ -75,7 +98,7 @@ android {
             // Android-specific R8 rules are covered by device tests.
             isMinifyEnabled = false
             isShrinkResources = false
-            manifestPlaceholders["appLabel"] = "Copper Lantern POS"
+            manifestPlaceholders["appLabel"] = if (stockApp) "Stock" else "Copper Lantern POS"
         }
     }
 

@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'api.dart';
+import 'app_mode.dart';
 import 'connection_monitor.dart';
 import 'design/tokens.dart';
 import 'home.dart';
@@ -37,20 +38,28 @@ Future<void> main() async {
       ], await rootBundle.loadString('assets/fonts/$file'));
     }
   });
-  // Kiosk mode: hide status + navigation bars everywhere; a swipe from the
-  // edge peeks them and immersiveSticky re-hides them on its own — no
-  // per-screen or on-resume re-assertion needed.
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  // The counter tablet is used in landscape (either way up); the layouts are
-  // designed for it. The manifest locks the activity the same way.
-  await SystemChrome.setPreferredOrientations(const [
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-  // A POS terminal must never sleep mid-shift. Re-asserted on every resume by
-  // [_WakelockObserver] — Android can drop the lock while backgrounded.
-  await WakelockPlus.enable();
-  WidgetsBinding.instance.addObserver(_WakelockObserver());
+  if (AppMode.isStock) {
+    // The stock app is an ordinary phone app: portrait, system bars shown,
+    // the phone sleeps as usual (counts are saved on every change).
+    await SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+    ]);
+  } else {
+    // Kiosk mode: hide status + navigation bars everywhere; a swipe from the
+    // edge peeks them and immersiveSticky re-hides them on its own — no
+    // per-screen or on-resume re-assertion needed.
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // The counter tablet is used in landscape (either way up); the layouts are
+    // designed for it. The manifest locks the activity the same way.
+    await SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    // A POS terminal must never sleep mid-shift. Re-asserted on every resume by
+    // [_WakelockObserver] — Android can drop the lock while backgrounded.
+    await WakelockPlus.enable();
+    WidgetsBinding.instance.addObserver(_WakelockObserver());
+  }
   await Prefs.instance.load(); // device-level fallback until login hydrates
   await Api.loadServerConfig(); // manual override + last-discovered store URL
   // A saved address is a hint, not a lock. If it disappears while the app is
@@ -162,7 +171,9 @@ class PosApp extends StatelessWidget {
           final sagePoppy = StoreProfile.current.isSagePoppy;
           return MaterialApp(
             navigatorObservers: [_RouteBarrierLogger()],
-            title: sagePoppy ? 'Sage & Poppy POS' : 'Copper Lantern POS',
+            title: AppMode.isStock
+                ? (sagePoppy ? 'Sage & Poppy Stock' : 'POS Stock')
+                : (sagePoppy ? 'Sage & Poppy POS' : 'Copper Lantern POS'),
             navigatorKey: rootNavigatorKey,
             theme: sagePoppy
                 ? buildSagePoppyTheme(Brightness.light)

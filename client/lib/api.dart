@@ -7,10 +7,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
 
+import 'app_mode.dart';
 import 'connection_monitor.dart';
 import 'i18n.dart';
+import 'stock/stock_models.dart';
 import 'store_profile.dart';
 
+export 'stock/stock_models.dart';
 export 'store_profile.dart';
 
 /// Thin API client for the store server. The client owns NO money logic —
@@ -19,8 +22,10 @@ class Api {
   Api._();
 
   /// Android hosts its own store. Desktop/web builds retain LAN discovery for
-  /// development; an Android tablet never silently falls back to a Mac.
-  static bool get usesEmbeddedStore => !kIsWeb && Platform.isAndroid;
+  /// development; an Android tablet never silently falls back to a Mac. The
+  /// stock app (a phone) never runs a store: it finds the store on the Wi-Fi.
+  static bool get usesEmbeddedStore =>
+      !kIsWeb && Platform.isAndroid && !AppMode.isStock;
   static const embeddedStoreUrl = 'http://127.0.0.1:8080';
 
   /// The POS itself uses loopback, but a QR scanned by another phone must not.
@@ -598,7 +603,7 @@ class Api {
         code = body['code'];
         declineCode = body['declineCode'];
       } catch (_) {}
-      throw ApiException(message, code, declineCode);
+      throw ApiException(message, code, declineCode, res.statusCode);
     }
   }
 
@@ -1383,6 +1388,60 @@ class Api {
     });
     return CashMovementResult.fromJson(json);
   }
+
+  // --- stock (retail): counting and receiving, from the stock app or the
+  // counter. Every write is idempotent on the client's own id, so the offline
+  // queue (stock/stock_queue.dart) can resend after a dropped connection. ---
+
+  /// The best-effort expected on hand per product.
+  static Future<StockExpected> stockExpected() async =>
+      StockExpected.fromJson(await _get('/stock/expected'));
+
+  /// Open counts first, then the latest submitted ones.
+  static Future<List<CountSummary>> stockCounts() async =>
+      ((await _get('/stock/counts')) as List)
+          .map((c) => CountSummary.fromJson(c as Map<String, dynamic>))
+          .toList();
+
+  /// Start the count with this client id (or get it, if it exists).
+  static Future<CountSession> startCount(String id, {String? name}) async =>
+      CountSession.fromJson(
+        await _post('/stock/counts', {'id': id, 'name': ?name}),
+      );
+
+  static Future<CountSession> getCount(String id, {String? counterId}) async =>
+      CountSession.fromJson(
+        await _get(
+          '/stock/counts/$id${counterId == null ? '' : '?counter=$counterId'}',
+        ),
+      );
+
+  /// SET this counter's quantities ([lines]: itemId, qty, countedAt, remove).
+  static Future<CountSession> setCountLines(
+    String id,
+    String counterId,
+    List<Map<String, dynamic>> lines,
+  ) async => CountSession.fromJson(
+    await _put('/stock/counts/$id/lines', {
+      'counterId': counterId,
+      'lines': lines,
+    }),
+  );
+
+  /// Submit (idempotent). A variance needs a manager: their session or PIN.
+  static Future<CountSession> submitCount(
+    String id, {
+    String? managerPin,
+  }) async => CountSession.fromJson(
+    await _post('/stock/counts/$id/submit', {'managerPin': ?managerPin}),
+  );
+
+  static Future<CountSession> cancelCount(String id) async =>
+      CountSession.fromJson(await _post('/stock/counts/$id/cancel'));
+
+  /// A delivery (idempotent on its id).
+  static Future<StockReceipt> receiveStock(Map<String, dynamic> body) async =>
+      StockReceipt.fromJson(await _post('/stock/receipts', body));
 }
 
 class ApiException implements Exception {
@@ -1390,7 +1449,10 @@ class ApiException implements Exception {
   final String? code; // machine code, translated client-side
   final String?
   declineCode; // Stripe card decline reason (stripe_declined only)
-  ApiException(this.message, [this.code, this.declineCode]);
+
+  /// The HTTP status, when the store answered (null for client-made errors).
+  final int? status;
+  ApiException(this.message, [this.code, this.declineCode, this.status]);
 
   /// User-facing text: the localized copy for [code], or — for an unknown or
   /// missing code — a clean generic message. The raw server [message] (internal
