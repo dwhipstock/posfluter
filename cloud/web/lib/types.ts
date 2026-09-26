@@ -346,6 +346,45 @@ export interface RefundListRow {
   roundingAdjustmentCents?: number;
 }
 
+/** A fuel grade as dispensed, in one currency (GET /v1/reports/fuel). */
+export interface FuelGradeRow {
+  /** REG | MID | PRE | DSL (or whatever the store sends). */
+  grade: string;
+  gradeName: string;
+  /** Thousandths of a US gallon. */
+  volumeMilli: number;
+  amountCents: number;
+  count: number;
+  currency?: Currency;
+}
+
+export interface FuelReport {
+  currency: Currency;
+  byGrade: FuelGradeRow[];
+  /** What the pumps dispensed (tax-inclusive); prepay change is a refund, not taken off here. */
+  fuel: {
+    volumeMilli: number;
+    amountCents: number;
+    count: number;
+    prepayCount: number;
+    prepaidCents: number;
+    prepayRefundCents: number;
+  };
+  /** Shop sales: pre-tax line totals of closed sales' non-fuel lines. */
+  inStore: { salesCents: number; lineCount: number; qty: number; checkCount: number };
+  byVenue: {
+    venueId: string;
+    venueName: string;
+    fuelVolumeMilli: number;
+    fuelAmountCents: number;
+    fuelCount: number;
+    inStoreSalesCents: number;
+    inStoreCheckCount: number;
+    currency?: Currency;
+  }[];
+  money?: MoneyScope;
+}
+
 export interface RefundsReport {
   count: number;
   grossCents: number;

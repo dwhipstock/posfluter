@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Pronghorn Fuel &amp; Market">
+  <!-- Pronghorn Fuel & Market: the round cut of the mark (pronghorn-mark.svg)
+       for places that show a mark in a circle — the manager portal's sidebar,
+       sign-in badge and home-screen icon. Same horns and fuel drop, on a
+       near-black disc with a signal-yellow ring. -->
+  <circle cx="256" cy="256" r="256" fill="#0E1013"/>
+  <circle cx="256" cy="256" r="236" fill="none" stroke="#FFC400" stroke-width="14"/>
+  <g transform="translate(256 256) scale(0.92) translate(-256 -262)">
+    <g fill="none" stroke="#FFC400" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M232 262 C 196 230, 168 180, 172 124 C 174 100, 190 86, 212 92" stroke-width="36"/>
+      <path d="M280 262 C 316 230, 344 180, 340 124 C 338 100, 322 86, 300 92" stroke-width="36"/>
+      <path d="M186 196 L 138 184" stroke-width="30"/>
+      <path d="M326 196 L 374 184" stroke-width="30"/>
+    </g>
+    <path d="M256 238 C 256 238, 188 326, 188 372 C 188 412, 218 440, 256 440
+             C 294 440, 324 412, 324 372 C 324 326, 256 238, 256 238 Z" fill="#FFFFFF"/>
+    <path d="M226 378 C 226 402, 240 416, 262 418" fill="none" stroke="#0E1013" stroke-width="14" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   ChevronRight,
   Clock3,
+  Fuel,
   Landmark,
   ListOrdered,
   Receipt,
@@ -16,11 +17,17 @@ import {
 } from "lucide-react";
 import { useT } from "@/lib/i18n/context";
 import { useStoreHref } from "@/lib/store";
+import { useBrand } from "@/lib/brand/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 
-const REPORTS: { href: string; titleKey: MsgKey; descKey: MsgKey; icon: typeof Landmark }[] = [
+type ReportCard = { href: string; titleKey: MsgKey; descKey: MsgKey; icon: typeof Landmark };
+
+// a gas station (brand pack `features.fuel`): fuel by grade beside in-store sales, first
+const FUEL: ReportCard = { href: "/reports/fuel", titleKey: "report_fuel_title", descKey: "report_fuel_desc", icon: Fuel };
+
+const REPORTS: ReportCard[] = [
   { href: "/reports/tax", titleKey: "report_tax_title", descKey: "report_tax_desc", icon: Landmark },
   { href: "/reports/payments", titleKey: "report_payments_title", descKey: "report_payments_desc", icon: Wallet },
   { href: "/reports/items", titleKey: "report_items_title", descKey: "report_items_desc", icon: ListOrdered },
@@ -36,11 +43,12 @@ const REPORTS: { href: string; titleKey: MsgKey; descKey: MsgKey; icon: typeof L
 export default function ReportsPage() {
   const t = useT();
   const storeHref = useStoreHref();
+  const reports = useBrand().features.fuel ? [FUEL, ...REPORTS] : REPORTS;
   return (
     <div>
       <PageHeader title={t("reports_title")} sub={t("reports_sub")} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {REPORTS.map(({ href, titleKey, descKey, icon: Icon }) => (
+        {reports.map(({ href, titleKey, descKey, icon: Icon }) => (
           <Link key={href} href={storeHref(href)} className="group">
             <Card className="flex items-center gap-4 p-4 transition-colors group-hover:border-navy/40 group-hover:shadow-raised">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-navy text-white">

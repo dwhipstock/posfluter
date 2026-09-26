@@ -222,6 +222,8 @@ export const messages = {
   report_refunds_desc: m("Montants remboursés par motif, taxes en sus", "Refund amounts by reason, net of tax"),
   report_cash_title: m("Entrées et sorties de caisse", "Cash movements"),
   report_cash_desc: m("Argent ajouté ou retiré hors vente, avec le motif", "Non-sale cash in/out, with reasons"),
+  report_fuel_title: m("Carburant", "Fuel"),
+  report_fuel_desc: m("Gallons et ventes par carburant, à côté des ventes en magasin", "Gallons and sales by grade, beside in-store sales"),
 
   // ── tax report ────────────────────────────────────────────────────────
   tax_title: m("Rapport des taxes", "Sales tax report"),
@@ -312,6 +314,30 @@ export const messages = {
   col_time: m("Heure", "Time"),
   refunds_empty: m("Aucun remboursement pour cette période", "No refunds in this range"),
   refunds_empty_hint: m("Aucune addition n’a été remboursée.", "No bills were refunded."),
+
+  // ── Fuel report (a gas station) ───────────────────────────────────────
+  fuel_title: m("Carburant", "Fuel"),
+  fuel_note: m(
+    "Le carburant est ce que les pompes ont distribué, taxes comprises. La monnaie rendue sur un prépaiement est un remboursement (voir Remboursements). Les ventes en magasin sont avant taxes.",
+    "Fuel is what the pumps dispensed, taxes included. Unused prepay handed back is a refund (see Refunds). In-store sales are before tax."
+  ),
+  fuel_gallons: m("Gallons", "Gallons"),
+  fuel_sales: m("Ventes de carburant", "Fuel sales"),
+  fuel_fills: m("Pleins", "Fill-ups"),
+  fuel_in_store: m("Ventes en magasin", "In-store sales"),
+  fuel_in_store_sub: m("{n} ventes · avant taxes", "{n} sales · before tax"),
+  fuel_by_grade: m("Par carburant", "By grade"),
+  fuel_by_store: m("Carburant par magasin", "Fuel by store"),
+  fuel_total: m("Total carburant", "Fuel total"),
+  fuel_prepay: m("{n} prépaiements · {paid} payé d’avance, {back} rendu", "{n} prepaid · {paid} paid up front, {back} handed back"),
+  col_grade: m("Carburant", "Grade"),
+  // the store's grade codes (CONTRACT §2, Fuel); another code shows the store's own name
+  fuel_grade_REG: m("Ordinaire", "Regular"),
+  fuel_grade_MID: m("Intermédiaire", "Mid-Grade"),
+  fuel_grade_PRE: m("Super", "Premium"),
+  fuel_grade_DSL: m("Diesel", "Diesel"),
+  fuel_empty: m("Aucun carburant vendu pour cette période", "No fuel sold in this range"),
+  fuel_empty_hint: m("Les ventes de carburant s’affichent ici dès qu’une pompe est réglée.", "Fuel sales show here once a pump sale is settled."),
 
   // ── Cash movements report ─────────────────────────────────────────────
   cash_title: m("Entrées et sorties de caisse", "Cash movements"),

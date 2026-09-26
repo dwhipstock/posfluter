@@ -272,6 +272,58 @@ Deliveries and adjustments entered in the portal keep working and stay in
 the cloud. Nothing here ever gates a sale: the store sells regardless of
 stock (it may go negative), online or not.
 
+### Fuel (a gas station)
+A gas station is a retail store whose counter also settles the pumps. Fuel
+reaches the cloud two ways; the cloud keeps both (cloud migration 023).
+
+`fuel.sale` (aggregate `fuel_sale`, id = the store's fuel sale id) — one event
+per completed fuelling the store has settled: postpay when the sale that paid
+for it closes; prepay when the pump finishes and any unused prepay has been
+handed back.
+```json
+{ "currency": "USD", "country": "US",
+  "fuelSaleId": 17,
+  "checkId": 42,                  // the sale (check) it was paid on
+  "pump": 3, "nozzle": 2,
+  "grade": "MID", "gradeName": "Mid-Grade",   // REG Regular, MID Mid-Grade, PRE Premium, DSL Diesel
+  "volumeMilli": 10052,           // thousandths of a US gallon (10.052 gal)
+  "priceMills": 3299,             // thousandths of a dollar per gallon ($3.299)
+  "amountCents": 3316,            // what was dispensed, tax-inclusive (fuel taxes are in the pump price)
+  "mode": "PREPAY",               // PREPAY | POSTPAY
+  "prepaidCents": 4000,           // PREPAY only: paid up front
+  "refundCents": 684,             // PREPAY only: unused prepay handed back (0 when it filled exactly)
+  "refundId": 9,                  // PREPAY with a refund only
+  "fdcTransactionId": "T-000031",
+  "completedAt": "2026-09-26T15:04:05.000-05:00" }
+```
+- Idempotent by `(store, fuelSaleId)`: a re-sent sale (even under a new event
+  id) overwrites the row with the same figures, never adds a second one.
+- `amountCents` is the fuel figure. The unused prepay is an ordinary
+  `refund.created` (`"reason": "Prepay change"`, and it may carry
+  `"fuelSaleId"`) and nets out of sales like any refund; `refundCents` here is
+  only a note of it and is never subtracted from fuel again.
+- `completedAt` is an instant with the store's offset; a sale belongs to the
+  store's business day of `completedAt` (missing → the event's `createdAt`).
+  An absent `currency` is the store's.
+
+`check.closed` fuel lines carry `"categoryId": "fuel"`, `"taxable": false` and
+a `fuel` object besides the usual line keys:
+```json
+{ "lineId": 7, "itemId": "fuel-mid", "variantId": "fuel-mid:gal", "categoryId": "fuel",
+  "nameEn": "Mid-Grade", "nameFr": "Mid-Grade", "qty": 1,
+  "unitPriceCents": 3316, "lineTotalCents": 3316, "taxable": false,
+  "fuel": { "pump": 3, "nozzle": 2, "grade": "MID", "volumeMilli": 10052,
+            "priceMills": 3299, "mode": "POSTPAY", "fdcTransactionId": "T-000031" } }
+```
+A prepay line on the sale that paid for it is `"itemId": "fuel-prepay"`,
+`"categoryId": "fuel"`, `"unitPriceCents": 4000`, `"fuel": { "pump": 3,
+"mode": "PREPAY", "prepaidCents": 4000 }` — no grade or volume yet; those
+arrive in `fuel.sale`. The cloud keeps each line's `fuel` object as sent
+(`check_lines.fuel`) and counts **in-store sales** as the lines whose
+`categoryId` is not `fuel`. Item snapshots for the fuel items have
+`categoryId: "fuel"`, `taxable: false`, and may be `active: false` (sold at
+the pump, not from the shelf). The Fuel report is API.md, Reports.
+
 ### `age.checked`
 The outcome of one ID check before age-restricted items were paid for, and
 nothing else: `checkId, method (SCAN | MANUAL), passed, ageYears?, legalAge,

@@ -191,4 +191,31 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   ok "docker-compose.client.yml renders with the written env"
 fi
 
+# 9. the third client (a gas station): a US retail store in Central time, its own brand
+PH_ARGS=(pronghorn pronghorn-manager.example.com --clients-dir "$CL"
+  --name "Pronghorn Fuel & Market" --brand pronghorn --store "pronghorn=Pronghorn Fuel & Market"
+  --zone America/Chicago --currency USD --country US --retail
+  --admin-email owner@example.com --registry registry.example.com --image-tag abc123)
+out="$("$SCRIPT" "${PH_ARGS[@]}" --dry-run)"
+[[ ! -d "$CL/pronghorn" ]] || bad "pronghorn dry run wrote files"
+grep -q "brand       : pronghorn" <<<"$out" || bad "pronghorn dry run brand"
+grep -q "zone: America/Chicago" <<<"$out" || bad "pronghorn dry run zone"
+out="$("$SCRIPT" "${PH_ARGS[@]}")"
+PENV="$CL/pronghorn/.env"
+[[ "$(getv TENANT_ID "$PENV")" == pronghorn ]] || bad "pronghorn tenant"
+[[ "$(getv PORTAL_BRAND "$PENV")" == pronghorn ]] || bad "pronghorn brand"
+[[ "$(getv STORES "$PENV")" == "pronghorn=Pronghorn Fuel & Market" ]] || bad "pronghorn stores"
+[[ "$(getv VENUE_NAME "$PENV")" == "Pronghorn Fuel & Market" ]] || bad "pronghorn name"
+[[ "$(getv VENUE_TZ "$PENV")" == America/Chicago ]] || bad "pronghorn zone"
+[[ "$(getv STORE_CURRENCIES "$PENV")" == "pronghorn=USD" ]] || bad "pronghorn currency"
+[[ "$(getv STORE_COUNTRIES "$PENV")" == "pronghorn=US" ]] || bad "pronghorn country"
+[[ "$(getv RETAIL_STORES "$PENV")" == pronghorn ]] || bad "pronghorn retail"
+[[ "$(getv REPORTING_CURRENCY "$PENV")" == USD ]] || bad "pronghorn reporting currency"
+grep -q "^pronghorn-manager.example.com {" "$CL/proxy-sites/pronghorn.caddy" || bad "pronghorn site"
+[[ "$(getv CLOUD_SYNC_URL "$CL/pronghorn/stores/pronghorn.env")" == https://pronghorn-manager.example.com ]] || bad "pronghorn store url"
+[[ "$(getv VENUE_TZ "$CL/pronghorn/stores/pronghorn.env")" == America/Chicago ]] || bad "pronghorn store zone"
+[[ "$(getv STORE_API_KEY "$PENV")" != "$(getv STORE_API_KEY "$ENV")" ]] || bad "pronghorn shares a key"
+no_secrets_in "$out" "$PENV"
+ok "a third client (the gas station) gets its own brand, zone, keys and site"
+
 echo "all $PASS passed"

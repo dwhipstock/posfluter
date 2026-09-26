@@ -41,7 +41,7 @@ test("Spanish is translated, not English copied over", () => {
 test("no client's name is baked into the portal strings", () => {
   for (const k of keys) {
     for (const s of [messages[k].en, messages[k].fr, es[k]]) {
-      assert.doesNotMatch(s, /copper lantern|\blantern|\bsage\b|poppy/i, k);
+      assert.doesNotMatch(s, /copper lantern|\blantern|\bsage\b|poppy|pronghorn/i, k);
     }
   }
 });

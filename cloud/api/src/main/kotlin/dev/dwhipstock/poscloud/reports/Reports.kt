@@ -11,6 +11,7 @@ import dev.dwhipstock.poscloud.db.CatalogCategories
 import dev.dwhipstock.poscloud.db.CheckLines
 import dev.dwhipstock.poscloud.db.CheckTenders
 import dev.dwhipstock.poscloud.db.Checks
+import dev.dwhipstock.poscloud.db.FuelSales
 import dev.dwhipstock.poscloud.db.Refunds
 import dev.dwhipstock.poscloud.db.Shifts
 import dev.dwhipstock.poscloud.portalScopes
@@ -131,6 +132,7 @@ private fun ReportCtx.refunds(rows: List<ResultRow>, value: (ResultRow) -> Long)
 private fun ReportCtx.lines(rows: List<ResultRow>, value: (ResultRow) -> Long) = total(rows, { it[CheckLines.venueId] }, value)
 private fun ReportCtx.tenders(rows: List<ResultRow>, value: (ResultRow) -> Long) = total(rows, { it[CheckTenders.venueId] }, value)
 private fun ReportCtx.cash(rows: List<ResultRow>, value: (ResultRow) -> Long) = total(rows, { it[CashMovements.venueId] }, value)
+private fun ReportCtx.fuel(rows: List<ResultRow>, value: (ResultRow) -> Long) = total(rows, { it[FuelSales.venueId] }, value)
 
 /** Session → the in-scope stores + inclusive business-day range (default: each store's today). */
 private fun reportCtx(call: ApplicationCall, fx: Fx.Rates): ReportCtx {
@@ -665,6 +667,42 @@ data class VenueCashRow(
     val netCents: Long, val inCount: Int, val outCount: Int,
     val currency: String = "CAD")
 
+/** A fuel grade as dispensed in ONE currency (the same grade in two currencies is two rows). Exact. */
+@Serializable
+data class FuelGradeRow(
+    val grade: String, val gradeName: String,
+    /** Thousandths of a US gallon. */
+    val volumeMilli: Long, val amountCents: Long, val count: Int,
+    val currency: String = "CAD")
+
+/** Fuel dispensed (from `fuel.sale`): amounts are what the pumps dispensed, tax-inclusive. */
+@Serializable
+data class FuelTotals(
+    val volumeMilli: Long, val amountCents: Long, val count: Int,
+    /** Prepaid fuellings: paid up front, and the unused change handed back (a refund, already out of sales). */
+    val prepayCount: Int = 0, val prepaidCents: Long = 0, val prepayRefundCents: Long = 0)
+
+/** In-store (shop) sales: the pre-tax line totals of CLOSED checks' non-fuel lines. */
+@Serializable
+data class InStoreTotals(val salesCents: Long, val lineCount: Int, val qty: Int, val checkCount: Int)
+
+@Serializable
+data class VenueFuelRow(
+    val venueId: String, val venueName: String,
+    val fuelVolumeMilli: Long, val fuelAmountCents: Long, val fuelCount: Int,
+    val inStoreSalesCents: Long, val inStoreCheckCount: Int,
+    val currency: String = "CAD")
+
+@Serializable
+data class FuelReportResponse(
+    /** What the combined figures ([fuel], [inStore]) are in; see [money]. */
+    val currency: String,
+    val byGrade: List<FuelGradeRow>,
+    val fuel: FuelTotals,
+    val inStore: InStoreTotals,
+    val byVenue: List<VenueFuelRow>,
+    val money: MoneyScope? = null)
+
 @Serializable
 data class CashMovementsResponse(
     val paidInCents: Long, val paidOutCents: Long, val netCents: Long,
@@ -810,6 +848,54 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
             }
             CashMovementsResponse(
                 paidIn, paidOut, paidIn - paidOut, ins(movements).size, outs(movements).size, rows, byVenue, ctx.money())
+        }
+        call.respond(response)
+    }
+
+    /**
+     * A gas station's fuel and shop split. Fuel from `fuel.sale` rows completed
+     * in each store's business days (what the pumps dispensed; a prepay's
+     * unused change is a refund.created and is not subtracted again here).
+     * In-store = the pre-tax line totals of closed checks' lines that are not
+     * fuel (categoryId != "fuel"). Grades are one row per (grade, currency).
+     */
+    get("/reports/fuel") {
+        val ctx = reportCtx(call, fx)
+        val response = transaction {
+            val sales = FuelSales.selectAll().where {
+                inScope(ctx, FuelSales.tenantId, FuelSales.venueId, FuelSales.completedAt)
+            }.toList()
+            fun vol(r: ResultRow) = r[FuelSales.volumeMilli] ?: 0
+            fun amt(r: ResultRow) = r[FuelSales.amountCents] ?: 0
+            val byGrade = sales.groupBy { (it[FuelSales.grade] ?: "—") to ctx.currencyOf(it[FuelSales.venueId]) }
+                .map { (key, g) ->
+                    val (grade, currency) = key
+                    FuelGradeRow(
+                        grade, g.firstNotNullOfOrNull { it[FuelSales.gradeName] } ?: grade,
+                        g.sumOf(::vol), g.sumOf(::amt), g.size, currency)
+                }.sortedWith(compareBy({ ctx.currencies.indexOf(it.currency) }, { gradeOrder(it.grade) }, { it.grade }))
+            val prepays = sales.filter { it[FuelSales.mode] == "PREPAY" }
+            val fuel = FuelTotals(
+                sales.sumOf(::vol), ctx.fuel(sales, ::amt), sales.size, prepays.size,
+                ctx.fuel(prepays) { it[FuelSales.prepaidCents] ?: 0 },
+                ctx.fuel(prepays) { it[FuelSales.refundCents] ?: 0 },
+            )
+            val closed = closedChecks(ctx)
+            val shopLines = linesOf(ctx, closed).filter { it[CheckLines.categoryId] != FUEL_CATEGORY }
+            val shopChecks = shopLines.map { it[CheckLines.venueId] to it[CheckLines.checkId] }.toSet()
+            val inStore = InStoreTotals(
+                ctx.lines(shopLines) { it[CheckLines.lineTotalCents] },
+                shopLines.size, shopLines.sumOf { it[CheckLines.qty] }, shopChecks.size)
+            val salesBy = sales.groupBy { it[FuelSales.venueId] }
+            val linesBy = shopLines.groupBy { it[CheckLines.venueId] }
+            val byVenue = ctx.venues.map { v ->
+                val f = salesBy[v.id].orEmpty()
+                val l = linesBy[v.id].orEmpty()
+                VenueFuelRow(
+                    v.id, v.venue.name, f.sumOf(::vol), f.sumOf(::amt), f.size,
+                    l.sumOf { it[CheckLines.lineTotalCents] }, shopChecks.count { it.first == v.id }, v.currency)
+            }
+            FuelReportResponse(ctx.currency, byGrade, fuel, inStore, byVenue, ctx.money())
         }
         call.respond(response)
     }
@@ -1086,6 +1172,14 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
 }
 
 // --- helpers (call inside a transaction) ---
+
+/** The category a store puts its fuel lines in (CONTRACT §2, Fuel). */
+private const val FUEL_CATEGORY = "fuel"
+
+/** Regular, Mid-Grade, Premium, Diesel, then anything else. */
+private fun gradeOrder(grade: String): Int = when (grade) {
+    "REG" -> 0; "MID" -> 1; "PRE" -> 2; "DSL" -> 3; else -> 4
+}
 
 /** A sort key comparable across currencies: the figure in the scope's currency (approximate when mixed). */
 private fun comparable(ctx: ReportCtx, currency: String, cents: Long): Long =

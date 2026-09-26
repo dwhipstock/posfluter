@@ -72,6 +72,7 @@ picked; rows from a specific store carry `venueId`):
 | cash-movements | `{ venueId, venueName, paidInCents, paidOutCents, netCents, inCount, outCount }` |
 | shifts | `{ venueId, venueName, shiftCount, openCount, revenueCents, transactionCount, overShortCents }` |
 | journal | `{ venueId, venueName, closedCount, voidCount, closedCents }` over the whole filtered range, not the page |
+| fuel | `{ venueId, venueName, fuelVolumeMilli, fuelAmountCents, fuelCount, inStoreSalesCents, inStoreCheckCount }` |
 
 **Currency (every report).** Every per-store row (`byVenue` entries, list rows
 such as journal / refunds / voids / cash movements / shifts / zones / tables)
@@ -166,6 +167,29 @@ counts 0.
   ```
   (open shift included with nulls for the close-only fields — that's the live
   X view; `GET /v1/reports/shifts/{id}` returns one.)
+- `GET /v1/reports/fuel` — a gas station's fuel beside its shop (CONTRACT §2,
+  Fuel). Fuel from `fuel.sale` rows whose `completedAt` falls in the range
+  (each store's business days): what the pumps dispensed, tax-inclusive. A
+  prepay's unused change is a `refund.created` (Refunds report) and is not
+  subtracted from fuel again. In-store = Σ `lineTotalCents` of the lines of
+  closed checks in the range whose `categoryId` is not `fuel` (pre-tax item
+  sales).
+  ```json
+  { "currency": "USD",
+    "byGrade": [ { "grade": "REG", "gradeName": "Regular", "volumeMilli": 155217,
+                   "amountCents": 46548, "count": 16, "currency": "USD" } ],
+    "fuel": { "volumeMilli": 310525, "amountCents": 101581, "count": 26,
+              "prepayCount": 8, "prepaidCents": 38000, "prepayRefundCents": 3373 },
+    "inStore": { "salesCents": 28455, "lineCount": 59, "qty": 75, "checkCount": 29 },
+    "byVenue": [ { "venueId", "venueName", "fuelVolumeMilli", "fuelAmountCents", "fuelCount",
+                   "inStoreSalesCents", "inStoreCheckCount", "currency" } ],
+    "money": { … } }
+  ```
+  (`volumeMilli` = thousandths of a US gallon. Grade rows are one per
+  (grade, currency), in the order Regular, Mid-Grade, Premium, Diesel, then
+  others; `fuel` and `inStore` money is combined per the currency rules above.
+  A store with no fuel sales returns empty `byGrade` and zeros. The portal
+  shows this report when the brand pack sets `"features": { "fuel": true }`.)
 - `GET /v1/reports/journal?from&to&q&limit=50&offset=0` — searchable
   transaction journal over closed+voided checks. `q` matches check id, table
   label, or exact CAD amount.

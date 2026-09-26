@@ -13,7 +13,7 @@ import { getBrand } from "@/lib/brand/server";
 // PORTAL_BRAND_DIR), so one build serves every client.
 export const dynamic = "force-dynamic";
 
-// Both faces are bundled from app/fonts (Latin subsets, accents included); the
+// Every face is bundled from app/fonts (Latin subsets, accents included); the
 // brand pack picks one (--font-brand). No font CDN is called, at build or run time.
 const inter = localFont({
   src: [
@@ -37,6 +37,19 @@ const jakarta = localFont({
   variable: "--font-jakarta",
   display: "swap",
   // only the brands that use it download it
+  preload: false,
+});
+
+const barlow = localFont({
+  src: [
+    { path: "./fonts/Barlow-Regular.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/Barlow-Medium.ttf", weight: "500", style: "normal" },
+    { path: "./fonts/Barlow-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "./fonts/Barlow-Bold.ttf", weight: "700", style: "normal" },
+    { path: "./fonts/Barlow-ExtraBold.ttf", weight: "800", style: "normal" },
+  ],
+  variable: "--font-barlow",
+  display: "swap",
   preload: false,
 });
 
@@ -69,7 +82,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = pickLocale(brand, (await cookies()).get("locale")?.value);
 
   return (
-    <html lang={locale} className={`${inter.variable} ${jakarta.variable}`} data-brand={brand.id}>
+    <html lang={locale} className={`${inter.variable} ${jakarta.variable} ${barlow.variable}`} data-brand={brand.id}>
       <head>
         {/* the brand's palette, radii, shadow and face as CSS variables (tailwind.config.ts) */}
         <style id="brand-vars" dangerouslySetInnerHTML={{ __html: brandCss(brand) }} />
