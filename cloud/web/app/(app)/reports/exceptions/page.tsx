@@ -2,7 +2,8 @@
 
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { FxNote, useScopedKpi } from "@/components/money-scope";
 import { useT, useFmt } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
@@ -33,6 +34,14 @@ function ExceptionsPage() {
   const { data, error, isLoading, mutate } = useApi<ExceptionsReport>(
     reportKey("/v1/reports/exceptions", range)
   );
+  const m = useMoney();
+  const kpi = useScopedKpi();
+  type V = ExceptionsReport["byVenue"][number];
+  const cur = (r: V) => r.currency ?? m.currencyOf(r.venueId);
+  const scoped = (cents: number, f: (r: V) => number) =>
+    kpi(data?.money, cents, m.perCurrency(data?.byVenue ?? [], cur, f));
+  const voidAmt = data ? scoped(data.voidAmountCents, (r) => r.voidAmountCents) : undefined;
+  const cork = data ? scoped(data.corkageCents, (r) => r.corkageCents) : undefined;
 
   const buildDoc = (): ExportDoc | null => {
     if (!data) return null;
@@ -41,8 +50,8 @@ function ExceptionsPage() {
       reportTitle: t("exceptions_title"),
       kpis: [
         { label: t("exc_voids"), value: String(data.voidCount) },
-        { label: t("exc_void_amount"), value: CAD(data.voidAmountCents) },
-        { label: t("exc_corkage"), value: CAD(data.corkageCents) },
+        { label: t("exc_void_amount"), value: [voidAmt?.value, voidAmt?.sub].filter(Boolean).join(" — ") },
+        { label: t("exc_corkage"), value: [cork?.value, cork?.sub].filter(Boolean).join(" — ") },
       ],
       sections: [
         ...storeExport.byStore<ExceptionsReport["byVenue"][number]>(
@@ -52,7 +61,12 @@ function ExceptionsPage() {
             col.money(t("exc_corkage"), (r) => r.corkageCents),
           ],
           data.byVenue,
-          [T(t("col_total")), Int(data.voidCount), Money(data.voidAmountCents), Money(data.corkageCents)]
+          [
+            T(t("col_total")),
+            Int(data.voidCount),
+            m.totalCell(data.byVenue, cur, (r) => r.voidAmountCents),
+            m.totalCell(data.byVenue, cur, (r) => r.corkageCents),
+          ]
         ),
         {
           title: t("exceptions_title"),
@@ -84,6 +98,7 @@ function ExceptionsPage() {
         }
       />
       <DateRangePicker />
+      <FxNote money={data?.money} />
       {data && (
         <StoreSplit
           rows={data.byVenue}
@@ -91,16 +106,16 @@ function ExceptionsPage() {
           chartKey="amount"
           cols={[
             { key: "voids", label: t("exc_voids"), value: (r) => r.voidCount, format: String },
-            { key: "amount", label: t("exc_void_amount"), value: (r) => r.voidAmountCents, format: CAD, strong: true },
-            { key: "corkage", label: t("exc_corkage"), value: (r) => r.corkageCents, format: CAD, hide: "sm" },
+            { key: "amount", label: t("exc_void_amount"), value: (r) => r.voidAmountCents, money: true, strong: true },
+            { key: "corkage", label: t("exc_corkage"), value: (r) => r.corkageCents, money: true, hide: "sm" },
           ]}
         />
       )}
 
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("exc_voids")} value={data && String(data.voidCount)} loading={isLoading} />
-        <Kpi label={t("exc_void_amount")} value={data && CAD(data.voidAmountCents)} loading={isLoading} />
-        <Kpi label={t("exc_corkage")} value={data && CAD(data.corkageCents)} loading={isLoading} />
+        <Kpi label={t("exc_void_amount")} value={voidAmt?.value} sub={voidAmt?.sub} loading={isLoading} />
+        <Kpi label={t("exc_corkage")} value={cork?.value} sub={cork?.sub} loading={isLoading} />
       </div>
 
       <Card>
@@ -134,7 +149,7 @@ function ExceptionsPage() {
                   </TableCell>
                   <TableCell>{v.tableLabel}</TableCell>
                   <TableCell className="text-right font-medium tabular-nums text-red-600">
-                    {CAD(v.amountCents)}
+                    {m.fmtIn(v.currency ?? m.currencyOf(v.venueId), v.amountCents)}
                   </TableCell>
                   <TableCell className="max-w-[14rem] truncate text-xs text-neutral-600">
                     {v.reason}

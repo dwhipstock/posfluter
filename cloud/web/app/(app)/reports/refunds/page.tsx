@@ -2,7 +2,8 @@
 
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { FxNote, useScopedKpi } from "@/components/money-scope";
 import { useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { ExportMenu } from "@/components/export-menu";
@@ -34,6 +35,16 @@ function RefundsPage() {
   const { data, error, isLoading, mutate } = useApi<RefundsReport>(
     reportKey("/v1/reports/refunds", range)
   );
+  const m = useMoney();
+  const kpi = useScopedKpi();
+  const money = data?.money;
+  const fmtC = (n: number) => m.fmtScope(money, n);
+  type V = RefundsReport["byVenue"][number];
+  const cur = (r: V) => r.currency ?? m.currencyOf(r.venueId);
+  const scoped = (cents: number, f: (r: V) => number) => kpi(money, cents, m.perCurrency(data?.byVenue ?? [], cur, f));
+  const gross = data ? scoped(data.grossCents, (r) => r.grossCents) : undefined;
+  const tax = data ? scoped(data.taxCents, (r) => r.taxCents) : undefined;
+  const both = (k?: { value: string; sub?: string }) => [k?.value, k?.sub].filter(Boolean).join(" — ");
 
   const buildDoc = (): ExportDoc | null => {
     if (!data) return null;
@@ -43,8 +54,8 @@ function RefundsPage() {
       notes: [t("refunds_note")],
       kpis: [
         { label: t("ref_count"), value: String(data.count) },
-        { label: t("ref_amount"), value: CAD(data.grossCents) },
-        { label: t("ref_tax"), value: CAD(data.taxCents) },
+        { label: t("ref_amount"), value: both(gross) },
+        { label: t("ref_tax"), value: both(tax) },
       ],
       sections: [
         ...storeExport.byStore<RefundsReport["byVenue"][number]>(
@@ -55,7 +66,13 @@ function RefundsPage() {
             col.money(t("col_tax"), (r) => r.taxCents),
           ],
           data.byVenue,
-          [T(t("col_total")), Int(data.count), Money(data.grossCents), Money(data.netCents), Money(data.taxCents)]
+          [
+            T(t("col_total")),
+            Int(data.count),
+            m.totalCell(data.byVenue, cur, (r) => r.grossCents),
+            m.totalCell(data.byVenue, cur, (r) => r.netCents),
+            m.totalCell(data.byVenue, cur, (r) => r.taxCents),
+          ]
         ),
         {
           title: t("refunds_by_reason"),
@@ -67,6 +84,8 @@ function RefundsPage() {
             col.money<RefundReasonRow>(t("col_tax"), (r) => r.taxCents),
           ],
           rows: data.byReason,
+          // by-reason figures combine stores: converted (≈) when they sell in several currencies
+          ...(money?.approximate ? { rowCurrency: () => `≈ ${money.currency}` } : {}),
         },
         {
           title: t("refunds_list"),
@@ -95,6 +114,7 @@ function RefundsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.count === 0} />}
       />
       <DateRangePicker />
+      <FxNote money={money} />
       {data && (
         <StoreSplit
           rows={data.byVenue}
@@ -102,17 +122,17 @@ function RefundsPage() {
           chartKey="gross"
           cols={[
             { key: "count", label: t("ref_count"), value: (r) => r.count, format: String },
-            { key: "gross", label: t("ref_amount"), value: (r) => r.grossCents, format: CAD, strong: true },
-            { key: "net", label: t("col_net"), value: (r) => r.netCents, format: CAD, hide: "sm" },
-            { key: "tax", label: t("ref_tax"), value: (r) => r.taxCents, format: CAD, hide: "sm" },
+            { key: "gross", label: t("ref_amount"), value: (r) => r.grossCents, money: true, strong: true },
+            { key: "net", label: t("col_net"), value: (r) => r.netCents, money: true, hide: "sm" },
+            { key: "tax", label: t("ref_tax"), value: (r) => r.taxCents, money: true, hide: "sm" },
           ]}
         />
       )}
 
       <div className="grid grid-cols-3 gap-3">
         <Kpi label={t("ref_count")} value={data && String(data.count)} loading={isLoading} />
-        <Kpi label={t("ref_amount")} value={data && CAD(data.grossCents)} loading={isLoading} accent />
-        <Kpi label={t("ref_tax")} value={data && CAD(data.taxCents)} loading={isLoading} />
+        <Kpi label={t("ref_amount")} value={gross?.value} sub={gross?.sub} loading={isLoading} accent />
+        <Kpi label={t("ref_tax")} value={tax?.value} sub={tax?.sub} loading={isLoading} />
       </div>
 
       <p className="px-1 text-xs text-neutral-500">{t("refunds_note")}</p>
@@ -148,10 +168,10 @@ function RefundsPage() {
                     <TableCell className="font-medium">{r.reason}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.count}</TableCell>
                     <TableCell className="text-right tabular-nums text-red-600">
-                      {CAD(r.grossCents)}
+                      {fmtC(r.grossCents)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{CAD(r.netCents)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{CAD(r.taxCents)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtC(r.netCents)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtC(r.taxCents)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -194,7 +214,7 @@ function RefundsPage() {
                       {r.reason ?? "—"}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums text-red-600">
-                      {CAD(r.grossCents)}
+                      {m.fmtIn(r.currency ?? m.currencyOf(r.venueId), r.grossCents)}
                     </TableCell>
                   </TableRow>
                 ))}

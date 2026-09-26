@@ -510,6 +510,27 @@ export const messages = {
   ),
   tax_of_store: m("Taxe · {store}", "Tax · {store}"),
   staff_count_n: m("{n} employés", "{n} staff"),
+
+  // ── currencies: stores in more than one country ─────────────────────
+  col_currency: m("Devise", "Currency"),
+  fx_mixed_title: m("Plusieurs devises", "More than one currency"),
+  fx_note: m(
+    "Chaque magasin est affiché dans sa propre devise, au montant exact. Le total combiné est converti en {cur} au taux fixe {rates} : il est approximatif.",
+    "Each store is shown in its own currency, exactly. The combined total is converted to {cur} at the fixed rate {rates}, so it is approximate."
+  ),
+  fx_no_rate: m(
+    "Aucun taux de change n’est configuré : pas de total combiné, seulement les totaux exacts par devise.",
+    "No exchange rate is configured: no combined total, only the exact totals per currency."
+  ),
+  fx_by_currency: m("Par devise (exact)", "By currency (exact)"),
+  fx_converted_total: m("≈ Total converti en {cur}", "≈ Converted total in {cur}"),
+  fx_converted_sub: m("taux fixe {rates}, approximatif", "fixed rate {rates}, approximate"),
+  fx_chart_converted: m("≈ en {cur} au taux fixe {rates}", "≈ in {cur} at fixed rate {rates}"),
+  fx_stores_in: m("{n} magasin(s)", "{n} store(s)"),
+  retail_badge: m("Magasin", "Bottle shop"),
+  tax_col_rate: m("{label} {rate} %", "{label} {rate}%"),
+  tax_by_code: m("Par taxe", "By tax"),
+  tax_col_tax: m("Taxe", "Tax"),
 } as const;
 
 export type MsgKey = keyof typeof messages;

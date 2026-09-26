@@ -2,7 +2,8 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { FxNote } from "@/components/money-scope";
 import { useI18n, useT, useFmt } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
@@ -37,6 +38,10 @@ function ItemsPage() {
   const { data, error, isLoading, mutate } = useApi<ItemsReport>(reportKey("/v1/reports/items", range));
   const [metric, setMetric] = useState<"revenue" | "qty">("revenue");
   const [cat, setCat] = useState<string | null>(null);
+  const m = useMoney();
+  const mixed = !!data?.money?.approximate;
+  // revenue comparable across currencies (sorting, bar lengths): converted when mixed
+  const cmpRevenue = (cents: number, currency?: string) => (mixed ? m.toReporting(cents, currency) ?? cents : cents);
 
   const cats = useMemo(() => {
     const seen = new Map<string, string>();
@@ -51,13 +56,19 @@ function ItemsPage() {
   const rows = useMemo(() => {
     const filtered = (data?.rows ?? []).filter((r) => (cat ? r.categoryId === cat : true));
     return [...filtered].sort((a, b) =>
-      metric === "qty" ? b.qty - a.qty : b.revenueCents - a.revenueCents
+      metric === "qty" ? b.qty - a.qty : cmpRevenue(b.revenueCents, b.currency) - cmpRevenue(a.revenueCents, a.currency)
     );
-  }, [data, cat, metric]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, cat, metric, mixed, m]);
 
   const metricOf = (v: { qty: number; revenueCents: number }) => (metric === "qty" ? v.qty : v.revenueCents);
-  const show = (n: number) => (metric === "qty" ? String(n) : CAD(n));
-  const max = Math.max(1, ...rows.map(metricOf));
+  const barOf = (v: { qty: number; revenueCents: number; currency?: string }) =>
+    metric === "qty" ? v.qty : cmpRevenue(v.revenueCents, v.currency);
+  const show = (n: number, currency?: string) => (metric === "qty" ? String(n) : m.fmtIn(currency ?? m.scopeCurrency, n));
+  // a column total over rows that may be in several currencies: exact per currency
+  const showTotal = (f: (r: ItemReportRow) => number) =>
+    metric === "qty" || !mixed ? show(sum(f)) : m.joinAmounts(m.perCurrency(rows, (r) => r.currency, f));
+  const max = Math.max(1, ...rows.map(barOf));
   const split = (r: ItemReportRow, venueId: string) => r.byVenue.find((v) => v.venueId === venueId);
   const sum = (f: (r: ItemReportRow) => number) => rows.reduce((n, r) => n + f(r), 0);
 
@@ -67,13 +78,16 @@ function ItemsPage() {
     const perStore: Col<ItemReportRow>[] = combined
       ? venues.flatMap((v) => [
           col.int<ItemReportRow>(`${t("col_qty")} · ${nameOf(v.id)}`, (r) => split(r, v.id)?.qty ?? 0),
-          col.money<ItemReportRow>(`${t("col_revenue")} · ${nameOf(v.id)}`, (r) => split(r, v.id)?.revenueCents ?? 0),
+          col.money<ItemReportRow>(
+            `${t("col_revenue")} · ${nameOf(v.id)}${m.multi ? ` (${m.currencyOf(v.id)})` : ""}`,
+            (r) => split(r, v.id)?.revenueCents ?? 0
+          ),
         ])
       : [];
     const perStoreTotal: Cell[] = combined
       ? venues.flatMap((v) => [
           Int(sum((r) => split(r, v.id)?.qty ?? 0)),
-          Money(sum((r) => split(r, v.id)?.revenueCents ?? 0)),
+          Money(sum((r) => split(r, v.id)?.revenueCents ?? 0), m.currencyOf(v.id)),
         ])
       : [];
     return {
@@ -83,7 +97,13 @@ function ItemsPage() {
         ...storeExport.byStore<VenueTotalRow>(
           [col.int(t("col_qty"), (r) => r.qty), col.money(t("col_revenue"), (r) => r.grossCents)],
           data.byVenue,
-          [T(t("col_total")), Int(data.byVenue.reduce((n, r) => n + r.qty, 0)), Money(data.byVenue.reduce((n, r) => n + r.grossCents, 0))]
+          [
+            T(t("col_total")),
+            Int(data.byVenue.reduce((n, r) => n + r.qty, 0)),
+            mixed
+              ? T(m.joinAmounts(m.perCurrency(data.byVenue, (r) => r.currency, (r) => r.grossCents)))
+              : Money(data.byVenue.reduce((n, r) => n + r.grossCents, 0)),
+          ]
         ),
         {
           title: t("items_title"),
@@ -95,7 +115,16 @@ function ItemsPage() {
             col.money<ItemReportRow>(combined ? `${t("col_revenue")} · ${t("store_all")}` : t("col_revenue"), (r) => r.revenueCents),
           ],
           rows,
-          total: [T(t("col_total")), T(""), ...perStoreTotal, Int(sum((r) => r.qty)), Money(sum((r) => r.revenueCents))],
+          total: [
+            T(t("col_total")),
+            T(""),
+            ...perStoreTotal,
+            Int(sum((r) => r.qty)),
+            mixed
+              ? T(m.joinAmounts(m.perCurrency(rows, (r) => r.currency, (r) => r.revenueCents)))
+              : Money(sum((r) => r.revenueCents)),
+          ],
+          ...(mixed ? { totalCurrency: "" } : {}),
         },
       ],
     };
@@ -120,6 +149,7 @@ function ItemsPage() {
         }
       />
       <DateRangePicker />
+      <FxNote money={data?.money} />
       {data && (
         <StoreSplit
           rows={data.byVenue}
@@ -127,7 +157,7 @@ function ItemsPage() {
           chartKey="revenue"
           cols={[
             { key: "qty", label: t("col_qty"), value: (r) => r.qty, format: String },
-            { key: "revenue", label: t("col_revenue"), value: (r) => r.grossCents, format: CAD, strong: true },
+            { key: "revenue", label: t("col_revenue"), value: (r) => r.grossCents, money: true, strong: true },
           ]}
         />
       )}
@@ -168,7 +198,7 @@ function ItemsPage() {
             </TableHeader>
             <TableBody>
               {rows.map((r, i) => (
-                <TableRow key={r.itemId ?? `open-${i}`}>
+                <TableRow key={`${r.itemId ?? `open-${i}`}-${r.currency ?? ""}`}>
                   <TableCell className="text-xs font-semibold text-neutral-500">{i + 1}</TableCell>
                   <TableCell>
                     <div className="min-w-[10rem]">
@@ -178,12 +208,12 @@ function ItemsPage() {
                       )}
                       {/* share bar: one segment per store in "All stores" */}
                       <div className="mt-1.5 flex h-1 w-full max-w-[10rem] gap-px overflow-hidden rounded-full bg-neutral-100">
-                        {(combined ? r.byVenue : [{ venueId: "", qty: r.qty, revenueCents: r.revenueCents }]).map((v) => (
+                        {(combined ? r.byVenue : [{ venueId: "", qty: r.qty, revenueCents: r.revenueCents, currency: r.currency }]).map((v) => (
                           <div
                             key={v.venueId}
                             className={cn("h-1", !combined && "bg-navy")}
                             style={{
-                              width: `${Math.max(2, (metricOf(v) / max) * 100)}%`,
+                              width: `${Math.max(2, (barOf(v) / max) * 100)}%`,
                               backgroundColor: combined ? colorOf(v.venueId) : undefined,
                             }}
                           />
@@ -199,14 +229,14 @@ function ItemsPage() {
                       const s = split(r, v.id);
                       return (
                         <TableCell key={v.id} className="hidden text-right tabular-nums text-neutral-600 sm:table-cell">
-                          {s ? show(metricOf(s)) : "—"}
+                          {s ? show(metricOf(s), m.currencyOf(v.id)) : "—"}
                         </TableCell>
                       );
                     })}
-                  <TableCell className="text-right font-semibold tabular-nums">{show(metricOf(r))}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">{show(metricOf(r), r.currency)}</TableCell>
                   {!combined && (
                     <TableCell className="text-right tabular-nums text-neutral-600">
-                      {metric === "qty" ? CAD(r.revenueCents) : r.qty}
+                      {metric === "qty" ? m.fmtIn(r.currency, r.revenueCents) : r.qty}
                     </TableCell>
                   )}
                 </TableRow>
@@ -220,13 +250,13 @@ function ItemsPage() {
                 {combined &&
                   venues.map((v) => (
                     <TableCell key={v.id} className="hidden text-right tabular-nums sm:table-cell">
-                      {show(sum((r) => { const s = split(r, v.id); return s ? metricOf(s) : 0; }))}
+                      {show(sum((r) => { const s = split(r, v.id); return s ? metricOf(s) : 0; }), m.currencyOf(v.id))}
                     </TableCell>
                   ))}
-                <TableCell className="text-right tabular-nums">{show(sum(metricOf))}</TableCell>
+                <TableCell className="text-right tabular-nums">{showTotal(metricOf)}</TableCell>
                 {!combined && (
                   <TableCell className="text-right tabular-nums">
-                    {metric === "qty" ? CAD(sum((r) => r.revenueCents)) : sum((r) => r.qty)}
+                    {metric === "qty" ? m.fmtIn(m.scopeCurrency, sum((r) => r.revenueCents)) : sum((r) => r.qty)}
                   </TableCell>
                 )}
               </TableRow>

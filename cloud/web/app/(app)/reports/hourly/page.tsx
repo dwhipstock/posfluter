@@ -2,7 +2,9 @@
 
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD, CADShort, hourLabel } from "@/lib/format";
+import { hourLabel } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { FxNote } from "@/components/money-scope";
 import { useT, useFmt } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
@@ -38,6 +40,11 @@ function HourlyPage() {
   const { data, error, isLoading, mutate } = useApi<HourlyReport>(reportKey("/v1/reports/hourly", range));
   const hasSales = data?.rows.some((r) => r.grossCents > 0) ?? false;
   const cell = (r: HourlyRow, venueId: string) => r.byVenue.find((v) => v.venueId === venueId);
+  const m = useMoney();
+  const fmtC = (n: number) => m.fmtScope(data?.money, n);
+  // a store's own column names its currency when the stores sell in several
+  const storeHead = (label: string, venueId: string) =>
+    `${label} · ${nameOf(venueId)}${m.multi ? ` (${m.currencyOf(venueId)})` : ""}`;
 
   const buildDoc = (): ExportDoc | null => {
     if (!data) return null;
@@ -57,7 +64,7 @@ function HourlyPage() {
             ...(combined
               ? venues.flatMap((v) => [
                   col.int<HourlyRow>(`${t("col_checks")} · ${nameOf(v.id)}`, (r) => cell(r, v.id)?.checkCount ?? 0),
-                  col.money<HourlyRow>(`${t("col_gross")} · ${nameOf(v.id)}`, (r) => cell(r, v.id)?.grossCents ?? 0),
+                  col.money<HourlyRow>(storeHead(t("col_gross"), v.id), (r) => cell(r, v.id)?.grossCents ?? 0),
                 ])
               : []),
             col.int<HourlyRow>(t("col_checks"), (r) => r.checkCount),
@@ -69,7 +76,7 @@ function HourlyPage() {
             ...(combined
               ? venues.flatMap((v): Cell[] => [
                   Int(rows.reduce((n, r) => n + (cell(r, v.id)?.checkCount ?? 0), 0)),
-                  Money(rows.reduce((n, r) => n + (cell(r, v.id)?.grossCents ?? 0), 0)),
+                  Money(rows.reduce((n, r) => n + (cell(r, v.id)?.grossCents ?? 0), 0), m.currencyOf(v.id)),
                 ])
               : []),
             Int(rows.reduce((n, r) => n + r.checkCount, 0)),
@@ -89,12 +96,13 @@ function HourlyPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || !hasSales} />}
       />
       <DateRangePicker />
+      <FxNote money={data?.money} />
       {data && (
         <StoreSplit
           rows={data.byVenue}
           cols={[
             { key: "checks", label: t("col_checks"), value: (r) => r.checkCount, format: String },
-            { key: "gross", label: t("col_gross"), value: (r) => r.grossCents, format: CAD, strong: true },
+            { key: "gross", label: t("col_gross"), value: (r) => r.grossCents, money: true, strong: true },
           ]}
         />
       )}
@@ -102,7 +110,13 @@ function HourlyPage() {
       <Card>
         <CardHeader>
           <CardTitle>{t("hourly_chart")}</CardTitle>
-          {combined && <CardDescription>{t("chart_per_store_stacked")}</CardDescription>}
+          {combined && (
+            <CardDescription>
+              {t("chart_per_store_stacked")}
+              {data?.money?.approximate &&
+                ` · ${t("fx_chart_converted", { cur: data.money.reportingCurrency, rates: m.rateText(data.money) })}`}
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -113,11 +127,13 @@ function HourlyPage() {
             <BarChart
               data={data!.rows.map((r) => ({
                 label: hourLabel(r.hour),
-                values: combined ? Object.fromEntries(r.byVenue.map((v) => [v.venueId, v.grossCents])) : { value: r.grossCents },
+                values: combined
+                  ? Object.fromEntries(r.byVenue.map((v) => [v.venueId, m.chartValue(v.venueId, v.grossCents)]))
+                  : { value: r.grossCents },
               }))}
               series={series}
-              format={CAD}
-              axisFormat={CADShort}
+              format={fmtC}
+              axisFormat={(n) => m.shortScope(data?.money, n)}
               ariaLabel={t("hourly_chart")}
             />
           ) : (
@@ -154,11 +170,11 @@ function HourlyPage() {
                   {combined &&
                     venues.map((v) => (
                       <TableCell key={v.id} className="hidden text-right tabular-nums sm:table-cell">
-                        {CAD(cell(r, v.id)?.grossCents ?? 0)}
+                        {m.fmtVenue(v.id, cell(r, v.id)?.grossCents ?? 0)}
                       </TableCell>
                     ))}
                   <TableCell className="text-right tabular-nums">{r.checkCount}</TableCell>
-                  <TableCell className="text-right font-medium tabular-nums">{CAD(r.grossCents)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">{fmtC(r.grossCents)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -168,11 +184,11 @@ function HourlyPage() {
                 {combined &&
                   venues.map((v) => (
                     <TableCell key={v.id} className="hidden text-right tabular-nums sm:table-cell">
-                      {CAD(data.rows.reduce((n, r) => n + (cell(r, v.id)?.grossCents ?? 0), 0))}
+                      {m.fmtVenue(v.id, data.rows.reduce((n, r) => n + (cell(r, v.id)?.grossCents ?? 0), 0))}
                     </TableCell>
                   ))}
                 <TableCell className="text-right tabular-nums">{data.rows.reduce((n, r) => n + r.checkCount, 0)}</TableCell>
-                <TableCell className="text-right tabular-nums">{CAD(data.rows.reduce((n, r) => n + r.grossCents, 0))}</TableCell>
+                <TableCell className="text-right tabular-nums">{fmtC(data.rows.reduce((n, r) => n + r.grossCents, 0))}</TableCell>
               </TableRow>
             </TableFooter>
           </Table>

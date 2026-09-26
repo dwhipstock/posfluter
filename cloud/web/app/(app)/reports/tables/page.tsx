@@ -4,7 +4,8 @@ import { Suspense, useMemo } from "react";
 import { BarChart } from "@/components/charts";
 import { useStores } from "@/lib/store";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD, CADShort } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { FxNote } from "@/components/money-scope";
 import { useI18n, useT, useFmt } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
@@ -36,6 +37,8 @@ function TablesPage() {
   const { data, error, isLoading, mutate } = useApi<TablesReport>(reportKey("/v1/reports/tables", range));
 
   const { combined } = useStores();
+  const m = useMoney();
+  const fmtC = (n: number) => m.fmtScope(data?.money, n);
   const series = useStoreSeries(t("series_gross"));
   // zones repeat across stores: one bar per zone name, stacked by store
   const zoneData = useMemo(() => {
@@ -44,15 +47,15 @@ function TablesPage() {
       const key = name(z.zoneNameFr, z.zoneNameEn) || "—";
       const values = byName.get(key) ?? {};
       const k = combined ? z.venueId : "value";
-      values[k] = (values[k] ?? 0) + z.grossCents;
+      values[k] = (values[k] ?? 0) + (combined ? m.chartValue(z.venueId, z.grossCents) : z.grossCents);
       byName.set(key, values);
     }
     return [...byName.entries()].map(([label, values]) => ({ label, values }));
-  }, [data, name, combined]);
+  }, [data, name, combined, m]);
 
   const byTable = useMemo(
-    () => [...(data?.byTable ?? [])].sort((a, b) => b.grossCents - a.grossCents),
-    [data]
+    () => [...(data?.byTable ?? [])].sort((a, b) => m.chartValue(b.venueId, b.grossCents) - m.chartValue(a.venueId, a.grossCents)),
+    [data, m]
   );
 
   const buildDoc = (): ExportDoc | null => {
@@ -86,7 +89,7 @@ function TablesPage() {
           [
             T(t("col_total")),
             Int(data.byVenue.reduce((n, r) => n + r.checkCount, 0)),
-            Money(data.byVenue.reduce((n, r) => n + r.grossCents, 0)),
+            m.totalCell(data.byVenue, (r) => r.currency ?? m.currencyOf(r.venueId), (r) => r.grossCents),
           ]
         ),
         ...(data.byZone.length ? [zoneSection] : []),
@@ -109,12 +112,13 @@ function TablesPage() {
         }
       />
       <DateRangePicker />
+      <FxNote money={data?.money} />
       {data && (
         <StoreSplit
           rows={data.byVenue}
           cols={[
             { key: "checks", label: t("col_checks"), value: (r) => r.checkCount, format: String },
-            { key: "gross", label: t("col_gross"), value: (r) => r.grossCents, format: CAD, strong: true },
+            { key: "gross", label: t("col_gross"), value: (r) => r.grossCents, money: true, strong: true },
           ]}
         />
       )}
@@ -132,8 +136,8 @@ function TablesPage() {
             <BarChart
               data={zoneData}
               series={series}
-              format={CAD}
-              axisFormat={CADShort}
+              format={fmtC}
+              axisFormat={(n) => m.shortScope(data?.money, n)}
               height={220}
               ariaLabel={t("tables_by_zone")}
             />
@@ -168,7 +172,7 @@ function TablesPage() {
                   <TableCell className="text-xs text-neutral-500">{t.zoneNameEn}</TableCell>
                   <TableCell className="text-right tabular-nums">{t.checkCount}</TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
-                    {CAD(t.grossCents)}
+                    {m.fmtVenue(t.venueId, t.grossCents)}
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,6 +1,7 @@
 "use client";
 
-import { CAD, CADShort } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { RetailBadge } from "@/components/money-scope";
 import { reportKey, useApi, useRange } from "@/lib/hooks";
 import { useT } from "@/lib/i18n/context";
 import { useStores } from "@/lib/store";
@@ -16,7 +17,12 @@ export interface SplitCol<R> {
   key: string;
   label: string;
   value: (r: R) => number;
-  format: (n: number) => string;
+  /** Plain figures (counts). Money columns set [money] instead and format per store currency. */
+  format?: (n: number) => string;
+  /** A money column: each row in its store's currency; the footer totals per currency. */
+  money?: boolean;
+  /** Money shown with a sign ("+$5" / "-$5"), e.g. over/short and net cash. */
+  signed?: boolean;
   /** Hidden below this breakpoint (keeps phones to the essential columns). */
   hide?: "sm" | "md";
   /** How the footer totals it: sum (default), or a custom figure, or none. */
@@ -47,10 +53,32 @@ export function StoreSplit<R extends { venueId: string }>({
   className?: string;
 }) {
   const t = useT();
+  const m = useMoney();
   const { combined, nameOf, colorOf } = useStores();
   if (!combined) return null;
   const hide = (c: SplitCol<R>) => (c.hide === "sm" ? "hidden sm:table-cell" : c.hide === "md" ? "hidden md:table-cell" : "");
   const chartCol = chartKey ? cols.find((c) => c.key === chartKey) : undefined;
+  const cell = (c: SplitCol<R>, r: R) =>
+    c.money
+      ? c.signed
+        ? m.signedIn(m.currencyOf(r.venueId), c.value(r))
+        : m.fmtVenue(r.venueId, c.value(r))
+      : (c.format ?? String)(c.value(r));
+  const footer = (c: SplitCol<R>) => {
+    if (c.total === false) return "";
+    if (c.money && m.mixedScope) {
+      // several currencies: one exact total per currency, never one sum
+      if (c.total) return "";
+      return m.joinAmounts(m.perCurrency(rows, (r) => m.currencyOf(r.venueId), c.value));
+    }
+    const n = c.total ? c.total(rows) : rows.reduce((s, r) => s + c.value(r), 0);
+    return c.money ? m.fmtIn(m.scopeCurrency, n) : (c.format ?? String)(n);
+  };
+  // stacked store bars across currencies are drawn in the reporting currency
+  const chartFormat = (n: number) =>
+    chartCol?.money ? `${m.mixedScope ? "≈ " : ""}${m.fmtIn(m.scopeCurrency, n)}` : (chartCol?.format ?? String)(n);
+  const chartAxis = (n: number) => (chartCol?.money ? m.shortIn(m.scopeCurrency, n) : (chartCol?.format ?? String)(n));
+  const chartValue = (r: R) => (chartCol?.money ? m.chartValue(r.venueId, chartCol.value(r)) : chartCol?.value(r) ?? 0);
   return (
     <Card className={className}>
       <CardHeader>
@@ -60,10 +88,10 @@ export function StoreSplit<R extends { venueId: string }>({
       <CardContent className="space-y-4">
         {chartCol && rows.some((r) => chartCol.value(r) > 0) && (
           <BarChart
-            data={rows.map((r) => ({ label: nameOf(r.venueId), values: { [r.venueId]: chartCol.value(r) } }))}
+            data={rows.map((r) => ({ label: nameOf(r.venueId), values: { [r.venueId]: chartValue(r) } }))}
             series={rows.map((r) => ({ key: r.venueId, label: nameOf(r.venueId), color: colorOf(r.venueId) }))}
-            format={chartCol.format}
-            axisFormat={chartCol.format === CAD ? CADShort : chartCol.format}
+            format={chartFormat}
+            axisFormat={chartAxis}
             height={170}
             ariaLabel={`${title ?? t("store_breakdown_title")}: ${chartCol.label}`}
           />
@@ -87,11 +115,12 @@ export function StoreSplit<R extends { venueId: string }>({
                     <span className="flex items-center gap-2">
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: colorOf(r.venueId) }} />
                       {nameOf(r.venueId)}
+                      <RetailBadge venueId={r.venueId} />
                     </span>
                   </TableCell>
                   {cols.map((c) => (
                     <TableCell key={c.key} className={cn("text-right tabular-nums", c.strong && "font-semibold", hide(c))}>
-                      {c.format(c.value(r))}
+                      {cell(c, r)}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -102,9 +131,7 @@ export function StoreSplit<R extends { venueId: string }>({
                 <TableCell>{t("col_total")}</TableCell>
                 {cols.map((c) => (
                   <TableCell key={c.key} className={cn("text-right tabular-nums", hide(c))}>
-                    {c.total === false
-                      ? ""
-                      : c.format(c.total ? c.total(rows) : rows.reduce((s, r) => s + c.value(r), 0))}
+                    {footer(c)}
                   </TableCell>
                 ))}
               </TableRow>
@@ -152,11 +179,11 @@ function SalesSplit({ rows, chart }: { rows: VenueSummaryRow[]; chart: boolean }
       title={t("store_sales_title")}
       chartKey={chart ? "gross" : undefined}
       cols={[
-        { key: "gross", label: t("col_gross"), value: (r) => r.grossCents, format: CAD, strong: true },
-        { key: "net", label: t("col_net"), value: (r) => r.netCents, format: CAD, hide: "sm" },
-        { key: "tax", label: t("col_tax"), value: (r) => r.taxCents, format: CAD, hide: "sm" },
+        { key: "gross", label: t("col_gross"), value: (r) => r.grossCents, money: true, strong: true },
+        { key: "net", label: t("col_net"), value: (r) => r.netCents, money: true, hide: "sm" },
+        { key: "tax", label: t("col_tax"), value: (r) => r.taxCents, money: true, hide: "sm" },
         { key: "checks", label: t("col_checks"), value: (r) => r.checkCount, format: count },
-        { key: "avg", label: t("kpi_avg_check"), value: (r) => r.avgCheckCents, format: CAD, hide: "md", total: avg },
+        { key: "avg", label: t("kpi_avg_check"), value: (r) => r.avgCheckCents, money: true, hide: "md", total: avg },
       ]}
     />
   );
@@ -170,6 +197,7 @@ export function StoreTag({ venueId }: { venueId: string }) {
     <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-neutral-200 bg-surface-alt px-1.5 py-0.5 text-[10px] font-semibold text-neutral-700">
       <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: colorOf(venueId) }} />
       {nameOf(venueId)}
+      <RetailBadge venueId={venueId} className="ml-0.5 px-1 py-0 text-[9px]" />
     </span>
   );
 }

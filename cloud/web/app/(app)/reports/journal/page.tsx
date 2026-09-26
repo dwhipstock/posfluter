@@ -6,7 +6,7 @@ import { ChevronDown, Search } from "lucide-react";
 import { useApi, useRange } from "@/lib/hooks";
 import { scopeApiPath, useStoreId } from "@/lib/store";
 import { get } from "@/lib/api";
-import { CAD } from "@/lib/format";
+import { useMoney } from "@/lib/money";
 import { useI18n, useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import type { JournalReport, JournalRow } from "@/lib/types";
@@ -142,7 +142,7 @@ function JournalPage() {
           cols={[
             { key: "closed", label: t("journal_closed_n"), value: (r) => r.closedCount, format: String },
             { key: "voids", label: t("exc_voids"), value: (r) => r.voidCount, format: String },
-            { key: "total", label: t("col_total_short"), value: (r) => r.closedCents, format: CAD, strong: true },
+            { key: "total", label: t("col_total_short"), value: (r) => r.closedCents, money: true, strong: true },
           ]}
         />
       )}
@@ -232,6 +232,9 @@ function JournalRowView({
   const t = useT();
   const fmt = useFmt();
   const { name, nameAlt } = useI18n();
+  const m = useMoney();
+  const cur = row.currency ?? m.currencyOf(row.venueId);
+  const CAD = (cents: number) => m.fmtIn(cur, cents);
   const voided = row.status === "VOID";
   return (
     <Fragment>
