@@ -473,6 +473,9 @@ export const messages = {
     "Menus are edited on each store’s tablet and appear here once it syncs."
   ),
   menu_off: m("Retiré du menu", "Off menu"),
+  menu_ai_badge: m("IA", "AI"),
+  menu_ai_generated: m("Photo générée par IA", "AI-generated photo"),
+  menu_ai_enhanced: m("Photo réelle retouchée par IA", "Real photo, AI-enhanced"),
   menu_empty: m("Aucun menu synchronisé pour l’instant", "No menu synced yet"),
   menu_empty_hint: m(
     "Il apparaîtra dès que la tablette de l’établissement se connectera.",

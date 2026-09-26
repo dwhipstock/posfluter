@@ -6,6 +6,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../widgets/ai_photos.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/resume_refresh.dart';
@@ -29,6 +30,8 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
 
   List<Item> _items = [];
   List<Category> _categories = [];
+  // AI menu photos (paid add-on): hidden until the store says it is on
+  AiPhotoStatus _aiStatus = AiPhotoStatus.hidden;
   bool _loaded = false;
   String? _error;
 
@@ -40,7 +43,17 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
     _load();
   }
 
+  /// Never blocks the menu: a slow or failing check just leaves the buttons off.
+  Future<void> _loadAiStatus() async {
+    if (!_isManager) return;
+    try {
+      final st = await Api.aiPhotoStatus();
+      if (mounted) setState(() => _aiStatus = st);
+    } catch (_) {}
+  }
+
   Future<void> _load() async {
+    _loadAiStatus();
     try {
       final results = await Future.wait([
         Api.items(includeInactive: true),
@@ -112,6 +125,94 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
     }
   }
 
+  Future<void> _aiGenerate(Item item) async {
+    final l = L.of(context);
+    final name = l.name(item.nameFr, item.nameEn);
+    final pin = await askManagerPin(context, title: l.aiGenerateFor(name));
+    if (pin == null || !mounted) return;
+    await _runAiDialog(
+      title: l.aiGenerateFor(name),
+      run: () =>
+          Api.aiGeneratePhoto(item.id, pin, count: _aiStatus.defaultCount),
+      choose: (id) => Api.aiChoosePhoto(item.id, id, pin),
+    );
+  }
+
+  Future<void> _aiEnhance(Item item) async {
+    final l = L.of(context);
+    final name = l.name(item.nameFr, item.nameEn);
+    final pin = await askManagerPin(context, title: l.aiEnhanceFor(name));
+    if (pin == null || !mounted) return;
+    final picker = ImagePicker();
+    final canCamera = picker.supportsImageSource(ImageSource.camera);
+    final source = canCamera
+        ? await showDialog<ImageSource>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: Text(l.aiEnhanceFor(name)),
+              children: [
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.camera),
+                  child: Text(l.aiTakePhoto),
+                ),
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.gallery),
+                  child: Text(l.aiChooseFromGallery),
+                ),
+              ],
+            ),
+          )
+        : ImageSource.gallery;
+    if (source == null || !mounted) return;
+    final picked = await picker.pickImage(
+      source: source,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 88,
+    );
+    if (picked == null || !mounted) return;
+    final bytes = await picked.readAsBytes();
+    final type = picked.name.toLowerCase().endsWith('.png')
+        ? 'image/png'
+        : 'image/jpeg';
+    if (!mounted) return;
+    await _runAiDialog(
+      title: l.aiEnhanceFor(name),
+      hint: l.aiEnhanceHint,
+      run: () => Api.aiEnhancePhoto(
+        item.id,
+        bytes,
+        type,
+        pin,
+        count: _aiStatus.defaultCount,
+      ),
+      choose: (id) => Api.aiChoosePhoto(item.id, id, pin),
+    );
+  }
+
+  Future<void> _runAiDialog({
+    required String title,
+    String? hint,
+    required Future<AiPhotoCandidates> Function() run,
+    required Future<void> Function(String) choose,
+  }) async {
+    final l = L.of(context);
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          AiPhotoDialog(title: title, hint: hint, run: run, choose: choose),
+    );
+    if (saved == true && mounted) {
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.aiPhotoSaved)));
+      }
+    }
+  }
+
   Future<void> _openEditor([Item? item]) async {
     final saved = await showDialog<bool>(
       context: context,
@@ -119,6 +220,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
         item: item,
         categories: _categories,
         onUploadPhoto: item == null ? null : () => _uploadPhoto(item),
+        aiStatus: _aiStatus,
+        onAiGenerate: item == null ? null : () => _aiGenerate(item),
+        onAiEnhance: item == null ? null : () => _aiEnhance(item),
       ),
     );
     if (saved == true) _load();
@@ -205,15 +309,18 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
           ),
           child: ListTile(
             onTap: () => _isManager ? _openEditor(item) : _uploadPhoto(item),
-            leading: ClipRRect(
-              borderRadius: T.radiusSmall,
-              child: SizedBox(
-                width: 44,
-                height: 44,
-                child: ItemPhoto(
-                  item,
-                  width: 128,
-                  fallback: AbbrevFallback(item.abbrev, size: 44),
+            leading: AiBadged(
+              item: item,
+              child: ClipRRect(
+                borderRadius: T.radiusSmall,
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: ItemPhoto(
+                    item,
+                    width: 128,
+                    fallback: AbbrevFallback(item.abbrev, size: 44),
+                  ),
                 ),
               ),
             ),
@@ -259,10 +366,15 @@ class _ItemEditorDialog extends StatefulWidget {
   final Item? item; // null = add new
   final List<Category> categories;
   final VoidCallback? onUploadPhoto;
+  final AiPhotoStatus aiStatus;
+  final VoidCallback? onAiGenerate, onAiEnhance;
   const _ItemEditorDialog({
     required this.item,
     required this.categories,
     this.onUploadPhoto,
+    this.aiStatus = AiPhotoStatus.hidden,
+    this.onAiGenerate,
+    this.onAiEnhance,
   });
 
   @override
@@ -584,6 +696,21 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                             widget.onUploadPhoto?.call();
                           },
                   ),
+                  if (widget.aiStatus.configured) ...[
+                    const SizedBox(height: 8),
+                    AiPhotoActions(
+                      status: widget.aiStatus,
+                      busy: _busy,
+                      onGenerate: () {
+                        Navigator.pop(context, false);
+                        widget.onAiGenerate?.call();
+                      },
+                      onEnhance: () {
+                        Navigator.pop(context, false);
+                        widget.onAiEnhance?.call();
+                      },
+                    ),
+                  ],
                 ],
                 const SizedBox(height: 16),
                 Row(

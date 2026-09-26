@@ -1066,6 +1066,99 @@ class Api {
     _throwOnError(res);
   }
 
+  // --- AI menu photos (paid add-on, online only) ------------------------------
+  // These wait on an image provider (through the store) for up to a couple of
+  // minutes, so like the Stripe calls they never feed the ConnectionMonitor: a
+  // slow or offline provider must not look like the local store dropping out.
+
+  static const Duration _aiTimeout = Duration(seconds: 200);
+
+  /// Is "Generate photo" / "Snap and enhance" usable now? Any failure → the
+  /// buttons show as unavailable; an older store without the route → hidden.
+  static Future<AiPhotoStatus> aiPhotoStatus() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/ai-photos/status'), headers: _headers)
+          .timeout(const Duration(seconds: 8));
+      _throwOnError(res);
+      return AiPhotoStatus.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+    } on ApiException catch (e) {
+      if (e.code == null || e.code == 'not_found') return AiPhotoStatus.hidden;
+      return AiPhotoStatus.unavailable(e.code);
+    } on SessionExpiredException {
+      rethrow;
+    } catch (_) {
+      return AiPhotoStatus.unavailable('image_offline');
+    }
+  }
+
+  static Future<AiPhotoCandidates> aiGeneratePhoto(
+    String itemId,
+    String managerPin, {
+    int? count,
+  }) async {
+    final res = await http
+        .post(
+          Uri.parse('$baseUrl/items/$itemId/ai-photo/generate'),
+          headers: _headers,
+          body: jsonEncode({'managerPin': managerPin, 'count': ?count}),
+        )
+        .timeout(_aiTimeout);
+    _throwOnError(res);
+    return AiPhotoCandidates.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  static Future<AiPhotoCandidates> aiEnhancePhoto(
+    String itemId,
+    List<int> bytes,
+    String contentType,
+    String managerPin, {
+    int? count,
+  }) async {
+    final req =
+        http.MultipartRequest(
+            'POST',
+            Uri.parse('$baseUrl/items/$itemId/ai-photo/enhance'),
+          )
+          ..headers['Authorization'] = 'Bearer $_token'
+          ..fields['managerPin'] = managerPin
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'photo',
+              bytes,
+              filename: 'dish',
+              contentType: http_parser.MediaType.parse(contentType),
+            ),
+          );
+    if (count != null) req.fields['count'] = '$count';
+    if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
+    final res = await http.Response.fromStream(
+      await req.send(),
+    ).timeout(_aiTimeout);
+    _throwOnError(res);
+    return AiPhotoCandidates.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// Save the picked candidate as the item's photo (the ordinary photo pipeline).
+  static Future<void> aiChoosePhoto(
+    String itemId,
+    String candidateId,
+    String managerPin,
+  ) async {
+    final res = await _send(
+      () => http.post(
+        Uri.parse('$baseUrl/items/$itemId/ai-photo/choose'),
+        headers: _headers,
+        body: jsonEncode({
+          'managerPin': managerPin,
+          'candidateId': candidateId,
+        }),
+      ),
+      operation: 'POST ai-photo/choose',
+    );
+    _throwOnError(res);
+  }
+
   static Future<Check> setCorkage(int checkId, int bottles) async =>
       Check.fromJson(
         await _post('/checks/$checkId/corkage', {'bottles': bottles}),
@@ -2005,6 +2098,12 @@ class Item {
   /// Cache-busting photo version; null = no photo (tile shows the badge).
   final int? photoVersion;
 
+  /// Where the photo came from: original | ai_generated | ai_enhanced
+  /// (null = no photo, or an older store). The AI values get an "AI" badge.
+  final String? photoSource;
+  bool get photoIsAi =>
+      photoSource == 'ai_generated' || photoSource == 'ai_enhanced';
+
   /// Retail shelf facts: UPC barcode, ID check before payment, taxed or
   /// not, and the bottle deposit (CRV) per unit sold. Pub items: defaults.
   final String? barcode;
@@ -2027,6 +2126,7 @@ class Item {
     this.active,
     this.variants,
     this.photoVersion, {
+    this.photoSource,
     this.barcode,
     this.ageRestricted = false,
     this.taxable = true,
@@ -2049,6 +2149,7 @@ class Item {
     j['active'] ?? true,
     (j['variants'] as List).map((v) => Variant.fromJson(v)).toList(),
     j['photoVersion'],
+    photoSource: j['photoSource'],
     barcode: j['barcode'],
     ageRestricted: j['ageRestricted'] ?? false,
     taxable: j['taxable'] ?? true,
@@ -2713,4 +2814,75 @@ class StripeIntent {
     j['currency'],
     j['locationId'],
   );
+}
+
+/// GET /ai-photos/status. [configured] false → no AI buttons at all (the
+/// add-on is not on for this client); configured but not [available] → the
+/// buttons show disabled with a note ([reason]: image_offline, image_key_missing…).
+class AiPhotoStatus {
+  final bool configured, available;
+  final String? reason, provider;
+  final int defaultCount;
+  const AiPhotoStatus({
+    required this.configured,
+    required this.available,
+    this.reason,
+    this.provider,
+    this.defaultCount = 3,
+  });
+  static const hidden = AiPhotoStatus(
+    configured: false,
+    available: false,
+    reason: 'image_generation_off',
+  );
+  factory AiPhotoStatus.unavailable(String? reason) => AiPhotoStatus(
+    configured: true,
+    available: false,
+    reason: reason ?? 'image_offline',
+  );
+  factory AiPhotoStatus.fromJson(Map<String, dynamic> j) => AiPhotoStatus(
+    configured: j['configured'] == true,
+    available: j['available'] == true,
+    reason: j['reason'],
+    provider: j['provider'],
+    defaultCount: (j['defaultCount'] as num?)?.toInt() ?? 3,
+  );
+}
+
+class AiPhotoCandidate {
+  final String id, contentType;
+  final Uint8List bytes;
+  AiPhotoCandidate(this.id, this.contentType, this.bytes);
+}
+
+/// 2–4 pictures to pick from; [source] is what choosing one records.
+class AiPhotoCandidates {
+  final String itemId, provider, source;
+  final int elapsedMs;
+  final double estimatedCostUsd;
+  final List<AiPhotoCandidate> candidates;
+  AiPhotoCandidates(
+    this.itemId,
+    this.provider,
+    this.source,
+    this.elapsedMs,
+    this.estimatedCostUsd,
+    this.candidates,
+  );
+  factory AiPhotoCandidates.fromJson(Map<String, dynamic> j) =>
+      AiPhotoCandidates(
+        j['itemId'],
+        j['provider'],
+        j['source'],
+        (j['elapsedMs'] as num?)?.toInt() ?? 0,
+        (j['estimatedCostUsd'] as num?)?.toDouble() ?? 0,
+        [
+          for (final c in (j['candidates'] as List))
+            AiPhotoCandidate(
+              c['id'],
+              c['contentType'],
+              base64Decode(c['dataBase64']),
+            ),
+        ],
+      );
 }

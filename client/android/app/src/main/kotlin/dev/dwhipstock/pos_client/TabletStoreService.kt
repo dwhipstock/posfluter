@@ -10,6 +10,7 @@ import android.os.IBinder
 import android.util.Log
 import dev.dwhipstock.pos.module
 import dev.dwhipstock.pos.sdk.CashRounding
+import dev.dwhipstock.pos.sdk.ImageGenConfig
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
 import dev.dwhipstock.pos.sdk.StaffAppMfa
 import dev.dwhipstock.pos.sdk.StripeConfig
@@ -96,6 +97,11 @@ class TabletStoreService : Service() {
             cashRounding.warning?.let { Log.w("TabletStore", "Cash rounding config ignored: $it") }
             if (venueId != null) Log.i("TabletStore", "Store: $venueId (port ${BuildConfig.STORE_PORT})")
             val staffAppMfa = readStaffAppMfa(storeProps)
+            // AI menu photos: image.generation / image.provider / image.<provider>.apiKey
+            // (scripts/tablet-ai-photos.sh). Missing → off; the key is never logged.
+            val imageGenConfig = runCatching { ImageGenConfig.fromProperties(storeProps) }
+                .getOrElse { ImageGenConfig.OFF }
+            Log.i("TabletStore", imageGenConfig.describe())
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = BuildConfig.STORE_PORT) {
                 module(
                     dbPath = dbFile.absolutePath,
@@ -118,6 +124,7 @@ class TabletStoreService : Service() {
                     venueId = venueId,
                     legalAgeOverride = legalAge,
                     cashRounding = cashRounding,
+                    imageGenConfig = imageGenConfig,
                 )
             }.start(wait = true)
         } catch (error: Throwable) {
@@ -164,7 +171,8 @@ class TabletStoreService : Service() {
 
     /**
      * The external store.properties itself, for the store switches that are
-     * plain values: `store.venue`, `legal.age`, `cash.rounding` and `staff.app.mfa`. Missing/unreadable → null;
+     * plain values: `store.venue`, `legal.age`, `cash.rounding`, `staff.app.mfa`
+     * and the AI photo settings (`image.*`). Missing/unreadable → null;
      * never fails startup.
      */
     private fun readStoreProperties(): java.util.Properties? = runCatching {

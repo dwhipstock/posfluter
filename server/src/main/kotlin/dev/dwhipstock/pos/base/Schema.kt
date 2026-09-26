@@ -33,6 +33,8 @@ object Items : Table("items") {
     val isAlcohol = bool("is_alcohol").default(false)
     val active = bool("active").default(true) // 86'ing flips this at runtime (M2)
     val photoPath = varchar("photo_path", 300).nullable() // PhotoStore path (M5)
+    // original | ai_generated | ai_enhanced (044); NULL = an older photo, read as original
+    val photoSource = varchar("photo_source", 16).nullable().databaseGenerated()
     val deletedAt = utcTimestamp("deleted_at").nullable() // soft delete (M6); history keeps the row
     // retail shelf facts (038); the pubs keep the defaults. The defaults are
     // the database's (databaseGenerated: an insert that doesn't set them leaves

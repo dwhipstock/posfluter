@@ -13,6 +13,7 @@ import dev.dwhipstock.pos.api.pairingRoutes
 import dev.dwhipstock.pos.api.PairingService
 import dev.dwhipstock.pos.api.floorObjectRoutes
 import dev.dwhipstock.pos.api.photoRoutes
+import dev.dwhipstock.pos.api.aiPhotoRoutes
 import dev.dwhipstock.pos.api.posRoutes
 import dev.dwhipstock.pos.api.retailRoutes
 import dev.dwhipstock.pos.api.stockRoutes
@@ -120,6 +121,14 @@ fun Application.module(
     stripeConfig: StripeConfig.Resolved = StripeConfig.fromEnv(),
     // test seam: a fake Stripe HTTP layer
     stripeHttp: StripeHttp? = null,
+    // AI menu photos (paid add-on): image.generation=on|off + image.provider=
+    // flux|gemini|openai|off + the provider's key (POS_IMAGE_* / BFL_API_KEY /
+    // GEMINI_API_KEY / OPENAI_API_KEY; the tablet passes its store.properties).
+    // Default off. Online-only; never contacted at startup or on a selling path.
+    imageGenConfig: dev.dwhipstock.pos.sdk.ImageGenConfig.Resolved = dev.dwhipstock.pos.sdk.ImageGenConfig.fromEnv(),
+    // test seams: a fake image provider and the online probe
+    imageProvider: dev.dwhipstock.pos.aiphotos.ImageProvider? = null,
+    imageReachable: ((String) -> Boolean)? = null,
 ) {
     // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
     // Angeles for the US store); an existing store keeps its settings row's
@@ -225,6 +234,11 @@ fun Application.module(
     log.info(staffAppMfa.describe())
     val authService = AuthService(settingsRepo, staffAppMfa.required)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
+    val aiPhotos = dev.dwhipstock.pos.aiphotos.AiPhotoService(
+        imageGenConfig, config.brand,
+        provider = imageProvider ?: dev.dwhipstock.pos.aiphotos.ImageProviders.from(imageGenConfig),
+        reachable = imageReachable ?: dev.dwhipstock.pos.aiphotos.AiPhotoService::tcpReachable,
+    ).also { it.start() }
 
     // Cloud sync (CONTRACT.md): one-way outbox pusher + revocation pull. Never constructed
     // unless both env vars are set — offline-first stays the default (and tests).
@@ -303,6 +317,11 @@ fun Application.module(
                 cause.declineCode?.let { put("declineCode", it) }
             })
         }
+        exception<dev.dwhipstock.pos.aiphotos.ImageGenException> { call, cause ->
+            cause.retryAfterSeconds?.let { call.response.header(HttpHeaders.RetryAfter, it.toString()) }
+            call.respond(HttpStatusCode.fromValue(cause.status),
+                mapOf("error" to (cause.message ?: "image generation failed"), "code" to cause.code))
+        }
         exception<RateLimitException> { call, cause ->
             call.response.header(HttpHeaders.RetryAfter, cause.retryAfterSeconds.toString())
             call.respond(HttpStatusCode.TooManyRequests,
@@ -372,6 +391,7 @@ fun Application.module(
         zoneManagementRoutes(authService)
         catalogRoutes()
         photoRoutes(photoStore, authService)
+        aiPhotoRoutes(aiPhotos, photoStore, authService)
         shiftRoutes(shiftService, authService)
         settingsRoutes(settingsRepo)
         printerRoutes(thermalPrinter, config, settingsRepo)

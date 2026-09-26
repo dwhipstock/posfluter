@@ -302,6 +302,8 @@ object CatalogItems : Table("catalog_items") {
     val active = bool("active")
     val deleted = bool("deleted")
     val photoVersion = long("photo_version").nullable()
+    // original | ai_generated | ai_enhanced (022); NULL = not sent
+    val photoSource = text("photo_source").nullable()
     // the store's UPC for display (018); NULL = none sent
     val barcode = text("barcode").nullable()
     // big retail catalogs (021): producer, style/varietal/type, size/pack label

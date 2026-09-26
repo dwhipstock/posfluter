@@ -43,6 +43,8 @@ fun JsonObject.instant(key: String, zone: java.time.ZoneId): java.time.OffsetDat
  * change feed ([appendChange]) now only carries device revocations down.
  */
 object Catalog {
+    /** The provenance values a store may send (anything else is ignored). */
+    val PHOTO_SOURCES = setOf("original", "ai_generated", "ai_enhanced")
 
     /** Apply an item snapshot (incl. soft-deleted variants). No-op without an id. */
     fun applyItemSnapshot(scope: Scope, item: JsonObject) = applyItemSnapshots(scope, listOf(item))
@@ -62,13 +64,14 @@ object Catalog {
         // photoVersion is an optional hint most POS snapshots omit — the upsert
         // covers every column, so an absent key must not wipe the stored version
         // (portal thumbnails would vanish on any POS edit of the item)
-        val missingPhoto = byId.filterValues { it.long("photoVersion") == null }.keys
-        val storedPhoto = if (missingPhoto.isEmpty()) emptyMap() else
+        // (photoSource, the photo's provenance, rides with it and is kept the same way)
+        val missingPhoto = byId.filterValues { it.long("photoVersion") == null || it.str("photoSource") !in PHOTO_SOURCES }.keys
+        val stored = if (missingPhoto.isEmpty()) emptyMap() else
             missingPhoto.chunked(1000).flatMap { ids ->
-                CatalogItems.select(CatalogItems.id, CatalogItems.photoVersion).where {
+                CatalogItems.select(CatalogItems.id, CatalogItems.photoVersion, CatalogItems.photoSource).where {
                     (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and
                         (CatalogItems.id inList ids) and CatalogItems.photoVersion.isNotNull()
-                }.map { it[CatalogItems.id] to it[CatalogItems.photoVersion] }
+                }.map { it[CatalogItems.id] to (it[CatalogItems.photoVersion] to it[CatalogItems.photoSource]) }
             }.toMap()
         CatalogItems.batchUpsert(byId.entries, shouldReturnGeneratedValues = false) { (itemId, item) ->
             this[CatalogItems.tenantId] = scope.tenantId
@@ -83,7 +86,9 @@ object Catalog {
             this[CatalogItems.isAlcohol] = item.bool("isAlcohol") ?: false
             this[CatalogItems.active] = item.bool("active") ?: true
             this[CatalogItems.deleted] = item.bool("deleted") ?: false
-            this[CatalogItems.photoVersion] = item.long("photoVersion") ?: storedPhoto[itemId]
+            this[CatalogItems.photoVersion] = item.long("photoVersion") ?: stored[itemId]?.first
+            this[CatalogItems.photoSource] = item.str("photoSource")?.takeIf { it in PHOTO_SOURCES }
+                ?: stored[itemId]?.second
             this[CatalogItems.barcode] = item.str("barcode")
             this[CatalogItems.brand] = item.str("brand")?.trim()?.takeIf { it.isNotEmpty() }
             this[CatalogItems.subcategory] = item.str("subcategory")?.trim()?.takeIf { it.isNotEmpty() }

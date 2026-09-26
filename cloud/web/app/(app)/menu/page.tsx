@@ -239,15 +239,30 @@ function ItemRow({ row }: { row: MergedItem }) {
 }
 
 function Thumb({ item }: { item: MenuItem }) {
+  const t = useT();
   if (item.photoVersion !== null) {
+    const ai = item.photoSource === "ai_generated" || item.photoSource === "ai_enhanced";
+    const aiLabel = item.photoSource === "ai_enhanced" ? t("menu_ai_enhanced") : t("menu_ai_generated");
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={`/v1/menu/items/${item.id}/photo?venue=${encodeURIComponent(item.venueId)}&v=${item.photoVersion}`}
-        alt=""
-        loading="lazy"
-        className="h-11 w-11 shrink-0 rounded-lg bg-neutral-100 object-cover"
-      />
+      <span className="relative h-11 w-11 shrink-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`/v1/menu/items/${item.id}/photo?venue=${encodeURIComponent(item.venueId)}&v=${item.photoVersion}`}
+          alt={ai ? aiLabel : ""}
+          loading="lazy"
+          className="h-11 w-11 rounded-lg bg-neutral-100 object-cover"
+        />
+        {ai && (
+          // transparency: an AI-made or AI-retouched photo says so
+          <span
+            title={aiLabel}
+            aria-label={aiLabel}
+            className="absolute -bottom-1 -right-1 rounded bg-ink px-1 text-[9px] font-bold leading-4 text-white ring-2 ring-white"
+          >
+            {t("menu_ai_badge")}
+          </span>
+        )}
+      </span>
     );
   }
   return (

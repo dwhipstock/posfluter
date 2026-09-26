@@ -43,6 +43,8 @@ data class ItemDto(
     val abbrev: String, val isAlcohol: Boolean, val active: Boolean, val variants: List<VariantDto>,
     /** Cache-busting photo version (file mtime); null = no photo → tile shows the badge. */
     val photoVersion: Long? = null,
+    /** Where the photo came from: original | ai_generated | ai_enhanced (null = no photo). */
+    val photoSource: String? = null,
     /** Retail shelf facts (038): UPC, ID check, taxable, CRV per unit sold. */
     val barcode: String? = null,
     val ageRestricted: Boolean = false,
@@ -66,6 +68,7 @@ internal fun itemDtoOf(
     row[Items.descriptionFr], row[Items.descriptionEn], row[Items.categoryId],
     row[Items.abbrev], row[Items.isAlcohol], row[Items.active], variants,
     photoVersion = photoVersion,
+    photoSource = if (photoVersion == null) null else row[Items.photoSource] ?: "original",
     barcode = row[Items.barcode],
     ageRestricted = row[Items.ageRestricted],
     taxable = row[Items.taxable],

@@ -496,6 +496,8 @@ export interface MenuItem {
   isAlcohol: boolean;
   active: boolean;
   photoVersion: number | null;
+  /** Where the photo came from; the AI values get a small "AI" badge. Absent from older stores. */
+  photoSource?: "original" | "ai_generated" | "ai_enhanced" | null;
   variants: MenuVariant[];
   /** The store this row comes from (a combined view lists every store's items). */
   venueId: string;
