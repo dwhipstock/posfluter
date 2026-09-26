@@ -149,6 +149,9 @@ fun Application.module(
     kitchenPrinting: dev.dwhipstock.pos.sdk.KitchenPrinting.Resolved = dev.dwhipstock.pos.sdk.KitchenPrinting.fromEnv(),
     // test seam: the station printers' transport
     kitchenTransport: dev.dwhipstock.pos.sdk.EscPosTransport? = null,
+    // age.check=always|looks-under:N (POS_AGE_CHECK / POS_CONFIG_FILE). Default
+    // always: an ID for every age-restricted sale; tobacco and vape always.
+    ageCheckMode: dev.dwhipstock.pos.sdk.AgeCheckMode = dev.dwhipstock.pos.sdk.AgeCheckMode.fromEnv(),
 ) {
     // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
     // Angeles for the US store); an existing store keeps its settings row's
@@ -303,8 +306,9 @@ fun Application.module(
     }
     val stripeService = StripeService(storeStripe, checkService, config.venueId, config.displayName, stripeHttp)
         .also { it.start() }
+    ageCheckMode.let { if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Age check: ${it.wire}") }
     val retailService = dev.dwhipstock.pos.retail.RetailService(
-        config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup())
+        config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup(), ageCheckMode)
     if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
     // stock counting / receiving in the store (retail); on hand stays the cloud's
     val stockService = dev.dwhipstock.pos.retail.StockService(config)
@@ -434,7 +438,8 @@ fun Application.module(
         // venue = the store's display name ("Copper Lantern — Vieux-Port") so the
         // sign-in screen can say which store this terminal serves before login
         get("/health") {
-            call.respond(HealthResponse.of(config, requireDeviceToken, kitchenService != null, forecourt != null))
+            call.respond(HealthResponse.of(config, requireDeviceToken, kitchenService != null, forecourt != null)
+                .copy(looksOverAge = ageCheckMode.looksOver))
         }
         // Staff ordering web app (M7): a mobile-first page served from the store.
         // Public shell (like the customer menu); it authenticates via POST /login
@@ -555,6 +560,10 @@ data class HealthResponse(
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
     val forecourt: Boolean = false,
+    /** age.check=looks-under:N: the cashier may pass a customer who looks over N (never tobacco). Absent = always an ID. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val looksOverAge: Int? = null,
 ) {
     companion object {
         fun of(

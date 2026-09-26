@@ -47,13 +47,16 @@ object PronghornSeed {
             this[Items.salesWeight] = p.salesWeight
             this[Items.active] = p.active
         }
-        ItemVariants.batchInsert(list, shouldReturnGeneratedValues = false) { p ->
-            this[ItemVariants.id] = p.variantId
+        // one variant per product, or one per cup size (fountain, slush, coffee)
+        val variants = list.flatMap { p -> p.variants.mapIndexed { i, v -> Triple(p, v, i) } }
+        ItemVariants.batchInsert(variants, shouldReturnGeneratedValues = false) { (p, v, i) ->
+            this[ItemVariants.id] = v.id
             this[ItemVariants.itemId] = p.id
-            this[ItemVariants.labelFr] = p.unitLabel
-            this[ItemVariants.labelEn] = p.unitLabel
-            this[ItemVariants.priceCents] = p.cents
-            this[ItemVariants.sortOrder] = 0
+            this[ItemVariants.labelFr] = v.label
+            this[ItemVariants.labelEn] = v.label
+            this[ItemVariants.priceCents] = v.cents
+            this[ItemVariants.sortOrder] = i
+            if (v.costCents > 0) this[ItemVariants.costCents] = v.costCents
         }
     }
 

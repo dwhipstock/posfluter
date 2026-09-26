@@ -62,6 +62,8 @@ data class FuelGrade(
     val name: String,
     val nameEs: String,
     val priceMills: Long,
+    /** What the store pays a gallon, delivered and taxed (thousandths of a dollar); 0 = unknown. */
+    val costMills: Long = 0,
 )
 
 data class PumpAuthorisation(val authId: String, val mode: FuelMode, val maxAmountCents: Long?, val posRef: String?)

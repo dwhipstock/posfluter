@@ -52,6 +52,8 @@ data class Receipt(
      */
     val cashDue: Money? = null,
     val cashRounding: Money = Money.ZERO,
+    /** Promotions taken off before tax, one line each (a c-store's deals). */
+    val discounts: List<ReceiptDiscount> = emptyList(),
 ) {
     /** Pre-tax subtotal: the total less the taxes added on top. */
     val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
@@ -78,6 +80,9 @@ data class ReceiptFuel(
     val volumeMilli: Long? = null,
     val priceMills: Long? = null,
 )
+
+/** "2 for $5 energy drinks  -0.98": [label] in English, [labelEs] on a Spanish receipt. */
+data class ReceiptDiscount(val label: String, val labelEs: String, val amount: Money)
 
 data class ReceiptFee(val labelFr: String, val labelEn: String, val amount: Money, val code: String = "")
 
@@ -223,6 +228,9 @@ object ReceiptRenderer {
                     else -> msg(MessageKey.RECEIPT_FUEL_PREPAY, f.pump)
                 }))
             }
+        }
+        for (d in receipt.discounts) {
+            add(PrintLine.KeyValue(if (locale.tag == "es") d.labelEs else d.label, "-" + policy.money(d.amount)))
         }
         for (fee in receipt.fees) {
             val label = Messages.dataLabel("fee.${fee.code}", locale) ?: locale.dataText(fee.labelFr, fee.labelEn)

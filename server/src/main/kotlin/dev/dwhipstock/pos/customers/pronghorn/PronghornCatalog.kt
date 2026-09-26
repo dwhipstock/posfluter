@@ -61,13 +61,24 @@ object PronghornCatalog {
         val active: Boolean = true,
         /** "Each", or "Gallon" for fuel. */
         val unitLabel: String = "Each",
+        /** What the store pays for one (its cost), for margin; 0 = unknown. */
+        val costCents: Long = 0,
+        /** Cup sizes (fountain, slush, coffee): the variants, each its price and cost. Empty = one "Each". */
+        val sizes: List<Size> = emptyList(),
     ) {
         val barcode: String get() = Upc.upcA(UPC_PREFIX + seq.toString().padStart(5, '0'))
         val shelfCode: String? get() = if (barcodeless) null else barcode
         val abbrev: String get() = name.split(' ').filter { it.firstOrNull()?.isLetter() == true }
             .take(2).joinToString("") { it.first().uppercase() }
         val variantId: String get() = if (cat == Cat.FUEL && id != "fuel-prepay") "$id:gal" else "$id:each"
+
+        /** Every variant: the sizes, or the one [variantId] at [cents]. */
+        val variants: List<Variant> get() = if (sizes.isEmpty()) listOf(Variant(variantId, unitLabel, cents, costCents))
+            else sizes.map { Variant("$id:" + slug(it.label), it.label, it.cents, it.costCents) }
     }
+
+    data class Size(val label: String, val cents: Long, val costCents: Long)
+    data class Variant(val id: String, val label: String, val cents: Long, val costCents: Long)
 
     /**
      * The fuel items: one per grade (a fuel line is one fuelling at the pump's
@@ -78,7 +89,7 @@ object PronghornCatalog {
         Product(
             id = "fuel-" + g.code.lowercase(), name = g.name, cat = Cat.FUEL, cents = (g.priceMills + 5) / 10,
             seq = 1 + i, taxable = false, brand = "Pronghorn", subcategory = "Fuel", size = "per gallon",
-            barcodeless = true, active = false, unitLabel = "Gallon",
+            barcodeless = true, active = false, unitLabel = "Gallon", costCents = (g.costMills + 5) / 10,
         )
     } + Product(
         id = "fuel-prepay", name = "Fuel prepay", cat = Cat.FUEL, cents = 0, seq = 9, taxable = false,
@@ -112,7 +123,37 @@ object PronghornCatalog {
         val name: String, val brand: String, val cat: Cat, val sub: String, val size: String,
         val cents: Long, val taxable: Boolean, val appeal: Double,
         val ageRestricted: Boolean = false, val barcodeless: Boolean = false,
+        /** Cup sizes: label to price (the first is the tile's price). */
+        val sizes: List<Pair<String, Long>> = emptyList(),
     )
+
+    /**
+     * The store's margin by department, as a share of the shelf price: thin
+     * on tobacco and beer, fat on coffee and fountain drinks — which is why a
+     * gas station lives off its shop, not its pumps.
+     */
+    private fun marginRange(cat: Cat, sub: String): Pair<Double, Double> = when {
+        cat == Cat.HOT && sub in setOf("Coffee", "Fountain", "Frozen") -> 0.72 to 0.85
+        cat == Cat.HOT -> 0.50 to 0.65
+        cat == Cat.TOBACCO -> 0.10 to 0.18
+        cat == Cat.BEER -> 0.20 to 0.28
+        cat == Cat.DRINKS -> 0.38 to 0.50
+        cat == Cat.SNACKS -> 0.35 to 0.45
+        cat == Cat.CANDY -> 0.40 to 0.50
+        cat == Cat.GROCERY -> 0.22 to 0.32
+        cat == Cat.AUTO -> 0.35 to 0.50
+        cat == Cat.HEALTH -> 0.40 to 0.55
+        cat == Cat.GENERAL && sub == "Propane" -> 0.15 to 0.30
+        cat == Cat.GENERAL -> 0.45 to 0.60
+        cat == Cat.ICE -> 0.55 to 0.65
+        else -> 0.30 to 0.40
+    }
+
+    private fun cost(rng: Rng, cents: Long, cat: Cat, sub: String): Long {
+        val (lo, hi) = marginRange(cat, sub)
+        val margin = lo + (hi - lo) * rng.double()
+        return (cents * (1 - margin)).toLong().coerceAtLeast(1)
+    }
 
     private fun generate(): List<Product> {
         val rng = Rng(SEED)
@@ -137,6 +178,7 @@ object PronghornCatalog {
         var seq = FIRST_SEQ
         val scored = drafts.map { d ->
             val s = seq++
+            val sizes = d.sizes.map { (label, cents) -> Size(label, cents, cost(rng, cents, d.cat, d.sub)) }
             val boost = when (d.cat) {
                 Cat.HOT -> 4.0; Cat.ICE -> 2.5; Cat.DRINKS -> 1.6; Cat.TOBACCO -> 1.6; Cat.BEER -> 1.3
                 Cat.SNACKS -> 1.2; Cat.CANDY -> 1.1; Cat.AUTO -> 0.8; Cat.GROCERY -> 0.7; Cat.HEALTH -> 0.6
@@ -146,6 +188,8 @@ object PronghornCatalog {
                 id = if (d.barcodeless) "ph-" + slug(d.name) else "ph$s", name = d.name, cat = d.cat, cents = d.cents,
                 seq = s, ageRestricted = d.ageRestricted, taxable = d.taxable, brand = d.brand, subcategory = d.sub,
                 size = d.size, barcodeless = d.barcodeless,
+                costCents = sizes.firstOrNull()?.costCents ?: if (d.sub == "Deposit") d.cents else cost(rng, d.cents, d.cat, d.sub),
+                sizes = sizes,
             )
             Scored(p, d.appeal * boost * exp(rng.gauss() * 1.0))
         }
@@ -160,40 +204,46 @@ object PronghornCatalog {
 
     // ---- departments ----
 
-    /** The counter's own: coffee, fountain drinks, the roller grill, kolaches and tacos. Quick keys, no barcodes. */
+    /**
+     * The counter's own: coffee, fountain and frozen drinks by cup size (a
+     * flavour is a modifier on the line), a refill price for a store cup, the
+     * roller grill, pizza, breakfast, and nachos with pump cheese (jalapeños
+     * and chili are paid add-ons). Quick keys, no barcodes. Prepared food is
+     * taxable in Texas.
+     */
     private fun hotFood(add: (Draft) -> Unit) {
-        fun hot(name: String, sub: String, size: String, cents: Long, appeal: Double) =
-            add(Draft(name, "Pronghorn Kitchen", Cat.HOT, sub, size, cents, true, appeal, barcodeless = true))
-        hot("Coffee 12 oz", "Coffee", "12 oz", 149, 3.0)
-        hot("Coffee 16 oz", "Coffee", "16 oz", 179, 3.4)
-        hot("Coffee 20 oz", "Coffee", "20 oz", 209, 2.6)
-        hot("Iced Coffee 24 oz", "Coffee", "24 oz", 279, 1.6)
-        hot("Hot Chocolate 16 oz", "Coffee", "16 oz", 179, 0.8)
-        hot("Cappuccino 16 oz", "Coffee", "16 oz", 229, 1.0)
-        hot("Fountain Drink 22 oz", "Fountain", "22 oz", 129, 2.4)
-        hot("Fountain Drink 32 oz", "Fountain", "32 oz", 159, 3.0)
-        hot("Fountain Drink 44 oz", "Fountain", "44 oz", 189, 2.4)
-        hot("Fountain Drink 64 oz", "Fountain", "64 oz", 219, 1.2)
-        hot("Frozen Slush 32 oz", "Fountain", "32 oz", 249, 1.2)
-        hot("Sweet Tea 32 oz", "Fountain", "32 oz", 149, 1.5)
-        hot("Kolache Sausage & Cheese", "Bakery", "Each", 199, 2.2)
-        hot("Kolache Sausage & Jalapeño", "Bakery", "Each", 219, 1.8)
-        hot("Kolache Fruit", "Bakery", "Each", 169, 1.1)
-        hot("Breakfast Taco Egg & Bacon", "Tacos", "Each", 249, 2.4)
-        hot("Breakfast Taco Potato & Egg", "Tacos", "Each", 229, 1.9)
-        hot("Breakfast Taco Chorizo & Egg", "Tacos", "Each", 249, 1.6)
-        hot("Brisket Taco", "Tacos", "Each", 399, 1.5)
-        hot("Hot Dog", "Roller Grill", "Each", 179, 1.8)
+        fun hot(name: String, sub: String, size: String, cents: Long, appeal: Double, sizes: List<Pair<String, Long>> = emptyList()) =
+            add(Draft(name, "Pronghorn Kitchen", Cat.HOT, sub, size, sizes.firstOrNull()?.second ?: cents, true, appeal,
+                barcodeless = true, sizes = sizes))
+        hot("Coffee", "Coffee", "Cup", 149, 3.4,
+            listOf("Small 12 oz" to 149L, "Medium 16 oz" to 179L, "Large 20 oz" to 209L, "Refill" to 99L))
+        hot("Iced Coffee", "Coffee", "Cup", 249, 1.6, listOf("Medium 16 oz" to 249L, "Large 24 oz" to 279L))
+        hot("Cappuccino", "Coffee", "Cup", 199, 1.0, listOf("Medium 16 oz" to 199L, "Large 20 oz" to 229L))
+        hot("Fountain Drink", "Fountain", "Cup", 129, 3.0,
+            listOf("Small 22 oz" to 129L, "Medium 32 oz" to 159L, "Large 44 oz" to 189L, "Jumbo 64 oz" to 219L, "Refill" to 79L))
+        hot("Frozen Slush", "Frozen", "Cup", 179, 1.8,
+            listOf("Small 16 oz" to 179L, "Medium 32 oz" to 249L, "Large 44 oz" to 299L, "Refill" to 129L))
+        hot("Sweet Tea", "Fountain", "Cup", 129, 1.4, listOf("Medium 32 oz" to 129L, "Large 44 oz" to 159L))
+        hot("Hot Dog", "Roller Grill", "Each", 179, 2.2)
         hot("Jalapeño Cheddar Sausage", "Roller Grill", "Each", 229, 1.4)
         hot("Taquito Beef", "Roller Grill", "Each", 169, 1.3)
         hot("Taquito Chicken", "Roller Grill", "Each", 169, 1.1)
-        hot("Pizza Slice Pepperoni", "Pizza", "Slice", 299, 1.2)
+        hot("Corn Dog", "Roller Grill", "Each", 199, 0.8)
+        hot("Pizza Slice Pepperoni", "Pizza", "Slice", 299, 1.3)
         hot("Pizza Slice Cheese", "Pizza", "Slice", 279, 0.9)
-        hot("Brisket Sandwich", "Sandwiches", "Each", 649, 0.9)
+        hot("Breakfast Sandwich Sausage Egg & Cheese", "Breakfast", "Each", 349, 1.6)
+        hot("Breakfast Sandwich Bacon Egg & Cheese", "Breakfast", "Each", 369, 1.4)
+        hot("Breakfast Taco Egg & Bacon", "Breakfast", "Each", 249, 2.0)
+        hot("Breakfast Taco Potato & Egg", "Breakfast", "Each", 229, 1.5)
+        hot("Kolache Sausage & Cheese", "Breakfast", "Each", 199, 2.0)
+        hot("Kolache Sausage & Jalapeño", "Breakfast", "Each", 219, 1.5)
+        hot("Kolache Fruit", "Breakfast", "Each", 169, 1.0)
+        hot("Nachos with Pump Cheese", "Nachos", "Each", 349, 1.5)
+        hot("Add Jalapeños", "Add-ons", "Scoop", 50, 0.9)
+        hot("Add Chili", "Add-ons", "Scoop", 99, 0.8)
+        hot("Brisket Taco", "Hot Case", "Each", 399, 1.2)
         hot("Chicken Tenders 3 pc", "Hot Case", "3 pc", 499, 0.9)
-        hot("Corn Dog", "Hot Case", "Each", 199, 0.8)
         hot("Burrito Bean & Cheese", "Hot Case", "Each", 299, 0.8)
-        hot("Nachos with Cheese", "Hot Case", "Each", 349, 0.7)
     }
 
     private fun ice(add: (Draft) -> Unit) {
@@ -214,9 +264,10 @@ object PronghornCatalog {
         )
         for (b in sodaBrands) for (s in rng.sample(sodas, 5 + rng.int(3))) for ((size, band, appeal) in rng.sample(sodaSizes, 2 + rng.int(3)))
             add(Draft("$b $s $size", b, Cat.DRINKS, "Soda", size, rng.price(band.first, band.second), true, appeal))
-        val energy = listOf("Volt Rush", "Stampede", "Night Rider", "Jackrabbit", "Thunderhead")
-        val energyFlavors = listOf("Original", "Sugar Free", "Tropical", "Mango", "Berry Blast", "Citrus", "Watermelon", "Peach")
-        for (b in energy) for (f in rng.sample(energyFlavors, 4 + rng.int(3))) {
+        val energy = listOf("Volt Rush", "Stampede", "Night Rider", "Jackrabbit", "Thunderhead", "Dust Storm", "High Voltage Ranch")
+        val energyFlavors = listOf("Original", "Sugar Free", "Tropical", "Mango", "Berry Blast", "Citrus", "Watermelon",
+            "Peach", "Blue Razz", "Cherry Lime", "Grape", "Zero Sugar Citrus")
+        for (b in energy) for (f in rng.sample(energyFlavors, 7 + rng.int(4))) {
             add(Draft("$b Energy $f 16 oz can", b, Cat.DRINKS, "Energy", "16 oz can", rng.price(2.99, 3.49), true, 1.7))
             if (rng.int(3) == 0) add(Draft("$b Energy $f 4-pack", b, Cat.DRINKS, "Energy", "4-pack", rng.price(8.99, 10.99), true, 0.7))
         }
@@ -400,10 +451,10 @@ object PronghornCatalog {
         listOf("Pain Reliever Ibuprofen 24 ct", "Pain Reliever Acetaminophen 24 ct", "Aspirin 24 ct", "Pain Reliever 2-Pack",
             "Antacid Tablets 12 ct", "Heartburn Relief 14 ct", "Allergy Relief 12 ct", "Cold & Flu Daytime", "Cold & Flu Nighttime",
             "Cough Drops Honey Lemon", "Cough Drops Cherry", "Motion Sickness Tablets", "Anti-Diarrheal 12 ct", "Eye Drops",
-            "Sleep Aid 16 ct", "Energy Shot Berry", "Energy Shot Grape", "Hydration Powder 6 ct", "Bandages Assorted 30 ct",
+            "Sleep Aid 16 ct", "Hydration Powder 6 ct", "Bandages Assorted 30 ct",
             "First Aid Kit Travel",
-        ).forEach { w -> add(Draft("$b $w", b, Cat.HEALTH, if (w.startsWith("Energy") || w.startsWith("Hydration")) "Energy & Hydration" else "Medicine & First Aid",
-            "Single", rng.price(1.99, 9.99), w.startsWith("Energy") || w.startsWith("Hydration") || w.startsWith("Bandages") || w.startsWith("First Aid"), 0.7)) }
+        ).forEach { w -> add(Draft("$b $w", b, Cat.HEALTH, if (w.startsWith("Hydration")) "Hydration" else "Medicine & First Aid",
+            "Single", rng.price(1.99, 9.99), w.startsWith("Hydration") || w.startsWith("Bandages") || w.startsWith("First Aid"), 0.7)) }
         listOf("Lip Balm Original", "Lip Balm Cherry", "Sunscreen SPF 50 3 oz", "Sunscreen Stick SPF 30", "Aloe Gel 8 oz",
             "Hand Sanitizer 2 oz", "Hand Lotion 3 oz", "Deodorant Travel", "Toothbrush", "Toothpaste Travel", "Mouthwash 8 oz",
             "Floss Picks 30 ct", "Disposable Razors 4 ct", "Shaving Cream Travel", "Shampoo Travel", "Body Wash Travel",
@@ -439,10 +490,32 @@ object PronghornCatalog {
             Triple("Cat Food Can", "Pets", 1.29 to 1.79), Triple("Travel Mug", "Travel", 9.99 to 14.99),
             Triple("Postcard Hill Country", "Travel", 0.99 to 1.49), Triple("Keychain Texas", "Travel", 3.99 to 5.99),
         ).forEach { (w, sub, band) -> add(Draft("$b $w", b, Cat.GENERAL, sub, "Single", rng.price(band.first, band.second), true, 0.5)) }
+        // propane from the cage out front: an exchange (trade in an empty
+        // tank), and the tank deposit when there's no tank to trade — the
+        // deposit is money held, not a sale: no tax, no margin
+        add(Draft("Propane Exchange 20 lb (trade in a tank)", "Pronghorn", Cat.GENERAL, "Propane", "20 lb", 2299, true, 1.0,
+            barcodeless = true))
+        add(Draft("Propane Tank Deposit (no tank to trade)", "Pronghorn", Cat.GENERAL, "Deposit", "Tank", 3499, false, 0.4,
+            barcodeless = true))
     }
 
-    /** Behind the counter, 21+. Generic, fictional, no cigarette brands. */
+    /**
+     * Behind the counter, 21+ (federal Tobacco 21), always with an ID check.
+     * Fictional brands only. Cigarettes by the pack and by the carton (10
+     * packs, its own barcode and price). The state and federal excise taxes
+     * are inside the shelf price (an assumption for the demo); sales tax is
+     * added like any taxable good.
+     */
     private fun tobacco(rng: Rng, add: (Draft) -> Unit) {
+        for (brand in listOf("Longhaul", "Prairie Wind", "Big Country", "Mesa Ridge", "Tumbleweed")) {
+            for (style in listOf("Full Flavor", "Lights", "Menthol", "Menthol Lights").take(2 + rng.int(3))) {
+                val pack = rng.price(8.29, 9.49)
+                add(Draft("$brand $style King Pack", brand, Cat.TOBACCO, "Cigarettes", "Pack", pack, true, 1.5,
+                    ageRestricted = true))
+                add(Draft("$brand $style King Carton", brand, Cat.TOBACCO, "Cigarettes", "Carton", pack * 10 - rng.int(4) * 100 - 100,
+                    true, 0.5, ageRestricted = true))
+            }
+        }
         for (b in listOf("Prairie", "Cold Front")) for (f in listOf("Mint", "Wintergreen", "Citrus", "Coffee", "Cool Berry"))
             for (mg in listOf(3, 6))
                 add(Draft("$b Nicotine Pouches $f ${mg} mg", b, Cat.TOBACCO, "Nicotine Pouches", "${mg} mg", rng.price(4.99, 5.99), true, 1.2, ageRestricted = true))

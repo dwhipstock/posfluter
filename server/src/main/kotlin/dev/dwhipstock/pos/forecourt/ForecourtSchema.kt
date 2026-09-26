@@ -29,6 +29,9 @@ object FuelSales : IntIdTable("fuel_sales") {
     val createdAt = utcTimestamp("created_at")
     val completedAt = utcTimestamp("completed_at").nullable()
     val settledAt = utcTimestamp("settled_at").nullable()
+    // the fuel's cost per gallon and this fuelling's cost (047)
+    val costMills = long("cost_mills").nullable().databaseGenerated()
+    val costCents = long("cost_cents").nullable().databaseGenerated()
 }
 
 object FuelStatus {

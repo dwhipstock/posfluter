@@ -9,6 +9,7 @@ import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.Fee
 import dev.dwhipstock.pos.sdk.LegalAge
 import dev.dwhipstock.pos.sdk.PrinterAdapter
+import dev.dwhipstock.pos.sdk.Promotion
 import dev.dwhipstock.pos.sdk.ReceiptPolicy
 import dev.dwhipstock.pos.sdk.RoundingPolicy
 import dev.dwhipstock.pos.sdk.StoreProfile
@@ -60,10 +61,37 @@ object Pronghorn {
      * store tells the controller these when it connects.
      */
     val GRADES = listOf(
-        FuelGrade("REG", "Regular", "Regular", 2_899),
-        FuelGrade("MID", "Mid-Grade", "Intermedia", 3_299),
-        FuelGrade("PRE", "Premium", "Premium", 3_699),
-        FuelGrade("DSL", "Diesel", "Diésel", 3_499),
+        // a gas station's fuel margin is thin: 18–25¢ a gallon over the
+        // delivered, taxed cost (the store lives off the shop)
+        FuelGrade("REG", "Regular", "Regular", 2_899, costMills = 2_689),
+        FuelGrade("MID", "Mid-Grade", "Intermedia", 3_299, costMills = 3_069),
+        FuelGrade("PRE", "Premium", "Premium", 3_699, costMills = 3_449),
+        FuelGrade("DSL", "Diesel", "Diésel", 3_499, costMills = 3_319),
+    )
+
+    /**
+     * The counter's deals, applied before tax in this order: 2 for $5 on the
+     * 16 oz energy drinks, a hot dog + any fountain drink for $3, and $1 off a
+     * coffee with 8 or more gallons of fuel on the sale (postpay fuel: a
+     * prepay's gallons aren't known until after it's paid).
+     */
+    val PROMOTIONS: List<Promotion> = listOf(
+        Promotion.MixAndMatch(
+            code = "energy-2for5", label = "2 for \$5 energy drinks", labelEs = "2 por \$5 bebidas energéticas",
+            qty = 2, priceCents = 500,
+        ) { it.subcategory == "Energy" && it.size == "16 oz can" },
+        Promotion.Combo(
+            code = "hotdog-fountain", label = "Hot dog + fountain drink \$3", labelEs = "Hot dog + refresco \$3",
+            priceCents = 300,
+            parts = listOf(
+                { it.itemId == "ph-hot-dog" },
+                { it.subcategory == "Fountain" && it.variantLabel != "Refill" },
+            ),
+        ),
+        Promotion.WithFuel(
+            code = "coffee-fuel", label = "\$1 off coffee with 8+ gal", labelEs = "\$1 menos en café con 8+ gal",
+            minVolumeMilli = 8_000, offCents = 100,
+        ) { it.subcategory == "Coffee" },
     )
 
     fun salesTax(percent: BigDecimal = DEFAULT_SALES_TAX) = TaxComponent(
@@ -110,6 +138,7 @@ class PronghornConfig(
     override val authPolicy = AuthPolicy.PinLogin(pinLength = 4)
     // no bottle deposit in Texas
     override val fees: List<Fee> = emptyList()
+    override val promotions: List<Promotion> = Pronghorn.PROMOTIONS
 
     override val receiptPolicy: ReceiptPolicy
         get() = settings.get().let { s ->

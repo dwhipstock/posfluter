@@ -77,6 +77,8 @@ object ItemVariants : Table("item_variants") {
     val priceCents = long("price_cents")
     val sortOrder = integer("sort_order").default(0)
     val deletedAt = utcTimestamp("deleted_at").nullable() // soft delete (M6)
+    // what the store pays for one (047); NULL = unknown
+    val costCents = long("cost_cents").nullable().databaseGenerated()
     override val primaryKey = PrimaryKey(id)
 }
 

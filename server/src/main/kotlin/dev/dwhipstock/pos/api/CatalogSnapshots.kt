@@ -18,12 +18,23 @@ import org.jetbrains.exposed.sql.selectAll
  * Call inside the same transaction as the mutation, like Outbox.write.
  */
 
+/**
+ * ItemVariants' columns this database has: the older catalog migrations
+ * snapshot items before 047 adds `cost_cents`, so it's left out until then.
+ */
+private fun variantColumns(): List<org.jetbrains.exposed.sql.Expression<*>> {
+    var has = false
+    org.jetbrains.exposed.sql.transactions.TransactionManager.current()
+        .exec("SELECT 1 FROM pragma_table_info('item_variants') WHERE name = 'cost_cents'") { has = it.next() }
+    return if (has) ItemVariants.columns else ItemVariants.columns - ItemVariants.costCents
+}
+
 internal fun itemSnapshotJson(itemId: String, photoVersion: Long? = null): JsonObject =
     itemRowSnapshot(Items.selectAll().where { Items.id eq itemId }.first(), photoVersion)
 
 private fun itemRowSnapshot(
     row: ResultRow, photoVersion: Long?,
-    variantRows: List<ResultRow> = ItemVariants.selectAll()
+    variantRows: List<ResultRow> = ItemVariants.select(variantColumns())
         .where { ItemVariants.itemId eq row[Items.id] }
         .orderBy(ItemVariants.sortOrder).toList(),
 ): JsonObject {
@@ -35,6 +46,7 @@ private fun itemRowSnapshot(
                 put("labelFr", v[ItemVariants.labelFr])
                 put("labelEn", v[ItemVariants.labelEn])
                 put("priceCents", v[ItemVariants.priceCents])
+                v.getOrNull(ItemVariants.costCents)?.let { put("costCents", it) }
                 put("sortOrder", v[ItemVariants.sortOrder])
                 put("deleted", v[ItemVariants.deletedAt] != null)
             }
@@ -56,6 +68,8 @@ private fun itemRowSnapshot(
         if (row[Items.photoPath] != null) row[Items.photoSource]?.let { put("photoSource", it) }
         // retail shelf facts (038), only where they differ from a pub item
         row[Items.barcode]?.let { put("barcode", it) }
+        // what one costs the store (047): the first variant's, for the portal's margins
+        variantRows.firstOrNull()?.getOrNull(ItemVariants.costCents)?.let { put("costCents", it) }
         if (row[Items.ageRestricted]) put("ageRestricted", true)
         if (!row[Items.taxable]) put("taxable", false)
         if (row[Items.crvSize] != "NONE") {
@@ -97,7 +111,7 @@ internal fun allLiveItemsJson(): JsonArray = JsonArray(liveItemSnapshots(null))
  */
 internal fun liveItemSnapshots(ids: Collection<String>?): List<JsonObject> {
     val wanted = ids?.toSet()
-    val variantsByItem = ItemVariants.selectAll().orderBy(ItemVariants.sortOrder).toList()
+    val variantsByItem = ItemVariants.select(variantColumns()).orderBy(ItemVariants.sortOrder).toList()
         .let { rows -> if (wanted == null) rows else rows.filter { it[ItemVariants.itemId] in wanted } }
         .groupBy { it[ItemVariants.itemId] }
     return Items.selectAll().where { Items.deletedAt.isNull() }.orderBy(Items.id).toList()

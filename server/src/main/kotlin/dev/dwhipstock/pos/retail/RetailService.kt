@@ -44,6 +44,8 @@ class RetailService(
     private val config: CustomerConfig,
     private val checks: CheckService,
     private val lookup: ProductLookup = ProductLookup.NONE,
+    /** age.check: an ID for every restricted sale (default), or a visual check over N (never for tobacco). */
+    private val ageCheckMode: dev.dwhipstock.pos.sdk.AgeCheckMode = dev.dwhipstock.pos.sdk.AgeCheckMode.ALWAYS,
 ) {
     companion object {
         const val COUNTER_ZONE = "counter"
@@ -123,6 +125,7 @@ class RetailService(
         if (check[Checks.status] !in listOf("OPEN", "TOTAL_LOCKED"))
             throw ConflictException("check $checkId is ${check[Checks.status]}", "check_not_open")
         val m = method.trim().uppercase()
+        if (m == dev.dwhipstock.pos.restaurant.AgeGate.VISUAL) return@transaction visualCheck(checkId, cashierSawId, userId)
         val dates: IdDates? = when (m) {
             "SCAN" -> Aamva.parse(scan)
             "MANUAL" -> AgeMath.parseIsoDate(dateOfBirth)?.let { IdDates(it, null) }
@@ -152,6 +155,41 @@ class RetailService(
             put("checkedAt", VenueClock.iso(now))
         })
         AgeCheckResult(verdict.passed, verdict.ageYears, legalAge, verdict.reason, checks.getCheck(checkId))
+    }
+
+    /**
+     * `age.check=looks-under:N`: the cashier confirms the customer clearly looks
+     * over N, no ID taken. Refused while the store asks for an ID every time,
+     * and for a sale with tobacco or vape (always an ID). Only the outcome is kept.
+     */
+    private fun visualCheck(checkId: Int, confirmed: Boolean, userId: String): AgeCheckResult {
+        val over = ageCheckMode.looksOver
+            ?: throw ConflictException("this store checks an ID for every age-restricted sale", "id_required")
+        if (dev.dwhipstock.pos.restaurant.AgeGate.tobaccoOnSale(checkId))
+            throw ConflictException("tobacco and vape always need an ID check", "id_required_tobacco")
+        if (!confirmed) throw BadRequestException("confirm the customer looks over $over", "not_confirmed")
+        val now = VenueClock.now()
+        val legalAge = config.legalAge
+        AgeChecks.insertAndGetId {
+            it[AgeChecks.checkId] = checkId
+            it[AgeChecks.method] = dev.dwhipstock.pos.restaurant.AgeGate.VISUAL
+            it[passed] = true
+            it[ageYears] = null
+            it[AgeChecks.legalAge] = legalAge
+            it[reason] = null
+            it[checkedBy] = userId
+            it[checkedAt] = now
+        }
+        Outbox.write("age.checked", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("method", dev.dwhipstock.pos.restaurant.AgeGate.VISUAL)
+            put("passed", true)
+            put("legalAge", legalAge)
+            put("looksOver", over)
+            put("checkedBy", userId)
+            put("checkedAt", VenueClock.iso(now))
+        })
+        return AgeCheckResult(true, null, legalAge, null, checks.getCheck(checkId))
     }
 
     /** A suggested name for an unknown barcode (Open Food Facts), or null. Never throws. */

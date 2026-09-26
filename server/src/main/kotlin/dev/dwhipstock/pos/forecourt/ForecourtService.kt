@@ -265,11 +265,16 @@ class ForecourtService(
                     it[volumeMilli] = t.volumeMilli
                     it[priceMills] = t.priceMills
                     it[amountCents] = t.amountCents
+                    costMills(t.grade)?.let { c ->
+                        it[costMills] = c
+                        it[costCents] = fuelAmountCents(t.volumeMilli, c)
+                    }
                     it[createdAt] = VenueClock.now()
                     it[completedAt] = VenueClock.now()
                 }.value
                 val item = FuelItems.gradeItemId(t.grade)
-                checks.addFuelLine(checkId, item, FuelItems.gradeVariantId(t.grade), t.amountCents, id)
+                checks.addFuelLine(checkId, item, FuelItems.gradeVariantId(t.grade), t.amountCents, id,
+                    unitCostCents = costMills(t.grade)?.let { fuelAmountCents(t.volumeMilli, it) })
             }
         } catch (e: Exception) {
             runCatching { adapter.unlock(trxId) }
@@ -481,6 +486,10 @@ class ForecourtService(
                 it[volumeMilli] = t.volumeMilli
                 it[priceMills] = t.priceMills
                 it[amountCents] = dispensed
+                costMills(t.grade)?.let { c ->
+                    it[costMills] = c
+                    it[costCents] = fuelAmountCents(t.volumeMilli, c)
+                }
                 it[refundCents] = change
                 it[FuelSales.refundId] = refundId
                 it[completedAt] = VenueClock.now()
@@ -557,6 +566,9 @@ class ForecourtService(
         }
     }
 
+    /** The store's cost per gallon of [grade], when it knows it. */
+    private fun costMills(grade: String?): Long? = grades.firstOrNull { it.code == grade }?.costMills?.takeIf { it > 0 }
+
     private fun gradeName(code: String?, fallback: String?): String =
         grades.firstOrNull { it.code == code }?.name ?: fallback ?: code ?: "?"
 
@@ -574,6 +586,9 @@ class ForecourtService(
             put("volumeMilli", r[FuelSales.volumeMilli] ?: 0)
             put("priceMills", r[FuelSales.priceMills] ?: 0)
             put("amountCents", r[FuelSales.amountCents] ?: 0)
+            // the fuel's cost: a gas station's margin is a few cents a gallon
+            r[FuelSales.costMills]?.let { put("costMills", it) }
+            r[FuelSales.costCents]?.let { put("costCents", it) }
             put("mode", r[FuelSales.mode])
             if (r[FuelSales.mode] == FuelMode.PREPAY.name) {
                 put("prepaidCents", r[FuelSales.prepaidCents] ?: 0)
