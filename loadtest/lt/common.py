@@ -407,8 +407,20 @@ def open_files(pid: int) -> int | None:
         return None
 
 
+def built_commit() -> str:
+    """The commit the jars under test were built from (scripts/load-test.sh
+    writes it at build time), else the current one."""
+    try:
+        with open(os.path.join(WORK, "build-commit")) as f:
+            return f.read().strip()
+    except OSError:
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=REPO)
+        return r.stdout.strip()
+
+
 def save_result(name: str, data: dict) -> str:
     os.makedirs(RESULTS, exist_ok=True)
+    data = {"commit": built_commit()} | data
     path = os.path.join(RESULTS, f"{name}.json")
     with open(path, "w") as f:
         json.dump(data, f, indent=1)

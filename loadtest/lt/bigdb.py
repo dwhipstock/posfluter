@@ -18,7 +18,7 @@ import time
 import urllib.parse
 
 from . import store as store_lt
-from .common import PORTS, WORK, Client, fresh_dir, load_result, log, save_result, start_simulator, start_store, summary
+from .common import PORTS, WORK, Client, built_commit, fresh_dir, load_result, log, save_result, start_simulator, start_store, summary
 
 # table → primary key, foreign keys (column → table), unique text columns, timestamps
 TABLES = {
@@ -217,7 +217,7 @@ def run(kinds: list[str], target: int, seconds: float) -> dict:
             lv = store_lt.run_level(scn, 10, seconds, st.pid, seed=10, pins=pins)
             log(f"bigdb {kind}: 10 devices on a year of sales → {lv['sales_per_min']} sales/min, "
                 f"p50 {lv['all']['p50']} ms, p95 {lv['all']['p95']} ms, p99 {lv['all']['p99']} ms, errors {lv['errors']}")
-            results[kind] = {"grow": g, "db": s, "startup_s": st.extra["startup_s"], "history": history, "load10": lv}
+            results[kind] = {"grow": g, "db": s, "startup_s": st.extra["startup_s"], "history": history, "load10": lv, "commit": built_commit()}
         finally:
             for p in procs:
                 p.stop()

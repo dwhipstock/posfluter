@@ -232,18 +232,27 @@ def charts(store: dict, sync: dict | None, soak: dict | None) -> list[str]:
 
 def run() -> str:
     store = {k: r for k in ("restaurant", "retail", "gas") if (r := load_result(f"store-{k}"))}
-    bigdb = load_result("bigdb") or {}
+    raw_bigdb = load_result("bigdb") or {}
+    bigdb = {k: raw_bigdb[k] for k in ("restaurant", "retail", "gas") if k in raw_bigdb}
     sync = load_result("sync")
     soak = load_result("soak")
     m = machine()
-    commit = sh("git", "rev-parse", "--short", "HEAD")
-    dirty = " (with uncommitted changes)" if sh("git", "status", "--porcelain", "--untracked-files=no") else ""
+    # the commit each scenario's jars were built from (a partial rerun can mix them)
+    built: dict[str, list[str]] = {}
+    for label, r in [*((f"store {SHORT[k]}", v) for k, v in store.items()),
+                     *((f"history {SHORT[k]}", v) for k, v in bigdb.items()),
+                     ("sync + portal", sync), ("soak", soak)]:
+        if r:
+            built.setdefault(r.get("commit") or "unknown", []).append(label)
+    commits = list(built) or [sh("git", "rev-parse", "--short", "HEAD")]
     made = charts(store, sync, soak)
     L: list[str] = []
     w = L.append
     w("# Load test report")
     w("")
-    w(f"Commit `{commit}`{dirty} · generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} · "
+    stamp = (f"Commit `{commits[0]}`" if len(commits) == 1 else
+             "Commits " + "; ".join(f"`{c}` ({', '.join(labels)})" for c, labels in built.items()))
+    w(f"{stamp} · generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} · "
       f"{m['cpu']}, {m['cores']} cores, {m['memory_gb']} GB, {m['os']} · regenerate with "
       "`scripts/load-test.sh all`")
     w("")
