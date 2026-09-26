@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Point the Vieux-Port Android tablet's cloud sync at THIS Mac's local demo stack
+# Point a tablet store's cloud sync at THIS Mac's local demo stack
 # (scripts/demo-up.sh) over the LAN. Stages ONLY the sync settings; the tablet's
 # store data (menu, staff, sales, identity) is never touched. The POS applies
 # them on its next start (TabletStoreService.applyStagedCloudSettings) and then
@@ -12,6 +12,14 @@
 #   scripts/tablet-cloud-config.sh --no-restart  # stage only (applied on next app start)
 #   scripts/tablet-cloud-config.sh --print       # show the settings (key masked), no adb
 #   scripts/tablet-cloud-config.sh --install-id <id>   # adopt this sync identity (see below)
+#   scripts/tablet-cloud-config.sh --app sagepoppy     # the Sage & Poppy app (see below)
+#
+# --app copperlantern|sagepoppy picks which POS app on the tablet (default
+# copperlantern = Vieux-Port, key STORE_API_KEY; sagepoppy = Sage & Poppy, key
+# STORE_API_KEY_SAGE_POPPY). The cloud pins each venue to ONE store database
+# (its install id): while the Mac's desktop Sage & Poppy store syncs to this
+# cloud, the tablet's Sage & Poppy app must not (docs/demo-runbook.md, "Two
+# apps on one tablet"; scripts/tablet-sagepoppy-setup.sh).
 #
 # A tablet store that has NEVER synced has no install id, and the POS refuses to
 # re-point it (logged as "REFUSED to re-point cloud sync"; it keeps starting
@@ -25,9 +33,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/tablet-app.sh"
+tablet_app_parse "$@"; set -- "${TABLET_ARGS[@]+"${TABLET_ARGS[@]}"}"
 ENV_FILE="$REPO_ROOT/.env.local"
-PACKAGE="${POS_PACKAGE:-dev.dwhipstock.pos_client}"
-STAGING="/sdcard/Android/data/$PACKAGE/files/migration"
+STAGING="$TABLET_FILES/migration"
+case "$TABLET_APP" in
+  sagepoppy) KEY_NAME=STORE_API_KEY_SAGE_POPPY; STORE_NAME="Sage & Poppy";;
+  *) KEY_NAME=STORE_API_KEY; STORE_NAME="Vieux-Port";;
+esac
 MODE=""
 INSTALL_ID="${STORE_INSTALL_ID:-}"
 while [[ $# -gt 0 ]]; do
@@ -39,8 +52,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -f "$ENV_FILE" ]] || { echo "ERROR: $ENV_FILE missing — run scripts/demo-up.sh first." >&2; exit 1; }
-KEY="$(grep '^STORE_API_KEY=' "$ENV_FILE" | tail -1 | cut -d= -f2-)"
-[[ -n "$KEY" && "$KEY" != replace-with-* ]] || { echo "ERROR: no STORE_API_KEY in $ENV_FILE — run scripts/demo-up.sh." >&2; exit 1; }
+KEY="$(grep "^$KEY_NAME=" "$ENV_FILE" | tail -1 | cut -d= -f2-)"
+[[ -n "$KEY" && "$KEY" != replace-with-* ]] || { echo "ERROR: no $KEY_NAME in $ENV_FILE — run scripts/demo-up.sh." >&2; exit 1; }
 
 LAN_IP="${LAN_IP:-$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)}"
 [[ -n "$LAN_IP" ]] || { echo "ERROR: no LAN IP on en0/en1; set LAN_IP=<this Mac's Wi-Fi address>." >&2; exit 1; }
@@ -57,8 +70,7 @@ if [[ "$MODE" == "--print" ]]; then
   exit 0
 fi
 
-command -v adb >/dev/null 2>&1 || { echo "ERROR: adb not found (brew install --cask android-platform-tools)." >&2; exit 1; }
-adb get-state >/dev/null 2>&1 || { echo "ERROR: no tablet on adb (USB debugging on? adb devices)." >&2; exit 1; }
+tablet_require_adb
 
 # Best-effort pre-check (debuggable builds only; a release build hides its files
 # and the tablet itself enforces the same rule at startup).
@@ -82,12 +94,11 @@ printf 'cloud.url=%s\ncloud.apiKey=%s\nportal.url=%s\n' "$SYNC_URL" "$KEY" "$POR
 
 adb shell mkdir -p "$STAGING"
 adb push "$TMP/store-cloud.properties" "$STAGING/store-cloud.properties" >/dev/null
-echo "Staged Vieux-Port sync → $SYNC_URL (portal $PORTAL_URL)."
+echo "Staged $STORE_NAME sync ($TABLET_APP_NAME) → $SYNC_URL (portal $PORTAL_URL)."
 
 if [[ "$MODE" != "--no-restart" ]]; then
-  adb shell am force-stop "$PACKAGE"
-  adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-  echo "Restarted the POS. It applies the settings at startup; watch with:"
+  tablet_restart_app
+  echo "Restarted $TABLET_APP_NAME. It applies the settings at startup; watch with:"
   echo "  adb logcat -s TabletStore"
   echo "(a never-synced store logs REFUSED and keeps its current settings)"
 fi

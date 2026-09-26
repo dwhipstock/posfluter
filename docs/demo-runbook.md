@@ -8,7 +8,7 @@ shop in USD, English/Spanish (below):
 | --- | --- | --- | --- |
 | Copper Lantern — Vieux-Port | `vieux-port` | the Android tablet | `STORE_API_KEY` |
 | Copper Lantern — Plateau | `plateau` | this Mac (`DesktopMain.kt`, `POS_VENUE=plateau`) | `STORE_API_KEY_PLATEAU` |
-| Sage & Poppy Bottle Shop | `sage-poppy` | this Mac, `:8082` (`POS_VENUE=sage-poppy`) | `STORE_API_KEY_SAGE_POPPY` |
+| Sage & Poppy Bottle Shop | `sage-poppy` | this Mac, `:8082` (`POS_VENUE=sage-poppy`); or the Sage & Poppy app on the same tablet, see [Two apps on one tablet](#two-apps-on-one-tablet) | `STORE_API_KEY_SAGE_POPPY` |
 
 Both stores share the pub menu in seven categories (Beer & Cider, Wine,
 Cocktails, Starters, Burgers & Sandwiches, Mains & Salads, Desserts). Plateau
@@ -101,9 +101,9 @@ serve `client/build/web`). Sign in with a PIN, then:
 - **Language**: the EN/ES pill in the header; a cashier's own language
   (Cajera Demo = Spanish) is used after sign-in and on their receipts.
 
-On a tablet, `store.venue=sage-poppy` in
-`/sdcard/Android/data/dev.dwhipstock.pos_client/files/store.properties` makes it
-this store (one tablet per store).
+On a tablet it is its own app, **Sage & Poppy POS**
+(`dev.dwhipstock.pos_sagepoppy`, store on `:8082`), installed next to the
+Copper Lantern app; see [Two apps on one tablet](#two-apps-on-one-tablet).
 
 ### Counting and receiving stock (the stock app)
 
@@ -163,10 +163,12 @@ deliveries tabs after the seed (08–11).
    manager).
 3. Join the **store's Wi-Fi** (the same network as the counter tablet / the
    Mac running the store).
-4. Open **Stock**. It looks for the store on the Wi-Fi (a scan for port
-   `8080`; the counter tablet serves there). The Mac demo store is on `:8082`,
-   so after a few seconds tap **Connection help** and type
-   `http://<Mac LAN IP>:8082` (the IP is in the `demo-up.sh` banner).
+4. Open **Stock**. It looks for the store on the Wi-Fi: a scan for port
+   `8082` (Sage & Poppy, on the tablet's Sage & Poppy app or the Mac) and then
+   `8080` (Copper Lantern); once connected it looks on that same port first
+   next time. To pick a store yourself, tap **Connection help** and type its
+   address, e.g. `http://<tablet or Mac LAN IP>:8082` (the Mac's IP is in the
+   `demo-up.sh` banner).
 5. **Pair / sign in**: the same as the terminals. A store on the LAN (the
    demo) needs no pairing — sign in with a staff PIN: cashier `9999`,
    manager `1234`. A cloud-hosted store (device gate on) first shows the
@@ -261,6 +263,90 @@ keeps starting, signing in and selling; only its sync pauses. To send the
 tablet back to another cloud, stage that cloud's URL and Vieux-Port key the
 same way.
 
+## Two apps on one tablet
+
+Copper Lantern and Sage & Poppy can both be installed **and running** on the
+one Android tablet. They are two separate Android apps built from the same
+code, each with its own everything:
+
+| | Copper Lantern POS | Sage & Poppy POS |
+| --- | --- | --- |
+| build | `flutter build apk --release` (as always) | `flutter build apk --release --dart-define=POS_BRAND=sagepoppy` |
+| app id | `dev.dwhipstock.pos_client` (unchanged, so the live Vieux-Port install upgrades in place and keeps its data) | `dev.dwhipstock.pos_sagepoppy` |
+| store | `vieux-port` on `:8080` | `sage-poppy` on `:8082` |
+| staff app / guest QRs | `http://<tablet IP>:8080/…` | `http://<tablet IP>:8082/…` |
+| database, photos, receipts, cloud key, install id | the app's own private files | its own private files |
+| settings file | `/sdcard/Android/data/dev.dwhipstock.pos_client/files/store.properties` | `/sdcard/Android/data/dev.dwhipstock.pos_sagepoppy/files/store.properties` |
+| launcher icon / name | the Copper Lantern logo, "Copper Lantern POS" | the Sage & Poppy mark, "Sage & Poppy POS" |
+
+(For the demo tablet add `POS_DEMO_BUILD=true` in front, as before: staff-app
+MFA off.) Each app keeps its store alive with its own background service, so
+switching between them in the recent-apps view never stops the other store.
+`store.venue` in an app's store.properties still overrides its built-in store.
+The stock phone app connects to either (see step 4 above).
+
+Every `scripts/tablet-*.sh` helper takes `--app copperlantern|sagepoppy`
+(default `copperlantern`), so it writes that app's store.properties and
+restarts only that app:
+
+```sh
+scripts/tablet-print-mode.sh digital --app sagepoppy
+scripts/tablet-staff-mfa.sh off --app sagepoppy
+scripts/tablet-cloud-config.sh --app sagepoppy     # the local Docker cloud, STORE_API_KEY_SAGE_POPPY
+scripts/tablet-sagepoppy-setup.sh status           # what the Sage & Poppy app has
+```
+
+Install (the tablet on USB):
+
+```sh
+cd client
+POS_DEMO_BUILD=true flutter build apk --release --dart-define=POS_BRAND=sagepoppy
+adb install build/app/outputs/flutter-apk/app-release.apk     # new app, next to Copper Lantern
+scripts/tablet-sagepoppy-setup.sh local-only                  # store.venue=sage-poppy, restart it
+```
+
+### Sage & Poppy on the tablet and the cloud
+
+The cloud pins each store to **one** store database (its install id): the
+first push records it, any other database for the same store is refused
+(`409 install_mismatch`). The hosted portal's `sage-poppy` store is fed by the
+Mac's desktop store today, so the tablet app cannot simply be given the same
+key: it would be a second database for that store and its sale numbers would
+collide with the Mac's. Pick one:
+
+1. **Local-only (the default, nothing to change anywhere).**
+   `scripts/tablet-sagepoppy-setup.sh local-only`. The tablet runs Sage &
+   Poppy on its own demo catalog with no cloud; the Mac keeps feeding the
+   portal. Tablet Sage & Poppy sales do not reach the portal.
+2. **Move the store from the Mac to the tablet (no hosted change needed).**
+   The tablet takes over the Mac store's database, so it keeps the same install
+   id and the hosted cloud accepts it as the same store:
+   1. stop the Mac's Sage & Poppy store (nothing may listen on `:8082` on the
+      Mac; if you use `demo-autostart.sh`, stop it there);
+   2. install the Sage & Poppy app but do not open it yet (if it already has a
+      store: `adb shell pm clear dev.dwhipstock.pos_sagepoppy`, which deletes
+      that local-only store);
+   3. `scripts/tablet-sagepoppy-setup.sh move-from-mac`. It copies the Mac
+      store's database, photos/receipts/bills and hosted cloud key
+      (`.demo/sage-poppy/store.env`) for the tablet's one-time import, and sets
+      the Mac store to `DEMO_CLOUD=offline` so it never syncs as the same store
+      again. The tablet checks the backup (integrity, identity) before
+      installing it: `adb logcat -s TabletStore` shows `Validated store backup
+      imported`.
+
+   After this the Mac's Sage & Poppy is a local practice copy only; the demo
+   runs the bottle shop on the tablet. `demo-reset.sh --store sage-poppy`
+   resets the Mac copy, not the tablet.
+3. **A fresh tablet store on the hosted cloud** needs a hosted change (clearing
+   the pinned install id for `sage-poppy`, and its old history no longer
+   matching this store). Not recommended; not done by any script.
+
+Memory and battery, both apps open with their stores running (Galaxy Tab A9+,
+5.5 GB RAM): about 190 MB for the app in front and 145 MB for the one behind;
+2.5 GB of RAM still free; both idle at ~0% CPU between sales. The second store
+adds no work while nobody uses it, so battery use is about the same as one
+app with the screen on.
+
 ## Receipt printing: paper or digital
 
 A config-file switch (no UI) decides whether sale receipts go to the thermal
@@ -280,7 +366,8 @@ local only and never depends on the network.
 
 **Tablet** (release build, so via adb): the POS reads
 `/sdcard/Android/data/dev.dwhipstock.pos_client/files/store.properties` at
-store startup.
+store startup (the Sage & Poppy app: `dev.dwhipstock.pos_sagepoppy`; add
+`--app sagepoppy` to the script).
 
 ```sh
 scripts/tablet-print-mode.sh digital   # write print.receipts=digital + restart the app

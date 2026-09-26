@@ -34,6 +34,26 @@ val dartDefines: Map<String, String> = (project.findProperty("dart-defines") as 
     ?.toMap() ?: emptyMap()
 val stockApp = dartDefines["POS_APP"] == "stock"
 
+// Which store brand this counter-tablet build is (--dart-define=POS_BRAND=…,
+// read in Dart by lib/app_mode.dart). Each brand is its own Android app so both
+// can be installed and run on one tablet at once: own application id (so own
+// private DB/files and external store.properties), label, launcher icon,
+// default venue, embedded-store port and service notification. Copper Lantern
+// keeps the original id so the live tablet install upgrades in place.
+data class Brand(
+    val applicationId: String, val label: String, val icon: String,
+    val storePort: Int, val defaultVenue: String,
+)
+val brands = mapOf(
+    "copperlantern" to Brand("dev.dwhipstock.pos_client", "Copper Lantern POS", "@mipmap/ic_launcher",
+        8080, ""),
+    "sagepoppy" to Brand("dev.dwhipstock.pos_sagepoppy", "Sage & Poppy POS", "@mipmap/ic_launcher_sagepoppy",
+        8082, "sage-poppy"),
+)
+val brandName = dartDefines["POS_BRAND"]?.trim()?.takeIf { it.isNotEmpty() } ?: "copperlantern"
+val brand = brands[brandName]
+    ?: error("POS_BRAND=$brandName is not one of ${brands.keys.joinToString("|")}")
+
 val sqliteJdbcNative by configurations.creating
 val stageSqliteNative by tasks.registering(Sync::class) {
     from({ zipTree(sqliteJdbcNative.singleFile) }) {
@@ -70,9 +90,14 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         // The stock app installs next to the POS, never over it.
-        applicationId = if (stockApp) "dev.dwhipstock.pos_stock" else "dev.dwhipstock.pos_client"
+        // (the stock app is one LAN client for either brand; POS_BRAND is ignored)
+        applicationId = if (stockApp) "dev.dwhipstock.pos_stock" else brand.applicationId
         // The counter tablet hosts the store; the stock app is a LAN client.
         buildConfigField("boolean", "EMBEDDED_STORE", (!stockApp).toString())
+        buildConfigField("int", "STORE_PORT", brand.storePort.toString())
+        buildConfigField("String", "DEFAULT_VENUE", "\"${brand.defaultVenue}\"")
+        buildConfigField("String", "SERVICE_TITLE", "\"${brand.label}\"")
+        manifestPlaceholders["appIcon"] = if (stockApp) "@mipmap/ic_launcher" else brand.icon
         manifestPlaceholders["screenOrientation"] = if (stockApp) "portrait" else "sensorLandscape"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -87,7 +112,7 @@ android {
         debug {
             // Side-by-side verification must never overwrite the working POS.
             applicationIdSuffix = if (stockApp) ".debug" else ".embeddedtest"
-            manifestPlaceholders["appLabel"] = if (stockApp) "Stock Test" else "Copper Lantern Test"
+            manifestPlaceholders["appLabel"] = if (stockApp) "Stock Test" else brand.label.replace(" POS", " Test")
         }
         release {
             // TODO: Add your own signing config for the release build.
@@ -98,7 +123,7 @@ android {
             // Android-specific R8 rules are covered by device tests.
             isMinifyEnabled = false
             isShrinkResources = false
-            manifestPlaceholders["appLabel"] = if (stockApp) "Stock" else "Copper Lantern POS"
+            manifestPlaceholders["appLabel"] = if (stockApp) "Stock" else brand.label
         }
     }
 

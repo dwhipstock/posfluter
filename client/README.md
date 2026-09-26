@@ -24,6 +24,19 @@ flutter build apk --release --dart-define=POS_APP=stock
 An iOS build is the stock app by default (ios/, needs Xcode). See
 docs/demo-runbook.md ("Counting and receiving stock").
 
+## Two brand apps (Copper Lantern, Sage & Poppy)
+
+`--dart-define=POS_BRAND=sagepoppy` builds the Sage & Poppy counter app
+(`dev.dwhipstock.pos_sagepoppy`, "Sage & Poppy POS", its store on :8082). The
+default (`copperlantern`) is the original app (`dev.dwhipstock.pos_client`,
+:8080). Both install and run side by side on one tablet; see
+android/app/build.gradle.kts and docs/demo-runbook.md ("Two apps on one
+tablet").
+
+```bash
+flutter build apk --release --dart-define=POS_BRAND=sagepoppy
+```
+
 ## Tablet: staff-app MFA
 
 The tablet-hosted staff ordering app requires MFA by default. Turn it off

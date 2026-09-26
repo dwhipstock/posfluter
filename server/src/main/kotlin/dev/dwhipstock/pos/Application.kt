@@ -99,6 +99,10 @@ fun Application.module(
     cloudSyncUrl: String? = System.getenv("CLOUD_SYNC_URL"),
     cloudSyncApiKey: String? = System.getenv("CLOUD_SYNC_API_KEY"),
     publicUrl: String? = System.getenv("POS_PUBLIC_URL"),
+    // the port this store listens on, for the auto-detected LAN address (table
+    // QRs, /cloud/info, the portal heartbeat) when publicUrl is unset. The
+    // tablet passes its build's port (8080 Copper Lantern, 8082 Sage & Poppy).
+    lanPort: Int = System.getenv("POS_PORT")?.toIntOrNull() ?: 8080,
     reportingPortalUrl: String? = System.getenv("REPORTING_PORTAL_URL"),
     physicalPrinterEnabled: Boolean = true,
     // staff.app.mfa=on|off (POS_STAFF_APP_MFA / POS_CONFIG_FILE; the tablet
@@ -154,8 +158,8 @@ fun Application.module(
     // POS_PUBLIC_URL wins; otherwise auto-detect the LAN address so printed
     // table QRs work out of the box at the venue.
     val publicBaseUrl = publicUrl
-        ?: detectLanIpv4()?.let { "http://$it:8080" }
-        ?: "http://192.168.1.100:8080"
+        ?: detectLanIpv4()?.let { "http://$it:$lanPort" }
+        ?: "http://192.168.1.100:$lanPort"
     val settingsRepo = SettingsRepository()
     // Real ESC/POS network printer, wrapping the virtual printer for the audit
     // spool + receipt.printed outbox (unchanged), then also pushing a French-capable
@@ -174,7 +178,7 @@ fun Application.module(
         },
     )
     val publicUrlProvider = {
-        publicUrl ?: detectLanIpv4()?.let { "http://$it:8080" } ?: publicBaseUrl
+        publicUrl ?: detectLanIpv4()?.let { "http://$it:$lanPort" } ?: publicBaseUrl
     }
     val config: dev.dwhipstock.pos.sdk.CustomerConfig = if (sagePoppy) SagePoppyConfig(
         settings = settingsRepo,
@@ -231,7 +235,7 @@ fun Application.module(
         // fake QR fallback, so the portal shows "offline" instead of a dead IP.
         val lanBaseUrlProvider: () -> String? = {
             publicUrl?.takeIf { it.isNotBlank() }
-                ?: detectLanIpv4()?.let { "http://$it:8080" }
+                ?: detectLanIpv4()?.let { "http://$it:$lanPort" }
         }
         val transport = HttpCloudTransport(syncUrl, syncKey)
         if (pairingService == null) pairingService = PairingService(transport)
@@ -368,7 +372,7 @@ fun Application.module(
             ?: portalUrlFrom(syncUrl)
         cloudRoutes(portalUrl) {
             publicUrl?.takeIf { it.isNotBlank() }
-                ?: detectLanIpv4()?.let { "http://$it:8080" }
+                ?: detectLanIpv4()?.let { "http://$it:$lanPort" }
         }
     }
 }
