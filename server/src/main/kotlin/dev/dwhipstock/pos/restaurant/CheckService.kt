@@ -902,8 +902,7 @@ class CheckService(private val config: CustomerConfig) {
         val table = DiningTables.selectAll().where { DiningTables.id eq check[Checks.tableId] }.first()
         val totals = groupTotals(check, groups)[groups.indexOf(group)]
 
-        val variantCounts = ItemVariants.selectAll()
-            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+        val variantCounts = variantCountsOnCheck(checkId)
         val items = BillGroupAllocations
             .join(CheckLines, JoinType.INNER, BillGroupAllocations.lineId, CheckLines.id)
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
@@ -986,8 +985,7 @@ class CheckService(private val config: CustomerConfig) {
         val totals = computeTotals(check)
 
         // variant label only matters when the item actually has multiple sizes
-        val variantCounts = ItemVariants.selectAll()
-            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+        val variantCounts = variantCountsOnCheck(checkId)
 
         // LEFT joins: an open line (null item/variant) renders from display_name
         val itemRows = CheckLines
@@ -1664,9 +1662,7 @@ class CheckService(private val config: CustomerConfig) {
 
         // same disambiguation rule as receipts: variant label only when the
         // item has more than one live size
-        val liveVariantCounts = ItemVariants.selectAll()
-            .where { ItemVariants.deletedAt.isNull() }
-            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+        val liveVariantCounts = variantCountsOnCheck(checkId, liveOnly = true)
         val activeRows = CheckLines
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
             .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
@@ -2050,8 +2046,7 @@ class CheckService(private val config: CustomerConfig) {
         val totals = computeTotals(check)
         // same rule as the receipt: the variant label only disambiguates when
         // the item actually has multiple sizes (bottle/pitcher/tower)
-        val variantCounts = ItemVariants.selectAll()
-            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+        val variantCounts = variantCountsOnCheck(checkId)
         val lineRows = CheckLines
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
             .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
