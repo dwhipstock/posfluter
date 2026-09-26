@@ -26,6 +26,9 @@ COMPOSE_FILE="docker-compose.local.yml"
 PROJECT="${POS_DEMO_PROJECT:-pos-local}"
 ENV_FILE=".env.local"
 PLATEAU_DIR="$REPO_ROOT/.demo/plateau"
+# staff web app sign-in: off = PIN only for the demo stores started here
+# (the product default is on). POS_STAFF_APP_MFA=on scripts/demo-up.sh to demo TOTP.
+STAFF_APP_MFA="${POS_STAFF_APP_MFA:-off}"
 PLATEAU_PORT="${PLATEAU_PORT:-8080}"
 SAGE_POPPY_DIR="$REPO_ROOT/.demo/sage-poppy"
 # not 8081: that's the cloud API
@@ -151,6 +154,7 @@ else
     POS_BILLS_DIR="$PLATEAU_DIR/bills" \
     POS_PHOTOS_DIR="$PLATEAU_DIR/photos" \
     POS_PUBLIC_URL="$PUBLIC_URL" \
+    POS_STAFF_APP_MFA="$STAFF_APP_MFA" \
     VENUE_TZ="$VENUE_TZ" \
     CLOUD_SYNC_URL="http://localhost:8081" \
     CLOUD_SYNC_API_KEY="$STORE_API_KEY_PLATEAU" \
@@ -207,6 +211,7 @@ else
     POS_PHOTOS_DIR="$SAGE_POPPY_DIR/photos" \
     POS_PUBLIC_URL="http://${LAN_IP}:${SAGE_POPPY_PORT}" \
     VENUE_TZ="America/Los_Angeles" \
+    POS_STAFF_APP_MFA="$STAFF_APP_MFA" \
     POS_LEGAL_AGE="${POS_LEGAL_AGE:-21}" \
     CLOUD_SYNC_URL="http://localhost:8081" \
     CLOUD_SYNC_API_KEY="$STORE_API_KEY_SAGE_POPPY" \
@@ -254,7 +259,7 @@ cat <<BANNER
     sage-poppy   CLOUD_SYNC_URL=http://localhost:8081   key: STORE_API_KEY_SAGE_POPPY (this Mac)
 
   Plateau store  : http://${LAN_IP}:${PLATEAU_PORT}/health   (PIN 1234 manager, 9999 server)
-                   staff app: http://${LAN_IP}:${PLATEAU_PORT}/staff-app
+                   staff app: http://${LAN_IP}:${PLATEAU_PORT}/staff-app   (MFA: ${STAFF_APP_MFA})
                    POS UI on the Mac: cd client && flutter run -d macos
                    log: .demo/plateau/store.log
 

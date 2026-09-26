@@ -155,9 +155,9 @@ class AuthService(
         if (user == null) { rateLimiter.recordFailure(); return@transaction null }
         val uid = user[Users.id]
 
-        // Only an explicitly packaged demo build may set this false. Keep the
+        // staff.app.mfa=off (store config; default on). Keep the
         // PIN check, rate limit, and normal session expiry; leave enrolled TOTP
-        // data intact so a later MFA-on build requires it at the next login.
+        // data intact so turning it back on requires it at the next login.
         if (!staffAppMfaRequired) {
             rateLimiter.recordSuccess()
             return@transaction StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))

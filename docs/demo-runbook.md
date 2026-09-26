@@ -199,6 +199,33 @@ docker store**: `POS_CASH_ROUNDING=nickel|off`, or `cash.rounding` in the
 `Cash rounding: <mode> (<source>)` at startup; a bad value means `nickel`
 (logged) and never fails startup.
 
+## Staff app MFA
+
+The staff web app (`/staff-app` on a phone) asks for the PIN and then an
+authenticator code (TOTP, with a 90-day trusted device). A config switch (no
+UI), default `on` for every store: `staff.app.mfa=on|off`. `off` means the PIN
+alone signs in; the PIN check, lockout and session expiry stay, and existing
+authenticator enrollments are kept for when it is turned back on. The
+terminal's PIN login and the owner portal (`TOTP_REQUIRED`) are unaffected.
+
+**Tablet**: `store.properties`, the same file as `print.receipts`.
+
+```sh
+scripts/tablet-staff-mfa.sh off   # write staff.app.mfa=off + restart the app
+scripts/tablet-staff-mfa.sh on    # back to PIN + authenticator
+adb logcat -s TabletStore | grep 'Staff app MFA'
+```
+
+Unset there, a demo APK (`POS_DEMO_BUILD=true`) still uses its baked-in
+`staff.app.mfa.required=false`; the store.properties key wins over it.
+
+**Desktop / docker store**: `POS_STAFF_APP_MFA=on|off`, or `staff.app.mfa` in
+the `POS_CONFIG_FILE` properties file (the env var wins). `scripts/demo-up.sh`
+starts Plateau and Sage & Poppy with it `off`; `POS_STAFF_APP_MFA=on
+scripts/demo-up.sh` to demo the authenticator (restart the store to apply). The
+store logs `Staff app MFA: <on|off> (<source>)` at startup; a bad value means
+`on` (logged) and never fails startup.
+
 ## Stripe (test mode)
 
 An optional extra tender, **Card (Stripe)**, takes a card through Stripe
