@@ -319,4 +319,18 @@ void main() {
   testWidgets('menu management', (tester) async {
     await _shoot(tester, 'menu-management', const MenuManagementScreen());
   });
+
+  testWidgets('tender (French)', (tester) async {
+    Prefs.instance.lang = 'fr';
+    await _shoot(
+      tester,
+      'tender-fr',
+      TenderScreen(check: Check.fromJson(_check())),
+    );
+  });
+
+  testWidgets('menu management (French)', (tester) async {
+    Prefs.instance.lang = 'fr';
+    await _shoot(tester, 'menu-management-fr', const MenuManagementScreen());
+  });
 }

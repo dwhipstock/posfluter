@@ -71,8 +71,8 @@ export default function AccountPage() {
               onChange={setLocale}
               ariaLabel={t("account_language")}
               options={[
-                { value: "fr", label: "français" },
-                { value: "en", label: "EN" },
+                { value: "fr", label: "Français" },
+                { value: "en", label: "English" },
               ]}
             />
           </div>

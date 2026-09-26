@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 // CURRENT value; tapping flips it. `tone` adapts to the dark
 // shell chrome vs. the light login card.
 export function LangToggle({ tone = "light" }: { tone?: "light" | "dark" }) {
-  const { locale, toggleLocale } = useI18n();
+  const { locale, toggleLocale, t } = useI18n();
 
   const btn = cn(
     "rounded-md px-2 py-1 text-xs font-bold tracking-wide transition-colors",
@@ -18,7 +18,7 @@ export function LangToggle({ tone = "light" }: { tone?: "light" | "dark" }) {
 
   return (
     <div className="flex items-center gap-0.5">
-      <button type="button" onClick={toggleLocale} className={btn} aria-label="Toggle language">
+      <button type="button" onClick={toggleLocale} className={btn} aria-label={t("switch_language")}>
         {locale === "en" ? "EN" : "FR"}
       </button>
     </div>

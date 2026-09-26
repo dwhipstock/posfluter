@@ -29,7 +29,7 @@ class ScanToOrderAndShiftTest {
         val page = client.get(customerPath("t5-5"))
         assertEquals(HttpStatusCode.OK, page.status)
         val html = page.bodyAsText()
-        assertTrue("Commande depuis un téléphone portable" in html)
+        assertTrue("commandez de votre téléphone" in html)
         assertTrue("U-2" in html) // label shown; the internal id "t5-5" is not
         assertTrue("\"t5-5\"" !in html)
         assertTrue("--accent: #1565c0" in html)

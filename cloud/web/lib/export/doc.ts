@@ -111,7 +111,7 @@ export interface ExportDoc {
   scopeLabel: string;
   /** Locale-aware, e.g. "1 – 31 Jan." or "Last 7 days". */
   rangeLabel: string;
-  /** "Émettre un rapport 12 Juillet 2026 09:20" — built by the caller with the active fmt. */
+  /** "Généré le 12 juill. 2026 09:20" — built by the caller with the active fmt. */
   generatedLabel: string;
   locale: Locale;
   /** Explanatory captions (e.g. the tax decomposition note). */

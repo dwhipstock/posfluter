@@ -579,7 +579,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       ),
                       Text(
                         [
-                          '${l.bill} #${widget.checkId}',
+                          l.billNo(widget.checkId),
                           if (check.lines.isNotEmpty)
                             l.itemCount(
                               check.lines.fold(0, (n, x) => n + x.qty),

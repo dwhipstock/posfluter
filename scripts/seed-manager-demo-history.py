@@ -28,7 +28,7 @@ MENU = [
     ("amber-ale", "amber-ale:pint", "beer-cider", "Copper Amber Ale", 795),
     ("hazy-ipa", "hazy-ipa:regular", "beer-cider", "Local Hazy IPA", 825),
     ("irish-stout", "irish-stout:regular", "beer-cider", "Irish Stout", 850),
-    ("dry-cider", "dry-cider:regular", "beer-cider", "Ontario Dry Cider", 795),
+    ("dry-cider", "dry-cider:regular", "beer-cider", "Québec Dry Cider", 795),
     ("hop-water", "hop-water:regular", "beer-cider", "Sparkling Hop Water", 495),
     ("wings", "wings:regular", "starters", "Chicken Wings", 1675),
     ("poutine", "poutine:regular", "starters", "Classic Poutine", 1300),

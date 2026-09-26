@@ -224,7 +224,7 @@ class DevicePairingTest {
         assertEquals(HttpStatusCode.OK, shell.status)
         val html = shell.bodyAsText()
         assertTrue("--accent: #1565c0" in html)
-        assertTrue("const cad =" in html)
+        assertTrue("const money =" in html && "currency: store.currency" in html)
         assertTrue("const CAD =" !in html)
     }
 }

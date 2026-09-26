@@ -76,7 +76,7 @@ SEARCH_TERMS = {
     "sauvignon-blanc": "sauvignon blanc wine glass photograph",
     "rose": "rose wine glass photograph",
     "sparkling": "sparkling wine flute photograph",
-    "icewine": "ice wine dessert wine glass photograph",
+    "icewine": "ice cider dessert glass photograph",
     "copper-old-fashioned": "old fashioned cocktail photograph",
     "lantern-mule": "moscow mule cocktail photograph",
     "smoked-caesar": "caesar cocktail drink photograph",

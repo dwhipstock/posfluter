@@ -19,7 +19,7 @@ class S {
   String get countHint => _t(
     'Scan the shelf, enter what you see',
     'Escanea el estante e ingresa lo que ves',
-    'Scannez le rayon, entrez ce que vous voyez',
+    'Balayez la tablette, puis entrez ce que vous voyez',
   );
   String get receive => _t('Receive', 'Recibir', 'Réception');
   String get receiveHint => _t(
@@ -27,7 +27,7 @@ class S {
     'Registra una entrega',
     'Enregistrer une livraison',
   );
-  String get signOut => _t('Sign out', 'Cerrar sesión', 'Déconnexion');
+  String get signOut => _t('Sign out', 'Cerrar sesión', 'Se déconnecter');
   String get allSent =>
       _t('Everything is sent', 'Todo enviado', 'Tout est envoyé');
   String waiting(int n) => _t(
@@ -38,16 +38,16 @@ class S {
   String get offlineSaved => _t(
     'No connection to the store — saved on this phone',
     'Sin conexión con la tienda: guardado en este teléfono',
-    'Pas de connexion au magasin — gardé sur ce téléphone',
+    'Pas de connexion au magasin — enregistré sur ce téléphone',
   );
-  String get sending => _t('Sending…', 'Enviando…', 'Envoi…');
-  String get sendNow => _t('Send now', 'Enviar ahora', 'Envoyer');
+  String get sending => _t('Sending…', 'Enviando…', 'Envoi en cours…');
+  String get sendNow => _t('Send now', 'Enviar ahora', 'Envoyer maintenant');
   String get needsAttention =>
       _t('Needs attention', 'Requiere atención', 'À vérifier');
   String get retry => _t('Try again', 'Reintentar', 'Réessayer');
   String get discard => _t('Discard', 'Descartar', 'Abandonner');
   String get notRetail => _t(
-    'This store doesn\'t count stock.',
+    'This store doesn’t count stock.',
     'Esta tienda no lleva inventario.',
     'Ce magasin ne compte pas le stock.',
   );
@@ -58,8 +58,8 @@ class S {
       _t('Start a count', 'Empezar un conteo', 'Commencer un inventaire');
   String get countName => _t(
     'Name (e.g. Back room)',
-    'Nombre (p. ej. Bodega)',
-    'Nom (ex. Réserve)',
+    'Nombre (p. ej., Bodega)',
+    'Nom (p.\u00A0ex. Réserve)',
   );
   String get start => _t('Start', 'Empezar', 'Commencer');
   String get openCounts =>
@@ -72,9 +72,9 @@ class S {
     'Aucun inventaire ouvert. Commencez-en un.',
   );
   String get storeListUnavailable => _t(
-    'Can\'t reach the store — you can still count here.',
-    'No se puede conectar con la tienda; puedes contar aquí.',
-    'Magasin injoignable — vous pouvez compter ici.',
+    'Can’t reach the store — you can still count here.',
+    'No se puede conectar con la tienda; aun así puedes contar aquí.',
+    'Magasin injoignable — vous pouvez quand même compter ici.',
   );
   String startedBy(String who) =>
       _t('Started by $who', 'Iniciado por $who', 'Commencé par $who');
@@ -92,41 +92,47 @@ class S {
   // counting
   String get scanOrType => _t(
     'Scan or type a barcode',
-    'Escanea o escribe un código',
-    'Scannez ou tapez un code',
+    'Escanea o escribe un código de barras',
+    'Balayez ou tapez un code-barres',
   );
   String get camera => _t('Camera', 'Cámara', 'Caméra');
-  String get scanWithCamera =>
-      _t('Scan with the camera', 'Escanear con la cámara', 'Scanner');
+  String get scanWithCamera => _t(
+    'Scan with the camera',
+    'Escanear con la cámara',
+    'Balayer avec la caméra',
+  );
   String get pointAtBarcode => _t(
     'Point the camera at a barcode',
     'Apunta la cámara al código de barras',
-    'Visez un code-barres',
+    'Pointez la caméra vers un code-barres',
   );
   String get cameraUnavailable => _t(
-    'The camera isn\'t available — type the code or use a scanner.',
+    'The camera isn’t available — type the code or use a scanner.',
     'La cámara no está disponible: escribe el código o usa un escáner.',
-    'Caméra indisponible — tapez le code ou utilisez un lecteur.',
+    'Caméra non disponible — tapez le code ou utilisez un lecteur.',
   );
   String unknownCode(String code) => _t(
     'No product with barcode $code',
     'Ningún producto con el código $code',
-    'Aucun produit avec le code $code',
+    'Aucun produit avec le code-barres $code',
   );
-  String expected(int n) => _t('expected $n', 'esperado $n', 'attendu $n');
+  String expected(int n) =>
+      _t('expected $n', 'esperado: $n', 'prévu\u00A0: $n');
   String get noExpected =>
-      _t('no expected qty', 'sin cantidad esperada', 'aucune qté attendue');
+      _t('no expected qty', 'sin cantidad esperada', 'aucune quantité prévue');
   String get nothingCounted => _t(
     'Nothing counted yet. Scan a product to start.',
-    'Nada contado aún. Escanea un producto.',
-    'Rien de compté. Scannez un produit.',
+    'Aún no has contado nada. Escanea un producto para empezar.',
+    'Rien de compté pour l’instant. Balayez un produit pour commencer.',
   );
   String get review => _t('Review', 'Revisar', 'Vérifier');
   String get qty => _t('Qty', 'Cant.', 'Qté');
-  String get setQty => _t('Set quantity', 'Fijar cantidad', 'Quantité');
+  String get setQty =>
+      _t('Set quantity', 'Cambiar cantidad', 'Modifier la quantité');
   String get remove => _t('Remove', 'Quitar', 'Retirer');
   String get cancel => _t('Cancel', 'Cancelar', 'Annuler');
   String get ok => _t('OK', 'OK', 'OK');
+  String get torch => _t('Flashlight', 'Linterna', 'Lampe de poche');
   String get discardCount => _t(
     'Discard this count',
     'Descartar este conteo',
@@ -135,12 +141,12 @@ class S {
   String get discardCountConfirm => _t(
     'Discard this count? Nothing is sent to the store.',
     '¿Descartar este conteo? No se envía nada a la tienda.',
-    'Abandonner ? Rien n\'est envoyé au magasin.',
+    'Abandonner cet inventaire\u00A0? Rien n’est envoyé au magasin.',
   );
 
   // review
   String get varianceReview =>
-      _t('Review the count', 'Revisar el conteo', 'Vérifier l\'inventaire');
+      _t('Review the count', 'Revisar el conteo', 'Vérifier l’inventaire');
   String get counted => _t('Counted', 'Contado', 'Compté');
   String get expectedCol => _t('Expected', 'Esperado', 'Attendu');
   String get variance => _t('Variance', 'Diferencia', 'Écart');
@@ -161,11 +167,12 @@ class S {
     'Tous les téléphones de cet inventaire, selon le magasin',
   );
   String get thisPhoneOnly => _t(
-    'This phone\'s counts (the store is out of reach)',
-    'Conteos de este teléfono (la tienda no responde)',
-    'Comptes de ce téléphone (magasin injoignable)',
+    'This phone’s counts (the store is out of reach)',
+    'Solo los conteos de este teléfono (la tienda no responde)',
+    'Comptes de ce téléphone seulement (magasin injoignable)',
   );
-  String get submit => _t('Submit count', 'Enviar conteo', 'Soumettre');
+  String get submit =>
+      _t('Submit count', 'Enviar conteo', 'Soumettre l’inventaire');
   String get managerApproves => _t(
     'A manager approves variances',
     'Un gerente aprueba las diferencias',
@@ -177,8 +184,8 @@ class S {
       _t('Count submitted', 'Conteo enviado', 'Inventaire soumis');
   String get submittedOffline => _t(
     'Count saved — it goes to the store when the phone is back on the Wi-Fi.',
-    'Conteo guardado: se envía a la tienda cuando vuelva el Wi-Fi.',
-    'Inventaire gardé — envoyé au magasin au retour du Wi-Fi.',
+    'Conteo guardado: se enviará a la tienda cuando el teléfono vuelva a conectarse al Wi-Fi.',
+    'Inventaire enregistré — il sera envoyé au magasin quand le téléphone sera de retour sur le Wi-Fi.',
   );
 
   // receiving
@@ -194,13 +201,13 @@ class S {
     'Scannez chaque produit de la livraison.',
   );
   String get saveDelivery =>
-      _t('Save delivery', 'Guardar entrega', 'Enregistrer');
+      _t('Save delivery', 'Guardar entrega', 'Enregistrer la livraison');
   String get deliverySaved =>
       _t('Delivery saved', 'Entrega guardada', 'Livraison enregistrée');
   String get deliverySavedOffline => _t(
     'Delivery saved — it goes to the store when the phone is back on the Wi-Fi.',
-    'Entrega guardada: se envía a la tienda cuando vuelva el Wi-Fi.',
-    'Livraison gardée — envoyée au retour du Wi-Fi.',
+    'Entrega guardada: se enviará a la tienda cuando el teléfono vuelva a conectarse al Wi-Fi.',
+    'Livraison enregistrée — elle sera envoyée au magasin quand le téléphone sera de retour sur le Wi-Fi.',
   );
 
   /// Stock-specific store refusals; null → the terminal's generic text.
@@ -218,12 +225,12 @@ class S {
     'count_empty' => _t(
       'Nothing has been counted yet',
       'Aún no se ha contado nada',
-      'Rien n\'a été compté',
+      'Rien n’a encore été compté',
     ),
     'unknown_item' || 'unknown_barcode' => _t(
       'That product is no longer in the catalog',
       'Ese producto ya no está en el catálogo',
-      'Ce produit n\'est plus au catalogue',
+      'Ce produit n’est plus au catalogue',
     ),
     'not_retail' => notRetail,
     _ => null,

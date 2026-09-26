@@ -5,6 +5,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Msg } from "@/lib/i18n/context";
 
 const Sheet = DialogPrimitive.Root;
 const SheetTrigger = DialogPrimitive.Trigger;
@@ -43,7 +44,7 @@ const SheetHeader = ({ className, children, ...props }: React.HTMLAttributes<HTM
     {children}
     <DialogPrimitive.Close className="rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-ink focus-visible:outline-none">
       <X className="h-5 w-5" />
-      <span className="sr-only">Close</span>
+      <span className="sr-only"><Msg k="close" /></span>
     </DialogPrimitive.Close>
   </div>
 );

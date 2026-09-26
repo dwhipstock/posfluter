@@ -387,7 +387,7 @@ void main() {
       await pump(tester, CountListScreen(queue: queue));
       await settle(tester, 20); // the list request retries before giving up
       expect(
-        find.text("Can't reach the store — you can still count here."),
+        find.text('Can’t reach the store — you can still count here.'),
         findsOneWidget,
       );
       await tester.tap(find.byKey(const Key('start-count')));
@@ -448,30 +448,26 @@ void main() {
     }, store);
   });
 
-  testWidgets(
-    'the counter tablet opens the same Count screens from its rail',
-    (tester) async {
-      AppMode.isStock = false;
-      await http.runWithClient(() async {
-        await pump(tester, const RetailScreen(), tablet: true);
-        expect(find.byKey(const Key('menu-count')), findsOneWidget);
-        expect(find.byKey(const Key('menu-receive')), findsOneWidget);
-        await tester.tap(find.byKey(const Key('menu-count')));
-        await settle(tester, 10);
-        expect(find.byType(CountListScreen), findsOneWidget);
-        await tester.tap(find.byKey(const Key('start-count')));
-        await settle(tester);
-        await tester.enterText(
-          find.byKey(const Key('count-name')),
-          'Back room',
-        );
-        await tester.tap(find.byKey(const Key('count-start')));
-        await settle(tester, 10);
-        await scan(tester, lagerCode);
-        await scan(tester, iceCode);
-        expect(find.text('expected 12'), findsOneWidget);
-        await snap(tester, '07-tablet-count');
-      }, store);
-    },
-  );
+  testWidgets('the counter tablet opens the same Count screens from its rail', (
+    tester,
+  ) async {
+    AppMode.isStock = false;
+    await http.runWithClient(() async {
+      await pump(tester, const RetailScreen(), tablet: true);
+      expect(find.byKey(const Key('menu-count')), findsOneWidget);
+      expect(find.byKey(const Key('menu-receive')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('menu-count')));
+      await settle(tester, 10);
+      expect(find.byType(CountListScreen), findsOneWidget);
+      await tester.tap(find.byKey(const Key('start-count')));
+      await settle(tester);
+      await tester.enterText(find.byKey(const Key('count-name')), 'Back room');
+      await tester.tap(find.byKey(const Key('count-start')));
+      await settle(tester, 10);
+      await scan(tester, lagerCode);
+      await scan(tester, iceCode);
+      expect(find.text('expected 12'), findsOneWidget);
+      await snap(tester, '07-tablet-count');
+    }, store);
+  });
 }

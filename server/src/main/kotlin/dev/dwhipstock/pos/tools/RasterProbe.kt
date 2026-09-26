@@ -35,16 +35,16 @@ fun main(args: Array<String>) {
     println("french-ish families: ${if (frenchish.isEmpty()) "(none — glyphs will rely on SansSerif fallback)" else frenchish.joinToString(", ")}")
 
     val lines = listOf(
-        PrintLine.LogoPlaceholder("The Copper Lantern Pub"),
+        PrintLine.LogoPlaceholder("Copper Lantern — Vieux-Port"),
         PrintLine.Text("French raster probe", Align.CENTER),
         PrintLine.Divider,
-        PrintLine.Header("Test de dactylographie français"),
-        PrintLine.KeyValue("Cuisse de porc frite ×1", "$450"),
-        PrintLine.KeyValue("Bière Maple Oat Stout (bouteille) ×2", "$240"),
-        PrintLine.KeyValue("Frais de service 10%", "$69"),
+        PrintLine.Header("Essai des accents français"),
+        PrintLine.KeyValue("Poutine au smoked meat ×1", "16,75"),
+        PrintLine.KeyValue("Stout à l’avoine et à l’érable (pinte) ×2", "17,00"),
+        PrintLine.KeyValue("TPS/GST 5\u00A0%", "1,69"),
         PrintLine.Divider,
-        PrintLine.KeyValue("Total", "$759", emphasized = true),
-        PrintLine.Text("Merci d'utiliser le service.", Align.CENTER),
+        PrintLine.KeyValue("Total", "35,44", emphasized = true),
+        PrintLine.Text("Merci de votre visite\u00A0!", Align.CENTER),
     )
     val img = ThermalReceiptRenderer.renderImage(lines)
     out.absoluteFile.parentFile?.mkdirs()

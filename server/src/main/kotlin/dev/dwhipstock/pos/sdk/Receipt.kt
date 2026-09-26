@@ -84,7 +84,7 @@ data class ReceiptTender(
 
 /**
  * FINAL = post-payment reçu (proof of payment). PROVISIONAL = the "check please"
- * customer bill (déclaration) printed on request before payment — same layout, minus
+ * customer bill (addition) printed on request before payment — same layout, minus
  * the tender section, plus a CUSTOMER BILL header and a NOT A RECEIPT footer.
  */
 enum class ReceiptKind { FINAL, PROVISIONAL }
@@ -111,11 +111,19 @@ sealed interface ReceiptPolicy {
     /** A retail counter: "Register 1 · Sale #12" instead of "Table · Bill". */
     val retail: Boolean get() = false
 
+    /** A rule under the store's name and address block (a brand's letterhead). */
+    val headerRule: Boolean get() = false
+
     /** Always print the cents ("40.00"), US shelf style; the pubs print "40". */
     val alwaysCents: Boolean get() = false
 
-    /** Money on the receipt, in this policy's style. */
-    fun money(m: Money): String = if (alwaysCents) m.formatCents() else m.format()
+    /**
+     * Money on the receipt, in this policy's style: bare figures, no symbol.
+     * French prints the French way ("10,50", "1 010" with a no-break space).
+     */
+    fun money(m: Money): String = (if (alwaysCents) m.formatCents() else m.format()).let {
+        if (locale.tag == LocaleCode.FR.tag) Money.frenchFigure(it) else it
+    }
 
     /** Same venue identity, different print locale — the check owner's preference wins at close time. */
     fun withLocale(locale: LocaleCode): ReceiptPolicy
@@ -130,6 +138,7 @@ sealed interface ReceiptPolicy {
         override val alwaysCents: Boolean = false,
         /** US receipts: "09/25/2026 5:57 PM" (month first, 12-hour clock). */
         val usDates: Boolean = false,
+        override val headerRule: Boolean = false,
     ) : ReceiptPolicy {
         override fun withLocale(locale: LocaleCode) = copy(locale = locale)
 
@@ -156,6 +165,7 @@ object ReceiptRenderer {
 
         add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
         policy.headerLines.forEach { add(PrintLine.Text(it, Align.CENTER)) }
+        if (policy.headerRule) add(PrintLine.Divider)
         add(PrintLine.Blank)
         if (provisional) {
             // Customer-facing banner: bilingual in every locale pack — anyone at
@@ -164,9 +174,9 @@ object ReceiptRenderer {
             add(PrintLine.Blank)
         }
         if (policy.retail) {
-            add(PrintLine.KeyValue(msg(RECEIPT_REGISTER) + " " + receipt.tableLabel, msg(RECEIPT_SALE) + " #" + receipt.checkId))
+            add(PrintLine.KeyValue(msg(RECEIPT_REGISTER) + " " + receipt.tableLabel, msg(RECEIPT_SALE) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
         } else {
-            add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " #" + receipt.checkId))
+            add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
         }
         add(PrintLine.KeyValue(msg(RECEIPT_OPEN), policy.formatDate(receipt.openedAt)))
         // provisional: "Printed at" (this snapshot); final: the close/paid time

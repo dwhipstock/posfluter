@@ -45,7 +45,7 @@ sealed interface Fee {
         // TODO: size-based corkage = a new Fee implementation, not a knob here
     ) : Fee {
         override val code = "corkage"
-        override val labelFr = "Frais de bouchon de bouteille"
+        override val labelFr = "Droit de bouchon"
         override val labelEn = "Corkage"
         override val appliesAt = FeeScope.TRANSACTION
 

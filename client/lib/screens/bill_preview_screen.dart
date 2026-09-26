@@ -48,7 +48,7 @@ class _BillPreviewScreenState extends State<BillPreviewScreen> {
     final l = L.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('${l.customerBill} — ${l.bill} #${widget.checkId}'),
+        title: Text('${l.customerBill} — ${l.billNo(widget.checkId)}'),
       ),
       body: Center(
         child: Container(

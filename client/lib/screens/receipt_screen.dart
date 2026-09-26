@@ -31,7 +31,7 @@ class ReceiptScreen extends StatelessWidget {
     final l = L.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(title ?? '${l.receipt} — ${l.bill} #$checkId'),
+        title: Text(title ?? '${l.receipt} — ${l.billNo(checkId)}'),
       ),
       body: Center(
         child: Container(
@@ -52,7 +52,7 @@ class ReceiptScreen extends StatelessWidget {
                     children: [
                       const _WordmarkHeader(),
                       const SizedBox(height: 14),
-                      Text(_withoutNameLine(text), style: T.receipt()),
+                      Text(withoutNameLine(text), style: T.receipt()),
                     ],
                   )
                 : Text(text, style: T.receipt()),
@@ -76,12 +76,22 @@ class ReceiptScreen extends StatelessWidget {
   }
 }
 
-/// The band already names the store: drop the text's own name line.
-String _withoutNameLine(String text) {
+/// The band already names the store: drop the text's own name block — the
+/// name line and the rows of stars the text printer frames it with.
+String withoutNameLine(String text) {
   final lines = text.split('\n');
-  if (lines.isNotEmpty &&
-      lines.first.trim().toLowerCase().startsWith('sage & poppy')) {
-    return lines.skip(1).join('\n');
+  bool stars(String l) => RegExp(r'^\*+$').hasMatch(l.trim());
+  var i = 0;
+  while (i < lines.length && stars(lines[i])) {
+    i++;
+  }
+  if (i < lines.length &&
+      lines[i].trim().toLowerCase().startsWith('sage & poppy')) {
+    i++;
+    while (i < lines.length && stars(lines[i])) {
+      i++;
+    }
+    return lines.skip(i).join('\n');
   }
   return text;
 }

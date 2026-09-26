@@ -160,28 +160,29 @@
 const TABLE_TOKEN = "{{TABLE_TOKEN}}";
 const TABLE_LABEL = "{{TABLE_LABEL}}";
 
-// Two locales end-to-end: fr (default) + en, persisted per phone.
+// The pubs' two languages, fr + en, persisted per phone. French: vous, and a
+// no-break space before : ; ! ? (LocaleCoverageTest reads these tables).
 let lang = localStorage.getItem("menu_lang") || "en";
 const STR = {
   fr: {
-    orderFromPhone: "tableau " + TABLE_LABEL + " — Commande depuis un téléphone portable",
-    langBtn: "EN",
-    basket: "panier", send: "Envoyer la commande", note: "Remarque (facultatif)",
-    addToBasket: "＋ Ajouter au panier", sizes: "taille",
-    doneTitle: "Commande envoyée !", doneText: "Le personnel confirmera votre commande sous peu.",
-    orderMore: "Commandez plus", failed: "L'envoi a échoué. Essayer à nouveau.",
-    billLocked: "La facture est en train d'être payée. — Veuillez contacter le personnel.",
+    orderFromPhone: "Table " + TABLE_LABEL + " — commandez de votre téléphone",
+    langBtn: "English",
+    basket: "Panier", send: "Envoyer la commande", note: "Note (facultative)",
+    addToBasket: "＋ Ajouter au panier", sizes: "formats",
+    doneTitle: "Commande envoyée !", doneText: "Notre équipe confirmera votre commande sous peu.",
+    orderMore: "Commander autre chose", failed: "L’envoi a échoué. Veuillez réessayer.",
+    billLocked: "Votre addition est en cours de paiement — adressez-vous au personnel.",
     viewCart: "Voir le panier", addedToast: "Ajouté au panier ✓", subtotal: "Sous-total (taxes en sus)", billSubtotal: "Sous-total",
-    tabMenu: "menu", tabBill: "votre facture", seeBill: "Consulter la facture",
-    onBill: "sur votre facture", beingConfirmed: "Attendez que l'employé confirme.", total: "Total",
+    tabMenu: "Menu", tabBill: "Votre addition", seeBill: "Voir l’addition",
+    onBill: "Sur votre addition", beingConfirmed: "En attente de confirmation", total: "Total",
     rounding: "Arrondi", cashTotal: "Total comptant",
-    noOrders: "Il n'y a pas encore de commande. — Sélectionnez un menu pour commencer à commander maintenant.", billPaying: "La facture est en train d'être payée.",
-    billLoading: "Chargement de la facture…",
+    noOrders: "Aucune commande pour l’instant — parcourez le menu pour commencer.", billPaying: "Addition en cours de paiement",
+    billLoading: "Chargement de votre addition…",
     menuLoading: "Chargement du menu…", menuUnavailable: "Le menu n’est pas disponible pour le moment. Veuillez réessayer.",
   },
   en: {
     orderFromPhone: "Table " + TABLE_LABEL + " — order from your phone",
-    langBtn: "français",
+    langBtn: "Français",
     basket: "Basket", send: "Send order", note: "Note (optional)",
     addToBasket: "＋ Add to basket", sizes: "sizes",
     doneTitle: "Order sent!", doneText: "Staff will confirm your order shortly.",
@@ -209,9 +210,25 @@ const catName = c => {
   return row ? (lang === "en" ? row.nameEn : row.nameFr) : c;
 };
 
-const cad = cents => (cents / 100).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA", {
-  style: "currency", currency: "CAD",
+// The store's currency (GET /health); a store without French (the US shop)
+// shows English only, no language button.
+let store = { locales: ["fr", "en"], currency: "CAD", country: "CA" };
+const cad = cents => (cents / 100).toLocaleString((lang === "fr" ? "fr-" : "en-") + store.country, {
+  style: "currency", currency: store.currency,
 });
+async function loadStore() {
+  try {
+    const r = await fetch("/health");
+    const h = r.ok ? await r.json() : null;
+    if (h && Array.isArray(h.locales) && h.locales.length) store.locales = h.locales;
+    if (h && h.currency) store.currency = h.currency;
+    if (h && h.country) store.country = h.country;
+  } catch (_) {}
+  if (!store.locales.includes("fr")) {
+    lang = "en";
+    document.getElementById("lang-btn").style.display = "none";
+  }
+}
 
 function toggleLang() {
   lang = lang === "fr" ? "en" : "fr";
@@ -220,6 +237,7 @@ function toggleLang() {
 }
 
 async function load() {
+  await loadStore();
   // categories are server data (sorted); no hardcoded menu structure here
   try {
     const [itemsResponse, categoriesResponse] = await Promise.all([fetch("/items"), fetch("/categories")]);
@@ -415,7 +433,7 @@ const lineName = l => {
 // "GST 5%" / "TVQ 9,975 %" — the rate is the server's decimal string
 const taxLabel = t => lang === "en"
   ? `${t.labelEn} ${t.ratePercent}%`
-  : `${t.labelFr} ${String(t.ratePercent).replace(".", ",")} %`;
+  : `${t.labelFr} ${String(t.ratePercent).replace(".", ",")}\u00a0%`;
 const billRow = l => `
   <div class="brow">
     <span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>

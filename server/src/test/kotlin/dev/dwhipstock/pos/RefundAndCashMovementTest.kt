@@ -84,16 +84,16 @@ class RefundAndCashMovementTest {
         // the manager (fr preference) opened the check → French slip, labels pinned exactly
         val slip = refundBody["slipText"]!!.jsonPrimitive.content
         val slipKv = slip.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
-        assertTrue("Sous-total | 20.25" in slipKv, slip)
-        assertTrue("TPS/GST 5 % | 1.01" in slipKv, slip)
-        assertTrue("TVQ/QST 9,975 % | 2.02" in slipKv, slip)
-        assertTrue("*** Bon de remboursement / REFUND ***" in slip, "fr refund header expected:\n$slip")
-        assertTrue("Facture de référence #$checkId" in slip)
-        assertTrue("Remboursement #" in slip)
-        assertTrue("Total retourné" in slip)
-        assertTrue("Arrondi | +0.02" in slipKv && "Remis en espèces | 23.30" in slipKv, slip)
-        assertTrue("Remboursé par" in slip && "Espèces" in slip)
-        assertTrue("Motif : Le client retourne le produit" in slip) // colon + single space + reason
+        assertTrue("Sous-total | 20,25" in slipKv, slip)
+        assertTrue("TPS/GST 5\u00A0% | 1,01" in slipKv, slip)
+        assertTrue("TVQ/QST 9,975\u00A0% | 2,02" in slipKv, slip)
+        assertTrue("*** REMBOURSEMENT / REFUND ***" in slip, "fr refund header expected:\n$slip")
+        assertTrue("Addition d’origine n°\u00A0$checkId" in slip)
+        assertTrue("Remboursement n°\u00A0" in slip)
+        assertTrue("Total remboursé" in slip)
+        assertTrue("Arrondi | +0,02" in slipKv && "Remis en argent comptant | 23,30" in slipKv, slip)
+        assertTrue("Remboursé par" in slip && "Comptant" in slip)
+        assertTrue("Motif\u00A0: Le client retourne le produit" in slip) // no-break space, colon, space, reason
 
         // now fully refunded; a second refund is refused
         val info = json.parseToJsonElement(c.get("/checks/$checkId/refunds").bodyAsText()).jsonObject
@@ -114,9 +114,9 @@ class RefundAndCashMovementTest {
         val out = c.postJson("/cash-movements", """{"direction":"OUT","amountCents":20000,"reason":"acheter de la glace","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, out.status)
         val outSlip = json.parseToJsonElement(out.bodyAsText()).jsonObject["slipText"]!!.jsonPrimitive.content
-        assertTrue("*** Argent retiré / CASH OUT ***" in outSlip, "fr cash-out header expected:\n$outSlip")
+        assertTrue("*** SORTIE DE FONDS / CASH OUT ***" in outSlip, "fr cash-out header expected:\n$outSlip")
         assertTrue("Heure" in outSlip)
-        assertTrue("Motif : acheter de la glace" in outSlip)
+        assertTrue("Motif\u00A0: acheter de la glace" in outSlip)
 
         // cash movement by a server with no approving PIN is refused
         assertEquals(HttpStatusCode.Forbidden,
@@ -157,10 +157,10 @@ class RefundAndCashMovementTest {
             """{"direction":"IN","amountCents":10000,"reason":"change float","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, inRes.status)
         val inSlip = json.parseToJsonElement(inRes.bodyAsText()).jsonObject["slipText"]!!.jsonPrimitive.content
-        assertTrue("*** CASH IN / Argent entrant ***" in inSlip, "en cash-in header expected:\n$inSlip")
+        assertTrue("*** CASH IN / ENTRÉE DE FONDS ***" in inSlip, "en cash-in header expected:\n$inSlip")
         assertTrue("Cash in" in inSlip && "Time" in inSlip)
         assertTrue("Reason: change float" in inSlip)
-        assertTrue("raison" !in inSlip, "fr label leaked into an en slip")
+        assertTrue("Motif" !in inSlip, "fr label leaked into an en slip")
 
         // refund slip: the check owner (this en manager) sets the language
         val checkId = c.finalizeTowerSale("t6")
@@ -168,12 +168,12 @@ class RefundAndCashMovementTest {
             """{"amountCents":2328,"tenderType":"CASH","reason":"changed mind","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, refundRes.status)
         val slip = json.parseToJsonElement(refundRes.bodyAsText()).jsonObject["slipText"]!!.jsonPrimitive.content
-        assertTrue("*** REFUND / Bon de remboursement ***" in slip, "en refund header (order swapped) expected:\n$slip")
-        assertTrue("Ref bill #$checkId" in slip)
+        assertTrue("*** REFUND / REMBOURSEMENT ***" in slip, "en refund header (order swapped) expected:\n$slip")
+        assertTrue("Original bill #$checkId" in slip)
         assertTrue("Refund #" in slip)
         assertTrue("Refund total" in slip && "Refund via" in slip && "Cash" in slip)
         assertTrue("Reason: changed mind" in slip)
-        assertTrue("raison" !in slip && "Total retourné" !in slip, "fr labels leaked into an en slip")
+        assertTrue("Motif" !in slip && "Total remboursé" !in slip, "fr labels leaked into an en slip")
     }
 
     @Test

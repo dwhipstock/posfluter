@@ -96,9 +96,12 @@ class SagePoppyConfig(
     override val receiptPolicy: ReceiptPolicy
         get() = settings.get().let { s ->
             ReceiptPolicy.Standard(
-                // title + subtitle on paper: "Sage & Poppy" / "Bottle Shop"
-                logoFallbackText = "Sage & Poppy — Bottle Shop",
-                headerLines = listOf(s.venueAddress, "Tel: ${s.venuePhone}"),
+                // the brand's letterhead, as the on-screen receipt draws it: the
+                // name in capitals, "BOTTLE SHOP" below (ThermalLayout.venueName
+                // splits on the dash), the address and phone, then a rule
+                logoFallbackText = "SAGE & POPPY — BOTTLE SHOP",
+                headerLines = listOf(s.venueAddress, "Tel. ${s.venuePhone}"),
+                headerRule = true,
                 footerText = s.receiptFooter,
                 showTax = false,
                 locale = LocaleCode.EN,

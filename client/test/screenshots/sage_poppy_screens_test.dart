@@ -58,10 +58,9 @@ Future<void> _loadFonts() async {
   }
 }
 
-Map<String, dynamic> _item(String id) =>
-    (_fx['items'] as List).cast<Map<String, dynamic>>().firstWhere(
-      (i) => i['id'] == id,
-    );
+Map<String, dynamic> _item(String id) => (_fx['items'] as List)
+    .cast<Map<String, dynamic>>()
+    .firstWhere((i) => i['id'] == id);
 
 /// A sale in progress: a six-pack, a bottle of wine, chips and ice.
 Map<String, dynamic> _sale() {
@@ -292,7 +291,12 @@ void main() {
 
   testWidgets('sign-in', (tester) async {
     Api.currentUser = null;
-    await _shoot(tester, 'login', const LoginScreen(), expectText: 'Demo Cashier');
+    await _shoot(
+      tester,
+      'login',
+      const LoginScreen(),
+      expectText: 'Demo Cashier',
+    );
   });
 
   testWidgets('sign-in (Spanish, dark)', (tester) async {

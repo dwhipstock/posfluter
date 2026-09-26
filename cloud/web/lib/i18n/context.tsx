@@ -97,3 +97,9 @@ export function useT() {
 export function useFmt() {
   return useI18n().fmt;
 }
+
+/** A message as a node, for shared UI primitives; English outside a provider. */
+export function Msg({ k }: { k: MsgKey }) {
+  const ctx = useContext(Ctx);
+  return <>{ctx ? ctx.t(k) : messages[k].en}</>;
+}

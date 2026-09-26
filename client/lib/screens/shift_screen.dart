@@ -652,7 +652,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
           SectionLabel(l.voidedBills),
           for (final v in r.voids)
             kv(
-              '${l.bill} #${v.checkId} — ${v.reason}',
+              '${l.billNo(v.checkId)} — ${v.reason}',
               v.voidedBy,
               color: T.destructive,
             ),

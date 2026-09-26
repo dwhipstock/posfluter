@@ -220,7 +220,7 @@
 
 <!-- LOGIN -->
 <div id="login">
-  <button class="hbtn" style="position:fixed;top:14px;right:14px;background:var(--surface-alt);color:var(--ink);border-color:var(--line)"
+  <button class="hbtn" style="position:fixed;top:14px;right:14px;z-index:2;background:var(--surface-alt);color:var(--ink);border-color:var(--line)"
           onclick="toggleLang()" id="login-lang"></button>
   <h1>Copper Lantern POS</h1>
   <div class="sub" id="login-sub"></div>
@@ -328,32 +328,38 @@
 <script>
 "use strict";
 
-// ---- i18n: FR default + EN, persisted per phone ----------------------------
+// ---- i18n: the store's languages (GET /health), persisted per phone ---------
+// fr/en at the pubs, en/es at the US store. Every table carries every key
+// (LocaleCoverageTest). French: vous, no-break space before : ; ! ? and ».
 let lang = localStorage.getItem("staff_lang") || "en";
+let store = { locales: ["fr", "en"], currency: "CAD", country: "CA" };
+const LANG_NAMES = { fr: "Français", en: "English", es: "Español" };
 const STR = {
   fr: {
-    whoClockingIn: "Qui prend son service ?", enterPin: "Entrez votre NIP", pinWrong: "NIP incorrect",
-    langBtn: "EN", logout: "Déconnexion", tabTables: "Tables", tabPending: "En attente",
-    free: "Libre", open: "Ouverte", noZones: "Aucune zone pour l'instant", closed: "Fermée",
-    addItems: "＋ Ajouter des articles", onCheck: "Sur l’addition", pendingHd: "⏳ Commandes clients à confirmer",
+    whoClockingIn: "Qui commence son quart ?", enterPin: "Entrez votre NIP", pinWrong: "NIP incorrect",
+    logout: "Déconnexion", tabTables: "Tables", tabPending: "À confirmer",
+    free: "Libre", open: "Ouverte", noZones: "Aucune zone pour le moment", closed: "Fermée",
+    addItems: "＋ Ajouter des articles", onCheck: "Sur l’addition", pendingHd: "⏳ Commandes des clients à confirmer",
     rounding: "Arrondi", cashTotal: "Total comptant",
-    total: "Total", emptyCheck: "Aucun article — touchez Ajouter des articles pour commencer.",
-    basket: "Panier", addToCheck: "Ajouter à l’addition", subtotal: "Sous-total", note: "Remarque (facultatif)",
+    total: "Total", emptyCheck: "Aucun article — touchez « Ajouter des articles » pour commencer.",
+    basket: "Panier", addToCheck: "Ajouter à l’addition", subtotal: "Sous-total", note: "Note (facultative)",
     add: "＋ Ajouter", sizes: "formats", viewBasket: "Voir le panier", addedOne: "Ajouté ✓",
     linesAdded: "Ajouté à l’addition ✓", accepted: "Confirmé ✓", rejected: "Refusé",
-    noPending: "Rien à confirmer", pendingSub: "Les commandes des clients apparaissent ici.",
-    billPaying: "L’addition est en cours de paiement — impossible d’ajouter des articles", failed: "Action échouée, veuillez réessayer.",
+    noPending: "Rien à confirmer", pendingSub: "Les commandes passées par les clients sur leur téléphone s’affichent ici.",
+    billPaying: "Paiement de l’addition en cours — impossible d’ajouter des articles", failed: "L’opération a échoué. Veuillez réessayer.",
     zoneClosed: "Zone fermée", table: "Table", loading: "Chargement…",
-    codePrompt: "Entrez le code à 6 chiffres de votre application d’authentification", verify: "Confirmer", backBtn: "‹ Retour",
-    enrollPrompt: "Scannez le code QR avec votre application d’authentification, puis entrez le code à 6 chiffres",
-    enrollHint: "Configuration unique — utilisez ensuite seulement votre NIP pendant 90 jours", enrollManual: "Ou entrez cette clé manuellement :",
+    codePrompt: "Entrez le code à 6 chiffres de votre application d’authentification", verify: "Vérifier", backBtn: "‹ Retour",
+    enrollPrompt: "Balayez le code QR avec votre application d’authentification, puis entrez le code à 6 chiffres",
+    enrollHint: "Configuration unique — ensuite, votre NIP suffit pendant 90 jours", enrollManual: "Ou entrez cette clé manuellement :",
     codeWrong: "Code invalide. Veuillez réessayer.", resetTitle: "Réinitialiser l’authentification", resetBtn: "Réinitialiser",
-    resetConfirm: "Réinitialiser l’authentification de ", resetDone: "Réinitialisation terminée — l’employé peut recommencer la configuration.",
-    cantReach: "Impossible de joindre le restaurant — vérifiez le Wi-Fi et réessayez", retry: "Réessayer",
+    resetConfirm: "Réinitialiser l’authentification de {name} ?", resetDone: "C’est fait — la personne devra refaire la configuration.",
+    cantReach: "Impossible de joindre le système de caisse — vérifiez le Wi-Fi et réessayez", retry: "Réessayer",
+    roleManager: "Gérant", roleServer: "Serveur",
+    spKicker: "Sage & Poppy · Boutique d’alcools", spWelcome: "Bon retour",
   },
   en: {
     whoClockingIn: "Who's clocking in?", enterPin: "Enter your PIN", pinWrong: "Incorrect PIN",
-    langBtn: "français", logout: "Log out", tabTables: "Tables", tabPending: "Pending",
+    logout: "Log out", tabTables: "Tables", tabPending: "Pending",
     free: "Free", open: "Open", noZones: "No zones yet", closed: "Closed",
     addItems: "＋ Add items", onCheck: "On the bill", pendingHd: "⏳ Customer orders (to confirm)",
     rounding: "Rounding", cashTotal: "Cash total",
@@ -368,10 +374,48 @@ const STR = {
     enrollPrompt: "Scan the QR with your authenticator app, then enter the 6-digit code",
     enrollHint: "One-time setup — then just your PIN for 90 days", enrollManual: "Or enter this key manually:",
     codeWrong: "Wrong code, try again", resetTitle: "Reset authenticator", resetBtn: "Reset",
-    resetConfirm: "Reset the authenticator for ", resetDone: "Reset — the staff member sets up again",
+    resetConfirm: "Reset the authenticator for {name}?", resetDone: "Reset — the staff member sets up again",
     cantReach: "Can't reach the store — check Wi-Fi and try again", retry: "Try again",
+    roleManager: "Manager", roleServer: "Server",
+    spKicker: "Sage & Poppy · Bottle Shop", spWelcome: "Welcome back",
+  },
+  es: {
+    whoClockingIn: "¿Quién empieza su turno?", enterPin: "Ingresa tu PIN", pinWrong: "PIN incorrecto",
+    logout: "Cerrar sesión", tabTables: "Mesas", tabPending: "Pendientes",
+    free: "Libre", open: "Abierta", noZones: "Todavía no hay zonas", closed: "Cerrada",
+    addItems: "＋ Agregar productos", onCheck: "En la cuenta", pendingHd: "⏳ Pedidos de clientes por confirmar",
+    rounding: "Redondeo", cashTotal: "Total en efectivo",
+    total: "Total", emptyCheck: "Todavía no hay productos: toca Agregar productos para empezar",
+    basket: "Carrito", addToCheck: "Agregar a la cuenta", subtotal: "Subtotal", note: "Nota (opcional)",
+    add: "＋ Agregar", sizes: "tamaños", viewBasket: "Ver carrito", addedOne: "Agregado ✓",
+    linesAdded: "Agregado a la cuenta ✓", accepted: "Confirmado ✓", rejected: "Rechazado",
+    noPending: "Nada por confirmar", pendingSub: "Aquí llegan los pedidos que los clientes hacen desde su teléfono.",
+    billPaying: "Se está pagando la cuenta: no se pueden agregar productos", failed: "No se pudo completar. Inténtalo de nuevo.",
+    zoneClosed: "Zona cerrada", table: "Mesa", loading: "Cargando…",
+    codePrompt: "Ingresa el código de 6 dígitos de tu app de autenticación", verify: "Verificar", backBtn: "‹ Atrás",
+    enrollPrompt: "Escanea el código QR con tu app de autenticación y luego ingresa el código de 6 dígitos",
+    enrollHint: "Configuración única: después, solo tu PIN durante 90 días", enrollManual: "O ingresa esta clave manualmente:",
+    codeWrong: "Código incorrecto. Inténtalo de nuevo.", resetTitle: "Restablecer autenticador", resetBtn: "Restablecer",
+    resetConfirm: "¿Restablecer el autenticador de {name}?", resetDone: "Listo: la persona tendrá que configurarlo de nuevo",
+    cantReach: "No se puede conectar con la tienda: revisa el Wi-Fi e inténtalo de nuevo", retry: "Reintentar",
+    roleManager: "Gerente", roleServer: "Cajero",
+    spKicker: "Sage & Poppy · Tienda de licores", spWelcome: "Hola de nuevo",
   },
 };
+// Department and zone names in US Spanish (the shop's catalog is English
+// only); same words as the counter app (client/lib/retail/shelf_names.dart).
+const NAMES_ES = {
+  "Counter": "Mostrador",
+  "Beer & Cider": "Cerveza y sidra", "Wine": "Vino", "Spirits": "Licores",
+  "Seltzers & Coolers": "Seltzers y bebidas preparadas", "Mixers & Soda": "Mezcladores y refrescos",
+  "Snacks": "Botanas", "Ice": "Hielo", "Sundries": "Artículos varios",
+};
+// The store's languages decide; a language it doesn't offer falls back to
+// English if offered, else the store's default.
+function supportedLang(l) {
+  if (store.locales.includes(l)) return l;
+  return store.locales.includes("en") ? "en" : store.locales[0];
+}
 const T = () => STR[lang];
 const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 // Embed an untrusted string as a JS string literal inside an inline-handler
@@ -390,19 +434,29 @@ function photoFallback(img) {
   d.textContent = img.dataset.fallback || "";
   img.replaceWith(d);
 }
-const cad = cents => (cents / 100).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA", {
-  style: "currency", currency: "CAD",
+// Money in the store's currency, the way the language writes it: "12,99 $"
+// (fr-CA), "$12.99" (en-CA, en-US, es-US).
+const money = cents => (cents / 100).toLocaleString(lang + "-" + store.country, {
+  style: "currency", currency: store.currency,
 });
-const iname = i => lang === "en" ? i.nameEn : i.nameFr;
-const inameAlt = i => lang === "en" ? i.nameFr : i.nameEn;
-const idesc = i => lang === "en" ? i.descriptionEn : i.descriptionFr;
-const vlabel = v => lang === "en" ? v.labelEn : v.labelFr;
-const zname = z => lang === "en" ? z.nameEn : z.nameFr;
+// Catalog data carries French and English only: French reads the French side,
+// English and Spanish read the English side.
+const pick = (fr, en) => lang === "fr" ? fr : en;
+// the other language as a small second line (none when it says the same, or in Spanish)
+const alt = (fr, en) => lang === "es" || fr === en ? "" : (lang === "fr" ? en : fr);
+const iname = i => pick(i.nameFr, i.nameEn);
+const inameAlt = i => alt(i.nameFr, i.nameEn);
+const idesc = i => pick(i.descriptionFr, i.descriptionEn);
+const vlabel = v => pick(v.labelFr, v.labelEn);
+const esName = en => NAMES_ES[en] || en;
+const zname = z => lang === "es" ? esName(z.nameEn) : pick(z.nameFr, z.nameEn);
+const catName = c => lang === "es" ? esName(c.nameEn) : pick(c.nameFr, c.nameEn);
+const roleName = r => r === "MANAGER" ? T().roleManager : r === "SERVER" ? T().roleServer : r;
 
 // line label for a served LineView (name + variant when disambiguating)
 function lineName(l) {
-  const name = lang === "en" ? l.nameEn : l.nameFr;
-  const variant = lang === "en" ? l.variantLabelEn : l.variantLabelFr;
+  const name = pick(l.nameFr, l.nameEn);
+  const variant = pick(l.variantLabelFr, l.variantLabelEn);
   return esc(name + (variant ? " (" + variant + ")" : ""));
 }
 
@@ -473,7 +527,20 @@ function errMsg(e) {
 }
 
 // ---- boot ------------------------------------------------------------------
+// The store says which languages and currency it uses; a phone that can't
+// reach it yet keeps the defaults and boot's own retry takes over.
+async function loadStore() {
+  try {
+    const h = await api("/health", { auth: false });
+    if (h && Array.isArray(h.locales) && h.locales.length) store.locales = h.locales.map(l => String(l).toLowerCase());
+    if (h && h.currency) store.currency = h.currency;
+    if (h && h.country) store.country = h.country;
+  } catch (_) {}
+  lang = supportedLang(lang);
+}
+
 async function boot() {
+  await loadStore();
   applyStaticLabels();
   if (token) {
     try { me = await api("/me"); enterApp(); return; }
@@ -503,8 +570,11 @@ function retryBoot() {
   boot();
 }
 
+// the next of the store's languages: fr ⇄ en at the pubs, en ⇄ es in the US
+const nextLang = () => store.locales[(store.locales.indexOf(lang) + 1) % store.locales.length];
+
 function toggleLang() {
-  lang = lang === "fr" ? "en" : "fr";
+  lang = nextLang();
   localStorage.setItem("staff_lang", lang);
   document.documentElement.lang = lang;
   applyStaticLabels();
@@ -515,7 +585,11 @@ function toggleLang() {
 function applyStaticLabels() {
   document.documentElement.lang = lang;
   const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-  set("login-lang", T().langBtn); set("app-lang", T().langBtn);
+  // the button names the language it switches to, in that language
+  const one = store.locales.length < 2;
+  set("login-lang", LANG_NAMES[nextLang()] || nextLang()); set("app-lang", LANG_NAMES[nextLang()] || nextLang());
+  for (const id of ["login-lang", "app-lang"]) { const el = document.getElementById(id); if (el) el.style.visibility = one ? "hidden" : ""; }
+  set("sp-kicker", T().spKicker); set("sp-welcome", T().spWelcome);
   set("login-sub", T().whoClockingIn);
   set("logout-btn", T().logout);
   set("tab-tables-l", T().tabTables); set("tab-pending-l", T().tabPending);
@@ -524,9 +598,10 @@ function applyStaticLabels() {
   set("code-submit", T().verify); set("code-back", T().backBtn);
   set("enroll-hint", T().enrollHint); set("enroll-manual-label", T().enrollManual);
   set("reset-title", T().resetTitle);
-  if (me) set("who", me.name + " · " + me.role);
+  if (me) set("who", me.name + " · " + roleName(me.role));
   // the authenticator-reset tool is a manager-only affordance
   const mgr = document.getElementById("mgr-btn");
+  if (mgr) mgr.title = T().resetTitle;
   if (mgr) mgr.style.display = (me && me.role === "MANAGER") ? "inline-block" : "none";
 }
 
@@ -540,7 +615,7 @@ async function openResetSheet() {
   try { staff = await api("/staff", { auth: false }); } catch (_) {}
   list.innerHTML = staff.map(s => `
     <div class="rrow">
-      <span class="who2">${esc(s.name)} <small>${esc(s.role)}</small></span>
+      <span class="who2">${esc(s.name)} <small>${esc(roleName(s.role))}</small></span>
       <button onclick="doReset(${jsArg(s.id)}, ${jsArg(s.name)})">${T().resetBtn}</button>
     </div>`).join("");
 }
@@ -549,7 +624,7 @@ function closeResetSheet() {
   document.getElementById("reset-sheet").classList.remove("open");
 }
 async function doReset(id, name) {
-  if (!confirm(T().resetConfirm + name + "?")) return;
+  if (!confirm(T().resetConfirm.replace("{name}", name))) return;
   try { await api(`/staff/${encodeURIComponent(id)}/totp/reset`, { method: "POST", body: {} }); toast(T().resetDone); }
   catch (e) { toast(errMsg(e), true); }
   closeResetSheet();
@@ -574,7 +649,7 @@ async function loadTiles() {
     <div class="tile ${selectedTile === s.id ? "sel" : ""}" onclick="selectTile(${jsArg(s.id)})">
       <div class="ic">${s.role === "MANAGER" ? "🛡️" : "👤"}</div>
       <div class="nm">${esc(s.name)}</div>
-      <div class="rl">${esc(s.role)}</div>
+      <div class="rl">${esc(roleName(s.role))}</div>
     </div>`).join("");
 }
 function selectTile(id) { selectedTile = selectedTile === id ? null : id; loadTiles(); }
@@ -615,8 +690,9 @@ async function submitPin() {
 function onLoggedIn(user) {
   me = user; token = user.token;
   localStorage.setItem("staff_token", token);
-  if (user.languageCode === "fr" || user.languageCode === "en") {
-    lang = user.languageCode; localStorage.setItem("staff_lang", lang);
+  const pref = String(user.languageCode || "").toLowerCase();
+  if (store.locales.includes(pref)) {
+    lang = pref; localStorage.setItem("staff_lang", lang);
   }
   pinBuf = ""; pendingPin = null; selectedTile = null;
   enterApp();
@@ -743,7 +819,10 @@ function elapsed(iso) {
   if (!iso) return "";
   const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
   if (isNaN(mins)) return "";
-  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  // "1 h 05" in French and Spanish, "1h 5m" in English
+  return lang === "en" ? `${h}h ${m}m` : `${h} h ${String(m).padStart(2, "0")}`;
 }
 
 function renderTables() {
@@ -757,7 +836,7 @@ function renderTables() {
       const cls = closed ? "closed" : hasPending ? "pend" : isOpen ? "open" : "";
       const st = isOpen ? T().open : T().free;
       const meta = isOpen && t.openCheckTotalCents != null
-        ? `<div class="meta">${cad(t.openCheckTotalCents)} · ${elapsed(t.openCheckOpenedAt)}</div>` : "";
+        ? `<div class="meta">${money(t.openCheckTotalCents)} · ${elapsed(t.openCheckOpenedAt)}</div>` : "";
       const badge = hasPending ? `<div class="pbadge">⏳ ${t.pendingCount}</div>` : "";
       const onclick = closed ? "" : `onclick="openTable(${jsArg(t.id)})"`;
       return `<div class="tcard ${cls}" ${onclick}>
@@ -768,7 +847,7 @@ function renderTables() {
     }).join("");
     return `<div class="zone">
       <div class="zone-hd">
-        <div><span class="z-fr">${esc(zname(z))}</span><span class="z-en">${esc(lang === "en" ? z.nameFr : z.nameEn)}</span></div>
+        <div><span class="z-fr">${esc(zname(z))}</span><span class="z-en">${esc(alt(z.nameFr, z.nameEn))}</span></div>
         ${closed ? `<span class="z-closed">${T().closed}</span>` : ""}
       </div>
       <div class="tgrid">${cards}</div>
@@ -813,19 +892,19 @@ function renderCheck() {
 
   const lineRow = l => `
     <div class="row"><span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
-    <span>${cad(l.lineTotalCents)}</span></div>`;
+    <span>${money(l.lineTotalCents)}</span></div>`;
 
   const feeRow = f => `
-    <div class="row"><span class="nm">${esc(lang === "en" ? f.labelEn : f.labelFr)}</span><span>${cad(f.amountCents)}</span></div>`;
+    <div class="row"><span class="nm">${esc(pick(f.labelFr, f.labelEn))}</span><span>${money(f.amountCents)}</span></div>`;
 
   // prices are pre-tax: subtotal, then each tax added on top (GST / QST), from the server
-  const taxLabel = t => lang === "en"
-    ? `${t.labelEn} ${t.ratePercent}%`
-    : `${t.labelFr} ${String(t.ratePercent).replace(".", ",")} %`;
+  const taxLabel = t => lang === "fr"
+    ? `${t.labelFr} ${String(t.ratePercent).replace(".", ",")}\u00a0%`
+    : `${lang === "es" && t.labelEn === "Sales Tax" ? "Impuesto sobre las ventas" : t.labelEn} ${t.ratePercent}%`;
   const taxRows = (check.taxes || []).length ? `
-    <div class="row"><span class="nm">${T().subtotal}</span><span>${cad(check.subtotalCents)}</span></div>
+    <div class="row"><span class="nm">${T().subtotal}</span><span>${money(check.subtotalCents)}</span></div>
     ${check.taxes.map(t => `
-    <div class="row"><span class="nm">${esc(taxLabel(t))}</span><span>${cad(t.amountCents)}</span></div>`).join("")}` : "";
+    <div class="row"><span class="nm">${esc(taxLabel(t))}</span><span>${money(t.amountCents)}</span></div>`).join("")}` : "";
 
   const pendingSec = check.pendingLines.length ? `
     <div class="sec">
@@ -846,10 +925,10 @@ function renderCheck() {
       ${check.lines.map(lineRow).join("")}
       ${check.fees.map(feeRow).join("")}
       ${taxRows}
-      <div class="total"><span>${T().total}</span><span>${cad(check.grandTotalCents)}</span></div>
+      <div class="total"><span>${T().total}</span><span>${money(check.grandTotalCents)}</span></div>
       ${check.cashRoundingCents ? `
-      <div class="row"><span class="nm">${T().rounding}</span><span>${check.cashRoundingCents > 0 ? "+" : ""}${cad(check.cashRoundingCents)}</span></div>
-      <div class="row"><span class="nm">${T().cashTotal}</span><span>${cad(check.cashDueCents)}</span></div>` : ""}
+      <div class="row"><span class="nm">${T().rounding}</span><span>${check.cashRoundingCents > 0 ? "+" : ""}${money(check.cashRoundingCents)}</span></div>
+      <div class="row"><span class="nm">${T().cashTotal}</span><span>${money(check.cashDueCents)}</span></div>` : ""}
     </div>`
     : (check.pendingLines.length ? "" : `<div class="empty"><div class="big">🧾</div><p>${T().emptyCheck}</p></div>`);
 
@@ -903,15 +982,15 @@ function renderMenu() {
   document.querySelectorAll('#mgrid [id^="n-"], #mgrid [id^="v-"]').forEach(el => { draft[el.id] = el.value; });
   const cats = categories.filter(c => items.some(i => i.category === c.id));
   document.getElementById("chips").innerHTML = cats.map(c =>
-    `<button class="chip ${c.id === cat ? "on" : ""}" onclick="pickCat(${jsArg(c.id)})">${esc(lang === "en" ? c.nameEn : c.nameFr)}</button>`).join("");
+    `<button class="chip ${c.id === cat ? "on" : ""}" onclick="pickCat(${jsArg(c.id)})">${esc(catName(c))}</button>`).join("");
   document.getElementById("mgrid").innerHTML = items.filter(i => i.category === cat).map(i => `
     <div class="mcard">
       ${i.photoVersion ? `<img class="photo" loading="lazy" src="/photos/${encodeURIComponent(i.id)}?v=${i.photoVersion}&w=512" data-fallback="${esc(i.abbrev)}" onerror="photoFallback(this)">` : `<div class="ph">${esc(i.abbrev)}</div>`}
       <div class="fr">${esc(iname(i))}</div>
       <div class="en">${esc(inameAlt(i))}</div>
       <div class="desc">${esc(idesc(i))}</div>
-      <div class="price">${i.variants.length === 1 ? cad(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
-      ${i.variants.length > 1 ? `<select id="v-${esc(i.id)}">` + i.variants.map(v => `<option value="${esc(v.id)}">${esc(vlabel(v))} ${cad(v.priceCents)}</option>`).join("") + `</select>` : ""}
+      <div class="price">${i.variants.length === 1 ? money(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
+      ${i.variants.length > 1 ? `<select id="v-${esc(i.id)}">` + i.variants.map(v => `<option value="${esc(v.id)}">${esc(vlabel(v))} ${money(v.priceCents)}</option>`).join("") + `</select>` : ""}
       <input type="text" id="n-${esc(i.id)}" placeholder="${T().note}">
       <button class="add" onclick="addToCart(${jsArg(i.id)})">${T().add}</button>
     </div>`).join("");
@@ -943,18 +1022,18 @@ function renderCart() {
   const bar = document.getElementById("cartbar");
   if (!count) { bar.classList.remove("show"); closeSheet(); return; }
   bar.classList.add("show");
-  document.getElementById("cart-sum").textContent = `🛒 ${count} · ${cad(cartSubtotal())}`;
+  document.getElementById("cart-sum").textContent = `🛒 ${count} · ${money(cartSubtotal())}`;
   document.getElementById("cart-lines").innerHTML = cart.map((b, ix) => `
     <div class="cline">
-      <span>${esc(lang === "en" ? b.nameEn : b.nameFr)}${b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
+      <span>${esc(pick(b.nameFr, b.nameEn))}${b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
       <span class="cqty">
         <button class="step" onclick="bumpCart(${ix},-1)">−</button><b>${b.qty}</b>
         <button class="step" onclick="bumpCart(${ix},1)">＋</button>
-        ${cad(b.priceCents * b.qty)}
+        ${money(b.priceCents * b.qty)}
         <button class="rm" onclick="removeCart(${ix})">✕</button>
       </span>
     </div>`).join("");
-  document.getElementById("sheet-sub").textContent = cad(cartSubtotal());
+  document.getElementById("sheet-sub").textContent = money(cartSubtotal());
 }
 function bumpCart(ix, d) { const l = cart[ix]; if (!l) return; l.qty += d; if (l.qty <= 0) cart.splice(ix, 1); renderCart(); }
 function removeCart(ix) { cart.splice(ix, 1); renderCart(); }

@@ -26,6 +26,7 @@ class Api {
   /// stock app (a phone) never runs a store: it finds the store on the Wi-Fi.
   static bool get usesEmbeddedStore =>
       !kIsWeb && Platform.isAndroid && !AppMode.isStock;
+
   /// This app's own embedded store (the port differs per brand app, so two
   /// brands can run side by side on one tablet; see [AppMode.brand]).
   static String get embeddedStoreUrl =>
@@ -102,6 +103,7 @@ class Api {
 
   /// The manual override (null = auto-detect). For the settings/startup UI.
   static String? get serverUrlOverride => _override;
+
   /// The store address this device last used (typed or discovered), if any.
   /// LAN discovery looks on its port first, so a phone stays with the same
   /// store when two run on one tablet (8080 and 8082).

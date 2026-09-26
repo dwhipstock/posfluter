@@ -364,8 +364,8 @@ class _TenderScreenState extends State<TenderScreen> {
       appBar: AppBar(
         title: Text(
           _group == null
-              ? '${l.pay} — ${l.bill} #${_check.id}'
-              : '${l.pay} — ${l.bill} #${_check.id} · ${l.groupTitle(_group!.number)}',
+              ? '${l.pay} — ${l.billNo(_check.id)}'
+              : '${l.pay} — ${l.billNo(_check.id)} · ${l.groupTitle(_group!.number)}',
         ),
         actions: const [LangActions()],
       ),

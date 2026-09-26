@@ -1312,7 +1312,11 @@ class _RetailScreenState extends State<RetailScreen> {
       ..sort((a, b) => subs[b]!.compareTo(subs[a]!));
     final sizeKeys = sizes.keys.toList()..sort(compareSizes);
     final shown = _index.filter(category: cat, subcategory: _sub, size: _size);
-    final crumbs = [_categoryName(cat), ?_sub, ?_size].join(' › ');
+    final crumbs = [
+      _categoryName(cat),
+      if (_sub != null) r.shelfName(_sub!),
+      if (_size != null) r.sizeName(_size!),
+    ].join(' › ');
     Widget chipRow(List<Widget> chips) => SizedBox(
       height: 42,
       child: ListView(scrollDirection: Axis.horizontal, children: chips),
@@ -1345,7 +1349,7 @@ class _RetailScreenState extends State<RetailScreen> {
           for (final v in subKeys)
             CounterChip(
               key: Key('sub-$v'),
-              label: v,
+              label: r.shelfName(v),
               count: subs[v],
               selected: _sub == v,
               onTap: () => setState(() => _sub = _sub == v ? null : v),
@@ -1361,7 +1365,7 @@ class _RetailScreenState extends State<RetailScreen> {
           for (final v in sizeKeys)
             CounterChip(
               key: Key('size-$v'),
-              label: v,
+              label: r.sizeName(v),
               count: sizes[v],
               selected: _size == v,
               onTap: () => setState(() => _size = _size == v ? null : v),

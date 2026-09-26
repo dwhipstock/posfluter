@@ -34,6 +34,10 @@ value class Money(val cents: Long) : Comparable<Money> {
 
     companion object {
         val ZERO = Money(0)
+
+        /** "1,010.50" → "1 010,50" (no-break space thousands, decimal comma). */
+        fun frenchFigure(figure: String): String =
+            figure.replace(',', '\u00A0').replace('.', ',')
         /** Whole-CAD helper for seed data / tests. */
         fun cad(dollars: Long) = Money(dollars * 100)
     }

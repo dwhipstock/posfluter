@@ -161,7 +161,7 @@ class ProductTile extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            item.size ?? '',
+                            r.sizeName(item.size ?? ''),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: s.text(
@@ -219,8 +219,8 @@ class ProductRow extends StatelessWidget {
     final s = BrandSkin.of(context);
     final r = R.of(context);
     final sub = [
-      item.brand,
-      item.size,
+      item.brand == 'House' ? r.houseBrand : item.brand,
+      item.size == null ? null : r.sizeName(item.size!),
       if (item.barcode == null) r.noBarcode,
     ].whereType<String>().join(' · ');
     return Material(

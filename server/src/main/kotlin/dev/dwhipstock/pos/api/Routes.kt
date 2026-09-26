@@ -788,7 +788,7 @@ private fun zoneClosedMenuPage(tableLabel: String, venueName: String): String = 
   <div class="card">
     <div class="icon">🌧️</div>
     <div class="table">${tableLabel.escapeHtml()}</div>
-    <div class="fr">Cette zone est temporairement fermée.<br>Veuillez contacter le personnel.</div>
+    <div class="fr">Cette section est fermée pour le moment.<br>Adressez-vous au personnel.</div>
     <div class="en">This section is temporarily closed.<br>Please ask staff to help.</div>
   </div>
 </body>
@@ -815,7 +815,7 @@ private fun scanAtTablePage(venueName: String): String = """<!DOCTYPE html>
 <body>
   <div class="card">
     <div class="venue">${venueName.escapeHtml()}</div>
-    <div class="fr">Veuillez scanner le code QR sur votre table.</div>
+    <div class="fr">Veuillez balayer le code QR sur votre table.</div>
     <div class="en">Please scan the QR code at your table.</div>
   </div>
 </body>
@@ -898,7 +898,7 @@ private fun slipPage(slips: List<SlipData>, venueName: String): String {
           <div class="label">${s.label.escapeHtml()}</div>
           <div class="zone">${s.zoneFr.escapeHtml()} / ${s.zoneEn.escapeHtml()}</div>
           <img class="qr" src="data:image/png;base64,${java.util.Base64.getEncoder().encodeToString(qrPng(s.menuUrl, 512))}" alt="QR ${s.label.escapeHtml()}">
-          <div class="cta">Scannez pour commander de la nourriture</div>
+          <div class="cta">Balayez pour commander</div>
           <div class="cta-en">Scan to order</div>
         </div>"""
     }

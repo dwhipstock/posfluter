@@ -8,7 +8,7 @@ import type {
   CustomTableLayout,
 } from "pdfmake/interfaces";
 import type { Cell, ExportDoc, Kpi, Section } from "./doc";
-import { currencySymbol } from "@/lib/format";
+import { moneyCents } from "@/lib/format";
 
 const INK = "#1C2733";
 const ACCENT = "#17456E"; // logo navy (lib/theme.ts)
@@ -20,20 +20,16 @@ const RULE = "#DCCFB9";
 const CONTENT_WIDTH = 515; // A4 (595pt) minus 40pt margins each side
 
 function moneyStr(cents: number, currency = "CAD", unambiguous = false, approximate = false): string {
-  const neg = cents < 0;
-  const abs = Math.abs(cents) / 100;
-  return `${approximate ? "≈ " : ""}${neg ? "-" : ""}${currencySymbol(currency, unambiguous)}${abs.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `${approximate ? "≈ " : ""}${moneyCents(cents, currency, { unambiguous, locale: docLocale })}`;
 }
 
 // set per render from the doc (one PDF at a time)
 let unambiguousDollars = false;
+let docLocale: "fr" | "en" = "en";
 
 function cellText(c: Cell): string {
   if (c.kind === "money") return moneyStr(Number(c.value ?? 0), c.currency, unambiguousDollars, c.approximate);
-  if (c.kind === "int") return Number(c.value ?? 0).toLocaleString("en-US");
+  if (c.kind === "int") return Number(c.value ?? 0).toLocaleString("en-US").replace(/,/g, docLocale === "fr" ? "\u00A0" : ",");
   return String(c.value ?? "");
 }
 
@@ -116,6 +112,7 @@ function kpiContent(kpis: Kpi[]): Content[] {
 
 export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
   unambiguousDollars = !!doc.multiCurrency;
+  docLocale = doc.locale === "fr" ? "fr" : "en";
   const content: Content[] = [
     { text: doc.venue || " ", style: "venue" },
     {
