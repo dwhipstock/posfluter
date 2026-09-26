@@ -124,7 +124,9 @@ object TransactionPipeline {
 
     /**
      * Stage 5 for a cash tender. Rounding applies HERE and only here — the grand
-     * total stays exact; electronic tenders settle exact cents.
+     * total stays exact; electronic tenders settle exact cents. The store's
+     * [CustomerConfig.roundingPolicy] is the nickel ([CashRounding]) unless
+     * cash rounding is off.
      *
      * Split-tender rule: rounding fires only when this cash payment SETTLES the
      * check (covers the rounded outstanding). A partial cash payment applies at
@@ -132,8 +134,11 @@ object TransactionPipeline {
      * the remainder (and gets the rounding if it's cash).
      */
     fun tenderCash(outstanding: Money, amountTendered: Money, config: CustomerConfig): CashTenderResult {
-        require(amountTendered > Money.ZERO) { "cash amount must be positive" }
         val roundedDue = config.roundingPolicy.roundCashDue(outstanding)
+        // a balance of 0.01 or 0.02 rounds to nothing in cash: settling it takes no coins
+        require(amountTendered > Money.ZERO || (amountTendered.isZero && roundedDue.isZero)) {
+            "cash amount must be positive"
+        }
         if (amountTendered < roundedDue) {
             // partial payment toward the balance: exact cents, no rounding, no change
             return CashTenderResult(amountApplied = amountTendered, roundingAdjustment = Money.ZERO, change = Money.ZERO)

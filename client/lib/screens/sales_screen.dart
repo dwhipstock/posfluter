@@ -265,7 +265,17 @@ class _RefundScreenState extends State<RefundScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.refundDone(money(result.refund.grossCents)))),
+        SnackBar(
+          content: Text(
+            result.refund.roundingAdjustmentCents == 0
+                ? l.refundDone(money(result.refund.grossCents))
+                // cash refund rounded to the nickel: say what was handed back
+                : '${l.refundDone(money(result.refund.grossCents))} · '
+                      '${l.rounding} '
+                      '${signedMoney(result.refund.roundingAdjustmentCents)} · '
+                      '${l.cashHandedBack(money(result.refund.paidOutCents))}',
+          ),
+        ),
       );
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -410,8 +420,12 @@ class _RefundScreenState extends State<RefundScreen> {
           SectionLabel(l.refundHistory),
           for (final r in info.refunds)
             _kv(
-              '${_tenderLabel(l, r.tenderType)} · ${r.reason}',
-              money(r.grossCents),
+              r.roundingAdjustmentCents == 0
+                  ? '${_tenderLabel(l, r.tenderType)} · ${r.reason}'
+                  : '${_tenderLabel(l, r.tenderType)} · ${r.reason} · '
+                        '${l.rounding} ${signedMoney(r.roundingAdjustmentCents)}',
+              // cash: what was actually handed back (gross when not rounded)
+              money(r.paidOutCents),
               color: T.textMuted,
             ),
         ],

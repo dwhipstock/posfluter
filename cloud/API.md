@@ -93,6 +93,20 @@ grossReportingCents }]` (exact); payments adds
 `country` and `kind` (restaurant | retail) plus the tenant's
 `reportingCurrency` and `rates`.
 
+**Cash rounding (summary, by-venue, tax, payments, refunds, shifts).** Cash
+payments round to the nickel at the store (CONTRACT §2); every revenue, tax
+and payment amount above stays the exact figure. The net rounding — the
+settling cash payments' `roundingAdjustmentCents` less cash refunds' — is
+reported beside them as `cashRoundingCents` (signed cents): on every
+summary / by-venue / tax `byVenue` and `byCurrency` entry and every payments
+`byVenue` / `byCurrency` entry (exact, in that row's currency); at the top of
+summary and payments and in tax `totals` it is exact when one currency is in
+scope and `null` when the scope spans currencies — rounding is never converted
+or added across CAD and USD. Refund rows and refunds `byVenue` carry
+`roundingAdjustmentCents` (cash back − gross); shift rows carry the Z-report's
+`cashRoundingCents` (`null` from an older store). A payload without the figure
+counts 0.
+
 - `GET /v1/reports/summary`
   ```json
   { "grossCents": 0, "netCents": 0, "taxCents": 0,

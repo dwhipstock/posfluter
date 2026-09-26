@@ -2,8 +2,8 @@
 
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { useMoney } from "@/lib/money";
-import { FxNote, RetailBadge } from "@/components/money-scope";
+import { cashRoundingAmounts, cashRoundingKpis, useMoney } from "@/lib/money";
+import { CashRoundingNote, FxNote, RetailBadge } from "@/components/money-scope";
 import { useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { ExportMenu } from "@/components/export-menu";
@@ -43,6 +43,9 @@ function PaymentsPage() {
   const tender = (type: string) => t(`tender_${type}` as MsgKey);
   const m = useMoney();
   const fmtC = (n: number) => m.fmtScope(data?.money, n);
+  // exact net cash rounding: one figure, or one per currency (never converted)
+  const rounding = data ? cashRoundingAmounts(data.cashRoundingCents, data.byCurrency, data.money?.currency ?? m.scopeCurrency) : [];
+  const hasRounding = rounding.length > 0;
   const axisC = (n: number) => m.shortScope(data?.money, n);
   const share = (cents: number) =>
     data && data.totalCents > 0 ? `${Math.round((cents / data.totalCents) * 100)}%` : "—";
@@ -54,12 +57,14 @@ function PaymentsPage() {
     return {
       ...meta("payments"),
       reportTitle: t("payments_title"),
+      ...(hasRounding ? { notes: [t("cash_rounding_note")] } : {}),
       kpis: [
         { label: t("col_amount"), value: fmtC(data.totalCents) },
         ...(data.money?.approximate
           ? (data.byCurrency ?? []).map((c) => ({ label: `${t("col_amount")} · ${c.currency}`, value: m.fmtIn(c.currency, c.totalCents) }))
           : []),
         { label: t("col_payments"), value: String(data.rows.reduce((n, r) => n + r.count, 0)) },
+        ...cashRoundingKpis(t("cash_rounding"), rounding, m.signedIn),
       ],
       sections: [
         ...storeExport.byStore<VenuePay>(
@@ -67,6 +72,8 @@ function PaymentsPage() {
             ...types.map((type) => col.money<VenuePay>(tender(type), (v) => amountOf(v, type))),
             col.int<VenuePay>(t("col_payments"), (v) => v.rows.reduce((n, r) => n + r.count, 0)),
             col.money<VenuePay>(t("col_total_short"), (v) => v.totalCents),
+            // each store in its own currency; the total is exact per currency
+            ...(hasRounding ? [col.money<VenuePay>(t("cash_rounding"), (v) => v.cashRoundingCents ?? 0)] : []),
           ],
           data.byVenue,
           [
@@ -74,6 +81,9 @@ function PaymentsPage() {
             ...data.rows.map((r) => Money(r.amountCents)),
             Int(data.rows.reduce((n, r) => n + r.count, 0)),
             Money(data.totalCents),
+            ...(hasRounding
+              ? [m.totalCell(data.byVenue, (v) => v.currency ?? m.currencyOf(v.venueId), (v) => v.cashRoundingCents ?? 0)]
+              : []),
           ]
         ),
         {
@@ -101,7 +111,7 @@ function PaymentsPage() {
       />
       <DateRangePicker />
       <FxNote money={data?.money} />
-      {data && data.rows.length > 0 && <PaymentsByStore report={data} />}
+      {data && data.rows.length > 0 && <PaymentsByStore report={data} showRounding={hasRounding} />}
 
       {isLoading ? (
         <Card className="p-5">
@@ -191,6 +201,7 @@ function PaymentsPage() {
               </TableFooter>
             </Table>
           </Card>
+          <CashRoundingNote amounts={rounding} />
         </>
       ) : (
         <Card>
@@ -202,7 +213,7 @@ function PaymentsPage() {
 }
 
 /** "All stores": the tender mix of each store side by side, with the combined row. */
-function PaymentsByStore({ report }: { report: PaymentsReport }) {
+function PaymentsByStore({ report, showRounding }: { report: PaymentsReport; showRounding: boolean }) {
   const t = useT();
   const { combined, nameOf, colorOf } = useStores();
   const m = useMoney();
@@ -230,6 +241,7 @@ function PaymentsByStore({ report }: { report: PaymentsReport }) {
                 </TableHead>
               ))}
               <TableHead className="text-right">{t("col_total_short")}</TableHead>
+              {showRounding && <TableHead className="hidden text-right md:table-cell">{t("cash_rounding")}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -248,6 +260,11 @@ function PaymentsByStore({ report }: { report: PaymentsReport }) {
                   </TableCell>
                 ))}
                 <TableCell className="text-right font-semibold tabular-nums">{m.fmtVenue(v.venueId, v.totalCents)}</TableCell>
+                {showRounding && (
+                  <TableCell className="hidden text-right tabular-nums text-neutral-600 md:table-cell">
+                    {m.signedIn(v.currency ?? m.currencyOf(v.venueId), v.cashRoundingCents ?? 0)}
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -260,6 +277,14 @@ function PaymentsByStore({ report }: { report: PaymentsReport }) {
                 </TableCell>
               ))}
               <TableCell className="text-right tabular-nums">{foot((v) => v.totalCents, report.totalCents)}</TableCell>
+              {showRounding && (
+                <TableCell className="hidden text-right tabular-nums md:table-cell">
+                  {/* exact per currency, never one converted sum */}
+                  {m.signedAmounts(
+                    m.perCurrency(report.byVenue, (v) => v.currency ?? m.currencyOf(v.venueId), (v) => v.cashRoundingCents ?? 0)
+                  )}
+                </TableCell>
+              )}
             </TableRow>
           </TableFooter>
         </Table>

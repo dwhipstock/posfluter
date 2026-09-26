@@ -99,15 +99,29 @@ sealed interface RoundingPolicy {
 
         override fun roundCashDue(exact: Money): Money {
             val u = unit.cents
-            return when (mode) {
-                Mode.DOWN -> Money((exact.cents / u) * u)
-                Mode.NEAREST -> Money(((exact.cents + u / 2) / u) * u)
+            // symmetric around zero: a refund rounds exactly like a sale
+            val abs = kotlin.math.abs(exact.cents)
+            val rounded = when (mode) {
+                Mode.DOWN -> (abs / u) * u
+                Mode.NEAREST -> ((abs + u / 2) / u) * u
             }
+            return Money(if (exact.cents < 0) -rounded else rounded)
         }
     }
 
     data object NoRounding : RoundingPolicy {
         override fun roundCashDue(exact: Money) = exact
+    }
+
+    /** What rounding [exact] to cash adds (signed: −0.02, +0.01, 0). */
+    fun cashAdjustment(exact: Money): Money = roundCashDue(exact) - exact
+
+    companion object {
+        /**
+         * Nearest 5¢ on the last cent digit: 1–2 → 0, 3–4 → 5, 6–7 → 5,
+         * 8–9 → 10; 0 and 5 unchanged ([CashRounding.NICKEL]).
+         */
+        val NICKEL: RoundingPolicy = RoundToUnit(Money(5), RoundToUnit.Mode.NEAREST)
     }
 }
 

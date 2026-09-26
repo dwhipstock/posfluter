@@ -5,8 +5,8 @@ import Link from "next/link";
 import { ChevronRight, Wifi, WifiOff } from "lucide-react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
 import { hourLabel } from "@/lib/format";
-import { useMoney } from "@/lib/money";
-import { ByCurrencyCard, FxNote, RetailBadge, useScopedKpi } from "@/components/money-scope";
+import { cashRoundingAmounts, cashRoundingKpis, useMoney } from "@/lib/money";
+import { ByCurrencyCard, CashRoundingNote, FxNote, RetailBadge, useScopedKpi } from "@/components/money-scope";
 import { useI18n, useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import type {
@@ -74,6 +74,8 @@ function Dashboard() {
     tax: s ? kpi(money, s.taxCents, exact((r) => r.taxCents)) : undefined,
     avg: s ? kpi(money, s.avgCheckCents, exact((r) => r.avgCheckCents)) : undefined,
   };
+  // exact net cash rounding: one figure, or one per currency (never converted)
+  const rounding = s ? cashRoundingAmounts(s.cashRoundingCents, s.byCurrency, money?.currency ?? m.scopeCurrency) : [];
   const fmtC = (n: number) => m.fmtScope(money, n);
   const axisC = (n: number) => m.shortScope(money, n);
   const chartNote = money?.approximate
@@ -91,6 +93,7 @@ function Dashboard() {
     return {
       ...meta("summary"),
       reportTitle: t("dash_title"),
+      ...(rounding.length > 0 ? { notes: [t("cash_rounding_note")] } : {}),
       kpis: [
         { label: t("kpi_gross"), value: fmtC(s.grossCents) },
         { label: t("kpi_net"), value: fmtC(s.netCents) },
@@ -110,6 +113,7 @@ function Dashboard() {
               value: m.fmtIn(r.currency, r.grossCents),
             }))
           : []),
+        ...cashRoundingKpis(t("cash_rounding"), rounding, m.signedIn),
       ],
       sections: [
         ...storeExport.byStore<VenueSummaryRow>(
@@ -119,9 +123,21 @@ function Dashboard() {
             col.money(t("col_tax"), (r) => r.taxCents),
             col.int(t("col_checks"), (r) => r.checkCount),
             col.money(t("kpi_avg_check"), (r) => r.avgCheckCents),
+            // each store in its own currency; the total is exact per currency
+            ...(rounding.length > 0 ? [col.money<VenueSummaryRow>(t("cash_rounding"), (r) => r.cashRoundingCents ?? 0)] : []),
           ],
           s.byVenue,
-          [T(t("col_total")), Money(s.grossCents), Money(s.netCents), Money(s.taxCents), Int(s.checkCount), Money(s.avgCheckCents)]
+          [
+            T(t("col_total")),
+            Money(s.grossCents),
+            Money(s.netCents),
+            Money(s.taxCents),
+            Int(s.checkCount),
+            Money(s.avgCheckCents),
+            ...(rounding.length > 0
+              ? [m.totalCell(s.byVenue, (r) => r.currency ?? m.currencyOf(r.venueId), (r) => r.cashRoundingCents ?? 0)]
+              : []),
+          ]
         ),
         {
           title: t("summary_by_day"),
@@ -184,6 +200,7 @@ function Dashboard() {
               className="col-span-2 md:col-span-1"
             />
           </div>
+          <CashRoundingNote amounts={rounding} className="mt-3" />
           {s && (
             <div className="mt-3">
               <ByCurrencyCard rows={s.byCurrency} money={money} />

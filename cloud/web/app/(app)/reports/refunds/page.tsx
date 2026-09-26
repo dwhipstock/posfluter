@@ -44,6 +44,8 @@ function RefundsPage() {
   const scoped = (cents: number, f: (r: V) => number) => kpi(money, cents, m.perCurrency(data?.byVenue ?? [], cur, f));
   const gross = data ? scoped(data.grossCents, (r) => r.grossCents) : undefined;
   const tax = data ? scoped(data.taxCents, (r) => r.taxCents) : undefined;
+  // refunds paid back in cash round to 5¢: the signed difference, per store in its own currency
+  const hasRounding = (data?.byVenue ?? []).some((r) => r.roundingAdjustmentCents != null);
   const both = (k?: { value: string; sub?: string }) => [k?.value, k?.sub].filter(Boolean).join(" — ");
 
   const buildDoc = (): ExportDoc | null => {
@@ -64,6 +66,7 @@ function RefundsPage() {
             col.money(t("col_amount"), (r) => r.grossCents),
             col.money(t("col_net"), (r) => r.netCents),
             col.money(t("col_tax"), (r) => r.taxCents),
+            ...(hasRounding ? [col.money<V>(t("cash_rounding"), (r) => r.roundingAdjustmentCents ?? 0)] : []),
           ],
           data.byVenue,
           [
@@ -72,6 +75,7 @@ function RefundsPage() {
             m.totalCell(data.byVenue, cur, (r) => r.grossCents),
             m.totalCell(data.byVenue, cur, (r) => r.netCents),
             m.totalCell(data.byVenue, cur, (r) => r.taxCents),
+            ...(hasRounding ? [m.totalCell(data.byVenue, cur, (r) => r.roundingAdjustmentCents ?? 0)] : []),
           ]
         ),
         {
@@ -98,6 +102,7 @@ function RefundsPage() {
             ),
             col.text<RefundListRow>(t("col_reason"), (r) => r.reason ?? "—"),
             col.money<RefundListRow>(t("col_amount"), (r) => r.grossCents),
+            ...(hasRounding ? [col.money<RefundListRow>(t("cash_rounding"), (r) => r.roundingAdjustmentCents ?? 0)] : []),
           ]),
           rows: data.rows,
         },
@@ -125,6 +130,18 @@ function RefundsPage() {
             { key: "gross", label: t("ref_amount"), value: (r) => r.grossCents, money: true, strong: true },
             { key: "net", label: t("col_net"), value: (r) => r.netCents, money: true, hide: "sm" },
             { key: "tax", label: t("ref_tax"), value: (r) => r.taxCents, money: true, hide: "sm" },
+            ...(hasRounding
+              ? [
+                  {
+                    key: "rounding",
+                    label: t("cash_rounding"),
+                    value: (r: V) => r.roundingAdjustmentCents ?? 0,
+                    money: true,
+                    signed: true,
+                    hide: "md" as const,
+                  },
+                ]
+              : []),
           ]}
         />
       )}
@@ -215,6 +232,11 @@ function RefundsPage() {
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums text-red-600">
                       {m.fmtIn(r.currency ?? m.currencyOf(r.venueId), r.grossCents)}
+                      {!!r.roundingAdjustmentCents && (
+                        <div className="text-[11px] font-normal text-neutral-500">
+                          {t("cash_rounding")} {m.signedIn(r.currency ?? m.currencyOf(r.venueId), r.roundingAdjustmentCents)}
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

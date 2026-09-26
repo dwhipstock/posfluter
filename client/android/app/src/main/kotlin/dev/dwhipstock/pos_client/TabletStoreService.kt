@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.os.IBinder
 import android.util.Log
 import dev.dwhipstock.pos.module
+import dev.dwhipstock.pos.sdk.CashRounding
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
 import dev.dwhipstock.pos.sdk.StripeConfig
 import io.ktor.server.cio.CIO
@@ -97,6 +98,9 @@ class TabletStoreService : Service() {
             // shop); unset → Vieux-Port, as always
             val venueId = storeProps?.getProperty("store.venue")?.trim()?.takeIf { it.isNotEmpty() }
             val legalAge = storeProps?.getProperty("legal.age")?.trim()?.toIntOrNull()
+            // cash.rounding=nickel|off; unset → nickel
+            val cashRounding = CashRounding.resolve(storeProps?.getProperty(CashRounding.KEY), "store.properties")
+            cashRounding.warning?.let { Log.w("TabletStore", "Cash rounding config ignored: $it") }
             if (venueId != null) Log.i("TabletStore", "Store: $venueId (store.properties)")
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = 8080) {
                 module(
@@ -117,6 +121,7 @@ class TabletStoreService : Service() {
                     stripeConfig = stripeConfig,
                     venueId = venueId,
                     legalAgeOverride = legalAge,
+                    cashRounding = cashRounding,
                 )
             }.start(wait = true)
         } catch (error: Throwable) {
@@ -143,7 +148,7 @@ class TabletStoreService : Service() {
 
     /**
      * The external store.properties itself, for the store switches that are
-     * plain values: `store.venue` and `legal.age`. Missing/unreadable → null;
+     * plain values: `store.venue`, `legal.age` and `cash.rounding`. Missing/unreadable → null;
      * never fails startup.
      */
     private fun readStoreProperties(): java.util.Properties? = runCatching {

@@ -104,6 +104,9 @@ fun Application.module(
     // print.receipts=paper|digital (POS_PRINT_RECEIPTS / POS_CONFIG_FILE; the
     // tablet passes its store.properties). Local config only, never the network.
     receiptPrintMode: ReceiptPrintMode.Resolved = ReceiptPrintMode.fromEnv(),
+    // cash.rounding=nickel|off (POS_CASH_ROUNDING / POS_CONFIG_FILE; the tablet
+    // passes its store.properties). Default nickel for every store.
+    cashRounding: dev.dwhipstock.pos.sdk.CashRounding.Resolved = dev.dwhipstock.pos.sdk.CashRounding.fromEnv(),
     // Optional Stripe card tender, TEST MODE only (STRIPE_KEY / stripe.secretKey;
     // the tablet passes its store.properties). No key or a non-sk_test_ key →
     // disabled. Never contacted at startup on the request path.
@@ -177,13 +180,17 @@ fun Application.module(
         publicUrlProvider = publicUrlProvider,
         legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
             dev.dwhipstock.pos.sdk.LegalAge.fromEnv(SagePoppy.LEGAL_AGE), legalAgeOverride?.toString()),
+        cashRounding = cashRounding.rounding,
     ) else CopperLanternConfig(
         venue = venue,
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,
         publicUrlProvider = publicUrlProvider,
+        cashRounding = cashRounding.rounding,
     )
+    cashRounding.warning?.let { log.warn("Cash rounding config ignored: $it") }
+    log.info("Cash rounding: ${cashRounding.rounding.wire} (${cashRounding.source})")
     log.info("Store: ${config.displayName} (POS_VENUE=${config.venueId}, ${config.profile.country}, " +
         "${config.profile.currency}, ${config.profile.locales.joinToString("/")}, ${config.profile.kind.wire})")
     if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Legal age for age-restricted items: ${config.legalAge}")
@@ -400,6 +407,8 @@ data class HealthResponse(
     /** Languages staff can pick; the first is the store's default. */
     val locales: List<String> = listOf("fr", "en"),
     val legalAge: Int = 18,
+    /** Cash payments round to the nickel ("nickel") or are charged to the cent ("off"). */
+    val cashRounding: String = "nickel",
 ) {
     companion object {
         fun of(config: dev.dwhipstock.pos.sdk.CustomerConfig, pairingRequired: Boolean) = HealthResponse(
@@ -413,6 +422,7 @@ data class HealthResponse(
             currency = config.profile.currency,
             locales = config.profile.locales.map { it.tag },
             legalAge = config.legalAge,
+            cashRounding = if (config.roundingPolicy == dev.dwhipstock.pos.sdk.RoundingPolicy.NoRounding) "off" else "nickel",
         )
     }
 }

@@ -76,6 +76,12 @@ class _TenderScreenState extends State<TenderScreen> {
       ? null
       : _check.split?.groups.where((g) => g.id == widget.groupId).firstOrNull;
   int get _due => _group?.outstandingCents ?? _check.outstandingCents;
+
+  /// Paying in cash: the server's nickel-rounded amount and the signed
+  /// rounding. Card / bank transfer / Stripe always pay the exact [_due].
+  int get _cashDue => _group?.cashDueCents ?? _check.cashDueCents;
+  int get _cashRounding =>
+      _group?.cashRoundingCents ?? _check.cashRoundingCents;
   int? get _entryCAD => _entry.isEmpty ? null : int.parse(_entry);
 
   /// Never awaited by anything else on this screen: cash is usable at once,
@@ -109,11 +115,11 @@ class _TenderScreenState extends State<TenderScreen> {
     }
   }
 
-  /// Quick strip: exact, then round-ups to the next 100 / 500 / 1000.
+  /// Quick strip: exact cash due, then round-ups to the next 100 / 500 / 1000.
   List<int> get _quickAmounts {
     int ceilTo(int unitCents) =>
-        ((_due + unitCents - 1) ~/ unitCents) * unitCents;
-    return {_due, ceilTo(10000), ceilTo(50000), ceilTo(100000)}.toList()
+        ((_cashDue + unitCents - 1) ~/ unitCents) * unitCents;
+    return {_cashDue, ceilTo(10000), ceilTo(50000), ceilTo(100000)}.toList()
       ..sort();
   }
 
@@ -151,10 +157,7 @@ class _TenderScreenState extends State<TenderScreen> {
         _toast(
           L
               .of(context)
-              .receivedToast(
-                money(result.tender.amountAppliedCents),
-                money(_due),
-              ),
+              .receivedToast(money(result.tender.cashPaidCents), money(_due)),
         );
       }
     }
@@ -292,8 +295,10 @@ class _TenderScreenState extends State<TenderScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _row(l.cashReceived, money(tender.amountTenderedCents)),
-            if (tender.roundingAdjustmentCents != 0)
-              _row(l.rounding, money(tender.roundingAdjustmentCents)),
+            if (tender.roundingAdjustmentCents != 0) ...[
+              _row(l.rounding, signedMoney(tender.roundingAdjustmentCents)),
+              _row(l.cashTotal, money(tender.cashPaidCents)),
+            ],
             _row(l.change, money(tender.changeCents), big: true),
           ],
         ),
@@ -311,17 +316,31 @@ class _TenderScreenState extends State<TenderScreen> {
     context,
   ).showSnackBar(SnackBar(content: Text(message)));
 
-  Widget _row(String label, String value, {bool big = false}) {
+  Widget _row(
+    String label,
+    String value, {
+    bool big = false,
+    bool bigValue = false,
+  }) {
     final style = big
         ? T.price(size: 26, weight: FontWeight.w600)
         : T.text(size: 16);
+    final valueStyle = bigValue
+        ? T.price(size: 26, weight: FontWeight.w700)
+        : style;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: style),
-          Text(value, style: style),
+          Flexible(
+            child: Text(
+              label,
+              style: bigValue ? T.text(weight: FontWeight.w600) : style,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(value, style: valueStyle),
         ],
       ),
     );
@@ -391,6 +410,25 @@ class _TenderScreenState extends State<TenderScreen> {
                         ),
                       ),
                       style: T.small(),
+                    ),
+                  ),
+                // cash only: the server's nickel rounding and what to collect
+                if (_method == 'CASH' && _cashRounding != 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: PosPanel(
+                      key: const ValueKey('cash-rounding'),
+                      color: T.surfaceAlt,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Column(
+                        children: [
+                          _row(l.rounding, signedMoney(_cashRounding)),
+                          _row(l.cashTotal, money(_cashDue), bigValue: true),
+                        ],
+                      ),
                     ),
                   ),
                 const SizedBox(height: 16),
@@ -573,7 +611,7 @@ class _TenderScreenState extends State<TenderScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // quick-amount strip: exact + next-100/500/1000 round-ups
+        // quick-amount strip: exact cash due + next-100/500/1000 round-ups
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -586,14 +624,14 @@ class _TenderScreenState extends State<TenderScreen> {
                   style: OutlinedButton.styleFrom(
                     backgroundColor: T.surface,
                     side: BorderSide(
-                      color: amount == _due ? T.primary : T.border,
+                      color: amount == _cashDue ? T.primary : T.border,
                     ),
                   ),
                   child: Text(
                     money(amount),
                     style: T.price(
                       size: 18,
-                      color: amount == _due ? T.primary : T.textPrimary,
+                      color: amount == _cashDue ? T.primary : T.textPrimary,
                     ),
                   ),
                 ),

@@ -7,7 +7,8 @@ import '../i18n.dart';
 import 'retail_i18n.dart';
 import 'sp_theme.dart';
 
-/// Retail payment: cash (quick amounts + keypad, exact change to the cent) or
+/// Retail payment: cash (quick amounts + keypad; the server rounds the cash
+/// total to the nickel) or
 /// a card on the counter's own external terminal (the cashier confirms once it
 /// approves). No Stripe here: that integration is Canada-only for now.
 /// Resolves to the closed sale, or null if dismissed before payment.
@@ -26,11 +27,19 @@ class PaySheet extends StatefulWidget {
   State<PaySheet> createState() => _PaySheetState();
 }
 
-/// A paid sale and the change handed back.
+/// A paid sale and the change handed back. For a cash payment the server may
+/// round the total to the nickel: [roundingCents] (signed) and the rounded
+/// [cashTotalCents] actually collected (0 when not cash).
 class PayResult {
   final Check check;
   final int changeCents;
-  const PayResult(this.check, this.changeCents);
+  final int roundingCents, cashTotalCents;
+  const PayResult(
+    this.check,
+    this.changeCents, {
+    this.roundingCents = 0,
+    this.cashTotalCents = 0,
+  });
 }
 
 class _PaySheetState extends State<PaySheet> {
@@ -41,18 +50,24 @@ class _PaySheetState extends State<PaySheet> {
   PayResult? _done;
 
   int get _due => _sale.outstandingCents;
+
+  /// Cash: the server's nickel-rounded amount due and the signed rounding.
+  /// The card terminal always charges the exact [_due].
+  int get _cashDue => _sale.cashDueCents;
+  int get _cashRounding => _sale.cashRoundingCents;
+  bool get _showRounding => _method == 'CASH' && _cashRounding != 0;
   int? get _entered => _digits.isEmpty ? null : int.parse(_digits);
 
   List<int> get _quick {
-    int up(int unit) => ((_due + unit - 1) ~/ unit) * unit;
+    int up(int unit) => ((_cashDue + unit - 1) ~/ unit) * unit;
     return {
-      _due,
+      _cashDue,
       up(500),
       up(1000),
       up(2000),
       up(5000),
       up(10000),
-    }.where((v) => v >= _due).toList()..sort();
+    }.where((v) => v >= _cashDue).toList()..sort();
   }
 
   Future<void> _guard(Future<void> Function() op) async {
@@ -72,7 +87,15 @@ class _PaySheetState extends State<PaySheet> {
     _sale = res.check;
     if (_sale.outstandingCents == 0) {
       final closed = await Api.finalizeCheck(_sale.id);
-      setState(() => _done = PayResult(closed, res.tender.changeCents));
+      final t = res.tender;
+      setState(
+        () => _done = PayResult(
+          closed,
+          t.changeCents,
+          roundingCents: t.roundingAdjustmentCents,
+          cashTotalCents: t.cashPaidCents,
+        ),
+      );
     } else {
       setState(() => _digits = '');
     }
@@ -104,7 +127,7 @@ class _PaySheetState extends State<PaySheet> {
     return Dialog(
       insetPadding: const EdgeInsets.all(24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 640),
+        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 700),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: done != null ? _paid(r, c, done) : _paying(r, c),
@@ -125,7 +148,7 @@ class _PaySheetState extends State<PaySheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    r.amountDue.toUpperCase(),
+                    (_showRounding ? r.cashTotal : r.amountDue).toUpperCase(),
                     style: T
                         .text(
                           size: 13,
@@ -134,13 +157,32 @@ class _PaySheetState extends State<PaySheet> {
                         )
                         .copyWith(letterSpacing: 1.2),
                   ),
-                  Text(
-                    money(_due),
-                    style: T.price(
-                      size: 44,
-                      weight: FontWeight.w700,
-                      color: c.text,
-                    ),
+                  // the rounding sits beside the amount: the sheet has no
+                  // spare height for another line
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        money(_method == 'CASH' ? _cashDue : _due),
+                        style: T.price(
+                          size: 44,
+                          weight: FontWeight.w700,
+                          color: c.text,
+                        ),
+                      ),
+                      if (_showRounding) ...[
+                        const SizedBox(width: 14),
+                        Flexible(
+                          child: Text(
+                            '${r.amountDue} ${money(_due)} · '
+                            '${r.rounding} ${signedMoney(_cashRounding)}',
+                            key: const ValueKey('cash-rounding'),
+                            style: T.text(size: 15, color: c.textMuted),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -191,7 +233,7 @@ class _PaySheetState extends State<PaySheet> {
                   child: OutlinedButton(
                     onPressed: _busy ? null : () => _cash(q),
                     child: Text(
-                      q == _due ? '${r.exact} · ${money(q)}' : money(q),
+                      q == _cashDue ? '${r.exact} · ${money(q)}' : money(q),
                       style: T.price(
                         size: 20,
                         weight: FontWeight.w600,
@@ -332,6 +374,15 @@ class _PaySheetState extends State<PaySheet> {
           r.paid,
           style: T.text(size: 28, weight: FontWeight.w700, color: c.text),
         ),
+        if (done.roundingCents != 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            '${r.cashTotal} ${money(done.cashTotalCents)} · '
+            '${r.rounding} ${signedMoney(done.roundingCents)}',
+            key: const ValueKey('paid-rounding'),
+            style: T.text(size: 17, color: c.textMuted),
+          ),
+        ],
         if (done.changeCents > 0) ...[
           const SizedBox(height: 8),
           Text(

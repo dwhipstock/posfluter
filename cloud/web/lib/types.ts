@@ -61,6 +61,8 @@ export interface CurrencySummaryRow {
   refundAmountCents: number;
   /** grossCents in the reporting currency at the fixed rate; null = no rate. */
   grossReportingCents?: number | null;
+  /** Net cash rounding (cash tenders' 5¢ adjustments less cash refunds'), signed cents in this row's currency. Absent from older APIs. */
+  cashRoundingCents?: number;
 }
 
 /** One store's headline figures (the per-store comparison in "All stores"). */
@@ -80,6 +82,8 @@ export interface VenueSummaryRow {
   currency?: Currency;
   /** Every tax code the store charged (sales less refunds). */
   taxes?: TaxCodeRow[];
+  /** Net cash rounding (cash tenders' 5¢ adjustments less cash refunds'), signed cents in this row's currency. Absent from older APIs. */
+  cashRoundingCents?: number;
 }
 
 export interface ByVenueReport {
@@ -159,6 +163,8 @@ export interface Summary {
   byVenue: VenueSummaryRow[];
   /** Exact totals per currency (one row unless the scope spans countries). */
   byCurrency?: CurrencySummaryRow[];
+  /** Net cash rounding, signed cents; null when the scope mixes currencies (never summed across them). Absent from older APIs. */
+  cashRoundingCents?: number | null;
   money?: MoneyScope;
 }
 
@@ -182,6 +188,8 @@ export interface TaxReport {
     gstCents: number;
     qstCents: number;
     checkCount: number;
+    /** Net cash rounding, signed cents; null when the scope mixes currencies (never summed across them). Absent from older APIs. */
+    cashRoundingCents?: number | null;
   };
   byVenue: VenueSummaryRow[];
   byTax?: TaxCodeRow[];
@@ -197,12 +205,32 @@ export interface PaymentRow {
   count: number;
 }
 
+export interface VenuePayments {
+  venueId: string;
+  venueName: string;
+  totalCents: number;
+  rows: PaymentRow[];
+  currency?: Currency;
+  /** Net cash rounding (cash tenders' 5¢ adjustments less cash refunds'), signed cents in this row's currency. Absent from older APIs. */
+  cashRoundingCents?: number;
+}
+
+export interface CurrencyPayments {
+  currency: Currency;
+  totalCents: number;
+  rows: PaymentRow[];
+  /** Net cash rounding (cash tenders' 5¢ adjustments less cash refunds'), signed cents in this row's currency. Absent from older APIs. */
+  cashRoundingCents?: number;
+}
+
 export interface PaymentsReport {
   rows: PaymentRow[];
   totalCents: number;
-  byVenue: { venueId: string; venueName: string; totalCents: number; rows: PaymentRow[]; currency?: Currency }[];
+  byVenue: VenuePayments[];
   /** The payment mix per currency, exact. */
-  byCurrency?: { currency: Currency; totalCents: number; rows: PaymentRow[] }[];
+  byCurrency?: CurrencyPayments[];
+  /** Net cash rounding, signed cents; null when the scope mixes currencies (never summed across them). Absent from older APIs. */
+  cashRoundingCents?: number | null;
   money?: MoneyScope;
 }
 
@@ -314,6 +342,8 @@ export interface RefundListRow {
   taxCents: number;
   venueId: string;
   currency?: Currency;
+  /** Cash handed back less the gross refunded (the 5¢ rounding), signed cents. */
+  roundingAdjustmentCents?: number;
 }
 
 export interface RefundsReport {
@@ -332,6 +362,8 @@ export interface RefundsReport {
     netCents: number;
     taxCents: number;
     currency?: Currency;
+    /** Net rounding of this store's cash refunds, signed cents. */
+    roundingAdjustmentCents?: number;
   }[];
   money?: MoneyScope;
 }
@@ -391,6 +423,8 @@ export interface Shift {
   overShortCents: number | null;
   venueId: string;
   currency?: Currency;
+  /** Net cash rounding of the shift, signed cents in its store's currency. */
+  cashRoundingCents?: number | null;
 }
 
 export interface ShiftsReport {

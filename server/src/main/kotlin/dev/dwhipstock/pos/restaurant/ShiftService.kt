@@ -209,6 +209,7 @@ class ShiftService(private val config: CustomerConfig) {
             put("cashPaidOutCents", report.cashPaidOutCents)
             put("cashRefundCents", report.cashRefundCents)
             put("refundTotalCents", report.refundTotalCents)
+            put("cashRoundingCents", report.cashRoundingCents)
             putJsonArray("tenderBreakdown") {
                 report.tenderBreakdown.forEach { t ->
                     addJsonObject {
@@ -254,6 +255,7 @@ class ShiftService(private val config: CustomerConfig) {
             itemMix = agg.itemMix,
             voids = voids,
             corkageCents = agg.corkage,
+            cashRoundingCents = agg.cashRounding,
         )
     }
 
@@ -261,6 +263,8 @@ class ShiftService(private val config: CustomerConfig) {
         val revenue: Long, val count: Int, val tenderBreakdown: List<TenderSummary>,
         val itemMix: List<ItemMixEntry>, val corkage: Long,
         val cashIn: Long, val changeOut: Long,
+        /** Nickel rounding on the cash tenders (signed). */
+        val cashRounding: Long,
     )
 
     /** Shared X/Z/range math over a set of CLOSED check rows. */
@@ -313,8 +317,10 @@ class ShiftService(private val config: CustomerConfig) {
             tenderBreakdown = tenderBreakdown,
             itemMix = itemMix,
             corkage = corkage,
+            // tendered − change = the ROUNDED cash each settling payment took
             cashIn = cashRows.sumOf { it[Tenders.amountTenderedCents] },
             changeOut = cashRows.sumOf { it[Tenders.changeCents] },
+            cashRounding = cashRows.sumOf { it[Tenders.roundingAdjustmentCents] },
         )
     }
 
@@ -334,14 +340,17 @@ class ShiftService(private val config: CustomerConfig) {
         val cashPaidOut = movements.filter { it[CashMovements.direction] == "OUT" }.sumOf { it[CashMovements.amountCents] }
         val refunds = Refunds.selectAll().where { Refunds.shiftId eq shiftId }.toList()
         val refundTotal = refunds.sumOf { it[Refunds.grossCents] }
-        // only CASH refunds leave the drawer; Card/transfer refunds don't
-        val cashRefund = refunds.filter { it[Refunds.tenderType] == "CASH" }.sumOf { it[Refunds.grossCents] }
+        // only CASH refunds leave the drawer; Card/transfer refunds don't. The
+        // cash that left is the rounded amount: gross + its nickel rounding.
+        val cashRefundRows = refunds.filter { it[Refunds.tenderType] == "CASH" }
+        val cashRefund = cashRefundRows.sumOf { it[Refunds.grossCents] + it[Refunds.roundingAdjustmentCents] }
+        val refundRounding = cashRefundRows.sumOf { it[Refunds.roundingAdjustmentCents] }
 
-        // cash drawer math: opening float + cash sales - change given
+        // cash drawer math (all of it the rounded cash that changed hands):
+        //   opening float + cash taken - change given
         //   + non-sale cash in - non-sale cash out - cash refunds paid out
-        val expected = if (closingCountCents != null)
-            shift[Shifts.openingFloatCents] + agg.cashIn - agg.changeOut + cashPaidIn - cashPaidOut - cashRefund
-        else null
+        // The X-report shows the drawer so far; the Z adds the count.
+        val expected = shift[Shifts.openingFloatCents] + agg.cashIn - agg.changeOut + cashPaidIn - cashPaidOut - cashRefund
 
         return ShiftReport(
             shiftId = shiftId,
@@ -360,9 +369,11 @@ class ShiftService(private val config: CustomerConfig) {
             cashPaidOutCents = cashPaidOut,
             cashRefundCents = cashRefund,
             refundTotalCents = refundTotal,
+            // what the store gained (+) or gave (−) rounding cash to the nickel
+            cashRoundingCents = agg.cashRounding - refundRounding,
             expectedCashCents = expected,
             closingCountCents = closingCountCents,
-            overShortCents = if (expected != null && closingCountCents != null) closingCountCents - expected else null,
+            overShortCents = closingCountCents?.let { it - expected },
         )
     }
 
@@ -418,10 +429,13 @@ data class ShiftReport(
     // non-sale cash movements + refunds posted to the shift (feed expected cash)
     val cashPaidInCents: Long = 0,
     val cashPaidOutCents: Long = 0,
-    val cashRefundCents: Long = 0, // cash refunds only — what actually left the drawer
+    val cashRefundCents: Long = 0, // cash refunds only — what actually left the drawer (rounded)
     val refundTotalCents: Long = 0, // all refunds this shift (any tender), informational
-    // Z-only fields (null on X-report)
+    /** Net nickel rounding on cash: sales' rounding less cash refunds' (signed). */
+    val cashRoundingCents: Long = 0,
+    // the drawer: X and Z (null on a date-range report)
     val expectedCashCents: Long? = null,
+    // Z-only fields (null on X-report)
     val closingCountCents: Long? = null,
     val overShortCents: Long? = null,
 )

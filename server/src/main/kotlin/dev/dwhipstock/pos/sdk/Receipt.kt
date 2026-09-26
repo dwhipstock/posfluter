@@ -4,6 +4,7 @@ import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import dev.dwhipstock.pos.sdk.i18n.MessageKey
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_BILL
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_BILL_BANNER
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_CASH_TOTAL
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_CHANGE
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_CLOSE
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_NOT_A_RECEIPT
@@ -45,6 +46,12 @@ data class Receipt(
     val taxes: List<TaxLine> = emptyList(),
     /** The legal age a passing ID check cleared the sale at (retail); null = no check. */
     val ageVerifiedAt: Int? = null,
+    /**
+     * Bill only: what is still due, paid in cash (rounded to the nickel), and
+     * the signed rounding inside it. null / zero = nothing to show.
+     */
+    val cashDue: Money? = null,
+    val cashRounding: Money = Money.ZERO,
 ) {
     /** Pre-tax subtotal: the total less the taxes added on top. */
     val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
@@ -194,6 +201,13 @@ object ReceiptRenderer {
                 receipt.taxIncluded.let(policy::money),
             ))
         }
+        // the bill: paying cash rounds to the nickel — show the adjustment and
+        // the cash amount under the exact total, so nobody is surprised at the till
+        val cashDue = receipt.cashDue
+        if (provisional && cashDue != null && !receipt.cashRounding.isZero) {
+            add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), signed(receipt.cashRounding, policy::money)))
+            add(PrintLine.KeyValue(msg(RECEIPT_CASH_TOTAL), cashDue.let(policy::money)))
+        }
         receipt.taxes.filter { it.component.registrationNumber.isNotBlank() }
             .forEach { add(PrintLine.Text(taxRegistrationLine(it.component, locale))) }
         add(PrintLine.Blank)
@@ -207,10 +221,14 @@ object ReceiptRenderer {
 
         for (tender in receipt.tenders) {
             val label = Messages.dataLabel("tender.${tender.type}", locale) ?: locale.dataText(tender.labelFr, tender.labelEn)
-            add(PrintLine.KeyValue(label, tender.amountTendered.let(policy::money)))
+            // a cash payment that settled the balance: the nickel rounding, then
+            // the rounded cash amount the customer actually paid
             if (!tender.roundingAdjustment.isZero) {
-                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), tender.roundingAdjustment.let(policy::money)))
+                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), signed(tender.roundingAdjustment, policy::money)))
+                add(PrintLine.KeyValue(msg(RECEIPT_CASH_TOTAL),
+                    (tender.amountApplied + tender.roundingAdjustment).let(policy::money), emphasized = true))
             }
+            add(PrintLine.KeyValue(label, tender.amountTendered.let(policy::money)))
             if (!tender.change.isZero) {
                 add(PrintLine.KeyValue(msg(RECEIPT_CHANGE), tender.change.let(policy::money)))
             }
@@ -224,6 +242,10 @@ object ReceiptRenderer {
         add(PrintLine.Blank)
         add(PrintLine.Text(policy.footerText, Align.CENTER))
     }
+
+    /** A rounding adjustment with its sign: "-0.02", "+0.01". */
+    fun signed(m: Money, format: (Money) -> String = Money::format): String =
+        if (m > Money.ZERO) "+" + format(m) else format(m)
 
     /**
      * Both languages' names, the print locale's first: "GST/TPS" in English,

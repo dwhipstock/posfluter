@@ -194,6 +194,27 @@ private fun refundTax(row: ResultRow): Long = row[Refunds.taxIncludedCents] ?: 0
 private fun refundGst(row: ResultRow): Long = row[Refunds.gstCents] ?: 0
 private fun refundQst(row: ResultRow): Long = row[Refunds.qstCents] ?: 0
 
+/**
+ * Cash rounding to the nickel (store migration 039): each settling cash
+ * payment's signed adjustment, less each cash refund's. Revenue and tax stay
+ * the exact figures; this is reported next to them, never inside them. A row
+ * from an older store without the figure counts 0.
+ */
+private fun tenderRounding(row: ResultRow): Long = row[CheckTenders.roundingAdjustmentCents] ?: 0
+private fun refundRounding(row: ResultRow): Long = row[Refunds.roundingAdjustmentCents] ?: 0
+
+/** Net cash rounding of these rows. Callers pass ONE store's or ONE currency's rows. */
+private fun cashRounding(tenders: List<ResultRow>, refunds: List<ResultRow>): Long =
+    tenders.sumOf(::tenderRounding) - refunds.sumOf(::refundRounding)
+
+/**
+ * The combined figure: exact when every in-scope store sells in one currency;
+ * null when they span currencies — rounding is never converted or added across
+ * CAD and USD, the per-currency rows (`byCurrency`) carry it instead.
+ */
+private fun ReportCtx.combinedRounding(tenders: List<ResultRow>, refunds: List<ResultRow>): Long? =
+    if (mixed) null else cashRounding(tenders, refunds)
+
 /** GST and QST of closed sales less refunds: (gst, qst). Canadian stores only, so CAD. */
 private fun gstQst(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultRow>): Pair<Long, Long> =
     (ctx.checks(closed, ::checkGst) - ctx.refunds(refunds, ::refundGst)) to
@@ -339,14 +360,18 @@ data class VenueSummaryRow(
     val gstCents: Long = 0, val qstCents: Long = 0,
     val currency: String = "CAD",
     /** Every tax code the store charged (sales less refunds), exact. */
-    val taxes: List<TaxCodeRow> = emptyList())
+    val taxes: List<TaxCodeRow> = emptyList(),
+    /** Net cash rounding to the nickel (sales less cash refunds), exact, in [currency]. */
+    val cashRoundingCents: Long = 0)
 
 private fun venueSummaries(
     ctx: ReportCtx, closed: List<ResultRow>, voids: List<ResultRow>, refunds: List<ResultRow>,
+    tenders: List<ResultRow>,
 ): List<VenueSummaryRow> {
     val closedBy = closed.groupBy { it[Checks.venueId] }
     val voidsBy = voids.groupBy { it[Checks.venueId] }
     val refundsBy = refunds.groupBy { it[Refunds.venueId] }
+    val tendersBy = tenders.groupBy { it[CheckTenders.venueId] }
     return ctx.venues.map { v ->
         val c = closedBy[v.id].orEmpty()
         val r = refundsBy[v.id].orEmpty()
@@ -362,6 +387,7 @@ private fun venueSummaries(
             qstCents = c.sumOf(::checkQst) - r.sumOf(::refundQst),
             currency = v.currency,
             taxes = taxCodeTotals(ctx, c, r),
+            cashRoundingCents = cashRounding(tendersBy[v.id].orEmpty(), r),
         )
     }
 }
@@ -375,10 +401,13 @@ data class CurrencySummaryRow(
     val voidCount: Int, val voidAmountCents: Long,
     val refundCount: Int, val refundAmountCents: Long,
     /** [grossCents] in the reporting currency at the fixed rate; null = no rate configured. */
-    val grossReportingCents: Long? = null)
+    val grossReportingCents: Long? = null,
+    /** Net cash rounding to the nickel of these stores, exact, in [currency] (never converted). */
+    val cashRoundingCents: Long = 0)
 
 private fun currencySummaries(
     ctx: ReportCtx, closed: List<ResultRow>, voids: List<ResultRow>, refunds: List<ResultRow>,
+    tenders: List<ResultRow>,
 ): List<CurrencySummaryRow> = ctx.currencies.map { c ->
     val sub = ctx.only(c)
     val ids = sub.venueIds()
@@ -395,6 +424,7 @@ private fun currencySummaries(
         voidCount = vo.size, voidAmountCents = vo.sumOf(::gross),
         refundCount = re.size, refundAmountCents = re.sumOf(::rGross),
         grossReportingCents = ctx.fx.convert(g, c, ctx.reporting),
+        cashRoundingCents = cashRounding(tenders.filter { it[CheckTenders.venueId] in ids }, re),
     )
 }
 
@@ -410,7 +440,9 @@ data class SummaryResponse(
     val byVenue: List<VenueSummaryRow>,
     /** Exact totals per currency (one row unless the scope spans countries). */
     val byCurrency: List<CurrencySummaryRow> = emptyList(),
-    val money: MoneyScope? = null)
+    val money: MoneyScope? = null,
+    /** Net cash rounding, exact; null when the scope spans currencies (see [byCurrency]). */
+    val cashRoundingCents: Long? = null)
 
 @Serializable
 data class ByVenueResponse(
@@ -430,7 +462,9 @@ data class TaxReportResponse(
 @Serializable
 data class TaxTotals(
     val grossCents: Long, val netCents: Long, val taxCents: Long, val checkCount: Int,
-    val gstCents: Long = 0, val qstCents: Long = 0)
+    val gstCents: Long = 0, val qstCents: Long = 0,
+    /** Net cash rounding (not revenue, not taxed); null when the scope spans currencies. */
+    val cashRoundingCents: Long? = null)
 
 /** One tax as the store labelled it; [ratePercent] is a decimal string ("9.975"). */
 @Serializable
@@ -450,16 +484,22 @@ data class PaymentRow(val type: String, val amountCents: Long, val count: Int)
 @Serializable
 data class VenuePayments(
     val venueId: String, val totalCents: Long, val rows: List<PaymentRow>, val venueName: String = "",
-    val currency: String = "CAD")
+    val currency: String = "CAD",
+    /** Net cash rounding to the nickel, exact, in [currency]. Amounts above are exact. */
+    val cashRoundingCents: Long = 0)
 
 /** The payment mix of the stores selling in one currency, exact. */
 @Serializable
-data class CurrencyPayments(val currency: String, val totalCents: Long, val rows: List<PaymentRow>)
+data class CurrencyPayments(
+    val currency: String, val totalCents: Long, val rows: List<PaymentRow>,
+    val cashRoundingCents: Long = 0)
 
 @Serializable
 data class PaymentsResponse(
     val rows: List<PaymentRow>, val totalCents: Long, val byVenue: List<VenuePayments>,
-    val byCurrency: List<CurrencyPayments> = emptyList(), val money: MoneyScope? = null)
+    val byCurrency: List<CurrencyPayments> = emptyList(), val money: MoneyScope? = null,
+    /** Net cash rounding, exact; null when the scope spans currencies (see [byCurrency]). */
+    val cashRoundingCents: Long? = null)
 
 /** One store's share of an item or category (stores that sold none are left out). */
 @Serializable
@@ -549,7 +589,9 @@ data class ShiftDto(
     val tenderBreakdown: List<TenderTypeRow>,
     val expectedCashCents: Long?, val closingCountCents: Long?, val overShortCents: Long?,
     val venueId: String,
-    val currency: String = "CAD")
+    val currency: String = "CAD",
+    /** The Z-report's net cash rounding; null = an older store that sent none. */
+    val cashRoundingCents: Long? = null)
 
 @Serializable
 data class VenueShiftsRow(
@@ -593,13 +635,17 @@ data class RefundListRow(
     val refundId: Long, val checkId: Int?, val createdAt: String?,
     val tableLabel: String?, val tenderType: String?, val reason: String?,
     val grossCents: Long, val netCents: Long, val taxCents: Long, val venueId: String,
-    val currency: String = "CAD")
+    val currency: String = "CAD",
+    /** CASH refunds: cash handed back − gross (to the nickel); 0 otherwise. */
+    val roundingAdjustmentCents: Long = 0)
 
 @Serializable
 data class VenueRefundsRow(
     val venueId: String, val venueName: String, val count: Int,
     val grossCents: Long, val netCents: Long, val taxCents: Long,
-    val currency: String = "CAD")
+    val currency: String = "CAD",
+    /** The refunds' net cash rounding, exact, in [currency]. */
+    val roundingAdjustmentCents: Long = 0)
 
 @Serializable
 data class RefundsResponse(
@@ -633,6 +679,7 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
             val closed = closedChecks(ctx)
             val voids = voidChecks(ctx)
             val refunds = refundsInRange(ctx)
+            val tenders = tendersOf(ctx, closed)
             warnIfUndercounting(ctx, closed)
             val closedGross = ctx.checks(closed, ::gross)
             // net sales after refunds; avg check stays a sale-time figure (pre-refund)
@@ -651,9 +698,10 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
                 corkageCents = ctx.checks(closed) { it[Checks.corkageCents] ?: 0 },
                 serviceChargeCents = ctx.checks(closed) { it[Checks.serviceChargeCents] ?: 0 },
                 byDay = byDay(ctx, closed, refunds),
-                byVenue = venueSummaries(ctx, closed, voids, refunds),
-                byCurrency = currencySummaries(ctx, closed, voids, refunds),
+                byVenue = venueSummaries(ctx, closed, voids, refunds, tenders),
+                byCurrency = currencySummaries(ctx, closed, voids, refunds, tenders),
                 money = ctx.money(),
+                cashRoundingCents = ctx.combinedRounding(tenders, refunds),
             )
         }
         call.respond(response)
@@ -670,10 +718,11 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
             val closed = closedChecks(ctx)
             val voids = voidChecks(ctx)
             val refunds = refundsInRange(ctx)
-            val rows = venueSummaries(ctx, closed, voids, refunds)
+            val tenders = tendersOf(ctx, closed)
+            val rows = venueSummaries(ctx, closed, voids, refunds, tenders)
             ByVenueResponse(
                 rows, ctx.total(rows, { it.venueId }, { it.grossCents }), rows.sumOf { it.checkCount },
-                currencySummaries(ctx, closed, voids, refunds), ctx.money())
+                currencySummaries(ctx, closed, voids, refunds, tenders), ctx.money())
         }
         call.respond(response)
     }
@@ -688,13 +737,15 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
             val grossTotal = ctx.checks(closed, ::gross) - ctx.refunds(refunds, ::rGross)
             val taxTotal = ctx.checks(closed, ::checkTax) - ctx.refunds(refunds, ::refundTax)
             val (gst, qst) = gstQst(ctx, closed, refunds)
+            val tenders = tendersOf(ctx, closed)
             TaxReportResponse(
                 rates = taxRates(closed),
                 rows = byDay(ctx, closed, refunds),
-                totals = TaxTotals(grossTotal, grossTotal - taxTotal, taxTotal, closed.size, gst, qst),
-                byVenue = venueSummaries(ctx, closed, voids, refunds),
+                totals = TaxTotals(grossTotal, grossTotal - taxTotal, taxTotal, closed.size, gst, qst,
+                    ctx.combinedRounding(tenders, refunds)),
+                byVenue = venueSummaries(ctx, closed, voids, refunds, tenders),
                 byTax = taxCodeTotals(ctx, closed, refunds),
-                byCurrency = currencySummaries(ctx, closed, voids, refunds),
+                byCurrency = currencySummaries(ctx, closed, voids, refunds, tenders),
                 money = ctx.money(),
             )
         }
@@ -716,12 +767,13 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
                 RefundListRow(
                     r[Refunds.refundId], r[Refunds.checkId], ctx.iso(r[Refunds.createdAt], venueId),
                     r[Refunds.tableLabel], r[Refunds.tenderType], r[Refunds.reason],
-                    rGross(r), rNet(r), refundTax(r), venueId, ctx.currencyOf(venueId))
+                    rGross(r), rNet(r), refundTax(r), venueId, ctx.currencyOf(venueId), refundRounding(r))
             }
             val refundsBy = refunds.groupBy { it[Refunds.venueId] }
             val byVenue = ctx.venues.map { v ->
                 val r = refundsBy[v.id].orEmpty()
-                VenueRefundsRow(v.id, v.venue.name, r.size, r.sumOf(::rGross), r.sumOf(::rNet), r.sumOf(::refundTax), v.currency)
+                VenueRefundsRow(v.id, v.venue.name, r.size, r.sumOf(::rGross), r.sumOf(::rNet), r.sumOf(::refundTax), v.currency,
+                    r.sumOf(::refundRounding))
             }
             RefundsResponse(
                 refunds.size, ctx.refunds(refunds, ::rGross), ctx.refunds(refunds, ::rNet), ctx.refunds(refunds, ::refundTax),
@@ -766,6 +818,9 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
         val ctx = reportCtx(call, fx)
         val response = transaction {
             val tenders = tendersOf(ctx, closedChecks(ctx))
+            // cash refunds' rounding nets out of the rounding, like refunds out of sales
+            val refunds = refundsInRange(ctx)
+            val refundsBy = refunds.groupBy { it[Refunds.venueId] }
             fun applied(r: ResultRow) = r[CheckTenders.amountAppliedCents] ?: 0
             fun exactRows(group: List<ResultRow>) = group.groupBy { it[CheckTenders.type] }.map { (type, g) ->
                 PaymentRow(type, g.sumOf(::applied), g.size)
@@ -776,14 +831,18 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
             val grouped = tenders.groupBy { it[CheckTenders.venueId] }
             val byVenue = ctx.venues.map { v ->
                 val vr = exactRows(grouped[v.id].orEmpty())
-                VenuePayments(v.id, vr.sumOf { it.amountCents }, vr, v.venue.name, v.currency)
+                VenuePayments(v.id, vr.sumOf { it.amountCents }, vr, v.venue.name, v.currency,
+                    cashRounding(grouped[v.id].orEmpty(), refundsBy[v.id].orEmpty()))
             }
             val byCurrency = ctx.currencies.map { c ->
                 val ids = ctx.only(c).venueIds()
-                val cr = exactRows(tenders.filter { it[CheckTenders.venueId] in ids })
-                CurrencyPayments(c, cr.sumOf { it.amountCents }, cr)
+                val ct = tenders.filter { it[CheckTenders.venueId] in ids }
+                val cr = exactRows(ct)
+                CurrencyPayments(c, cr.sumOf { it.amountCents }, cr,
+                    cashRounding(ct, refunds.filter { it[Refunds.venueId] in ids }))
             }
-            PaymentsResponse(rows, ctx.tenders(tenders, ::applied), byVenue, byCurrency, ctx.money())
+            PaymentsResponse(rows, ctx.tenders(tenders, ::applied), byVenue, byCurrency, ctx.money(),
+                ctx.combinedRounding(tenders, refunds))
         }
         call.respond(response)
     }
@@ -1105,5 +1164,6 @@ private fun shiftDto(row: ResultRow, ctx: ReportCtx): ShiftDto {
         overShortCents = row[Shifts.overShortCents],
         venueId = venueId,
         currency = row[Shifts.currency] ?: ctx.currencyOf(venueId),
+        cashRoundingCents = row[Shifts.cashRoundingCents],
     )
 }

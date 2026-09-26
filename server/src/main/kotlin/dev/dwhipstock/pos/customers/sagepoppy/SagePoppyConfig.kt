@@ -3,6 +3,7 @@ package dev.dwhipstock.pos.customers.sagepoppy
 import dev.dwhipstock.pos.base.SettingsRepository
 import dev.dwhipstock.pos.sdk.AuthPolicy
 import dev.dwhipstock.pos.sdk.CardMethod
+import dev.dwhipstock.pos.sdk.CashRounding
 import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.Fee
 import dev.dwhipstock.pos.sdk.LegalAge
@@ -64,6 +65,8 @@ class SagePoppyConfig(
     private val publicUrlProvider: (() -> String)? = null,
     override val legalAge: Int = LegalAge.fromEnv(SagePoppy.LEGAL_AGE),
     salesTaxPercent: BigDecimal = SagePoppy.salesTaxFromEnv(),
+    /** cash.rounding / POS_CASH_ROUNDING: nickel (default) or off. */
+    cashRounding: CashRounding = CashRounding.DEFAULT,
 ) : CustomerConfig {
 
     override val publicBaseUrl: String
@@ -81,8 +84,9 @@ class SagePoppyConfig(
     // shelf prices are pre-tax; one sales tax is added on top of taxable items
     // (snacks and ice are exempt, per product)
     override val taxPolicy = TaxPolicy.AddedTaxes(listOf(SagePoppy.salesTax(salesTaxPercent)))
-    // US cash is to the cent: no rounding
-    override val roundingPolicy = RoundingPolicy.NoRounding
+    // the US no longer makes pennies either: a cash payment rounds to the
+    // nearest five cents (cash.rounding=off charges cash to the cent)
+    override val roundingPolicy: RoundingPolicy = cashRounding.policy
     override val authPolicy = AuthPolicy.PinLogin(pinLength = 4)
 
     // ---- data ----

@@ -162,6 +162,8 @@ object Refunds : IntIdTable("refunds") {
     val stripeRefundId = varchar("stripe_refund_id", 64).nullable()
     // the added taxes this refund reverses, one entry per tax (036); NULL = none
     val taxesJson = text("taxes_json").nullable()
+    // CASH refunds (039): cash handed back − gross, to the nickel; 0 otherwise
+    val roundingAdjustmentCents = long("rounding_adjustment_cents").default(0)
 }
 
 /**

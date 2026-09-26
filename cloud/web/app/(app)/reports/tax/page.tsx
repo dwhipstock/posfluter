@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
 import { useI18n } from "@/lib/i18n/context";
-import { useMoney } from "@/lib/money";
+import { cashRoundingAmounts, cashRoundingKpis, useMoney } from "@/lib/money";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
 import { col, Int, Money, T, type Col, type ExportDoc } from "@/lib/export/doc";
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
 import { StoreBreakdown } from "@/components/store-breakdown";
-import { FxNote, RetailBadge } from "@/components/money-scope";
+import { CashRoundingNote, FxNote, RetailBadge } from "@/components/money-scope";
 import { useStores } from "@/lib/store";
 import type { VenueSummaryRow } from "@/lib/types";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -50,6 +50,11 @@ function TaxPage() {
 
   const money = data?.money;
   const fmtC = (n: number) => m.fmtScope(money, n);
+  // exact net cash rounding, kept apart from sales and tax: one figure, or one per currency
+  const rounding = data
+    ? cashRoundingAmounts(data.totals.cashRoundingCents, data.byCurrency, money?.currency ?? m.scopeCurrency)
+    : [];
+  const hasRounding = rounding.length > 0;
   const rateText = (r: string) => (locale === "fr" ? r.replace(".", ",") : r);
   const taxLabel = (r: { code: string; labelFr: string; labelEn: string; ratePercent: string }) =>
     r.ratePercent
@@ -73,7 +78,10 @@ function TaxPage() {
     return {
       ...meta("tax"),
       reportTitle: t("tax_title"),
-      notes: showQc ? [t("tax_note"), t("tax_no_breakdown")] : [t("tax_note_generic")],
+      notes: [
+        ...(showQc ? [t("tax_note"), t("tax_no_breakdown")] : [t("tax_note_generic")]),
+        ...(hasRounding ? [t("cash_rounding_note")] : []),
+      ],
       kpis: [
         { label: t("col_gross"), value: fmtC(data.totals.grossCents) },
         { label: t("col_net"), value: fmtC(data.totals.netCents) },
@@ -86,6 +94,7 @@ function TaxPage() {
         { label: t("col_tax"), value: fmtC(data.totals.taxCents) },
         { label: t("col_checks"), value: String(data.totals.checkCount) },
         ...byTax.map((r) => ({ label: taxLabel(r), value: m.fmtIn(r.currency, r.amountCents) })),
+        ...cashRoundingKpis(t("cash_rounding"), rounding, m.signedIn),
       ],
       sections: [
         ...storeExport.byStore<VenueSummaryRow>(
@@ -95,6 +104,8 @@ function TaxPage() {
             ...qcCols<VenueSummaryRow>(),
             col.money(t("col_tax"), (r) => r.taxCents),
             col.int(t("col_checks"), (r) => r.checkCount),
+            // each store in its own currency; the total is exact per currency
+            ...(hasRounding ? [col.money<VenueSummaryRow>(t("cash_rounding"), (r) => r.cashRoundingCents ?? 0)] : []),
           ],
           data.byVenue,
           [
@@ -104,6 +115,9 @@ function TaxPage() {
             ...qcTotal,
             Money(data.totals.taxCents),
             Int(data.totals.checkCount),
+            ...(hasRounding
+              ? [m.totalCell(data.byVenue, (r) => r.currency ?? m.currencyOf(r.venueId), (r) => r.cashRoundingCents ?? 0)]
+              : []),
           ]
         ),
         {
@@ -284,6 +298,7 @@ function TaxPage() {
           <EmptyState title={t("tax_empty")} hint={t("tax_empty_hint")} />
         )}
       </Card>
+      {data && data.rows.length > 0 && <CashRoundingNote amounts={rounding} />}
     </div>
   );
 }

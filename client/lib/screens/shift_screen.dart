@@ -675,20 +675,33 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
           if (r.cashRefundCents > 0)
             kv(l.cashRefunds, money(r.cashRefundCents), color: T.destructive),
         ],
+        if (r.expectedCashCents == null && r.cashRoundingCents != 0) ...[
+          const SizedBox(height: 12),
+          kv(l.cashRounding, signedMoney(r.cashRoundingCents)),
+        ],
         if (r.expectedCashCents != null) ...[
           const SizedBox(height: 12),
           PosPanel(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                kv(l.expectedCash, money(r.expectedCashCents!)),
-                kv(l.countedActual, money(r.closingCountCents!)),
+                if (r.cashRoundingCents != 0)
+                  kv(l.cashRounding, signedMoney(r.cashRoundingCents)),
                 kv(
-                  l.overShort,
-                  money(r.overShortCents!),
-                  bold: true,
-                  color: r.overShortCents! < 0 ? T.destructive : T.primary,
+                  l.expectedCash,
+                  money(r.expectedCashCents!),
+                  bold: r.closingCountCents == null,
                 ),
+                // Z only: the X-report has expected cash but no count yet
+                if (r.closingCountCents != null)
+                  kv(l.countedActual, money(r.closingCountCents!)),
+                if (r.overShortCents != null)
+                  kv(
+                    l.overShort,
+                    money(r.overShortCents!),
+                    bold: true,
+                    color: r.overShortCents! < 0 ? T.destructive : T.primary,
+                  ),
               ],
             ),
           ),

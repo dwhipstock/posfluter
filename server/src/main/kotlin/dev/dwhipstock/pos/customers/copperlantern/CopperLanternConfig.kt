@@ -4,6 +4,7 @@ import dev.dwhipstock.pos.base.SettingsRepository
 import dev.dwhipstock.pos.sdk.AuthPolicy
 import dev.dwhipstock.pos.sdk.BankTransferMethod
 import dev.dwhipstock.pos.sdk.CardMethod
+import dev.dwhipstock.pos.sdk.CashRounding
 import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.Fee
 import dev.dwhipstock.pos.sdk.Money
@@ -28,6 +29,8 @@ class CopperLanternConfig(
     override val printer: PrinterAdapter,
     publicBaseUrl: String,
     private val publicUrlProvider: (() -> String)? = null,
+    /** cash.rounding / POS_CASH_ROUNDING: nickel (default) or off. */
+    cashRounding: CashRounding = CashRounding.DEFAULT,
 ) : CustomerConfig {
 
     override val publicBaseUrl: String
@@ -46,9 +49,9 @@ class CopperLanternConfig(
     // Québec: menu prices are pre-tax; GST (TPS) and QST (TVQ) are added on
     // top. Registration numbers are fictional, in the real formats.
     override val taxPolicy = TaxPolicy.AddedTaxes(QUEBEC_TAXES)
-    // Canadian cash transactions round to the nearest five cents.
-    override val roundingPolicy =
-        RoundingPolicy.RoundToUnit(unit = Money(5), mode = RoundingPolicy.RoundToUnit.Mode.NEAREST)
+    // Canada has no penny: a cash payment rounds to the nearest five cents
+    // (cash.rounding=off charges cash to the cent)
+    override val roundingPolicy: RoundingPolicy = cashRounding.policy
     override val authPolicy = AuthPolicy.PinLogin(pinLength = 4)
 
     // ---- data: assembled from live venue settings ----
