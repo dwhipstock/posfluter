@@ -6,6 +6,8 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../kitchen/kitchen_i18n.dart';
+import '../kitchen/kitchen_setup_screen.dart';
 import '../server_discovery.dart';
 
 /// Manager-only venue settings: the DATA the owner tunes at runtime
@@ -669,6 +671,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onPressed: _busy ? null : _printAllSlips,
                       ),
                     ),
+                    // kitchen / station tickets: stations, mappings, test prints
+                    if (KitchenApi.enabled) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: T.minTouch,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(LucideIcons.chefHat),
+                          label: Text(K.of(context).setupTitle),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const KitchenSetupScreen(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     ..._guestWifiSection(l),
                     SizedBox(

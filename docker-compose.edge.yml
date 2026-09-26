@@ -15,6 +15,7 @@ services:
       POS_SEED: none
       POS_PRINT_RECEIPTS: "${POS_PRINT_RECEIPTS:-paper}" # paper | digital (receipts/bills saved only)
       POS_STAFF_APP_MFA: "${POS_STAFF_APP_MFA:-on}" # on | off (staff web app sign-in by PIN only)
+      POS_KITCHEN_PRINTING: "${POS_KITCHEN_PRINTING:-off}" # off | on (kitchen tickets + kitchen screen)
       # optional "Card (Stripe)" tender, TEST MODE only: sk_test_… (anything else is refused)
       STRIPE_KEY: "${STRIPE_KEY:-}"
       STRIPE_LOCATION_ID: "${STRIPE_LOCATION_ID:-}"

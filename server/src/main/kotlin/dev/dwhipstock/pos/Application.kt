@@ -47,6 +47,7 @@ import dev.dwhipstock.pos.payments.StripeHttp
 import dev.dwhipstock.pos.payments.StripeService
 import dev.dwhipstock.pos.api.stripeRoutes
 import dev.dwhipstock.pos.api.printerRoutes
+import dev.dwhipstock.pos.api.kitchenRoutes
 import dev.dwhipstock.pos.restaurant.BadRequestException
 import dev.dwhipstock.pos.restaurant.ConflictException
 import dev.dwhipstock.pos.restaurant.NotFoundException
@@ -129,6 +130,11 @@ fun Application.module(
     // test seams: a fake image provider and the online probe
     imageProvider: dev.dwhipstock.pos.aiphotos.ImageProvider? = null,
     imageReachable: ((String) -> Boolean)? = null,
+    // kitchen.printing=on|off (POS_KITCHEN_PRINTING / POS_CONFIG_FILE; the
+    // tablet passes its store.properties). Default off; restaurants only.
+    kitchenPrinting: dev.dwhipstock.pos.sdk.KitchenPrinting.Resolved = dev.dwhipstock.pos.sdk.KitchenPrinting.fromEnv(),
+    // test seam: the station printers' transport
+    kitchenTransport: dev.dwhipstock.pos.sdk.EscPosTransport? = null,
 ) {
     // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
     // Angeles for the US store); an existing store keeps its settings row's
@@ -215,6 +221,27 @@ fun Application.module(
     if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Legal age for age-restricted items: ${config.legalAge}")
     log.info("Customers scan: $publicBaseUrl/m/t/{token} (a random link per table, on its QR slip; a manager can regenerate it)  — print slips from the tablet")
     val checkService = CheckService(config)
+    // Kitchen / station tickets: opt-in, restaurants only. Off = null, and the
+    // store behaves exactly as before (no hook, no queue, no worker thread).
+    kitchenPrinting.warning?.let { log.warn("Kitchen tickets config ignored: $it") }
+    val kitchenService = when {
+        !kitchenPrinting.enabled -> null
+        config.profile.kind == StoreProfile.Kind.RETAIL -> {
+            log.warn("Kitchen tickets: ignored for a retail store (${kitchenPrinting.source})")
+            null
+        }
+        else -> dev.dwhipstock.pos.restaurant.KitchenService(
+            config, settingsRepo,
+            transport = kitchenTransport ?: dev.dwhipstock.pos.restaurant.KitchenTcpTransport(),
+            printersEnabled = physicalPrinterEnabled,
+        ).also {
+            it.ensureDefaults()
+            checkService.kitchen = it
+            it.queue.start()
+            monitor.subscribe(ApplicationStopped) { _ -> it.queue.stop() }
+        }
+    }
+    log.info(if (kitchenService != null) kitchenPrinting.describe() else "Kitchen tickets: off (${kitchenPrinting.source})")
     // background account lookup only; a missing key or no internet changes nothing else
     // Stripe is Canada-only (a CAD account) for now: a store in another country
     // takes cash and its own external card terminal, and never contacts Stripe
@@ -355,7 +382,7 @@ fun Application.module(
         // venue = the store's display name ("Copper Lantern — Vieux-Port") so the
         // sign-in screen can say which store this terminal serves before login
         get("/health") {
-            call.respond(HealthResponse.of(config, requireDeviceToken))
+            call.respond(HealthResponse.of(config, requireDeviceToken, kitchenService != null))
         }
         // Staff ordering web app (M7): a mobile-first page served from the store.
         // Public shell (like the customer menu); it authenticates via POST /login
@@ -395,6 +422,7 @@ fun Application.module(
         shiftRoutes(shiftService, authService)
         settingsRoutes(settingsRepo)
         printerRoutes(thermalPrinter, config, settingsRepo)
+        kitchenRoutes(kitchenService)
         // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in
         // production, where Caddy fronts the sync API and the Next.js portal on one
         // host — so the derived scheme://host is correct. On a SPLIT deployment
@@ -459,9 +487,17 @@ data class HealthResponse(
     val legalAge: Int = 18,
     /** Cash payments round to the nickel ("nickel") or are charged to the cent ("off"). */
     val cashRounding: String = "nickel",
+    /**
+     * kitchen.printing=on: the terminal shows Send, the Kitchen view and station
+     * setup. Left out of the JSON while off, so a store without kitchen tickets
+     * answers exactly as it always did.
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val kitchenPrinting: Boolean = false,
 ) {
     companion object {
-        fun of(config: dev.dwhipstock.pos.sdk.CustomerConfig, pairingRequired: Boolean) = HealthResponse(
+        fun of(config: dev.dwhipstock.pos.sdk.CustomerConfig, pairingRequired: Boolean, kitchenPrinting: Boolean = false) = HealthResponse(
             status = "ok",
             pairingRequired = pairingRequired,
             venue = config.displayName,
@@ -473,6 +509,7 @@ data class HealthResponse(
             locales = config.profile.locales.map { it.tag },
             legalAge = config.legalAge,
             cashRounding = if (config.roundingPolicy == dev.dwhipstock.pos.sdk.RoundingPolicy.NoRounding) "off" else "nickel",
+            kitchenPrinting = kitchenPrinting,
         )
     }
 }

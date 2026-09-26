@@ -86,6 +86,21 @@ enum class MessageKey(val id: String) {
     SLIP_STEP_SCAN_TO_ORDER("slip.step_scan_to_order"),
     /** The one-QR table slip (no guest Wi-Fi): the caption under the menu QR. */
     SLIP_SCAN_TO_ORDER("slip.scan_to_order"),
+    // kitchen / station tickets (kitchen.printing=on)
+    KITCHEN_ORDER("kitchen.order"),
+    KITCHEN_ADD("kitchen.add"),
+    KITCHEN_VOID("kitchen.void"),
+    KITCHEN_REPRINT("kitchen.reprint"),
+    /** {0} = table label. */
+    KITCHEN_TABLE("kitchen.table"),
+    /** {0} = bill (check) number. */
+    KITCHEN_CHECK("kitchen.check"),
+    /** {0} = the server's name. */
+    KITCHEN_SERVER("kitchen.server"),
+    /** {0} = guests at the table. */
+    KITCHEN_GUESTS("kitchen.guests"),
+    KITCHEN_TEST("kitchen.test"),
+    KITCHEN_TEST_BODY("kitchen.test_body"),
 }
 
 /**

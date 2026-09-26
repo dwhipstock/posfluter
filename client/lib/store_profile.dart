@@ -20,6 +20,10 @@ class StoreProfile {
   final List<String> locales;
   final int legalAge;
 
+  /// `kitchen.printing=on` at the store: Send to kitchen, the Kitchen view,
+  /// station setup. Off (the default) and the terminal is exactly as before.
+  final bool kitchenPrinting;
+
   const StoreProfile({
     this.venueId = '',
     this.brand = 'copper-lantern',
@@ -28,6 +32,7 @@ class StoreProfile {
     this.currency = 'CAD',
     this.locales = const ['fr', 'en'],
     this.legalAge = 18,
+    this.kitchenPrinting = false,
   });
 
   /// The Montréal pubs (and any store too old to describe itself).
@@ -64,6 +69,7 @@ class StoreProfile {
       currency: str('currency', 'CAD').toUpperCase(),
       locales: locales,
       legalAge: j['legalAge'] is int ? j['legalAge'] as int : 18,
+      kitchenPrinting: j['kitchenPrinting'] == true,
     );
   }
 }

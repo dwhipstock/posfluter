@@ -29,6 +29,9 @@ PLATEAU_DIR="$REPO_ROOT/.demo/plateau"
 # staff web app sign-in: off = PIN only for the demo stores started here
 # (the product default is on). POS_STAFF_APP_MFA=on scripts/demo-up.sh to demo TOTP.
 STAFF_APP_MFA="${POS_STAFF_APP_MFA:-off}"
+# kitchen / station tickets and the kitchen screen for Plateau (a restaurant):
+# off unless asked for. POS_KITCHEN_PRINTING=on scripts/demo-up.sh
+KITCHEN_PRINTING="${POS_KITCHEN_PRINTING:-off}"
 PLATEAU_PORT="${PLATEAU_PORT:-8080}"
 SAGE_POPPY_DIR="$REPO_ROOT/.demo/sage-poppy"
 # not 8081: that's the cloud API
@@ -169,6 +172,7 @@ else
     POS_PHOTOS_DIR="$PLATEAU_DIR/photos" \
     POS_PUBLIC_URL="$PUBLIC_URL" \
     POS_STAFF_APP_MFA="$STAFF_APP_MFA" \
+    POS_KITCHEN_PRINTING="$KITCHEN_PRINTING" \
     VENUE_TZ="$VENUE_TZ" \
     CLOUD_SYNC_URL="http://localhost:8081" \
     CLOUD_SYNC_API_KEY="$STORE_API_KEY_PLATEAU" \

@@ -7,6 +7,8 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../kitchen/kitchen_banner.dart';
+import '../kitchen/kitchen_i18n.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/resume_refresh.dart';
@@ -42,6 +44,10 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   String? _error;
   Timer? _poll;
 
+  /// Kitchen tickets (store has kitchen.printing=on): what a Send would print.
+  KitchenCheckState? _kitchen;
+  bool _sending = false;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +59,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   @override
   void dispose() {
     _poll?.cancel();
+    // leaving the bill sends whatever the kitchen doesn't have yet (best
+    // effort, never blocks; the store already handles voids on its own)
+    if (KitchenApi.enabled) KitchenApi.sendQuietly(widget.checkId);
     super.dispose();
   }
 
@@ -61,6 +70,88 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       final check = await Api.getCheck(widget.checkId);
       if (mounted) setState(() => _check = check);
     } catch (_) {} // transient poll failures are fine
+    _refreshKitchen();
+  }
+
+  Future<void> _refreshKitchen() async {
+    if (!KitchenApi.enabled) return;
+    try {
+      final k = await KitchenApi.checkState(widget.checkId);
+      if (mounted) setState(() => _kitchen = k);
+    } catch (_) {} // the Send count just stays as it was
+  }
+
+  /// Send new / changed items to their stations now.
+  Future<void> _sendToKitchen() async {
+    if (_sending) return;
+    final k = K.of(context);
+    setState(() => _sending = true);
+    try {
+      final r = await KitchenApi.send(widget.checkId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(r.tickets == 0 ? k.nothingToSend : k.sentTo(r.tickets)),
+        ),
+      );
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+      _refreshKitchen();
+    }
+  }
+
+  Future<void> _reprintKitchen() async {
+    final k = K.of(context);
+    try {
+      final r = await KitchenApi.reprint(widget.checkId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            r.tickets == 0 ? k.nothingToReprint : k.reprinted(r.tickets),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    }
+  }
+
+  Future<void> _setGuests() async {
+    final k = K.of(context);
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(k.guestsTitle),
+        content: SizedBox(
+          width: 360,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var n = 1; n <= 12; n++)
+                SizedBox(
+                  width: 64,
+                  height: 56,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, n),
+                    child: Text('$n', style: T.price(size: 20)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null) return;
+    try {
+      final s = await KitchenApi.setGuests(widget.checkId, picked);
+      if (mounted) setState(() => _kitchen = s);
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    }
   }
 
   Future<void> _load() async {
@@ -80,6 +171,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         _category ??= _categories.isEmpty ? null : _categories.first.id;
         _error = null;
       });
+      _refreshKitchen();
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
@@ -100,6 +192,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         return;
       }
       setState(() => _check = check);
+      _refreshKitchen();
     } catch (e) {
       if (mounted) showApiError(context, e);
     }
@@ -342,6 +435,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   /// each printed/paid on its own. When the last group settles the check
   /// closes and we pop back to the tables screen like a normal payment.
   Future<void> _openSplit(Check check) async {
+    if (KitchenApi.enabled) unawaited(KitchenApi.sendQuietly(widget.checkId));
     final closed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) =>
@@ -365,21 +459,29 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             ? Center(child: Text(_error!))
             : check == null
             ? const DelayedSpinner()
-            : LayoutBuilder(
-                builder: (context, c) => Row(
-                  children: [
-                    _navRail(check, l),
-                    const VerticalDivider(),
-                    Expanded(child: _menuColumn(l)),
-                    const VerticalDivider(),
-                    // fixed cart: roomy on the landscape tablet, narrower
-                    // when the screen is (portrait / small windows)
-                    SizedBox(
-                      width: c.maxWidth >= 1100 ? 420 : 340,
-                      child: _billPanel(check, l),
+            : Column(
+                children: [
+                  // kitchen printer trouble (kitchen tickets only; else empty)
+                  const KitchenQueueBanner(),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, c) => Row(
+                        children: [
+                          _navRail(check, l),
+                          const VerticalDivider(),
+                          Expanded(child: _menuColumn(l)),
+                          const VerticalDivider(),
+                          // fixed cart: roomy on the landscape tablet, narrower
+                          // when the screen is (portrait / small windows)
+                          SizedBox(
+                            width: c.maxWidth >= 1100 ? 420 : 340,
+                            child: _billPanel(check, l),
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
       ),
     );
@@ -590,6 +692,20 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     ],
                   ),
                 ),
+                if (KitchenApi.enabled)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: T.onPrimary,
+                      minimumSize: const Size(0, T.minTouch),
+                    ),
+                    icon: const Icon(LucideIcons.users, size: 18),
+                    label: Text(
+                      _kitchen?.guests == null
+                          ? K.of(context).guests
+                          : K.of(context).guestsCount(_kitchen!.guests!),
+                    ),
+                    onPressed: _setGuests,
+                  ),
                 if (check.corkageBottles > 0)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
@@ -745,6 +861,10 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     ),
                   ],
                 ),
+                if (KitchenApi.enabled) ...[
+                  const SizedBox(height: 10),
+                  _kitchenRow(check),
+                ],
                 const SizedBox(height: 10),
                 // Pay: full width under the secondary actions, so its label
                 // (long in French) never has to squeeze
@@ -783,6 +903,11 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                               : check.split != null
                               ? () => _openSplit(check)
                               : () async {
+                                  if (KitchenApi.enabled) {
+                                    unawaited(
+                                      KitchenApi.sendQuietly(widget.checkId),
+                                    );
+                                  }
                                   final closed = await Navigator.of(context)
                                       .push<bool>(
                                         MaterialPageRoute(
@@ -806,6 +931,62 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
           ),
         ],
       ),
+    );
+  }
+
+  /// Send to kitchen (with what's waiting) + reprint. Kitchen tickets only.
+  Widget _kitchenRow(Check check) {
+    final k = K.of(context);
+    final state = _kitchen;
+    final waiting = state == null ? 0 : state.unsent;
+    final voids = state?.pendingVoids ?? 0;
+    final canSend = state == null || state.hasChanges;
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: T.minTouch,
+            child: FilledButton.tonalIcon(
+              icon: _sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(LucideIcons.chefHat, size: 20),
+              label: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  !canSend
+                      ? k.allSent
+                      : waiting > 0
+                      ? k.sendCount(waiting)
+                      : voids > 0
+                      ? k.voidsWaiting(voids)
+                      : k.send,
+                  maxLines: 1,
+                ),
+              ),
+              onPressed: _sending || !canSend ? null : _sendToKitchen,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: T.minTouch,
+          child: OutlinedButton(
+            onPressed: (state?.sent ?? 0) > 0 ? _reprintKitchen : null,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            child: Icon(
+              LucideIcons.printer,
+              size: 20,
+              semanticLabel: k.reprint,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

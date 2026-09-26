@@ -332,7 +332,7 @@
 // fr/en at the pubs, en/es at the US store. Every table carries every key
 // (LocaleCoverageTest). French: vous, no-break space before : ; ! ? and ».
 let lang = localStorage.getItem("staff_lang") || "en";
-let store = { locales: ["fr", "en"], currency: "CAD", country: "CA" };
+let store = { locales: ["fr", "en"], currency: "CAD", country: "CA", kitchen: false };
 const LANG_NAMES = { fr: "Français", en: "English", es: "Español" };
 const STR = {
   fr: {
@@ -535,6 +535,7 @@ async function loadStore() {
     if (h && Array.isArray(h.locales) && h.locales.length) store.locales = h.locales.map(l => String(l).toLowerCase());
     if (h && h.currency) store.currency = h.currency;
     if (h && h.country) store.country = h.country;
+    if (h) store.kitchen = h.kitchenPrinting === true;
   } catch (_) {}
   lang = supportedLang(lang);
 }
@@ -944,9 +945,17 @@ function tableLabelFor(tableId) {
   return tableId;
 }
 
+// Kitchen tickets (kitchen.printing=on only): send what's new on the check to
+// its stations. Best effort — the order is already on the bill; a failure
+// here never blocks staff (the tablet's banner shows a printer problem).
+function sendToKitchen(checkId) {
+  if (!store.kitchen || !checkId) return;
+  api(`/checks/${checkId}/kitchen/send`, { method: "POST" }).catch(() => {});
+}
+
 // approve / reject a pending customer line (Chunk 3, reused on the check screen)
 async function acceptLine(lineId) {
-  try { check = await api(`/checks/${check.id}/pending-lines/${lineId}/accept`, { method: "POST" }); renderCheck(); toast(T().accepted); }
+  try { check = await api(`/checks/${check.id}/pending-lines/${lineId}/accept`, { method: "POST" }); renderCheck(); toast(T().accepted); sendToKitchen(check.id); }
   catch (e) { toast(errMsg(e), true); refreshCheck(); }
 }
 async function rejectLine(lineId) {
@@ -1059,6 +1068,7 @@ async function submitCart() {
     renderCart();
     closeSheet();
     toast(T().linesAdded);
+    sendToKitchen(check.id);
     showCheck(); // returns to the check screen and re-arms its refresh poll
   } catch (e) {
     renderCart(); // reflect the remaining (un-committed) lines
@@ -1111,7 +1121,7 @@ async function renderPending() {
 }
 
 async function acceptPending(checkId, lineId) {
-  try { await api(`/checks/${checkId}/pending-lines/${lineId}/accept`, { method: "POST" }); toast(T().accepted); }
+  try { await api(`/checks/${checkId}/pending-lines/${lineId}/accept`, { method: "POST" }); toast(T().accepted); sendToKitchen(checkId); }
   catch (e) { toast(errMsg(e), true); }
   loadZones();
 }

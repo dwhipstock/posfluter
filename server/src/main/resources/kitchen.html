@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<title>Kitchen screen</title>
+<style>
+  :root {
+    --bg: #111418; --panel: #1b2027; --panel2: #232a33; --line: #2e3742;
+    --text: #f2f4f7; --muted: #9aa5b1; --accent: #d9822b;
+    --ok: #2f9e62; --warn: #e0b21b; --late: #d64545; --add: #3b82f6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 16px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  /* sign-in */
+  #login { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  .login-box { width: 100%; max-width: 340px; text-align: center; }
+  .login-box h1 { font-size: 26px; margin: 0 0 6px; }
+  .login-box p { color: var(--muted); margin: 0 0 18px; }
+  .dots { display: flex; gap: 14px; justify-content: center; margin: 10px 0 18px; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--muted); }
+  .dot.f { background: var(--text); border-color: var(--text); }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .pad button { height: 64px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 24px; }
+  .pad button.blank { visibility: hidden; }
+  .err { color: #ff8a8a; min-height: 22px; margin-top: 10px; }
+  #code-input { width: 100%; height: 56px; font-size: 26px; letter-spacing: 6px; text-align: center;
+    border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  #enroll-qr { width: 200px; height: 200px; background: #fff; border-radius: 8px; margin: 8px auto; display: block; }
+  .link { background: none; border: 0; color: var(--muted); text-decoration: underline; margin-top: 14px; }
+
+  /* board */
+  header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 20px; margin: 0 8px 0 0; white-space: nowrap; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; }
+  .chip { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); min-height: 40px; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 700; }
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tool { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); min-height: 40px; }
+  .tool:disabled { opacity: .45; cursor: default; }
+  #status { color: var(--muted); font-size: 14px; padding: 6px 16px 0; min-height: 22px; }
+  #status.bad { color: #ff8a8a; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 12px 16px 32px; }
+  .empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 64px 0; font-size: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    display: flex; flex-direction: column; text-align: left; padding: 0; min-height: 140px; }
+  .card:active { transform: scale(.99); }
+  .card .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 14px;
+    background: var(--ok); color: #fff; }
+  .card.warn .top { background: var(--warn); color: #111; }
+  .card.late .top { background: var(--late); color: #fff; }
+  .card .table { font-size: 22px; font-weight: 800; }
+  .card .timer { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .card .meta { padding: 6px 14px; color: var(--muted); font-size: 14px; border-bottom: 1px solid var(--line); }
+  .card ul { list-style: none; margin: 0; padding: 8px 14px 4px; flex: 1; }
+  .card li { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .card li:last-child { border-bottom: 0; }
+  .qty { font-weight: 800; font-size: 20px; margin-right: 6px; }
+  .name { font-weight: 700; font-size: 19px; }
+  .sub { color: var(--muted); font-size: 15px; margin-left: 30px; }
+  .note { color: var(--accent); font-size: 16px; font-weight: 600; margin-left: 30px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 800; padding: 2px 6px; border-radius: 5px; margin-left: 6px; vertical-align: 2px; }
+  .tag.add { background: var(--add); color: #fff; }
+  .tag.void { background: var(--late); color: #fff; }
+  li.voided .qty, li.voided .name, li.voided .sub, li.voided .note { text-decoration: line-through; opacity: .6; }
+  .partial { color: #ff8a8a; font-size: 14px; margin-left: 30px; text-decoration: line-through; }
+  .card .done { padding: 12px; text-align: center; font-weight: 800; letter-spacing: .5px; background: var(--panel2);
+    border-top: 1px solid var(--line); }
+  #recent { padding: 0 16px 24px; color: var(--muted); font-size: 14px; }
+  #recent button { margin: 4px 6px 0 0; }
+</style>
+</head>
+<body>
+
+<section id="login" class="hidden">
+  <div class="login-box">
+    <div id="login-pin">
+      <h1 id="t-title">Kitchen</h1>
+      <p id="t-pin">Enter your PIN</p>
+      <div class="dots" id="dots"></div>
+      <div class="pad" id="pad"></div>
+      <div class="err" id="login-err"></div>
+    </div>
+    <div id="login-code" class="hidden">
+      <h1 id="t-code-title">Code</h1>
+      <p id="code-prompt"></p>
+      <div id="enroll-block" class="hidden">
+        <img id="enroll-qr" alt="">
+        <p id="enroll-secret" style="font-family:monospace"></p>
+      </div>
+      <input id="code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+      <div class="err" id="code-err"></div>
+      <button class="link" id="code-back">←</button>
+    </div>
+    <button class="link" id="lang-login">EN / FR</button>
+  </div>
+</section>
+
+<section id="board" class="hidden">
+  <header>
+    <h1 id="t-kitchen">Kitchen</h1>
+    <div class="chips" id="stations"></div>
+    <div class="tools">
+      <button class="tool" id="recall">↶</button>
+      <button class="tool" id="sound">Sound</button>
+      <button class="tool" id="lang">EN</button>
+      <button class="tool" id="signout">⎋</button>
+    </div>
+  </header>
+  <div id="status"></div>
+  <div id="grid"></div>
+  <div id="recent"></div>
+</section>
+
+<script>
+"use strict";
+// The kitchen screen: any browser on the venue Wi-Fi. It signs in exactly
+// like the staff app (PIN, then the authenticator code when the store asks
+// for it) and shares its saved sign-in on this device. All state lives in the
+// store: cards are rebuilt from /kitchen/board on every poll, so a reload or
+// a second screen shows the same thing.
+
+const STR = {
+  fr: {
+    title: "Cuisine", pin: "Entrez votre NIP", pinWrong: "NIP incorrect", codeTitle: "Code de vérification",
+    codePrompt: "Entrez le code à 6 chiffres de votre application d’authentification.",
+    enrollPrompt: "Balayez ce code avec votre application d’authentification, puis entrez le code à 6 chiffres.",
+    codeWrong: "Code incorrect", all: "Toutes", recall: "Rappeler", done: "Touchez pour terminer",
+    add: "AJOUT", void: "ANNULÉ", empty: "Aucune commande", guests: "couverts", server: "Serveur",
+    soundOn: "Son activé", soundOff: "Son coupé", signout: "Quitter", offline: "Magasin injoignable — nouvel essai…",
+    updated: "À jour", recent: "Terminées récemment :", nothing: "Rien à rappeler", voided: "annulé",
+  },
+  en: {
+    title: "Kitchen", pin: "Enter your PIN", pinWrong: "Wrong PIN", codeTitle: "Verification code",
+    codePrompt: "Enter the 6-digit code from your authenticator app.",
+    enrollPrompt: "Scan this code with your authenticator app, then enter the 6-digit code.",
+    codeWrong: "Wrong code", all: "All", recall: "Recall", done: "Tap to finish",
+    add: "ADD", void: "VOID", empty: "No orders", guests: "guests", server: "Server",
+    soundOn: "Sound on", soundOff: "Sound off", signout: "Sign out", offline: "Can’t reach the store — retrying…",
+    updated: "Up to date", recent: "Recently done:", nothing: "Nothing to recall", voided: "voided",
+  },
+};
+
+let token = localStorage.getItem("staff_token");
+let deviceTokens = [];
+try { deviceTokens = JSON.parse(localStorage.getItem("staff_device_tokens") || "[]"); } catch (_) {}
+let lang = localStorage.getItem("kitchen_lang") || "";
+let station = localStorage.getItem("kitchen_station") || "";
+let sound = localStorage.getItem("kitchen_sound") !== "off";
+let pinBuf = "", pendingPin = null, codeBusy = false;
+let board = null, fetchedAt = 0, lastSeen = null, pollTimer = null;
+
+const T = () => STR[lang] || STR.fr;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+class ApiError extends Error { constructor(code, status) { super(code || "error"); this.code = code; this.status = status; } }
+async function api(path, { method = "GET", body = null, auth = true } = {}) {
+  const headers = {};
+  if (body != null) headers["Content-Type"] = "application/json";
+  if (auth && token) headers["Authorization"] = "Bearer " + token;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 10000);
+  let res;
+  try { res = await fetch(path, { method, headers, body: body != null ? JSON.stringify(body) : null, signal: ctl.signal }); }
+  catch (_) { throw new ApiError("network", 0); }
+  finally { clearTimeout(timer); }
+  if (res.status === 401 && auth) { signOut(false); throw new ApiError("login_required", 401); }
+  if (!res.ok) { let code = null; try { code = (await res.json()).code; } catch (_) {} throw new ApiError(code, res.status); }
+  const ct = res.headers.get("content-type") || "";
+  return ct.includes("application/json") ? res.json() : res.text();
+}
+
+// ---- sign-in (the staff app's two steps) ----
+function showLogin() {
+  stopPoll();
+  $("board").classList.add("hidden");
+  $("login").classList.remove("hidden");
+  backToPin();
+  labels();
+}
+function renderPad() {
+  $("pad").innerHTML = ["1","2","3","4","5","6","7","8","9","","0","⌫"].map(k =>
+    k === "" ? `<button class="blank" disabled></button>` : `<button data-k="${k}">${k}</button>`).join("");
+  $("pad").querySelectorAll("button[data-k]").forEach(b => b.onclick = () => pinKey(b.dataset.k));
+}
+function renderDots() { $("dots").innerHTML = [0,1,2,3].map(i => `<div class="dot ${i < pinBuf.length ? "f" : ""}"></div>`).join(""); }
+function pinKey(k) {
+  if (k === "⌫") { pinBuf = pinBuf.slice(0, -1); renderDots(); return; }
+  if (pinBuf.length >= 4) return;
+  pinBuf += k; renderDots();
+  if (pinBuf.length === 4) submitPin();
+}
+async function submitPin() {
+  const pin = pinBuf;
+  $("login-err").textContent = "";
+  try {
+    const r = await api("/staff-app/login", { method: "POST", body: { pin, deviceTokens }, auth: false });
+    if (r.status === "ok") { signedIn(r.user); return; }
+    pendingPin = pin;
+    showCode(r);
+  } catch (e) {
+    pinBuf = ""; renderDots();
+    $("login-err").textContent = (e.code === "rate_limited") ? "⏳" : (e.status === 0 ? T().offline : T().pinWrong);
+  }
+}
+function showCode(r) {
+  $("login-pin").classList.add("hidden");
+  $("login-code").classList.remove("hidden");
+  const enroll = r.status === "enroll";
+  $("enroll-block").classList.toggle("hidden", !enroll);
+  if (enroll) { $("enroll-qr").src = r.qrDataUri || ""; $("enroll-secret").textContent = r.secret || ""; }
+  $("code-prompt").textContent = enroll ? T().enrollPrompt : T().codePrompt;
+  $("code-input").value = ""; $("code-err").textContent = "";
+  $("code-input").focus();
+}
+async function submitCode() {
+  const code = ($("code-input").value || "").replace(/\D/g, "");
+  if (code.length !== 6 || pendingPin == null || codeBusy) return;
+  codeBusy = true;
+  try {
+    const r = await api("/staff-app/totp", { method: "POST", body: { pin: pendingPin, code }, auth: false });
+    deviceTokens = [r.deviceToken, ...deviceTokens.filter(t => t !== r.deviceToken)].slice(0, 12);
+    localStorage.setItem("staff_device_tokens", JSON.stringify(deviceTokens));
+    signedIn(r.user);
+  } catch (e) {
+    if (e.code === "invalid_totp") $("code-err").textContent = T().codeWrong;
+    else if (e.code === "rate_limited") $("code-err").textContent = "⏳";
+    else { backToPin(); $("login-err").textContent = T().pinWrong; return; }
+    $("code-input").value = "";
+  } finally { codeBusy = false; }
+}
+function backToPin() {
+  pendingPin = null; pinBuf = ""; renderDots();
+  $("login-code").classList.add("hidden");
+  $("login-pin").classList.remove("hidden");
+}
+function signedIn(user) {
+  token = user.token;
+  localStorage.setItem("staff_token", token);
+  if (!lang) { const p = String(user.languageCode || "").toLowerCase(); if (STR[p]) lang = p; }
+  pinBuf = ""; pendingPin = null;
+  showBoard();
+}
+function signOut(tellStore) {
+  if (tellStore && token) api("/logout", { method: "POST" }).catch(() => {});
+  token = null; localStorage.removeItem("staff_token");
+  showLogin();
+}
+
+// ---- the board ----
+function showBoard() {
+  $("login").classList.add("hidden");
+  $("board").classList.remove("hidden");
+  labels();
+  poll();
+  stopPoll();
+  pollTimer = setInterval(poll, 3000);
+}
+function stopPoll() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
+async function poll() {
+  try {
+    const b = await api("/kitchen/board" + (station ? "?station=" + encodeURIComponent(station) : ""));
+    if (!lang && b.language) lang = b.language === "en" ? "en" : "fr";
+    const isNew = lastSeen != null && b.latestTicket > lastSeen;
+    lastSeen = Math.max(lastSeen || 0, b.latestTicket);
+    board = b; fetchedAt = Date.now();
+    if (isNew && sound && b.sound) chime();
+    $("status").textContent = ""; $("status").classList.remove("bad");
+    render();
+  } catch (e) {
+    if (e.status === 401) return;
+    $("status").textContent = T().offline; $("status").classList.add("bad");
+  }
+}
+
+function name(fr, en) {
+  if (lang === "en") return en || fr;
+  return fr || en;
+}
+function mmss(sec) {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m + ":" + String(s).padStart(2, "0");
+}
+function level(sec) {
+  if (!board) return "ok";
+  if (sec >= board.lateMinutes * 60) return "late";
+  if (sec >= board.warnMinutes * 60) return "warn";
+  return "ok";
+}
+function render() {
+  labels();
+  if (!board) return;
+  const chips = [{ id: "", nameFr: T().all, nameEn: T().all }, ...board.stations];
+  $("stations").innerHTML = chips.map(s =>
+    `<button class="chip ${s.id === station ? "on" : ""}" data-s="${esc(s.id)}">${esc(name(s.nameFr, s.nameEn))}</button>`).join("");
+  $("stations").querySelectorAll("button").forEach(b => b.onclick = () => {
+    station = b.dataset.s; localStorage.setItem("kitchen_station", station); lastSeen = null; poll();
+  });
+  const drift = Math.floor((Date.now() - fetchedAt) / 1000);
+  const multi = !station && board.stations.length > 1;
+  $("grid").innerHTML = board.cards.length === 0 ? `<div class="empty">${esc(T().empty)}</div>` :
+    board.cards.map(c => {
+      const sec = c.elapsedSeconds + drift;
+      const items = c.items.map(i => {
+        const variant = name(i.variantFr, i.variantEn);
+        const tags = (i.add ? `<span class="tag add">${esc(T().add)}</span>` : "") +
+          (i.voided ? `<span class="tag void">${esc(T().void)}</span>` : "");
+        const partial = !i.voided && i.voidedQty > 0
+          ? `<div class="partial">−${i.voidedQty} ${esc(T().voided)}</div>` : "";
+        const qty = i.voided ? i.qty : i.qty - i.voidedQty;
+        return `<li class="${i.voided ? "voided" : ""}"><span class="qty">${qty}×</span><span class="name">${esc(name(i.nameFr, i.nameEn))}</span>${tags}` +
+          (variant ? `<div class="sub">${esc(variant)}</div>` : "") +
+          (i.note ? `<div class="note">» ${esc(i.note)}</div>` : "") + partial + `</li>`;
+      }).join("");
+      const meta = [multi ? name(c.stationNameFr, c.stationNameEn) : null, `${T().server} ${c.serverName}`,
+        c.guests ? `${c.guests} ${T().guests}` : null, `#${c.checkId}`].filter(Boolean).map(esc).join(" · ");
+      return `<button class="card ${level(sec)}" data-check="${c.checkId}" data-station="${esc(c.stationId)}">
+        <div class="top"><span class="table">${esc(c.tableLabel)}</span><span class="timer" data-t="${c.elapsedSeconds}">${mmss(sec)}</span></div>
+        <div class="meta">${meta}</div><ul>${items}</ul><div class="done">${esc(T().done)}</div></button>`;
+    }).join("");
+  $("grid").querySelectorAll(".card").forEach(el => el.onclick = () => bump(+el.dataset.check, el.dataset.station));
+  $("recall").disabled = board.recent.length === 0;
+  $("recent").innerHTML = board.recent.length === 0 ? "" : esc(T().recent) + " " + board.recent.map(r =>
+    `<button class="tool" data-b="${esc(r.bumpId)}">↶ ${esc(r.tableLabel)}</button>`).join("");
+  $("recent").querySelectorAll("button").forEach(b => b.onclick = () => recall(b.dataset.b));
+}
+// timers tick between polls without a refetch
+setInterval(() => {
+  if (!board) return;
+  const drift = Math.floor((Date.now() - fetchedAt) / 1000);
+  document.querySelectorAll(".card").forEach(el => {
+    const t = el.querySelector(".timer"); const sec = +t.dataset.t + drift;
+    t.textContent = mmss(sec);
+    el.classList.remove("ok", "warn", "late"); el.classList.add(level(sec));
+  });
+}, 1000);
+
+async function bump(checkId, stationId) {
+  try { await api("/kitchen/board/bump", { method: "POST", body: { checkId, stationId } }); } catch (_) {}
+  poll();
+}
+async function recall(bumpId) {
+  try { await api("/kitchen/board/recall", { method: "POST", body: { bumpId: bumpId || null, stationId: station || null } }); }
+  catch (e) { if (e.code === "nothing_to_recall") { $("status").textContent = T().nothing; } }
+  poll();
+}
+
+// ---- new-order chime (Web Audio: no file, works offline) ----
+let audio = null;
+function chime() {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const now = audio.currentTime;
+    [880, 1320].forEach((f, i) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = f; o.type = "sine";
+      g.gain.setValueAtTime(0.0001, now + i * 0.18);
+      g.gain.exponentialRampToValueAtTime(0.4, now + i * 0.18 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.18 + 0.35);
+      o.connect(g).connect(audio.destination);
+      o.start(now + i * 0.18); o.stop(now + i * 0.18 + 0.4);
+    });
+  } catch (_) {}
+}
+
+function labels() {
+  const t = T();
+  document.documentElement.lang = lang || "fr";
+  $("t-title").textContent = t.title; $("t-pin").textContent = t.pin; $("t-code-title").textContent = t.codeTitle;
+  $("t-kitchen").textContent = t.title; document.title = t.title;
+  $("recall").textContent = "↶ " + t.recall;
+  $("sound").textContent = sound ? t.soundOn : t.soundOff;
+  $("lang").textContent = (lang || "fr") === "fr" ? "EN" : "FR";
+  $("signout").textContent = t.signout;
+}
+
+$("code-input").addEventListener("input", () => { if (($("code-input").value || "").replace(/\D/g, "").length === 6) submitCode(); });
+$("code-back").onclick = backToPin;
+$("recall").onclick = () => recall(null);
+$("sound").onclick = () => { sound = !sound; localStorage.setItem("kitchen_sound", sound ? "on" : "off"); if (sound) chime(); labels(); };
+const flip = () => { lang = (lang || "fr") === "fr" ? "en" : "fr"; localStorage.setItem("kitchen_lang", lang); render(); labels(); };
+$("lang").onclick = flip; $("lang-login").onclick = flip;
+$("signout").onclick = () => signOut(true);
+
+renderPad(); renderDots();
+if (token) showBoard(); else showLogin();
+</script>
+</body>
+</html>

@@ -148,6 +148,21 @@ class CheckService(private val config: CustomerConfig) {
 
     private val log = LoggerFactory.getLogger(CheckService::class.java)
 
+    /**
+     * Kitchen tickets (kitchen.printing=on), else null and nothing here changes.
+     * Called only after the check's own transaction has committed, and never
+     * allowed to throw back into it: a printer problem can't block a sale.
+     */
+    var kitchen: KitchenHook? = null
+
+    private fun afterKitchen(view: CheckView): CheckView {
+        val hook = kitchen ?: return view
+        if (view.status == "VOID" || view.status == "CANCELLED") {
+            try { hook.checkEnded(view.id) } catch (e: Exception) { log.warn("kitchen hook failed: ${e.message}") }
+        }
+        return view
+    }
+
     /** Refuse when the table's zone is CLOSED. Call inside a transaction. */
     private fun requireZoneOpenForTable(tableId: String) {
         val status = DiningTables
@@ -313,7 +328,9 @@ class CheckService(private val config: CustomerConfig) {
         loadCheck(checkId)
     }
 
-    fun rejectPendingLine(checkId: Int, lineId: Int): CheckView = transaction {
+    fun rejectPendingLine(checkId: Int, lineId: Int): CheckView = afterKitchen(rejectPendingLineTx(checkId, lineId))
+
+    private fun rejectPendingLineTx(checkId: Int, lineId: Int): CheckView = transaction {
         val removed = CheckLines.deleteWhere {
             (CheckLines.id eq lineId) and (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING")
         }
@@ -348,7 +365,9 @@ class CheckService(private val config: CustomerConfig) {
     }
 
     /** Stage-1 basket edit. Only while OPEN — after total lock the basket is frozen. */
-    fun removeLine(checkId: Int, lineId: Int): CheckView = transaction {
+    fun removeLine(checkId: Int, lineId: Int): CheckView = afterKitchen(removeLineTx(checkId, lineId))
+
+    private fun removeLineTx(checkId: Int, lineId: Int): CheckView = transaction {
         val check = requireCheck(checkId)
         if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
         val removed = CheckLines.deleteWhere {
@@ -962,7 +981,10 @@ class CheckService(private val config: CustomerConfig) {
      * money applied. TODO: full manager-override framework (approval on someone
      * else's terminal session, discount gating) — this is the minimal honest gate.
      */
-    fun voidCheck(checkId: Int, reason: String, managerId: String): CheckView = transaction {
+    fun voidCheck(checkId: Int, reason: String, managerId: String): CheckView =
+        afterKitchen(voidCheckTx(checkId, reason, managerId))
+
+    private fun voidCheckTx(checkId: Int, reason: String, managerId: String): CheckView = transaction {
         require(reason.isNotBlank()) { "void reason is required" }
         // defense-in-depth: the route already authorized this; re-check the grant on the authorizer
         if (!GrantsRepo.has(managerId, Permissions.VOID))
@@ -1442,7 +1464,14 @@ class CheckService(private val config: CustomerConfig) {
      * MERGED: like CANCELLED it's a no-receipt, no-manager-gate close, and the
      * occupancy reads ignore it so the source table frees immediately.
      */
-    fun mergeCheck(sourceCheckId: Int, destCheckId: Int): CheckView = transaction {
+    fun mergeCheck(sourceCheckId: Int, destCheckId: Int): CheckView =
+        mergeCheckTx(sourceCheckId, destCheckId).also { view ->
+            kitchen?.let { hook ->
+                try { hook.checksMerged(sourceCheckId, view.id) } catch (e: Exception) { log.warn("kitchen hook failed: ${e.message}") }
+            }
+        }
+
+    private fun mergeCheckTx(sourceCheckId: Int, destCheckId: Int): CheckView = transaction {
         if (sourceCheckId == destCheckId)
             throw ConflictException("can't merge check $sourceCheckId into itself", "same_check")
         val source = requireMovable(sourceCheckId)

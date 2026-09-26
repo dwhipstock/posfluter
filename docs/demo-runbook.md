@@ -444,6 +444,88 @@ scripts/demo-up.sh` to demo the authenticator (restart the store to apply). The
 store logs `Staff app MFA: <on|off> (<source>)` at startup; a bad value means
 `on` (logged) and never fails startup.
 
+## Kitchen tickets and the kitchen screen (optional)
+
+Restaurants only, **off by default**. With it off nothing changes: no Send
+button, no Kitchen view, no station tickets, and `/health` answers exactly as
+before. With it on, sending an order puts one ticket per station (Kitchen,
+Bar, Sushi Bar…) on that station's printer, its kitchen screen, or both.
+
+**Turn it on** (a config switch, like the ones above): `kitchen.printing=on|off`.
+
+- **Tablet**: the same `store.properties` as `print.receipts`.
+
+  ```sh
+  scripts/tablet-kitchen-printing.sh on    # write kitchen.printing=on + restart the app
+  scripts/tablet-kitchen-printing.sh off   # back to no kitchen tickets
+  adb logcat -s TabletStore | grep 'Kitchen tickets'
+  ```
+
+- **Mac stores**: `POS_KITCHEN_PRINTING=on scripts/demo-up.sh` (Plateau; Sage &
+  Poppy is retail and ignores it). Any desktop / docker store:
+  `POS_KITCHEN_PRINTING=on`, or `kitchen.printing` in the `POS_CONFIG_FILE`
+  properties file (the env var wins). Restart the store to apply. A bad value
+  means `off` (logged) and never fails startup.
+
+**Stations and mapping** (manager): More → Venue settings → Receipt printer →
+**Kitchen tickets**. The first start with it on seeds sensible defaults once:
+
+| Station | Gets | Output |
+|---|---|---|
+| Cuisine / Kitchen | Starters, Burgers & Sandwiches, Mains & Salads, Desserts, anything unmapped (the default station) | printer + screen |
+| Bar | Beer & Cider, Wine, Cocktails, and any drink in another category (a Plateau Special cocktail) | printer + screen |
+| Bar à sushis / Sushi Bar (Plateau only) | Sushi & Sake | printer + screen |
+
+Per station: French and English names, **output** (printer, screen or both),
+printer IP and port (blank = the receipt printer, so the demo can run every
+station on the one printer), paper **80 or 58 mm**, and **Test print**. Each
+menu category picks a station (or "No ticket"); **per-item overrides** win
+over the category. Also here: ticket language (the store's, French, English
+or both), the default station, the screen's timer colours (yellow after 10
+min, red after 20 by default) and the new-order sound.
+
+**On the floor**
+
+- The check screen gets **Send (n)** (n = items the kitchen doesn't have yet),
+  a reprint button and a **guests** count for the ticket header. Leaving the
+  bill or tapping Pay also sends, so nothing is forgotten; it never waits on a
+  printer.
+- First send to a station: **COMMANDE / ORDER**. Later sends print only the
+  new or increased items: **AJOUT / ADD**. Removing or reducing a sent item,
+  or voiding the whole bill, prints **ANNULÉ / VOID** (black bars) to that
+  station; a changed note is a VOID of the old line plus an ADD. Reprint marks
+  the copy **RÉIMPRESSION / REPRINT**. Tickets carry the table, bill number,
+  server, time, guests, and each item with its size and note.
+- The staff phone app sends to the kitchen after adding lines or accepting a
+  guest's order.
+
+**Printer problems never block a sale.** Tickets go through a queue saved in
+the store's SQLite: an unreachable or out-of-paper printer (paper is checked
+with the printer's status query) makes its tickets wait and retry (2s, 4s …
+up to a minute), in order, and print when it's back, even after a restart.
+Each ticket prints once (job ids; a kitchen that printed isn't reprinted when
+the bar catches up). The floor and check screens show **"Kitchen printer
+offline — 2 tickets waiting"** with **Retry** and **Cancel tickets** (cancel
+means tell the kitchen in person).
+
+**The kitchen screen**
+
+- **On the POS**: the **Kitchen** button in the floor header. One card per
+  bill per station; the timer turns yellow then red; ADD items are marked,
+  voided items struck through; tap a card when it's done; **Recall** brings the
+  last one (or any recent one) back. Filter by station.
+- **On any other device** on the venue Wi-Fi (a spare tablet, a phone):
+  `http://<store IP>:<port>/kitchen` (the Kitchen view's screen icon shows the
+  address and a QR). It signs in exactly like the staff app (a staff PIN, plus
+  the authenticator code when `staff.app.mfa=on`) and remembers the sign-in on
+  that device; no internet needed. Pick a station at the top; the choice, the
+  language (FR/EN) and the sound setting stick across reloads.
+- Screens poll the store every 3 seconds; all state (open cards, bumps) lives
+  in the store, so every screen agrees and a reload loses nothing. Kitchen
+  tickets are local only: nothing about them syncs to the portal.
+
+Screenshots: `docs/screenshots/kitchen/`.
+
 ## Stripe (test mode)
 
 An optional extra tender, **Card (Stripe)**, takes a card through Stripe
