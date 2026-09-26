@@ -294,6 +294,8 @@ handed back.
   "refundCents": 684,             // PREPAY only: unused prepay handed back (0 when it filled exactly)
   "refundId": 9,                  // PREPAY with a refund only
   "fdcTransactionId": "T-000031",
+  "costMills": 2699,              // optional: cost per gallon, thousandths of a dollar
+  "costCents": 2713,              // optional: this fuelling's cost, cents
   "completedAt": "2026-09-26T15:04:05.000-05:00" }
 ```
 - Idempotent by `(store, fuelSaleId)`: a re-sent sale (even under a new event
@@ -323,6 +325,21 @@ arrive in `fuel.sale`. The cloud keeps each line's `fuel` object as sent
 `categoryId` is not `fuel`. Item snapshots for the fuel items have
 `categoryId: "fuel"`, `taxable: false`, and may be `active: false` (sold at
 the pump, not from the shelf). The Fuel report is API.md, Reports.
+
+**Costs and promotions (for margins; any store, all optional — cloud
+migration 024).** An absent cost is *unknown*, never zero: reports compute a
+margin only over what has a cost and count the rest.
+- `check.closed` lines may carry `"unitCostCents": 123` — the item's cost per
+  unit at ring-up (a fuel line carries its fuel cost). Line cost =
+  `unitCostCents × qty`.
+- `check.closed` may carry `"discounts": [{ "code": "energy-2for5",
+  "label": "2 for $5 energy drinks", "amountCents": 98 }]` — promotions taken
+  off before tax (in-store lines only). Line totals stay gross; net in-store
+  sales = Σ non-fuel `lineTotalCents` − Σ `discounts[].amountCents`. The cloud
+  keeps the list (`checks.discounts`) and its sum (`checks.discount_cents`).
+- Item snapshots may carry `"costCents": 123` (the item's current cost).
+- `fuel.sale` may carry `costMills` and `costCents` (above). Fuel margin =
+  `amountCents − costCents`.
 
 ### `age.checked`
 The outcome of one ID check before age-restricted items were paid for, and

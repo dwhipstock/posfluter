@@ -54,8 +54,9 @@ Stores are unchanged: each still runs fully on its own, offline, and only
    * `locales` — e.g. `{"default": "en", "available": ["en", "es"]}`
      (English, French and Spanish are built in); `currency` — e.g. `USD`;
    * `features` — optional extras, off unless set: `{"fuel": true}` adds the
-     Fuel report (a gas station: gallons and fuel sales by grade beside the
-     shop's own sales).
+     "Fuel & in-store" report and puts a gas station's headline row first on
+     the dashboard (in-store sales and margin, fuel gallons and margin per
+     gallon).
 4. Check it: `cd cloud/web && npm test && npm run build && npm run test:brands`
    — the last one renders every page under every pack and fails if any page
    names another client.

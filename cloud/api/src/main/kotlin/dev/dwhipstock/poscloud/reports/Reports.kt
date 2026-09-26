@@ -667,31 +667,76 @@ data class VenueCashRow(
     val netCents: Long, val inCount: Int, val outCount: Int,
     val currency: String = "CAD")
 
+/**
+ * Margins (cloud migration 024) are computed only over rows whose cost the
+ * store sent: an older store's sale has an UNKNOWN cost, never a zero one.
+ * Each figure below has its costed basis beside it and the count of rows
+ * without a cost; `null` ratios mean nothing in scope was costed.
+ */
+
 /** A fuel grade as dispensed in ONE currency (the same grade in two currencies is two rows). Exact. */
 @Serializable
 data class FuelGradeRow(
     val grade: String, val gradeName: String,
     /** Thousandths of a US gallon. */
     val volumeMilli: Long, val amountCents: Long, val count: Int,
-    val currency: String = "CAD")
+    val currency: String = "CAD",
+    /** Fuellings with a known cost, and their volume / revenue / cost. */
+    val costedCount: Int = 0, val costedVolumeMilli: Long = 0, val costedAmountCents: Long = 0,
+    val costCents: Long = 0,
+    /** costedAmountCents − costCents. */
+    val marginCents: Long = 0,
+    /** Margin per gallon in mills (tenths of a cent): 200 = 20.0¢/gal. Null = no costed fuelling. */
+    val marginMillsPerGallon: Long? = null)
 
 /** Fuel dispensed (from `fuel.sale`): amounts are what the pumps dispensed, tax-inclusive. */
 @Serializable
 data class FuelTotals(
     val volumeMilli: Long, val amountCents: Long, val count: Int,
     /** Prepaid fuellings: paid up front, and the unused change handed back (a refund, already out of sales). */
-    val prepayCount: Int = 0, val prepaidCents: Long = 0, val prepayRefundCents: Long = 0)
+    val prepayCount: Int = 0, val prepaidCents: Long = 0, val prepayRefundCents: Long = 0,
+    val costedCount: Int = 0, val uncostedCount: Int = 0,
+    val costedVolumeMilli: Long = 0, val costedAmountCents: Long = 0,
+    val costCents: Long = 0, val marginCents: Long = 0,
+    val marginMillsPerGallon: Long? = null)
 
-/** In-store (shop) sales: the pre-tax line totals of CLOSED checks' non-fuel lines. */
+/**
+ * In-store (shop) sales: CLOSED checks' non-fuel lines, before tax. Line
+ * totals are gross; [salesCents] is net of the sales' promotions
+ * ([discountCents]). For margins each sale's promotions are shared across its
+ * shop lines in proportion to their totals (the largest line takes the
+ * rounding cent), so costed figures are net too.
+ */
 @Serializable
-data class InStoreTotals(val salesCents: Long, val lineCount: Int, val qty: Int, val checkCount: Int)
+data class InStoreTotals(
+    val salesCents: Long, val lineCount: Int, val qty: Int, val checkCount: Int,
+    val grossSalesCents: Long = 0, val discountCents: Long = 0,
+    val costedLineCount: Int = 0, val uncostedLineCount: Int = 0,
+    /** Net sales of the lines with a known cost. */
+    val costedSalesCents: Long = 0,
+    val costCents: Long = 0,
+    /** costedSalesCents − costCents. */
+    val marginCents: Long = 0,
+    /** marginCents / costedSalesCents in basis points (2750 = 27.50%). Null = no costed line. */
+    val marginBasisPoints: Long? = null)
+
+/** One in-store category's net sales and margin, in ONE currency. */
+@Serializable
+data class InStoreCategoryRow(
+    val categoryId: String?, val nameFr: String?, val nameEn: String?,
+    val salesCents: Long, val qty: Int, val lineCount: Int,
+    val costedSalesCents: Long, val costCents: Long, val marginCents: Long,
+    val marginBasisPoints: Long?, val uncostedLineCount: Int,
+    val currency: String = "CAD")
 
 @Serializable
 data class VenueFuelRow(
     val venueId: String, val venueName: String,
     val fuelVolumeMilli: Long, val fuelAmountCents: Long, val fuelCount: Int,
     val inStoreSalesCents: Long, val inStoreCheckCount: Int,
-    val currency: String = "CAD")
+    val currency: String = "CAD",
+    val fuelMarginCents: Long = 0, val fuelMarginMillsPerGallon: Long? = null,
+    val inStoreMarginCents: Long = 0, val inStoreMarginBasisPoints: Long? = null)
 
 @Serializable
 data class FuelReportResponse(
@@ -701,7 +746,9 @@ data class FuelReportResponse(
     val fuel: FuelTotals,
     val inStore: InStoreTotals,
     val byVenue: List<VenueFuelRow>,
-    val money: MoneyScope? = null)
+    val money: MoneyScope? = null,
+    /** In-store categories, best margin first (uncosted categories last). */
+    val inStoreByCategory: List<InStoreCategoryRow> = emptyList())
 
 @Serializable
 data class CashMovementsResponse(
@@ -856,8 +903,9 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
      * A gas station's fuel and shop split. Fuel from `fuel.sale` rows completed
      * in each store's business days (what the pumps dispensed; a prepay's
      * unused change is a refund.created and is not subtracted again here).
-     * In-store = the pre-tax line totals of closed checks' lines that are not
-     * fuel (categoryId != "fuel"). Grades are one row per (grade, currency).
+     * In-store = closed checks' lines that are not fuel (categoryId != "fuel"),
+     * before tax, net of the checks' promotions. Margins only where the store
+     * sent a cost. Grades and categories are one row per (id, currency).
      */
     get("/reports/fuel") {
         val ctx = reportCtx(call, fx)
@@ -867,35 +915,76 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
             }.toList()
             fun vol(r: ResultRow) = r[FuelSales.volumeMilli] ?: 0
             fun amt(r: ResultRow) = r[FuelSales.amountCents] ?: 0
+            fun cost(r: ResultRow) = r[FuelSales.costCents] ?: 0
+            fun costed(g: List<ResultRow>) = g.filter { it[FuelSales.costCents] != null }
             val byGrade = sales.groupBy { (it[FuelSales.grade] ?: "—") to ctx.currencyOf(it[FuelSales.venueId]) }
                 .map { (key, g) ->
                     val (grade, currency) = key
+                    val c = costed(g)
+                    val margin = c.sumOf(::amt) - c.sumOf(::cost)
                     FuelGradeRow(
                         grade, g.firstNotNullOfOrNull { it[FuelSales.gradeName] } ?: grade,
-                        g.sumOf(::vol), g.sumOf(::amt), g.size, currency)
+                        g.sumOf(::vol), g.sumOf(::amt), g.size, currency,
+                        c.size, c.sumOf(::vol), c.sumOf(::amt), c.sumOf(::cost), margin,
+                        perGallonMills(margin, c.sumOf(::vol)))
                 }.sortedWith(compareBy({ ctx.currencies.indexOf(it.currency) }, { gradeOrder(it.grade) }, { it.grade }))
             val prepays = sales.filter { it[FuelSales.mode] == "PREPAY" }
+            val costedSales = costed(sales)
+            val fuelMargin = ctx.fuel(costedSales, ::amt) - ctx.fuel(costedSales, ::cost)
             val fuel = FuelTotals(
                 sales.sumOf(::vol), ctx.fuel(sales, ::amt), sales.size, prepays.size,
                 ctx.fuel(prepays) { it[FuelSales.prepaidCents] ?: 0 },
                 ctx.fuel(prepays) { it[FuelSales.refundCents] ?: 0 },
+                costedSales.size, sales.size - costedSales.size,
+                costedSales.sumOf(::vol), ctx.fuel(costedSales, ::amt), ctx.fuel(costedSales, ::cost),
+                fuelMargin, perGallonMills(fuelMargin, costedSales.sumOf(::vol)),
             )
+
             val closed = closedChecks(ctx)
-            val shopLines = linesOf(ctx, closed).filter { it[CheckLines.categoryId] != FUEL_CATEGORY }
-            val shopChecks = shopLines.map { it[CheckLines.venueId] to it[CheckLines.checkId] }.toSet()
+            val shop = shopLines(closed, linesOf(ctx, closed))
+            val shopChecks = shop.map { it.venueId to it.checkId }.toSet()
+            fun shopTotal(g: List<ShopLine>, value: (ShopLine) -> Long) = ctx.total(g, { it.venueId }, value)
+            val costedShop = shop.filter { it.costCents != null }
+            val discount = ctx.checks(closed) { it[Checks.discountCents] ?: 0 }
+            val grossShop = shopTotal(shop) { it.grossCents }
+            val costedShopSales = shopTotal(costedShop) { it.netCents }
+            val shopMargin = costedShopSales - shopTotal(costedShop) { it.costCents!! }
             val inStore = InStoreTotals(
-                ctx.lines(shopLines) { it[CheckLines.lineTotalCents] },
-                shopLines.size, shopLines.sumOf { it[CheckLines.qty] }, shopChecks.size)
+                grossShop - discount, shop.size, shop.sumOf { it.qty }, shopChecks.size,
+                grossShop, discount, costedShop.size, shop.size - costedShop.size,
+                costedShopSales, shopTotal(costedShop) { it.costCents!! }, shopMargin,
+                basisPoints(shopMargin, costedShopSales))
+
+            val categoryNames = categoryNames(ctx)
+            val byCategory = shop.groupBy { it.categoryId to ctx.currencyOf(it.venueId) }.map { (key, g) ->
+                val (categoryId, currency) = key
+                val c = g.filter { it.costCents != null }
+                val cSales = c.sumOf { it.netCents }
+                val margin = cSales - c.sumOf { it.costCents!! }
+                val names = categoryNames.lookup(g.first().venueId, categoryId)
+                InStoreCategoryRow(
+                    categoryId, names?.first, names?.second, g.sumOf { it.netCents }, g.sumOf { it.qty }, g.size,
+                    cSales, c.sumOf { it.costCents!! }, margin, basisPoints(margin, cSales), g.size - c.size, currency)
+            }.sortedWith(compareBy<InStoreCategoryRow>({ it.costedSalesCents == 0L }, { -comparable(ctx, it.currency, it.marginCents) }))
+
             val salesBy = sales.groupBy { it[FuelSales.venueId] }
-            val linesBy = shopLines.groupBy { it[CheckLines.venueId] }
+            val shopBy = shop.groupBy { it.venueId }
+            val discountBy = closed.groupBy({ it[Checks.venueId] }, { it[Checks.discountCents] ?: 0L })
             val byVenue = ctx.venues.map { v ->
                 val f = salesBy[v.id].orEmpty()
-                val l = linesBy[v.id].orEmpty()
+                val fc = costed(f)
+                val fm = fc.sumOf(::amt) - fc.sumOf(::cost)
+                val l = shopBy[v.id].orEmpty()
+                val lc = l.filter { it.costCents != null }
+                val lcSales = lc.sumOf { it.netCents }
+                val lm = lcSales - lc.sumOf { it.costCents!! }
                 VenueFuelRow(
                     v.id, v.venue.name, f.sumOf(::vol), f.sumOf(::amt), f.size,
-                    l.sumOf { it[CheckLines.lineTotalCents] }, shopChecks.count { it.first == v.id }, v.currency)
+                    l.sumOf { it.grossCents } - discountBy[v.id].orEmpty().sum(),
+                    shopChecks.count { it.first == v.id }, v.currency,
+                    fm, perGallonMills(fm, fc.sumOf(::vol)), lm, basisPoints(lm, lcSales))
             }
-            FuelReportResponse(ctx.currency, byGrade, fuel, inStore, byVenue, ctx.money())
+            FuelReportResponse(ctx.currency, byGrade, fuel, inStore, byVenue, ctx.money(), byCategory)
         }
         call.respond(response)
     }
@@ -1175,6 +1264,49 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
 
 /** The category a store puts its fuel lines in (CONTRACT §2, Fuel). */
 private const val FUEL_CATEGORY = "fuel"
+
+/** One in-store line with its share of its sale's promotions, and its cost when known. */
+private class ShopLine(row: ResultRow, val discountCents: Long) {
+    val venueId: String = row[CheckLines.venueId]
+    val checkId: Int = row[CheckLines.checkId]
+    val categoryId: String? = row[CheckLines.categoryId]
+    val qty: Int = row[CheckLines.qty]
+    val grossCents: Long = row[CheckLines.lineTotalCents]
+    val netCents: Long get() = grossCents - discountCents
+    /** unit cost × qty; null = the store sent no cost (unknown, never zero). */
+    val costCents: Long? = row[CheckLines.unitCostCents]?.let { it * qty }
+}
+
+/**
+ * The non-fuel lines of [closed], each with its share of its sale's
+ * promotions: pro rata to the line totals, the largest line taking the
+ * rounding remainder, so a sale's shares add up to its discount exactly.
+ */
+private fun shopLines(closed: List<ResultRow>, lines: List<ResultRow>): List<ShopLine> {
+    val discountOf = closed.associate { (it[Checks.venueId] to it[Checks.checkId]) to (it[Checks.discountCents] ?: 0L) }
+    return lines.filter { it[CheckLines.categoryId] != FUEL_CATEGORY }
+        .groupBy { it[CheckLines.venueId] to it[CheckLines.checkId] }
+        .flatMap { (key, group) ->
+            val discount = discountOf[key] ?: 0L
+            val gross = group.sumOf { it[CheckLines.lineTotalCents] }
+            if (discount == 0L || gross <= 0L) return@flatMap group.map { ShopLine(it, 0) }
+            val shares = group.map { it[CheckLines.lineTotalCents] * discount / gross }.toMutableList()
+            val largest = group.indices.maxBy { group[it][CheckLines.lineTotalCents] }
+            shares[largest] += discount - shares.sum()
+            group.mapIndexed { i, row -> ShopLine(row, shares[i]) }
+        }
+}
+
+/** [num] / [den], half-up, scaled by [scale]; null when [den] is 0. */
+private fun ratio(num: Long, den: Long, scale: Long): Long? =
+    if (den == 0L) null
+    else BigDecimal(num).multiply(BigDecimal(scale)).divide(BigDecimal(den), 0, java.math.RoundingMode.HALF_UP).toLong()
+
+/** Margin per gallon in mills: [marginCents] over [volumeMilli] thousandths of a gallon. */
+private fun perGallonMills(marginCents: Long, volumeMilli: Long): Long? = ratio(marginCents, volumeMilli, 10_000)
+
+/** [margin] / [sales] in basis points. */
+private fun basisPoints(margin: Long, sales: Long): Long? = ratio(margin, sales, 10_000)
 
 /** Regular, Mid-Grade, Premium, Diesel, then anything else. */
 private fun gradeOrder(grade: String): Int = when (grade) {

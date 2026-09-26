@@ -101,6 +101,9 @@ object Projections {
             it[qstCents] = taxSum(p, "QST")
             it[taxes] = p.arr("taxes")?.toString()
             it[currency] = cur
+            val discounts = p.arr("discounts")?.filterIsInstance<JsonObject>()
+            it[Checks.discounts] = p.arr("discounts")?.toString()
+            it[discountCents] = discounts?.sumOf { d -> d.long("amountCents") ?: 0 }
         }
         p.arr("lines")?.filterIsInstance<JsonObject>()?.let { lines ->
             CheckLines.deleteWhere {
@@ -124,6 +127,7 @@ object Projections {
                     it[unitPriceCents] = line.long("unitPriceCents") ?: 0
                     it[lineTotalCents] = line.long("lineTotalCents") ?: 0
                     it[fuel] = line.obj("fuel")?.toString()
+                    it[unitCostCents] = line.long("unitCostCents")
                 }
             }
         }
@@ -249,6 +253,8 @@ object Projections {
             it[fdcTransactionId] = p.str("fdcTransactionId")
             it[completedAt] = p.instant("completedAt", zone) ?: createdAt
             it[currency] = cur
+            it[costMills] = p.long("costMills")
+            it[costCents] = p.long("costCents")
         }
     }
 

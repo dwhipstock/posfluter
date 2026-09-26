@@ -346,7 +346,11 @@ export interface RefundListRow {
   roundingAdjustmentCents?: number;
 }
 
-/** A fuel grade as dispensed, in one currency (GET /v1/reports/fuel). */
+// Margins (GET /v1/reports/fuel) are only over rows whose cost the store sent;
+// `costed*` is that basis, `uncosted*` the rows without a cost. Ratios are
+// null when nothing was costed — never shown as 0 or 100%.
+
+/** A fuel grade as dispensed, in one currency. */
 export interface FuelGradeRow {
   /** REG | MID | PRE | DSL (or whatever the store sends). */
   grade: string;
@@ -355,6 +359,30 @@ export interface FuelGradeRow {
   volumeMilli: number;
   amountCents: number;
   count: number;
+  currency?: Currency;
+  costedCount?: number;
+  costedVolumeMilli?: number;
+  costedAmountCents?: number;
+  costCents?: number;
+  marginCents?: number;
+  /** Tenths of a cent per gallon (300 = 30.0¢/gal). */
+  marginMillsPerGallon?: number | null;
+}
+
+export interface InStoreCategoryRow {
+  categoryId: string | null;
+  nameFr: string | null;
+  nameEn: string | null;
+  /** Net of promotions, before tax. */
+  salesCents: number;
+  qty: number;
+  lineCount: number;
+  costedSalesCents: number;
+  costCents: number;
+  marginCents: number;
+  /** 2750 = 27.50%. */
+  marginBasisPoints: number | null;
+  uncostedLineCount: number;
   currency?: Currency;
 }
 
@@ -369,9 +397,30 @@ export interface FuelReport {
     prepayCount: number;
     prepaidCents: number;
     prepayRefundCents: number;
+    costedCount?: number;
+    uncostedCount?: number;
+    costedVolumeMilli?: number;
+    costedAmountCents?: number;
+    costCents?: number;
+    marginCents?: number;
+    marginMillsPerGallon?: number | null;
   };
-  /** Shop sales: pre-tax line totals of closed sales' non-fuel lines. */
-  inStore: { salesCents: number; lineCount: number; qty: number; checkCount: number };
+  /** Shop sales: closed sales' non-fuel lines, before tax; `salesCents` is net of promotions. */
+  inStore: {
+    salesCents: number;
+    lineCount: number;
+    qty: number;
+    checkCount: number;
+    grossSalesCents?: number;
+    discountCents?: number;
+    costedLineCount?: number;
+    uncostedLineCount?: number;
+    costedSalesCents?: number;
+    costCents?: number;
+    marginCents?: number;
+    marginBasisPoints?: number | null;
+  };
+  inStoreByCategory?: InStoreCategoryRow[];
   byVenue: {
     venueId: string;
     venueName: string;
@@ -381,6 +430,10 @@ export interface FuelReport {
     inStoreSalesCents: number;
     inStoreCheckCount: number;
     currency?: Currency;
+    fuelMarginCents?: number;
+    fuelMarginMillsPerGallon?: number | null;
+    inStoreMarginCents?: number;
+    inStoreMarginBasisPoints?: number | null;
   }[];
   money?: MoneyScope;
 }

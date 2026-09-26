@@ -33,7 +33,8 @@ import { EmptyState, ErrorState, PageFallback } from "@/components/states";
 import { BarChart, Donut, LineChart } from "@/components/charts";
 import { StoreBreakdown, useStoreSeries } from "@/components/store-breakdown";
 import { useStoreHref, useStores } from "@/lib/store";
-import { useChartTheme } from "@/lib/brand/context";
+import { useBrand, useChartTheme } from "@/lib/brand/context";
+import { FuelDashboardKpis } from "@/components/fuel-kpis";
 import { cn } from "@/lib/utils";
 
 export default function Page() {
@@ -56,6 +57,8 @@ function Dashboard() {
   const { combined, nameOf, colorOf } = useStores();
   const m = useMoney();
   const kpi = useScopedKpi();
+  // a gas station leads with its shop and its pumps (brand pack features.fuel)
+  const fuel = useBrand().features.fuel;
   const multiDay = range.from !== range.to;
   const today = todayISO();
   const isToday = range.from === today && range.to === today;
@@ -174,6 +177,8 @@ function Dashboard() {
       />
       <DateRangePicker />
       <FxNote money={money} />
+
+      {fuel && <FuelDashboardKpis range={range} />}
 
       {combined && <StoreCompare />}
 

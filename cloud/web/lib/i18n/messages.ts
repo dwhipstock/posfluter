@@ -222,8 +222,8 @@ export const messages = {
   report_refunds_desc: m("Montants remboursés par motif, taxes en sus", "Refund amounts by reason, net of tax"),
   report_cash_title: m("Entrées et sorties de caisse", "Cash movements"),
   report_cash_desc: m("Argent ajouté ou retiré hors vente, avec le motif", "Non-sale cash in/out, with reasons"),
-  report_fuel_title: m("Carburant", "Fuel"),
-  report_fuel_desc: m("Gallons et ventes par carburant, à côté des ventes en magasin", "Gallons and sales by grade, beside in-store sales"),
+  report_fuel_title: m("Carburant et magasin", "Fuel & in-store"),
+  report_fuel_desc: m("Ventes et marge du magasin, gallons et marge par carburant", "In-store sales and margin, fuel gallons and margin by grade"),
 
   // ── tax report ────────────────────────────────────────────────────────
   tax_title: m("Rapport des taxes", "Sales tax report"),
@@ -316,16 +316,39 @@ export const messages = {
   refunds_empty_hint: m("Aucune addition n’a été remboursée.", "No bills were refunded."),
 
   // ── Fuel report (a gas station) ───────────────────────────────────────
-  fuel_title: m("Carburant", "Fuel"),
+  fuel_title: m("Carburant et magasin", "Fuel & in-store"),
   fuel_note: m(
-    "Le carburant est ce que les pompes ont distribué, taxes comprises. La monnaie rendue sur un prépaiement est un remboursement (voir Remboursements). Les ventes en magasin sont avant taxes.",
-    "Fuel is what the pumps dispensed, taxes included. Unused prepay handed back is a refund (see Refunds). In-store sales are before tax."
+    "Le carburant est ce que les pompes ont distribué, taxes comprises. La monnaie rendue sur un prépaiement est un remboursement (voir Remboursements). Les ventes en magasin sont avant taxes et après promotions. La marge ne compte que ce dont le coût est connu.",
+    "Fuel is what the pumps dispensed, taxes included. Unused prepay handed back is a refund (see Refunds). In-store sales are before tax and after promotions. Margin counts only what has a known cost."
   ),
+  fuel_section: m("Carburant", "Fuel"),
+  instore_section: m("Magasin", "In-store"),
+  instore_margin: m("Marge du magasin", "In-store margin"),
+  fuel_margin: m("Marge sur le carburant", "Fuel margin"),
+  col_cost: m("Coût", "Cost"),
+  col_margin: m("Marge", "Margin"),
+  col_margin_pct: m("Marge %", "Margin %"),
+  col_per_gal: m("¢/gal", "¢/gal"),
+  fuel_cents_per_gal: m("{v} ¢/gal", "{v}¢/gal"),
+  margin_amount: m("{amount} de marge", "{amount} margin"),
+  fuel_sales_amount: m("{amount} de ventes de carburant", "{amount} in fuel sales"),
+  instore_promotions: m("{amount} de promotions déduites", "{amount} in promotions taken off"),
+  margin_uncosted_lines: m(
+    "{n} articles vendus sans coût connu — hors de la marge",
+    "{n} items sold without a known cost — left out of the margin"
+  ),
+  margin_uncosted_fills: m(
+    "{n} pleins sans coût connu — hors de la marge",
+    "{n} fill-ups without a known cost — left out of the margin"
+  ),
+  instore_top_categories: m("Meilleures catégories par marge", "Top categories by margin"),
+  instore_empty: m("Aucune vente en magasin pour cette période", "No in-store sales in this range"),
+  dash_fuel_details: m("Carburant et magasin", "Fuel & in-store"),
   fuel_gallons: m("Gallons", "Gallons"),
   fuel_sales: m("Ventes de carburant", "Fuel sales"),
   fuel_fills: m("Pleins", "Fill-ups"),
   fuel_in_store: m("Ventes en magasin", "In-store sales"),
-  fuel_in_store_sub: m("{n} ventes · avant taxes", "{n} sales · before tax"),
+  fuel_in_store_sub: m("{n} ventes · avant taxes, après promotions", "{n} sales · before tax, after promotions"),
   fuel_by_grade: m("Par carburant", "By grade"),
   fuel_by_store: m("Carburant par magasin", "Fuel by store"),
   fuel_total: m("Total carburant", "Fuel total"),
