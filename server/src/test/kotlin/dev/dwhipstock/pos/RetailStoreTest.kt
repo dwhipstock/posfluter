@@ -87,7 +87,7 @@ class RetailStoreTest {
         // number system 4 = in-store codes, never a manufacturer's
         assertTrue(codes.all { it.startsWith("4") })
         // every category is stocked; alcohol is age-restricted, food is not taxed
-        assertEquals(SagePoppySeed.Cat.entries.toSet(), products.map { it.cat }.toSet())
+        assertEquals(SagePoppySeed.Cat.entries.toSet() - SagePoppySeed.Cat.SUNDRIES, products.map { it.cat }.toSet())
         val alcohol = setOf(SagePoppySeed.Cat.WINE, SagePoppySeed.Cat.SPIRITS, SagePoppySeed.Cat.SELTZERS)
         assertTrue(products.filter { it.cat in alcohol }.all { it.ageRestricted })
         assertTrue(products.filter { it.cat == SagePoppySeed.Cat.SNACKS || it.cat == SagePoppySeed.Cat.ICE }
@@ -128,7 +128,8 @@ class RetailStoreTest {
         assertEquals(21, health["legalAge"]!!.jsonPrimitive.int)
         assertEquals(ZoneId.of("America/Los_Angeles"), dev.dwhipstock.pos.sdk.VenueClock.zone)
         val items = json.parseToJsonElement(loginClient().get("/items").bodyAsText()).jsonArray
-        assertEquals(SagePoppySeed.products.size, items.size)
+        // the whole ~5,000-product shelf, the hand-written first-boot products among it
+        assertEquals(dev.dwhipstock.pos.customers.sagepoppy.SagePoppyCatalog.TOTAL, items.size)
         assertTrue(items.none { it.jsonObject["id"]!!.jsonPrimitive.content == "lantern-lager" }, "no pub residue")
         val sixPack = items.single { it.jsonObject["id"]!!.jsonPrimitive.content == "golden-lager-6" }.jsonObject
         assertEquals(30L, sixPack["depositCents"]!!.jsonPrimitive.long)

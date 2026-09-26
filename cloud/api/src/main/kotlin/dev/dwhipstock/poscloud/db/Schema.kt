@@ -304,6 +304,10 @@ object CatalogItems : Table("catalog_items") {
     val photoVersion = long("photo_version").nullable()
     // the store's UPC for display (018); NULL = none sent
     val barcode = text("barcode").nullable()
+    // big retail catalogs (021): producer, style/varietal/type, size/pack label
+    val brand = text("brand").nullable()
+    val subcategory = text("subcategory").nullable()
+    val sizeLabel = text("size_label").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, id)
 }
 

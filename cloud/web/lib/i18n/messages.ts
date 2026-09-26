@@ -444,6 +444,24 @@ export const messages = {
     "It appears as soon as the store’s tablet connects."
   ),
   menu_cat_empty: m("Aucun article dans cette catégorie.", "No items here yet."),
+  menu_search: m("Chercher un produit, une marque ou un code-barres", "Search a product, brand or barcode"),
+  menu_no_match: m("Aucun produit ne correspond", "No products match"),
+  menu_no_match_hint: m("Modifiez la recherche ou réinitialisez les filtres.", "Change the search or reset the filters."),
+  menu_col_brand: m("Marque", "Brand"),
+  menu_col_category: m("Catégorie", "Category"),
+  menu_col_price: m("Prix", "Price"),
+  menu_col_active: m("En vente", "On sale"),
+
+  // ── product lists: search, 2-way filter, paging (Products, Stock) ─────
+  catalog_category: m("Catégorie", "Category"),
+  catalog_all_categories: m("Toutes les catégories", "All categories"),
+  catalog_subcategory: m("Sous-catégorie", "Subcategory"),
+  catalog_all_subcategories: m("Toutes les sous-catégories", "All subcategories"),
+  catalog_size: m("Format", "Size"),
+  catalog_all_sizes: m("Tous les formats", "All sizes"),
+  catalog_reset: m("Réinitialiser", "Reset"),
+  catalog_range: m("{from}–{to} sur {total}", "{from}–{to} of {total}"),
+  catalog_products: m("{n} produits", "{n} products"),
 
   // ── staff + grants (read-only: each store's tablet owns its staff) ─────
   nav_staff: m("Personnel", "Staff"),

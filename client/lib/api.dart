@@ -485,7 +485,10 @@ class Api {
     Duration(milliseconds: 750),
   ];
 
-  static Future<dynamic> _get(String path) async {
+  static Future<dynamic> _get(String path) async =>
+      jsonDecode(utf8.decode((await _getResponse(path)).bodyBytes));
+
+  static Future<http.Response> _getResponse(String path) async {
     for (var attempt = 0; ; attempt++) {
       final canRetry = attempt < _getRetryDelays.length;
       try {
@@ -497,7 +500,7 @@ class Api {
         // an error. 4xx (auth, not-found) throws immediately.
         if (res.statusCode < 500 || !canRetry) {
           _throwOnError(res);
-          return jsonDecode(utf8.decode(res.bodyBytes));
+          return res;
         }
       } on SocketException {
         if (!canRetry) rethrow;
@@ -848,6 +851,53 @@ class Api {
     'pin': pin,
     'permission': ?permission,
   });
+
+  /// The whole shelf for the counter's own index (a 5,000-product shop is a
+  /// few MB of JSON): fetched in one gzip'd response and decoded off the UI
+  /// thread, so the counter never stutters while it loads.
+  static Future<List<Item>> catalog() async {
+    final res = await _getResponse('/items');
+    // a pub menu (or a test fixture) is small: not worth an isolate
+    if (res.bodyBytes.length < 512 * 1024) return _decodeItems(res.bodyBytes);
+    return compute(_decodeItems, res.bodyBytes);
+  }
+
+  /// The counter's quick keys (pins, unscannables, fastest sellers).
+  static Future<QuickKeys> quickKeys({int limit = 36}) async =>
+      QuickKeys.fromJson(await _get('/retail/quick-keys?limit=$limit'));
+
+  static Future<QuickKeys> pinQuickKey(
+    String itemId, {
+    String? managerPin,
+  }) async => QuickKeys.fromJson(
+    await _post('/retail/quick-keys/pins', {
+      'itemId': itemId,
+      'managerPin': ?managerPin,
+    }),
+  );
+
+  static Future<QuickKeys> unpinQuickKey(
+    String itemId, {
+    String? managerPin,
+  }) async => QuickKeys.fromJson(
+    await _post('/retail/quick-keys/unpin', {
+      'itemId': itemId,
+      'managerPin': ?managerPin,
+    }),
+  );
+
+  /// The ranked top 20% of the shelf by the last 28 days' sales.
+  static Future<List<TopSeller>> topSellers() async {
+    final j = await _get('/retail/top-sellers') as Map<String, dynamic>;
+    return [
+      for (final r in (j['items'] as List? ?? const []))
+        TopSeller(
+          r['itemId'],
+          r['rank'] ?? 0,
+          (r['units'] as num? ?? 0).toInt(),
+        ),
+    ];
+  }
 
   static Future<List<Item>> items({bool includeInactive = false}) async =>
       ((await _get('/items${includeInactive ? "?all=true" : ""}')) as List)
@@ -1885,6 +1935,45 @@ class Variant {
       Variant(j['id'], j['labelFr'], j['labelEn'], j['priceCents']);
 }
 
+List<Item> _decodeItems(Uint8List bytes) => [
+  for (final j in jsonDecode(utf8.decode(bytes)) as List)
+    Item.fromJson(j as Map<String, dynamic>),
+];
+
+/// One counter quick key: a product, and why it is there.
+class QuickKey {
+  final String itemId;
+  final bool pinned;
+  final int units;
+
+  /// pin | unscannable | velocity | popular
+  final String source;
+  const QuickKey(this.itemId, this.pinned, this.units, this.source);
+}
+
+class QuickKeys {
+  final List<QuickKey> keys;
+  final int windowDays;
+  const QuickKeys(this.keys, {this.windowDays = 28});
+  static const empty = QuickKeys([]);
+  factory QuickKeys.fromJson(dynamic j) => QuickKeys([
+    for (final k in (j['keys'] as List? ?? const []))
+      QuickKey(
+        k['itemId'],
+        k['pinned'] == true,
+        (k['units'] as num? ?? 0).toInt(),
+        k['source'] ?? 'velocity',
+      ),
+  ], windowDays: j['windowDays'] ?? 28);
+}
+
+/// A product's place in the last 28 days' sales.
+class TopSeller {
+  final String itemId;
+  final int rank, units;
+  const TopSeller(this.itemId, this.rank, this.units);
+}
+
 class Item {
   final String id,
       nameFr,
@@ -1904,6 +1993,11 @@ class Item {
   final String? barcode;
   final bool ageRestricted, taxable;
   final int depositCents;
+
+  /// Catalog facets (a big shelf): producer, style / varietal / type, size or
+  /// pack label; containers in the pack; the demo popularity weight.
+  final String? brand, subcategory, size;
+  final int packUnits, salesWeight;
   Item(
     this.id,
     this.nameFr,
@@ -1920,6 +2014,11 @@ class Item {
     this.ageRestricted = false,
     this.taxable = true,
     this.depositCents = 0,
+    this.brand,
+    this.subcategory,
+    this.size,
+    this.packUnits = 1,
+    this.salesWeight = 0,
   });
   factory Item.fromJson(Map<String, dynamic> j) => Item(
     j['id'],
@@ -1937,7 +2036,15 @@ class Item {
     ageRestricted: j['ageRestricted'] ?? false,
     taxable: j['taxable'] ?? true,
     depositCents: j['depositCents'] ?? 0,
+    brand: j['brand'],
+    subcategory: j['subcategory'],
+    size: j['size'],
+    packUnits: j['packUnits'] ?? 1,
+    salesWeight: j['salesWeight'] ?? 0,
   );
+
+  /// The first price (a shelf product has exactly one).
+  int get priceCents => variants.isEmpty ? 0 : variants.first.priceCents;
 
   /// Photo URL, version-busted (?v=) so a replaced photo bypasses every cache
   /// layer. [width] asks the server for its downscaled variant (?w=, snapped

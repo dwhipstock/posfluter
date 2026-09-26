@@ -261,10 +261,13 @@ def cmd_seed(a):
             else:
                 # the Spanish-speaking cashier rings some sales (Spanish receipts)
                 login("5555" if rng.random() < 0.25 else ("9999" if rng.random() < 0.6 else MANAGER_PIN))
-                if baskets and rng.random() < 0.55:
+                # a few familiar baskets; the rest drawn by the catalog's sales
+                # weights, so ~20% of the shelf makes ~80% of the sales
+                if baskets and rng.random() < 0.2:
                     basket = list(rng.choice(baskets))
                 else:
-                    basket = rng.sample(scannable, rng.choice([1, 1, 2, 2, 3, 4]))
+                    basket = mod.weighted_basket(items, rng, rng.choice([1, 1, 2, 2, 3, 4])) \
+                        or rng.sample(scannable, 1)
                 pay = "CASH" if rng.random() < 0.35 else "CARD"
                 _, total, _ = mod.ring_sale(items, basket, pay)
                 gross += total

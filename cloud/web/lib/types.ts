@@ -499,6 +499,11 @@ export interface MenuItem {
   variants: MenuVariant[];
   /** The store this row comes from (a combined view lists every store's items). */
   venueId: string;
+  /** Retail shelf facts (big catalogs); absent/null for the pubs. */
+  barcode?: string | null;
+  brand?: string | null;
+  subcategory?: string | null;
+  size?: string | null;
 }
 
 export interface MenuCategory {
@@ -508,7 +513,30 @@ export interface MenuCategory {
   sortOrder: number;
 }
 
-export interface MenuResponse {
+/** One filter value and how many products carry it (under the other filters). */
+export interface FacetCount {
+  value: string;
+  count: number;
+}
+
+/** Filter values present: categories, the picked category's subcategories, and sizes. */
+export interface CatalogFacets {
+  categories: FacetCount[];
+  subcategories: FacetCount[];
+  sizes: FacetCount[];
+}
+
+/** Paging fields shared by the product lists (`limit`, `offset`, `q`, `category`, `subcategory`, `size`). */
+export interface PagedList {
+  /** Matching products (menu: one per item id) — the list holds one page of them. */
+  total?: number;
+  offset?: number;
+  limit?: number | null;
+  /** Present on a paged / filtered request. */
+  facets?: CatalogFacets | null;
+}
+
+export interface MenuResponse extends PagedList {
   categories: MenuCategory[];
   items: MenuItem[];
 }
@@ -629,6 +657,9 @@ export interface StockRow {
   onHand: number;
   reorderLevel?: number | null;
   low: boolean;
+  brand?: string | null;
+  subcategory?: string | null;
+  size?: string | null;
 }
 
 export interface VenueStockRow {
@@ -639,7 +670,7 @@ export interface VenueStockRow {
   lowCount: number;
 }
 
-export interface StockResponse {
+export interface StockResponse extends PagedList {
   rows: StockRow[];
   byVenue: VenueStockRow[];
   totalOnHand: number;
@@ -729,9 +760,12 @@ export interface ReorderRow {
   suggested: number;
   reorderLevel?: number | null;
   low: boolean;
+  brand?: string | null;
+  subcategory?: string | null;
+  size?: string | null;
 }
 
-export interface ReorderResponse {
+export interface ReorderResponse extends PagedList {
   rows: ReorderRow[];
   days: number;
   coverDays: number;

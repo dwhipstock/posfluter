@@ -289,10 +289,15 @@ object Projections {
         p.arr("categories")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyCategorySnapshot(scope, it) }
     }
 
-    /** Bootstrap upload of the menu the store already has. */
+    /**
+     * Bootstrap upload of the menu the store already has — possibly in several
+     * chunks (a big retail catalog), and later chunks when a store adds a
+     * batch of products. Always additive: nothing absent from a chunk is
+     * removed (deletions arrive as item.deleted snapshots).
+     */
     private fun catalogSnapshot(scope: Scope, p: JsonObject) {
         p.arr("categories")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyCategorySnapshot(scope, it) }
-        p.arr("items")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyItemSnapshot(scope, it) }
+        p.arr("items")?.filterIsInstance<JsonObject>()?.let { Catalog.applyItemSnapshots(scope, it) }
     }
 
     /** staff.created / staff.updated / staff.deleted carry one full `staff` snapshot. */

@@ -1,6 +1,8 @@
 package dev.dwhipstock.poscloud.menu
 
 import dev.dwhipstock.poscloud.NotFoundException
+import dev.dwhipstock.poscloud.catalog.CatalogFacets
+import dev.dwhipstock.poscloud.catalog.CatalogQuery
 import dev.dwhipstock.poscloud.catalog.Scope
 import dev.dwhipstock.poscloud.db.CatalogCategories
 import dev.dwhipstock.poscloud.db.CatalogItems
@@ -33,19 +35,39 @@ data class MenuItemDto(
     val descriptionFr: String, val descriptionEn: String, val categoryId: String,
     val abbrev: String?, val isAlcohol: Boolean, val active: Boolean,
     val photoVersion: Long?, val variants: List<MenuVariantDto>,
-    val venueId: String)
+    val venueId: String,
+    // retail shelf facts (021); null for the pubs
+    val barcode: String? = null,
+    val brand: String? = null,
+    val subcategory: String? = null,
+    val size: String? = null)
 
 @Serializable
 data class MenuCategoryDto(val id: String, val nameFr: String, val nameEn: String, val sortOrder: Int)
 
+/**
+ * [items]: every store's copy of the listed products. Paged (`limit`, `q`,
+ * `category`, `subcategory`, `size`): [total] counts the matching PRODUCTS
+ * (one per item id, however many stores carry it), [items] holds one page of
+ * them, and [facets] the filter values present. Unpaged (no parameter): the
+ * whole menu, as it always was, with [total] = every product.
+ */
 @Serializable
-data class MenuResponse(val categories: List<MenuCategoryDto>, val items: List<MenuItemDto>)
+data class MenuResponse(
+    val categories: List<MenuCategoryDto>,
+    val items: List<MenuItemDto>,
+    val total: Int = 0,
+    val offset: Int = 0,
+    val limit: Int? = null,
+    val facets: CatalogFacets? = null,
+)
 
 fun Route.menuRoutes() {
 
     get("/menu") {
         val venues = dev.dwhipstock.poscloud.portalScopes(call).second // one store, or all of them
-        call.respond(transaction { menuOf(venues.map { it.scope }) })
+        val query = CatalogQuery.from(call)
+        call.respond(transaction { menuOf(venues.map { it.scope }, query) })
     }
 
     get("/menu/items/{id}/photo") {
@@ -72,7 +94,36 @@ fun Route.menuRoutes() {
  * with the same id at several stores are listed once (first store's names win);
  * every item keeps its store id so a combined view can label it.
  */
-internal fun menuOf(scopes: List<Scope>): MenuResponse {
+internal fun menuOf(scopes: List<Scope>, query: CatalogQuery = CatalogQuery()): MenuResponse {
+    val all = fullMenuOf(scopes)
+    // one product per item id (the same id at several stores is one row)
+    val byId = LinkedHashMap<String, MutableList<MenuItemDto>>()
+    for (item in all.items) byId.getOrPut(item.id) { mutableListOf() } += item
+    if (!query.paged) return all.copy(total = byId.size)
+    val order = all.categories.withIndex().associate { it.value.id to it.index }
+    fun facts(copies: List<MenuItemDto>): CatalogQuery.Facts {
+        val i = copies.first()
+        return CatalogQuery.Facts(
+            names = copies.flatMap { listOf(it.nameEn, it.nameFr) }.distinct(),
+            categoryId = i.categoryId, brand = i.brand, subcategory = i.subcategory, size = i.size,
+            barcode = copies.firstNotNullOfOrNull { it.barcode },
+        )
+    }
+    val products = byId.values.map { it to facts(it) }
+    val matching = products.filter { (_, f) -> query.matches(f) }
+        .sortedWith(compareBy({ order[it.first.first().categoryId] ?: Int.MAX_VALUE },
+            { it.first.first().nameEn.lowercase() }, { it.first.first().id }))
+    return MenuResponse(
+        categories = all.categories,
+        items = query.page(matching).flatMap { it.first },
+        total = matching.size,
+        offset = query.offset,
+        limit = query.limit,
+        facets = query.facets(products) { it.second },
+    )
+}
+
+private fun fullMenuOf(scopes: List<Scope>): MenuResponse {
     val categories = linkedMapOf<String, MenuCategoryDto>()
     val items = mutableListOf<MenuItemDto>()
     for (scope in scopes) {
@@ -109,4 +160,8 @@ private fun itemDto(scope: Scope, row: ResultRow, variants: List<ResultRow>) = M
         )
     },
     scope.venueId,
+    barcode = row[CatalogItems.barcode],
+    brand = row[CatalogItems.brand],
+    subcategory = row[CatalogItems.subcategory],
+    size = row[CatalogItems.sizeLabel],
 )

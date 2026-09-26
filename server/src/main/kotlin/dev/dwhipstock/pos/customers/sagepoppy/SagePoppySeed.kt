@@ -42,6 +42,7 @@ object SagePoppySeed {
         MIXERS("mixers", "Mixers & Soda"),
         SNACKS("snacks", "Snacks"),
         ICE("ice", "Ice"),
+        SUNDRIES("sundries", "Sundries"),
     }
 
     data class Product(
@@ -54,9 +55,19 @@ object SagePoppySeed {
         val crv: Crv.Size = Crv.Size.NONE,
         val pack: Int = 1,
         val taxable: Boolean = true,
+        // catalog facets (SagePoppyCatalog): producer, style/varietal/type, size or pack
+        val brand: String? = null,
+        val subcategory: String? = null,
+        val size: String? = null,
+        /** Demo popularity: relative share of seeded sales (1/rank long tail). */
+        val salesWeight: Int = 0,
+        /** Sold by a quick key only (a paper bag, a lime): no barcode. */
+        val barcodeless: Boolean = false,
     ) {
         /** UPC-A: prefix + 5-digit item number + check digit. */
         val barcode: String get() = Upc.upcA(UPC_PREFIX + seq.toString().padStart(5, '0'))
+        /** What goes on the shelf: [barcode], or none for a barcodeless product. */
+        val shelfCode: String? get() = if (barcodeless) null else barcode
         val abbrev: String get() = name.split(' ').filter { it.firstOrNull()?.isLetter() == true }
             .take(2).joinToString("") { it.first().uppercase() }
     }
@@ -139,6 +150,35 @@ object SagePoppySeed {
         Product("ice-20", "Party Ice 20 lb bag", Cat.ICE, 699, 702, false, taxable = false),
     )
 
+    /** Batch-insert [list] as items + their one "Each" price (inside a transaction). */
+    fun insertProducts(list: List<Product>) {
+        Items.batchInsert(list, shouldReturnGeneratedValues = false) { p ->
+            this[Items.id] = p.id
+            this[Items.nameFr] = p.name
+            this[Items.nameEn] = p.name
+            this[Items.categoryId] = p.cat.id
+            this[Items.abbrev] = p.abbrev.ifEmpty { "?" }
+            this[Items.isAlcohol] = p.ageRestricted
+            this[Items.ageRestricted] = p.ageRestricted
+            this[Items.taxable] = p.taxable
+            this[Items.crvSize] = p.crv.name
+            this[Items.packUnits] = p.pack
+            this[Items.barcode] = p.shelfCode
+            this[Items.brand] = p.brand
+            this[Items.subcategory] = p.subcategory
+            this[Items.sizeLabel] = p.size
+            this[Items.salesWeight] = p.salesWeight
+        }
+        ItemVariants.batchInsert(list, shouldReturnGeneratedValues = false) { p ->
+            this[ItemVariants.id] = "${p.id}:each"
+            this[ItemVariants.itemId] = p.id
+            this[ItemVariants.labelFr] = "Each"
+            this[ItemVariants.labelEn] = "Each"
+            this[ItemVariants.priceCents] = p.cents
+            this[ItemVariants.sortOrder] = 0
+        }
+    }
+
     /** Empty-mode stores (POS_SEED=none): one manager so the owner can sign in and set up. */
     fun seedBootstrapManagerIfNoStaff() = transaction {
         if (Users.selectAll().count() > 0) return@transaction
@@ -174,27 +214,9 @@ object SagePoppySeed {
         Cat.entries.forEachIndexed { i, c ->
             Categories.insert { it[id] = c.id; it[sortOrder] = i; it[nameFr] = c.en; it[nameEn] = c.en }
         }
-        Items.batchInsert(products) { p ->
-            this[Items.id] = p.id
-            this[Items.nameFr] = p.name
-            this[Items.nameEn] = p.name
-            this[Items.categoryId] = p.cat.id
-            this[Items.abbrev] = p.abbrev
-            this[Items.isAlcohol] = p.ageRestricted
-            this[Items.ageRestricted] = p.ageRestricted
-            this[Items.taxable] = p.taxable
-            this[Items.crvSize] = p.crv.name
-            this[Items.packUnits] = p.pack
-            this[Items.barcode] = p.barcode
-        }
-        ItemVariants.batchInsert(products) { p ->
-            this[ItemVariants.id] = "${p.id}:each"
-            this[ItemVariants.itemId] = p.id
-            this[ItemVariants.labelFr] = "Each"
-            this[ItemVariants.labelEn] = "Each"
-            this[ItemVariants.priceCents] = p.cents
-            this[ItemVariants.sortOrder] = 0
-        }
+        // the full ~5,000-product shelf (the hand-written ones included)
+        insertProducts(SagePoppyCatalog.products)
+        SagePoppyCatalogUpgrade.markCurrent()
         // one register, as a check's "table" (no floor plan in a shop)
         Zones.insert {
             it[id] = RetailService.COUNTER_ZONE; it[nameFr] = "Comptoir"; it[nameEn] = "Counter"
@@ -208,7 +230,7 @@ object SagePoppySeed {
         Users.insert { it[id] = "cashier"; it[name] = "Demo Cashier"; it[role] = "SERVER"; it[pin] = AuthService.hashPin("9999"); it[languageCode] = "en" }
         Users.insert { it[id] = "cajera"; it[name] = "Cajera Demo"; it[role] = "SERVER"; it[pin] = AuthService.hashPin("5555"); it[languageCode] = "es" }
         Outbox.write("catalog.seeded", "catalog", "sage-poppy", buildJsonObject {
-            put("items", products.size)
+            put("items", SagePoppyCatalog.products.size)
             put("categories", Cat.entries.size)
         })
     }

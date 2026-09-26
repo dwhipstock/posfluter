@@ -51,6 +51,8 @@ For the complete local stack, see `docs/demo-runbook.md`.
 
 The seed creates a large bilingual pub menu: draft, bottled, canned, local craft and imported beer; lager, IPA, stout, cider and alcohol-free options; red, white, rosé, sparkling and dessert wine by glass or bottle; cocktails and mixed drinks; and a broad food menu of appetizers, burgers, sandwiches, mains, salads, vegetarian dishes, desserts and late-night snacks. They are grouped into seven categories: Beer & Cider, Wine, Cocktails, Starters, Burgers & Sandwiches, Mains & Salads and Desserts (stores seeded with the older fifteen-category layout are converted in place by migration 034).
 
+The Sage & Poppy bottle shop (`POS_VENUE=sage-poppy`) seeds a generated, deterministic shelf of about 5,000 fictional products (beer ~35%, wine ~30%, spirits ~25%, seltzers ~5%, snacks, mixers, ice and sundries ~5%) with in-store UPC-A codes, CRV, age and tax flags, a style/varietal and a size on every product, and a long-tail sales weight (about 20% of products make about 80% of seeded sales). A store seeded with the older ~50-product shelf adds the rest once at startup, without touching anything a manager changed (`SagePoppyCatalogUpgrade`).
+
 ## Data safety
 
 Runtime `.env` files, SQLite/PostgreSQL data, uploaded photos, receipts, bills, caches, and build products are ignored. Only fictional seed data and placeholder configuration belong in this repository.

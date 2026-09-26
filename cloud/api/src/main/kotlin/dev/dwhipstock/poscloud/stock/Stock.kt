@@ -4,6 +4,8 @@ import dev.dwhipstock.poscloud.BadRequestException
 import dev.dwhipstock.poscloud.CloudTime
 import dev.dwhipstock.poscloud.NotFoundException
 import dev.dwhipstock.poscloud.VenueScope
+import dev.dwhipstock.poscloud.catalog.CatalogFacets
+import dev.dwhipstock.poscloud.catalog.CatalogQuery
 import dev.dwhipstock.poscloud.db.CatalogItems
 import dev.dwhipstock.poscloud.db.CheckLines
 import dev.dwhipstock.poscloud.db.Checks
@@ -195,6 +197,10 @@ data class StockRow(
     val onHand: Long,
     val reorderLevel: Int? = null,
     val low: Boolean,
+    // retail shelf facts (021), for the filters
+    val brand: String? = null,
+    val subcategory: String? = null,
+    val size: String? = null,
 )
 
 @Serializable
@@ -210,6 +216,16 @@ data class StockResponse(
     val lowCount: Int,
     /** False when no store in scope is retail (restaurants don't track stock). */
     val retail: Boolean,
+    /**
+     * Paged (`limit`, `q`, `category`, `subcategory`, `size`, `low=true`):
+     * [rows] is one page of the [total] matching rows and [facets] the filter
+     * values present; the KPIs above stay the whole scope's. Unpaged: every
+     * row, [total] = rows.size.
+     */
+    val total: Int = 0,
+    val offset: Int = 0,
+    val limit: Int? = null,
+    val facets: CatalogFacets? = null,
 )
 
 @Serializable
@@ -229,18 +245,43 @@ data class MovementDto(
 @Serializable
 data class MovementsResponse(val movements: List<MovementDto>)
 
-/** The stock figures of [venues] (call inside a transaction). */
-internal fun stockOf(tenantId: String, venues: List<VenueScope>): StockResponse {
+private fun StockRow.facts() = CatalogQuery.Facts(
+    names = listOf(name), categoryId = categoryId, brand = brand, subcategory = subcategory, size = size, barcode = barcode,
+)
+
+/**
+ * The stock figures of [venues] (call inside a transaction), optionally one
+ * page of them under [query] (+ [lowOnly]); [itemIds] limits the read to
+ * those products (one product's refresh after an edit).
+ */
+internal fun stockOf(
+    tenantId: String, venues: List<VenueScope>, query: CatalogQuery = CatalogQuery(), lowOnly: Boolean = false,
+    itemIds: Collection<String>? = null,
+): StockResponse {
+    val full = stockRowsOf(tenantId, venues, itemIds)
+    if (!full.retail || (!query.paged && !lowOnly)) return full.copy(total = full.rows.size)
+    val matching = full.rows.filter { (!lowOnly || it.low) && query.matches(it.facts()) }
+    return full.copy(
+        rows = query.page(matching), total = matching.size, offset = query.offset, limit = query.limit,
+        facets = query.facets(full.rows.filter { !lowOnly || it.low }) { it.facts() },
+    )
+}
+
+private fun stockRowsOf(tenantId: String, venues: List<VenueScope>, itemIds: Collection<String>?): StockResponse {
     val retail = venues.filter { it.retail }
     if (retail.isEmpty()) return StockResponse(emptyList(), emptyList(), 0, 0, retail = false)
     val ids = retail.map { it.venueId }
     val zones = retail.associate { it.venueId to it.zone }
     val items = CatalogItems.selectAll().where {
-        (CatalogItems.tenantId eq tenantId) and (CatalogItems.venueId inList ids) and (CatalogItems.deleted eq false)
+        var op = (CatalogItems.tenantId eq tenantId) and (CatalogItems.venueId inList ids) and (CatalogItems.deleted eq false)
+        if (itemIds != null) op = op and (CatalogItems.id inList itemIds)
+        op
     }.toList()
-    val ledger = stockLedger(tenantId, ids)
+    val ledger = stockLedger(tenantId, ids, itemIds = itemIds)
     val levels = StockLevels.selectAll().where {
-        (StockLevels.tenantId eq tenantId) and (StockLevels.venueId inList ids)
+        var op = (StockLevels.tenantId eq tenantId) and (StockLevels.venueId inList ids)
+        if (itemIds != null) op = op and (StockLevels.itemId inList itemIds)
+        op
     }.associate { (it[StockLevels.venueId] to it[StockLevels.itemId]) to it[StockLevels.reorderLevel] }
 
     val order = ids.withIndex().associate { it.value to it.index }
@@ -256,6 +297,8 @@ internal fun stockOf(tenantId: String, venues: List<VenueScope>): StockResponse 
             received = l.received, sold = l.sold, adjusted = l.adjusted, returned = l.returned,
             countedQty = l.countedQty, countedAt = l.countedAt?.let { CloudTime.iso(it, zones.getValue(v)) },
             onHand = l.onHand, reorderLevel = level, low = StockMath.low(l.onHand, level),
+            brand = item[CatalogItems.brand], subcategory = item[CatalogItems.subcategory],
+            size = item[CatalogItems.sizeLabel],
         )
     }.sortedWith(compareBy({ order[it.venueId] ?: 0 }, { !it.low }, { it.categoryId }, { it.name }))
 
@@ -375,6 +418,7 @@ data class ReorderRow(
     val categoryId: String, val barcode: String? = null,
     val onHand: Long, val soldInWindow: Long, val avgDaily: Double,
     val target: Long, val suggested: Long, val reorderLevel: Int? = null, val low: Boolean,
+    val brand: String? = null, val subcategory: String? = null, val size: String? = null,
 )
 
 @Serializable
@@ -385,6 +429,11 @@ data class ReorderResponse(
     /** Products with something to order, and the units in total. */
     val toOrder: Int, val units: Long,
     val retail: Boolean,
+    /** Paged / filtered (see [StockResponse]); toOrder and units stay the whole scope's. */
+    val total: Int = 0,
+    val offset: Int = 0,
+    val limit: Int? = null,
+    val facets: CatalogFacets? = null,
 )
 
 object ReorderDefaults {
@@ -396,6 +445,7 @@ object ReorderDefaults {
 
 internal fun reorderOf(
     tenantId: String, venues: List<VenueScope>, days: Int, coverDays: Int, now: OffsetDateTime = CloudTime.now(),
+    query: CatalogQuery = CatalogQuery(), onlyToOrder: Boolean = false,
 ): ReorderResponse {
     val stock = stockOf(tenantId, venues)
     if (!stock.retail) return ReorderResponse(emptyList(), days, coverDays, 0, 0, retail = false)
@@ -420,9 +470,23 @@ internal fun reorderOf(
             onHand = r.onHand, soldInWindow = s, avgDaily = Math.round(avg * 100) / 100.0,
             target = StockMath.target(avg, coverDays), suggested = StockMath.suggested(avg, coverDays, r.onHand),
             reorderLevel = r.reorderLevel, low = r.low,
+            brand = r.brand, subcategory = r.subcategory, size = r.size,
         )
     }.sortedWith(compareBy({ -it.suggested }, { !it.low }, { it.name }))
-    return ReorderResponse(rows, days, coverDays, rows.count { it.suggested > 0 }, rows.sumOf { it.suggested }, retail = true)
+    val toOrder = rows.count { it.suggested > 0 }
+    val units = rows.sumOf { it.suggested }
+    if (!query.paged && !onlyToOrder)
+        return ReorderResponse(rows, days, coverDays, toOrder, units, retail = true, total = rows.size)
+    fun facts(r: ReorderRow) = CatalogQuery.Facts(
+        names = listOf(r.name), categoryId = r.categoryId, brand = r.brand, subcategory = r.subcategory,
+        size = r.size, barcode = r.barcode,
+    )
+    val scoped = rows.filter { !onlyToOrder || it.suggested > 0 }
+    val matching = scoped.filter { query.matches(facts(it)) }
+    return ReorderResponse(
+        query.page(matching), days, coverDays, toOrder, units, retail = true,
+        total = matching.size, offset = query.offset, limit = query.limit, facets = query.facets(scoped, ::facts),
+    )
 }
 
 // ---- routes ----
@@ -451,7 +515,9 @@ fun Route.stockRoutes() {
 
     get("/stock") {
         val (principal, venues) = portalScopes(call)
-        call.respond(transaction { stockOf(principal.tenantId, venues) })
+        val query = CatalogQuery.from(call)
+        val lowOnly = call.request.queryParameters["low"] == "true"
+        call.respond(transaction { stockOf(principal.tenantId, venues, query, lowOnly) })
     }
 
     /** For the nav badge: how many products are at or below their reorder level. */
@@ -482,7 +548,9 @@ fun Route.stockRoutes() {
         val (principal, venues) = portalScopes(call)
         val days = call.intParam("days", ReorderDefaults.DAYS, ReorderDefaults.DAYS_RANGE)
         val cover = call.intParam("cover", ReorderDefaults.COVER_DAYS, ReorderDefaults.COVER_RANGE)
-        call.respond(transaction { reorderOf(principal.tenantId, venues, days, cover) })
+        val query = CatalogQuery.from(call)
+        val onlyToOrder = call.request.queryParameters["only"] == "to-order"
+        call.respond(transaction { reorderOf(principal.tenantId, venues, days, cover, query = query, onlyToOrder = onlyToOrder) })
     }
 
     /** A delivery (RECEIVED, qty > 0) or an adjustment (ADJUSTMENT, qty ≠ 0: breakage, a return). */
@@ -509,7 +577,7 @@ fun Route.stockRoutes() {
                 it[createdBy] = principal.email
                 it[createdAt] = CloudTime.now()
             }
-            stockOf(principal.tenantId, listOf(store)).rows.first { it.itemId == req.itemId }
+            stockOf(principal.tenantId, listOf(store), itemIds = listOf(req.itemId)).rows.first { it.itemId == req.itemId }
         }
         call.respond(HttpStatusCode.Created, response)
     }
@@ -536,7 +604,7 @@ fun Route.stockRoutes() {
                     it[updatedAt] = CloudTime.now()
                 }
             }
-            stockOf(principal.tenantId, listOf(store)).rows.first { it.itemId == req.itemId }
+            stockOf(principal.tenantId, listOf(store), itemIds = listOf(req.itemId)).rows.first { it.itemId == req.itemId }
         }
         call.respond(response)
     }

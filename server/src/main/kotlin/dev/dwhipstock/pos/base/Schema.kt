@@ -43,7 +43,28 @@ object Items : Table("items") {
     val taxable = bool("taxable").databaseGenerated() // DEFAULT 1
     val crvSize = varchar("crv_size", 8).databaseGenerated() // NONE | SMALL (<24 oz) | LARGE (≥24 oz)
     val packUnits = integer("pack_units").databaseGenerated() // containers in the pack (a 6-pack = 6)
+    // catalog facets (041) for a big shelf's filters and search: producer,
+    // style / varietal / type, and a size or pack label ("6-pack", "750 ml")
+    val brand = varchar("brand", 100).nullable().databaseGenerated()
+    val subcategory = varchar("subcategory", 64).nullable().databaseGenerated()
+    val sizeLabel = varchar("size_label", 32).nullable().databaseGenerated()
+    // demo popularity (041): a seeded store's relative share of sales; also the
+    // quick keys' cold start before the store has sales of its own. 0 = none.
+    val salesWeight = integer("sales_weight").databaseGenerated() // DEFAULT 0
     override val primaryKey = PrimaryKey(id)
+}
+
+/**
+ * Counter quick keys a manager pinned (041, retail). The rest of the grid is
+ * auto-filled from the store's own recent sales; a pin keeps its tile through
+ * every refresh until it is unpinned.
+ */
+object QuickKeyPins : Table("quick_key_pins") {
+    val itemId = varchar("item_id", 64)
+    val sortOrder = integer("sort_order").default(0)
+    val pinnedBy = varchar("pinned_by", 64)
+    val pinnedAt = utcTimestamp("pinned_at")
+    override val primaryKey = PrimaryKey(itemId)
 }
 
 object ItemVariants : Table("item_variants") {

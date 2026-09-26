@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import '../catalog/catalog_index.dart';
+
 /// Wire models for counting and receiving stock (store `/stock/*`, retail).
 /// Quantities only — stock carries no money.
 
@@ -45,12 +47,21 @@ class StockProduct {
   final String id, name, category;
   final String? barcode;
   final bool active;
+
+  /// Catalog facets, for search ("ipa 6"); absent in an older cached copy.
+  final String? brand, subcategory, size;
+  final int packUnits, popularity;
   const StockProduct({
     required this.id,
     required this.name,
     this.category = '',
     this.barcode,
     this.active = true,
+    this.brand,
+    this.subcategory,
+    this.size,
+    this.packUnits = 1,
+    this.popularity = 0,
   });
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -58,6 +69,11 @@ class StockProduct {
     'category': category,
     'barcode': ?barcode,
     'active': active,
+    'brand': ?brand,
+    'subcategory': ?subcategory,
+    'size': ?size,
+    if (packUnits != 1) 'packUnits': packUnits,
+    if (popularity != 0) 'popularity': popularity,
   };
   factory StockProduct.fromJson(Map<String, dynamic> j) => StockProduct(
     id: j['id'],
@@ -65,36 +81,39 @@ class StockProduct {
     category: j['category'] ?? '',
     barcode: j['barcode'],
     active: j['active'] ?? true,
+    brand: j['brand'],
+    subcategory: j['subcategory'],
+    size: j['size'],
+    packUnits: j['packUnits'] ?? 1,
+    popularity: j['popularity'] ?? 0,
+  );
+
+  CatalogDoc get doc => CatalogDoc(
+    id: id,
+    name: name,
+    category: category,
+    brand: brand,
+    subcategory: subcategory,
+    size: size,
+    barcode: barcode,
+    packUnits: packUnits,
+    popularity: popularity,
   );
 }
 
-/// Barcode → product, both code forms (UPC-A and its EAN-13).
+/// Barcode → product (both code forms, UPC-A and its EAN-13) and typed
+/// search, on the counter's own index ([CatalogIndex]): the same matching as
+/// the counter, fast at 5,000 products.
 class ProductIndex {
-  final Map<String, StockProduct> _byCode = {};
-  final Map<String, StockProduct> _byId = {};
-  ProductIndex(Iterable<StockProduct> products) {
-    for (final p in products) {
-      _byId[p.id] = p;
-      final code = p.barcode;
-      if (code != null && code.isNotEmpty) _byCode[normalizeBarcode(code)] = p;
-    }
-  }
-  StockProduct? byCode(String code) => _byCode[normalizeBarcode(code)];
-  StockProduct? byId(String id) => _byId[id];
-  bool get isEmpty => _byId.isEmpty;
+  final CatalogIndex<StockProduct> _index;
+  ProductIndex(Iterable<StockProduct> products)
+    : _index = CatalogIndex(products, (p) => p.doc);
+  StockProduct? byCode(String code) => _index.byBarcode(code);
+  StockProduct? byId(String id) => _index.byId(id);
+  bool get isEmpty => _index.isEmpty;
 
-  /// Name or barcode contains [q] (case-insensitive), for typed searches.
-  List<StockProduct> search(String q) {
-    final t = q.trim().toLowerCase();
-    if (t.isEmpty) return const [];
-    return _byId.values
-        .where(
-          (p) =>
-              p.name.toLowerCase().contains(t) || (p.barcode ?? '').contains(t),
-        )
-        .take(30)
-        .toList();
-  }
+  /// Words, sizes or barcode digits ("ipa 6", "vodka 1.75", "0421"), best first.
+  List<StockProduct> search(String q) => _index.search(q, limit: 30);
 }
 
 /// The best-effort expected on hand per product (the cloud's figure plus the

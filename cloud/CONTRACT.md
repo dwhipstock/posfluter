@@ -104,7 +104,11 @@ Semantics:
 - **At-least-once, idempotent.** Cloud dedups on `(tenant_id, event_id)`
   (`ON CONFLICT DO NOTHING`); duplicates are counted and skipped. The store
   may retry any batch any number of times.
-- Batches are ordered by `seq` ascending (≤ 200 events). The cloud applies
+- Batches are ordered by `seq` ascending (≤ 200 events; the store also keeps
+  a batch's payloads to about 1 MB, so a few big catalog chunks go per push).
+  The cloud enforces no request-size or event-count limit of its own (one
+  transaction per batch; the API runs with a 512 MB heap), so the store's caps
+  are the ones that matter. The cloud applies
   projections in `seq` order within a batch. The store only advances its
   high-water mark (`sync_state` key `push_hwm`) after a 200.
 - Every event is stored raw in the cloud `events` table (replayable), then
@@ -206,7 +210,12 @@ Its lines may also carry `taxable: false` (a tax-exempt food item),
 `ageRestricted: true`; a line without them is a pub line (taxable, no
 deposit, not restricted). The deposits total as one fee, `code: "crv"`, never
 taxed. Item snapshots (below) may carry `barcode`, `ageRestricted`,
-`taxable: false`, `crvSize` (`SMALL` | `LARGE`) and `packUnits`.
+`taxable: false`, `crvSize` (`SMALL` | `LARGE`) and `packUnits` — and, for a
+big retail catalog, `brand` (the producer), `subcategory` (style, varietal or
+spirit type: `"IPA"`, `"Pinot Noir"`, `"Tequila Blanco"`) and `size` (a short
+size/pack label: `"12 oz can"`, `"6-pack"`, `"750 ml"`, `"1.75 L"`). All
+optional; the cloud mirrors them for the portal's product filters (cloud
+migration 021) and an absent key is stored as none.
 The cloud keeps the store's **stock** from these sales (API.md, Stock) —
 see "Stock" below.
 
@@ -332,10 +341,20 @@ mirror deletions.) Every `category.*` event gains
 `"category": { "id", "nameFr", "nameEn", "sortOrder", "deleted" }`;
 `categories.reordered` gains `"categories": [ …full list… ]`.
 
-### `catalog.snapshot` (one-time bootstrap)
-Written once, at the store's first-ever sync (`sync_state` flag), carrying the
-full live catalog. The cloud mirrors it for display; every later menu edit on
-the tablet carries its own snapshot (above).
+### `catalog.snapshot` (bootstrap, possibly chunked)
+Written at the store's first-ever sync (`sync_state` flag), carrying the live
+catalog. The cloud mirrors it for display; every later menu edit on the
+tablet carries its own snapshot (above).
+
+A big catalog (a retail store's ~5,000 products) is sent as SEVERAL
+`catalog.snapshot` events of up to ~250 items each; `categories` ride in the
+first, and a chunk may carry `chunk` / `chunks` (1-based index / count) for
+logs. A store that later adds a batch of products at once (e.g. a catalog
+upgrade) sends them the same way. Every snapshot is **additive**: the cloud
+upserts the items and categories it carries and never removes what a chunk
+leaves out (deletions arrive as `item.deleted` / `category.deleted`). A
+product listed twice in one chunk keeps its last copy. An older cloud already
+applied snapshots this way, so chunked stores work with it unchanged.
 
 ### Legacy echo tag
 Before sync became one-way, a store that applied a portal menu edit wrote the

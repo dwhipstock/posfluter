@@ -1,7 +1,6 @@
 package dev.dwhipstock.pos.sync
 
-import dev.dwhipstock.pos.api.allCategoriesJson
-import dev.dwhipstock.pos.api.allLiveItemsJson
+import dev.dwhipstock.pos.api.writeChunkedCatalogSnapshot
 import dev.dwhipstock.pos.base.StaffSnapshots
 import dev.dwhipstock.pos.db.SyncOutbox
 import dev.dwhipstock.pos.db.SyncState
@@ -61,6 +60,24 @@ class CloudSync(
         const val REPORT_BACKFILL_SEQ = "report_backfill_seq"
         const val INSTALL_ID = "install_id"
         const val BATCH_LIMIT = 200
+        /** A push also stops at about this much payload (a catalog chunk is ~100 KB). */
+        const val BATCH_MAX_BYTES = 900_000
+    }
+
+    /** Set by [capBatchBytes]: the last batch was cut by size, so more may be waiting. */
+    private var batchWasCapped = false
+
+    /** The longest prefix of [rows] under [BATCH_MAX_BYTES] of payload (always at least one row). */
+    private fun capBatchBytes(rows: List<org.jetbrains.exposed.sql.ResultRow>): List<org.jetbrains.exposed.sql.ResultRow> {
+        var bytes = 0
+        var n = 0
+        for (row in rows) {
+            bytes += row[SyncOutbox.payload].length + 200
+            if (n > 0 && bytes > BATCH_MAX_BYTES) break
+            n++
+        }
+        batchWasCapped = n < rows.size
+        return if (batchWasCapped) rows.take(n) else rows
     }
 
     /** Stable id for THIS store database, minted on first sync. */
@@ -180,6 +197,8 @@ class CloudSync(
             val batch = transaction {
                 SyncOutbox.selectAll().where { SyncOutbox.id greater hwm.toInt() }
                     .orderBy(SyncOutbox.id).limit(BATCH_LIMIT)
+                    .toList()
+                    .let(::capBatchBytes)
                     .map { row ->
                         PushEvent(
                             eventId = row[SyncOutbox.eventId],
@@ -209,7 +228,7 @@ class CloudSync(
             }
             setState(PUSH_HWM, batch.last().seq.toString())
             pushPhotosFor(batch)
-            if (batch.size < BATCH_LIMIT) return
+            if (batch.size < BATCH_LIMIT && !batchWasCapped) return
         }
     }
 
@@ -220,10 +239,9 @@ class CloudSync(
      */
     private fun ensureCatalogSnapshot() = transaction {
         if (SyncState.get(CATALOG_SNAPSHOT_SEQ) != null) return@transaction
-        Outbox.write("catalog.snapshot", "catalog", "snapshot", buildJsonObject {
-            put("categories", allCategoriesJson())
-            put("items", allLiveItemsJson())
-        })
+        // chunked: a 5,000-product shelf is ~20 events of 250 items, each a
+        // small upsert on the cloud (an older cloud applies them the same way)
+        writeChunkedCatalogSnapshot()
         SyncState.set(CATALOG_SNAPSHOT_SEQ, lastOutboxSeq().toString())
     }
 
