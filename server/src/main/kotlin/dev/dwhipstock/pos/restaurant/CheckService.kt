@@ -155,7 +155,20 @@ class CheckService(private val config: CustomerConfig) {
      */
     var kitchen: KitchenHook? = null
 
+    /**
+     * The forecourt (a gas station), else null. Told after a sale closes, loses
+     * a line or ends, once that transaction has committed; never throws back.
+     */
+    var forecourt: dev.dwhipstock.pos.forecourt.ForecourtHook? = null
+
+    private fun afterForecourt(view: CheckView): CheckView {
+        val hook = forecourt ?: return view
+        try { hook.checkChanged(view.id) } catch (e: Exception) { log.warn("forecourt hook failed: ${e.message}") }
+        return view
+    }
+
     private fun afterKitchen(view: CheckView): CheckView {
+        afterForecourt(view)
         val hook = kitchen ?: return view
         if (view.status == "VOID" || view.status == "CANCELLED") {
             try { hook.checkEnded(view.id) } catch (e: Exception) { log.warn("kitchen hook failed: ${e.message}") }
@@ -224,6 +237,7 @@ class CheckService(private val config: CustomerConfig) {
             it[CheckLines.note] = note
             it[createdAt] = VenueClock.now()
             captureShelfFacts(it, item)
+            variant[ItemVariants.costCents]?.let { c -> it[unitCostCents] = c }
         }.value
 
         Outbox.write("check.line_added", "check", checkId.toString(), buildJsonObject {
@@ -270,6 +284,47 @@ class CheckService(private val config: CustomerConfig) {
             note?.let { n -> put("note", n) }
         })
         loadCheck(checkId)
+    }
+
+    /**
+     * A fuel line (a completed postpay fuelling) or a prepay line: a catalog
+     * fuel item at the price the pump or the customer set, qty 1, tied to its
+     * [fuelSaleId] row. Only the forecourt adds these ([ForecourtService]);
+     * the fuel items carry no added sales tax. Call inside its transaction.
+     * Returns the new line's id.
+     */
+    fun addFuelLine(
+        checkId: Int, itemId: String, variantId: String, unitPriceCents: Long, fuelSaleId: Int, unitCostCents: Long? = null,
+    ): Int = transaction {
+        require(unitPriceCents > 0) { "price must be positive" }
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
+        val item = Items.selectAll().where { Items.id eq itemId }.firstOrNull()
+            ?: throw NotFoundException("fuel item $itemId not found", "fuel_item_missing")
+        val lineId = CheckLines.insertAndGetId {
+            it[CheckLines.checkId] = checkId
+            it[CheckLines.itemId] = itemId
+            it[CheckLines.variantId] = variantId
+            it[qty] = 1
+            it[CheckLines.unitPriceCents] = unitPriceCents
+            it[createdAt] = VenueClock.now()
+            it[CheckLines.fuelSaleId] = fuelSaleId
+            captureShelfFacts(it, item)
+            unitCostCents?.let { c -> it[CheckLines.unitCostCents] = c }
+        }.value
+        dev.dwhipstock.pos.forecourt.FuelSales.update({ dev.dwhipstock.pos.forecourt.FuelSales.id eq fuelSaleId }) {
+            it[dev.dwhipstock.pos.forecourt.FuelSales.lineId] = lineId
+        }
+        Outbox.write("check.line_added", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("lineId", lineId)
+            put("itemId", itemId)
+            put("variantId", variantId)
+            put("qty", 1)
+            put("unitPriceCents", unitPriceCents)
+            put("fuelSaleId", fuelSaleId)
+        })
+        lineId
     }
 
     /**
@@ -352,6 +407,9 @@ class CheckService(private val config: CustomerConfig) {
         val allocated = allocatedQtyForLine(lineId)
         if (qty < allocated)
             throw ConflictException("line $lineId has $allocated allocated to bill groups; unassign first", "qty_below_allocated")
+        // one fuelling is one line: its amount is what the pump says
+        val fuel = CheckLines.selectAll().where { CheckLines.id eq lineId }.firstOrNull()?.get(CheckLines.fuelSaleId)
+        if (fuel != null && qty != 1) throw ConflictException("a fuel line is one fuelling", "fuel_line_fixed")
         val updated = CheckLines.update({
             (CheckLines.id eq lineId) and (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE")
         }) { it[CheckLines.qty] = qty }
@@ -760,7 +818,9 @@ class CheckService(private val config: CustomerConfig) {
         return TenderView(tenderId, type.name, tenderedCents, applied.cents, rounding.cents, change.cents, groupId)
     }
 
-    fun finalizeCheck(checkId: Int): CheckView = transaction {
+    fun finalizeCheck(checkId: Int): CheckView = afterForecourt(finalizeCheckTx(checkId))
+
+    private fun finalizeCheckTx(checkId: Int): CheckView = transaction {
         val check = requireCheck(checkId)
         if (check[Checks.status] != "TOTAL_LOCKED") throw ConflictException("check $checkId is ${check[Checks.status]}; tender first")
         val outstanding = Money(check[Checks.lockedGrandTotalCents]!!) - tenderedSoFar(checkId)
@@ -930,10 +990,13 @@ class CheckService(private val config: CustomerConfig) {
             .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
 
         // LEFT joins: an open line (null item/variant) renders from display_name
-        val items = CheckLines
+        val itemRows = CheckLines
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
             .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
             .selectAll().where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .toList()
+        val fuel = dev.dwhipstock.pos.forecourt.fuelLineViews(itemRows.mapNotNull { it[CheckLines.fuelSaleId] })
+        val items = itemRows
             .map { row ->
                 val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
                 val open = row[CheckLines.displayName]
@@ -946,6 +1009,9 @@ class CheckService(private val config: CustomerConfig) {
                     unitPrice = Money(row[CheckLines.unitPriceCents]),
                     lineTotal = Money(row[CheckLines.unitPriceCents] * row[CheckLines.qty]),
                     note = row[CheckLines.note],
+                    fuel = row[CheckLines.fuelSaleId]?.let { fuel[it] }?.let { f ->
+                        dev.dwhipstock.pos.sdk.ReceiptFuel(f.pump, f.mode == "PREPAY", f.volumeMilli, f.priceMills)
+                    },
                 )
             }
         val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->
@@ -973,6 +1039,7 @@ class CheckService(private val config: CustomerConfig) {
             tenders = tenders,
             taxes = taxLinesOf(check, totals),
             ageVerifiedAt = AgeGate.passedAt(checkId),
+            discounts = discountsOf(check, totals).map { dev.dwhipstock.pos.sdk.ReceiptDiscount(it.label, it.labelEs, Money(it.amountCents)) },
         )
     }
 
@@ -1183,6 +1250,8 @@ class CheckService(private val config: CustomerConfig) {
         plan: RefundPlan,
         stripePaymentIntentId: String? = null,
         stripeRefundId: String? = null,
+        /** A forecourt refund (unused prepay): the fuel sale it belongs to. */
+        fuelSaleId: Int? = null,
     ): RefundResult = transaction {
         val checkId = plan.checkId
         val check = requireCheck(checkId)
@@ -1244,6 +1313,7 @@ class CheckService(private val config: CustomerConfig) {
             put("createdAt", VenueClock.iso(now))
             putMoneyContext(config.profile)
             linesJson?.let { put("lines", it) }
+            fuelSaleId?.let { f -> put("fuelSaleId", f) }
             stripeRefundId?.let { r ->
                 put("processor", "stripe")
                 put("stripePaymentIntentId", stripePaymentIntentId)
@@ -1597,10 +1667,13 @@ class CheckService(private val config: CustomerConfig) {
         val liveVariantCounts = ItemVariants.selectAll()
             .where { ItemVariants.deletedAt.isNull() }
             .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
-        val lines = CheckLines
+        val activeRows = CheckLines
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
             .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
             .selectAll().where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .toList()
+        val fuel = dev.dwhipstock.pos.forecourt.fuelLineViews(activeRows.mapNotNull { it[CheckLines.fuelSaleId] })
+        val lines = activeRows
             .map { row ->
                 buildJsonObject {
                     put("lineId", row[CheckLines.id].value)
@@ -1627,6 +1700,23 @@ class CheckService(private val config: CustomerConfig) {
                     if (!row[CheckLines.taxable]) put("taxable", false)
                     if (row[CheckLines.depositCents] > 0) put("depositCents", row[CheckLines.depositCents])
                     if (row[CheckLines.ageRestricted]) put("ageRestricted", true)
+                    row[CheckLines.unitCostCents]?.let { put("unitCostCents", it) }
+                    // a gas station's fuel / prepay line (CONTRACT §2, Fuel)
+                    row[CheckLines.fuelSaleId]?.let { fuel[it] }?.let { f ->
+                        put("fuel", buildJsonObject {
+                            put("pump", f.pump)
+                            put("mode", f.mode)
+                            if (f.mode == "PREPAY") {
+                                put("prepaidCents", f.prepaidCents ?: row[CheckLines.unitPriceCents])
+                            } else {
+                                f.nozzle?.let { n -> put("nozzle", n) }
+                                put("grade", f.grade)
+                                put("volumeMilli", f.volumeMilli)
+                                put("priceMills", f.priceMills)
+                                put("fdcTransactionId", f.fdcTransactionId)
+                            }
+                        })
+                    }
                 }
             }
         val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->
@@ -1660,6 +1750,7 @@ class CheckService(private val config: CustomerConfig) {
             put("taxes", taxLinesToJson(lockedTaxLines(check)))
             put("corkageBottles", check[Checks.corkageBottles])
             put("fees", fees)
+            check[Checks.lockedDiscountsJson]?.let { put("discounts", Json.parseToJsonElement(it)) }
             put("lines", JsonArray(lines))
             put("tenders", JsonArray(tenders))
         }
@@ -1799,6 +1890,9 @@ class CheckService(private val config: CustomerConfig) {
             it[lockedTaxAddedCents] = totals.taxAdded.cents
             it[lockedTaxesJson] = taxLinesToJson(totals.taxLines).toString()
             it[lockedFeesJson] = feeLinesToJson(totals.feeLines).toString()
+            if (totals.promotions.isNotEmpty()) it[lockedDiscountsJson] = discountsToJson(
+                totals.promotions.map { p -> DiscountView(p.code, p.label, p.labelEs, p.amount.cents, p.taxableAmount.cents) },
+            ).toString()
         }
         Outbox.write("check.total_locked", "check", checkId.toString(), buildJsonObject {
             put("checkId", checkId)
@@ -1847,11 +1941,43 @@ class CheckService(private val config: CustomerConfig) {
     private fun computeTotals(check: ResultRow): Totals {
         val checkId = check[Checks.id].value
         // PENDING (customer-submitted, unaccepted) lines never count toward totals
-        val basket = CheckLines.selectAll()
+        val rows = CheckLines
+            .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
+            .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
+            .selectAll()
             .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
-            .map { basketLine(it, it[CheckLines.qty]) }
-        return TransactionPipeline.computeTotals(basket, check[Checks.corkageBottles], config)
+            .toList()
+        val basket = rows.map { basketLine(it, it[CheckLines.qty]) }
+        return TransactionPipeline.computeTotals(basket, check[Checks.corkageBottles], config,
+            promotions = promotionHits(rows))
     }
+
+    /** The store's deals on these lines (none for a store without any). */
+    private fun promotionHits(rows: List<ResultRow>): List<dev.dwhipstock.pos.sdk.PromoHit> {
+        if (config.promotions.isEmpty()) return emptyList()
+        val fuel = dev.dwhipstock.pos.forecourt.fuelLineViews(rows.mapNotNull { it[CheckLines.fuelSaleId] })
+        return dev.dwhipstock.pos.sdk.Promotions.apply(config.promotions, rows.map { r ->
+            val f = r[CheckLines.fuelSaleId]?.let { fuel[it] }
+            dev.dwhipstock.pos.sdk.PromoItem(
+                lineId = r[CheckLines.id].value,
+                itemId = r[CheckLines.itemId],
+                category = r.getOrNull(Items.categoryId),
+                subcategory = r.getOrNull(Items.subcategory),
+                size = r.getOrNull(Items.sizeLabel),
+                variantLabel = r.getOrNull(ItemVariants.labelEn),
+                qty = r[CheckLines.qty],
+                unitPriceCents = r[CheckLines.unitPriceCents],
+                taxable = r[CheckLines.taxable],
+                fuelVolumeMilli = f?.takeIf { it.mode == "POSTPAY" }?.volumeMilli,
+            )
+        })
+    }
+
+    /** A sale's promotions: frozen at lock, else live. */
+    private fun discountsOf(check: ResultRow, live: Totals): List<DiscountView> =
+        check[Checks.lockedDiscountsJson]?.let(::discountsFromJson)
+            ?: if (check[Checks.lockedGrandTotalCents] != null) emptyList()
+            else live.promotions.map { DiscountView(it.code, it.label, it.labelEs, it.amount.cents, it.taxableAmount.cents) }
 
     /** A line as the pipeline sees it: price, qty, and its ring-up tax / deposit facts. */
     private fun basketLine(row: ResultRow, qty: Int) = BasketLine(
@@ -1926,11 +2052,14 @@ class CheckService(private val config: CustomerConfig) {
         // the item actually has multiple sizes (bottle/pitcher/tower)
         val variantCounts = ItemVariants.selectAll()
             .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
-        val allLines = CheckLines
+        val lineRows = CheckLines
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
             .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
             .selectAll()
             .where { CheckLines.checkId eq checkId }
+            .toList()
+        val fuel = dev.dwhipstock.pos.forecourt.fuelLineViews(lineRows.mapNotNull { it[CheckLines.fuelSaleId] })
+        val allLines = lineRows
             .map { row ->
                 val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
                 val open = row[CheckLines.displayName]
@@ -1949,6 +2078,7 @@ class CheckService(private val config: CustomerConfig) {
                     ageRestricted = row[CheckLines.ageRestricted],
                     depositCents = row[CheckLines.depositCents],
                     taxable = row[CheckLines.taxable],
+                    fuel = row[CheckLines.fuelSaleId]?.let { fuel[it] },
                 ))
             }
         val lines = allLines.filter { it.first == "ACTIVE" }.map { it.second }
@@ -1981,6 +2111,7 @@ class CheckService(private val config: CustomerConfig) {
             split = buildSplitView(check),
             subtotalCents = grandTotal - taxes.sumOf { it.amount.cents },
             taxes = taxes.map { it.toView() },
+            discounts = discountsOf(check, totals),
             ageCheckRequired = AgeGate.required(checkId),
             ageCleared = AgeGate.cleared(checkId),
             ageCheckFailed = AgeGate.latest(checkId)?.let { !it[dev.dwhipstock.pos.base.AgeChecks.passed] } == true &&
@@ -2021,6 +2152,8 @@ data class CheckView(
     val subtotalCents: Long = 0,
     /** Taxes added on top of [subtotalCents], one per tax (GST, QST). */
     val taxes: List<TaxView> = emptyList(),
+    /** Promotions taken off before tax (a c-store's deals); their sum is inside the total. */
+    val discounts: List<DiscountView> = emptyList(),
     /** Retail: an age-restricted line is on the sale, so payment needs an ID check. */
     val ageCheckRequired: Boolean = false,
     /** No ID check needed, or one passed. */
@@ -2084,7 +2217,36 @@ data class LineView(
     /** Container deposit (CRV) per unit. */
     val depositCents: Long = 0,
     val taxable: Boolean = true,
+    /** A fuel or prepay line (a gas station): pump, grade, gallons, price per gallon. */
+    val fuel: dev.dwhipstock.pos.forecourt.FuelLineView? = null,
 )
+
+/** One promotion on a sale: [amountCents] off, [taxableCents] of it off taxable goods. */
+@kotlinx.serialization.Serializable
+data class DiscountView(
+    val code: String,
+    val label: String,
+    val labelEs: String,
+    val amountCents: Long,
+    val taxableCents: Long = 0,
+)
+
+fun discountsToJson(list: List<DiscountView>): JsonArray = JsonArray(list.map { d ->
+    buildJsonObject {
+        put("code", d.code)
+        put("label", d.label)
+        put("labelEs", d.labelEs)
+        put("amountCents", d.amountCents)
+        put("taxableCents", d.taxableCents)
+    }
+})
+
+fun discountsFromJson(text: String): List<DiscountView> = Json.parseToJsonElement(text).jsonArray.map { e ->
+    val o = e.jsonObject
+    fun s(key: String) = o[key]?.jsonPrimitive?.contentOrNull ?: ""
+    DiscountView(s("code"), s("label"), s("labelEs"), o["amountCents"]?.jsonPrimitive?.longOrNull ?: 0,
+        o["taxableCents"]?.jsonPrimitive?.longOrNull ?: 0)
+}
 
 @kotlinx.serialization.Serializable
 data class FeeView(val code: String, val labelFr: String, val labelEn: String, val amountCents: Long)

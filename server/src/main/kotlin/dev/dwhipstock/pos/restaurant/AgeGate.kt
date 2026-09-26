@@ -24,10 +24,29 @@ object AgeGate {
     fun latest(checkId: Int) = AgeChecks.selectAll().where { AgeChecks.checkId eq checkId }
         .orderBy(AgeChecks.id, SortOrder.DESC).limit(1).firstOrNull()
 
-    /** The legal age a passing check cleared [checkId] at; null = never passed. */
-    fun passedAt(checkId: Int): Int? = AgeChecks.selectAll()
-        .where { (AgeChecks.checkId eq checkId) and (AgeChecks.passed eq true) }
-        .orderBy(AgeChecks.id, SortOrder.DESC).limit(1).firstOrNull()?.get(AgeChecks.legalAge)
+    /**
+     * The legal age a passing check cleared [checkId] at; null = never passed.
+     * A cashier's visual check ("clearly over N", [AgeCheckMode]) never clears
+     * tobacco or vape: with any on the sale only an ID check counts.
+     */
+    fun passedAt(checkId: Int): Int? {
+        val tobacco = tobaccoOnSale(checkId)
+        return AgeChecks.selectAll()
+            .where { (AgeChecks.checkId eq checkId) and (AgeChecks.passed eq true) }
+            .orderBy(AgeChecks.id, SortOrder.DESC)
+            .firstOrNull { !tobacco || it[AgeChecks.method] != VISUAL }?.get(AgeChecks.legalAge)
+    }
+
+    const val VISUAL = "VISUAL"
+
+    /** Tobacco or vape (the `tobacco` department) on [checkId]: always an ID check. */
+    fun tobaccoOnSale(checkId: Int): Boolean =
+        CheckLines.join(dev.dwhipstock.pos.base.Items, org.jetbrains.exposed.sql.JoinType.INNER,
+            CheckLines.itemId, dev.dwhipstock.pos.base.Items.id)
+            .selectAll().where {
+                (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") and
+                    (dev.dwhipstock.pos.base.Items.categoryId eq "tobacco")
+            }.any()
 
     fun cleared(checkId: Int): Boolean = !required(checkId) || passedAt(checkId) != null
 

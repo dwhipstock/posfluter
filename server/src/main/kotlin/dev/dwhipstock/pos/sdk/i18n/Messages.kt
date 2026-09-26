@@ -62,6 +62,12 @@ enum class MessageKey(val id: String) {
     RECEIPT_NUMBER("receipt.number"),
     /** {0} = the legal age the customer's ID was checked against (21). */
     RECEIPT_AGE_VERIFIED("receipt.age_verified"),
+    /** {0} = pump, {1} = gallons ("10.052"), {2} = price per gallon ("3.299"). */
+    RECEIPT_FUEL_PUMP("receipt.fuel_pump"),
+    /** {0} = pump: a prepay line, before the fuel is pumped. */
+    RECEIPT_FUEL_PREPAY("receipt.fuel_prepay"),
+    /** Fuel prices include the fuel taxes (no sales tax is added on fuel). */
+    RECEIPT_FUEL_TAX("receipt.fuel_tax"),
     REFUND_HEADER("refund.header"),
     REFUND_REF_BILL("refund.ref_bill"),
     REFUND_NUMBER("refund.number"),

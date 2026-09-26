@@ -33,5 +33,8 @@ interface CustomerConfig {
     /** Minimum age for age-restricted items: POS_LEGAL_AGE / legal.age, else the profile's. */
     val legalAge: Int get() = profile.legalAge
 
+    /** Deals applied to the basket before tax ([Promotions]); none by default. */
+    val promotions: List<Promotion> get() = emptyList()
+
     fun tenderMethod(type: TenderType): TenderMethod? = electronicTenders.firstOrNull { it.type == type }
 }

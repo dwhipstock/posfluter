@@ -24,6 +24,10 @@ enum ShellLayout {
   /// A slim navigation rail down the left, the search/scan bar front and
   /// centre, the basket docked on the right (Sage & Poppy).
   leftRail,
+
+  /// A gas station's counter: a black command bar across the top, the pump
+  /// grid above the shelf lanes, the basket docked on the right (Pronghorn).
+  forecourt,
 }
 
 enum LoginLayout {
@@ -147,6 +151,31 @@ class BrandSkin extends ThemeExtension<BrandSkin> {
     normal: const Duration(milliseconds: 140),
     ease: Curves.easeOutCubic,
     shell: ShellLayout.leftRail,
+    login: LoginLayout.centeredStack,
+    receiptHeader: ReceiptHeaderStyle.wordmark,
+    icons: IconStyle.rounded,
+  );
+
+  /// Pronghorn Fuel & Market: a highway c-store counter — Barlow, bold and
+  /// high-contrast on near-black, squared-off tiles with a small radius,
+  /// no shadows, quick motion; built to be read at a glance from a step away.
+  static final pronghorn = BrandSkin(
+    id: 'pronghorn',
+    fontFamily: 'Barlow',
+    fontFallback: const ['NotoSans'],
+    headlineTracking: 0.2,
+    radiusSmall: BorderRadius.circular(3),
+    radiusMedium: BorderRadius.circular(6),
+    radiusLarge: BorderRadius.circular(10),
+    tileRadius: BorderRadius.circular(8),
+    pillControls: false,
+    space: 6,
+    gutter: 16,
+    raised: const [],
+    fast: const Duration(milliseconds: 80),
+    normal: const Duration(milliseconds: 120),
+    ease: Curves.easeOutCubic,
+    shell: ShellLayout.forecourt,
     login: LoginLayout.centeredStack,
     receiptHeader: ReceiptHeaderStyle.wordmark,
     icons: IconStyle.rounded,

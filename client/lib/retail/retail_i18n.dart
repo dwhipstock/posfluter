@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../i18n.dart';
+import '../store_profile.dart';
 import 'shelf_names.dart';
 
 /// Retail counter strings: English and US Spanish (the Sage & Poppy store's
@@ -59,6 +60,28 @@ class R {
   );
   String get all => _t('All', 'Todos', 'Tout');
   String category(String id, String fallback) => switch (id) {
+    'beer' when StoreProfile.current.isPronghorn => _t(
+      'Beer & Seltzer',
+      'Cerveza y seltzer',
+      'Bières et seltzers',
+    ),
+    'drinks' => _t('Cold Drinks', 'Bebidas frías', 'Boissons froides'),
+    'candy' => _t('Candy & Gum', 'Dulces y chicles', 'Bonbons et gomme'),
+    'hot-food' => _t(
+      'Hot Food & Coffee',
+      'Comida caliente y café',
+      'Mets chauds et café',
+    ),
+    'grocery' => _t('Grocery & Dairy', 'Abarrotes y lácteos', 'Épicerie'),
+    'automotive' => _t('Automotive', 'Automotriz', 'Automobile'),
+    'health' => _t('Health & Beauty', 'Salud y belleza', 'Santé et beauté'),
+    'general' => _t(
+      'General Merchandise',
+      'Mercancía general',
+      'Articles divers',
+    ),
+    'tobacco' => _t('Tobacco & Vape', 'Tabaco y vapeo', 'Tabac et vapotage'),
+    'fuel' => _t('Fuel', 'Combustible', 'Carburant'),
     'beer' => _t('Beer & Cider', 'Cerveza y sidra', 'Bières et cidres'),
     'wine' => _t('Wine', 'Vino', 'Vins'),
     'spirits' => _t('Spirits', 'Licores', 'Spiritueux'),
@@ -479,10 +502,21 @@ class R {
     'MANAGER' => _t('Manager', 'Gerente', 'Gérant'),
     _ => _t('Cashier', 'Cajero', 'Caissier'),
   };
-  String get storeLine => _t(
-    'Bottle Shop · Los Angeles',
-    'Tienda de licores · Los Ángeles',
-    'Boutique d’alcools · Los Angeles',
+  String get storeLine => StoreProfile.current.isPronghorn
+      ? _t(
+          'Fuel & Market · Dripping Springs, TX',
+          'Gasolinera y tienda · Dripping Springs, TX',
+          'Carburant et dépanneur · Dripping Springs, TX',
+        )
+      : _t(
+          'Bottle Shop · Los Angeles',
+          'Tienda de licores · Los Ángeles',
+          'Boutique d’alcools · Los Angeles',
+        );
+  String looksOver(int n) => _t(
+    'Clearly over $n: no ID needed',
+    'Claramente mayor de $n: sin identificación',
+    'Nettement plus de $n\u00A0ans\u00A0: sans pièce d’identité',
   );
   String get stockApp =>
       _t('Stock app', 'App de inventario', 'Application d’inventaire');

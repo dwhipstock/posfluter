@@ -32,6 +32,9 @@ import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
 import dev.dwhipstock.pos.customers.sagepoppy.SagePoppy
 import dev.dwhipstock.pos.customers.sagepoppy.SagePoppyConfig
 import dev.dwhipstock.pos.customers.sagepoppy.SagePoppySeed
+import dev.dwhipstock.pos.customers.pronghorn.Pronghorn
+import dev.dwhipstock.pos.customers.pronghorn.PronghornConfig
+import dev.dwhipstock.pos.customers.pronghorn.PronghornSeed
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.sdk.FilesystemPhotoStore
@@ -48,6 +51,7 @@ import dev.dwhipstock.pos.payments.StripeService
 import dev.dwhipstock.pos.api.stripeRoutes
 import dev.dwhipstock.pos.api.printerRoutes
 import dev.dwhipstock.pos.api.kitchenRoutes
+import dev.dwhipstock.pos.api.forecourtRoutes
 import dev.dwhipstock.pos.restaurant.BadRequestException
 import dev.dwhipstock.pos.restaurant.ConflictException
 import dev.dwhipstock.pos.restaurant.NotFoundException
@@ -90,8 +94,18 @@ fun Application.module(
     // which store this is (POS_VENUE=vieux-port|plateau|sage-poppy): its config,
     // display name and first-boot seed. sage-poppy is the US retail store.
     venueId: String? = System.getenv("POS_VENUE"),
-    venue: CopperLanternVenue = if (SagePoppy.matches(venueId)) CopperLanternVenue.VIEUX_PORT else CopperLanternVenue.of(venueId),
+    venue: CopperLanternVenue = if (SagePoppy.matches(venueId) || Pronghorn.matches(venueId)) CopperLanternVenue.VIEUX_PORT
+        else CopperLanternVenue.of(venueId),
     sagePoppy: Boolean = SagePoppy.matches(venueId),
+    // pronghorn: the gas station (a retail counter + the forecourt)
+    pronghorn: Boolean = Pronghorn.matches(venueId),
+    // the forecourt controller: FORECOURT_URL (the simulator; default
+    // http://127.0.0.1:8086). Test seams: a fake adapter, no background poll,
+    // and a handle on the service.
+    forecourtUrl: String? = System.getenv("FORECOURT_URL"),
+    forecourtAdapter: dev.dwhipstock.pos.forecourt.ForecourtAdapter? = null,
+    forecourtPoll: Boolean = true,
+    onForecourt: ((dev.dwhipstock.pos.forecourt.ForecourtService) -> Unit)? = null,
     // retail: optional online name lookup for unknown barcodes (test seam)
     productLookup: dev.dwhipstock.pos.retail.ProductLookup? = null,
     // retail: minimum age for age-restricted items. The tablet passes its
@@ -135,11 +149,17 @@ fun Application.module(
     kitchenPrinting: dev.dwhipstock.pos.sdk.KitchenPrinting.Resolved = dev.dwhipstock.pos.sdk.KitchenPrinting.fromEnv(),
     // test seam: the station printers' transport
     kitchenTransport: dev.dwhipstock.pos.sdk.EscPosTransport? = null,
+    // age.check=always|looks-under:N (POS_AGE_CHECK / POS_CONFIG_FILE). Default
+    // always: an ID for every age-restricted sale; tobacco and vape always.
+    ageCheckMode: dev.dwhipstock.pos.sdk.AgeCheckMode = dev.dwhipstock.pos.sdk.AgeCheckMode.fromEnv(),
 ) {
     // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
     // Angeles for the US store); an existing store keeps its settings row's
-    dev.dwhipstock.pos.sdk.VenueClock.fallbackZone =
-        if (sagePoppy) SagePoppy.TIME_ZONE else dev.dwhipstock.pos.sdk.VenueClock.DEFAULT_ZONE
+    dev.dwhipstock.pos.sdk.VenueClock.fallbackZone = when {
+        pronghorn -> Pronghorn.TIME_ZONE
+        sagePoppy -> SagePoppy.TIME_ZONE
+        else -> dev.dwhipstock.pos.sdk.VenueClock.DEFAULT_ZONE
+    }
     initDatabase(dbPath)
     // discover i18n message catalogs now so missing-key warnings surface at
     // boot, not on the first printed receipt
@@ -153,7 +173,11 @@ fun Application.module(
     // also wipes that residue. Gate = no install_id yet: once a store has synced,
     // its data is never touched here again.
     if (seedMode != "none") {
-        if (sagePoppy) SagePoppySeed.seedIfEmpty() else CopperLanternSeed.seedIfEmpty(venue)
+        when {
+            pronghorn -> PronghornSeed.seedIfEmpty()
+            sagePoppy -> SagePoppySeed.seedIfEmpty()
+            else -> CopperLanternSeed.seedIfEmpty(venue)
+        }
         // a store seeded with an older shelf adds the rest of the current
         // catalog, once, without touching anything already there
         if (sagePoppy) dev.dwhipstock.pos.customers.sagepoppy.SagePoppyCatalogUpgrade.upgradeIfNeeded()
@@ -162,8 +186,14 @@ fun Application.module(
         // nobody could ever sign in to an empty store (staff no longer arrive
         // from the cloud), so it gets ONE bootstrap manager — PIN 1234, to be
         // changed on first sign-in
-        if (sagePoppy) SagePoppySeed.seedBootstrapManagerIfNoStaff() else CopperLanternSeed.seedBootstrapManagerIfNoStaff()
+        when {
+            pronghorn -> PronghornSeed.seedBootstrapManagerIfNoStaff()
+            sagePoppy -> SagePoppySeed.seedBootstrapManagerIfNoStaff()
+            else -> CopperLanternSeed.seedBootstrapManagerIfNoStaff()
+        }
     }
+    // the forecourt rings fuel up as catalog items: every gas station has them
+    if (pronghorn) PronghornSeed.ensureFuelItems()
     // every table must have its customer link token (033); covers any row a
     // raw-SQL path wrote without one
     org.jetbrains.exposed.sql.transactions.transaction { dev.dwhipstock.pos.restaurant.TableTokens.ensureAll() }
@@ -198,7 +228,15 @@ fun Application.module(
     val publicUrlProvider = {
         publicUrl ?: detectLanIpv4()?.let { "http://$it:$lanPort" } ?: publicBaseUrl
     }
-    val config: dev.dwhipstock.pos.sdk.CustomerConfig = if (sagePoppy) SagePoppyConfig(
+    val config: dev.dwhipstock.pos.sdk.CustomerConfig = if (pronghorn) PronghornConfig(
+        settings = settingsRepo,
+        printer = thermalPrinter,
+        publicBaseUrl = publicBaseUrl,
+        publicUrlProvider = publicUrlProvider,
+        legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
+            dev.dwhipstock.pos.sdk.LegalAge.fromEnv(Pronghorn.LEGAL_AGE), legalAgeOverride?.toString()),
+        cashRounding = cashRounding.rounding,
+    ) else if (sagePoppy) SagePoppyConfig(
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,
@@ -221,6 +259,23 @@ fun Application.module(
     if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Legal age for age-restricted items: ${config.legalAge}")
     log.info("Customers scan: $publicBaseUrl/m/t/{token} (a random link per table, on its QR slip; a manager can regenerate it)  — print slips from the tablet")
     val checkService = CheckService(config)
+    // The forecourt (the gas station): pumps on the counter through the
+    // controller's adapter. Its poller never blocks startup or a sale; an
+    // unreachable controller just shows the pumps offline.
+    val forecourt = if (!pronghorn) null else {
+        val adapter = forecourtAdapter ?: dev.dwhipstock.pos.forecourt.SimulatorAdapter(
+            forecourtUrl?.takeIf { it.isNotBlank() } ?: "http://127.0.0.1:8086")
+        dev.dwhipstock.pos.forecourt.ForecourtService(
+            config, checkService, adapter, Pronghorn.GRADES, Pronghorn.pumpsFromEnv(),
+        ).also { fc ->
+            checkService.forecourt = fc
+            onForecourt?.invoke(fc)
+            if (forecourtPoll) {
+                fc.start(System.getenv("FORECOURT_POLL_MS")?.toLongOrNull()?.coerceIn(100, 5000) ?: 300)
+                monitor.subscribe(ApplicationStopped) { _ -> fc.stop() }
+            }
+        }
+    }
     // Kitchen / station tickets: opt-in, restaurants only. Off = null, and the
     // store behaves exactly as before (no hook, no queue, no worker thread).
     kitchenPrinting.warning?.let { log.warn("Kitchen tickets config ignored: $it") }
@@ -251,8 +306,9 @@ fun Application.module(
     }
     val stripeService = StripeService(storeStripe, checkService, config.venueId, config.displayName, stripeHttp)
         .also { it.start() }
+    ageCheckMode.let { if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Age check: ${it.wire}") }
     val retailService = dev.dwhipstock.pos.retail.RetailService(
-        config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup())
+        config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup(), ageCheckMode)
     if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
     // stock counting / receiving in the store (retail); on hand stays the cloud's
     val stockService = dev.dwhipstock.pos.retail.StockService(config)
@@ -382,7 +438,8 @@ fun Application.module(
         // venue = the store's display name ("Copper Lantern — Vieux-Port") so the
         // sign-in screen can say which store this terminal serves before login
         get("/health") {
-            call.respond(HealthResponse.of(config, requireDeviceToken, kitchenService != null))
+            call.respond(HealthResponse.of(config, requireDeviceToken, kitchenService != null, forecourt != null)
+                .copy(looksOverAge = ageCheckMode.looksOver))
         }
         // Staff ordering web app (M7): a mobile-first page served from the store.
         // Public shell (like the customer menu); it authenticates via POST /login
@@ -423,6 +480,7 @@ fun Application.module(
         settingsRoutes(settingsRepo)
         printerRoutes(thermalPrinter, config, settingsRepo)
         kitchenRoutes(kitchenService)
+        forecourtRoutes(forecourt, authService)
         // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in
         // production, where Caddy fronts the sync API and the Next.js portal on one
         // host — so the derived scheme://host is correct. On a SPLIT deployment
@@ -495,9 +553,23 @@ data class HealthResponse(
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
     val kitchenPrinting: Boolean = false,
+    /**
+     * A gas station: the counter shows the pump grid (GET /forecourt). Left
+     * out of the JSON for every other store, like [kitchenPrinting].
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val forecourt: Boolean = false,
+    /** age.check=looks-under:N: the cashier may pass a customer who looks over N (never tobacco). Absent = always an ID. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val looksOverAge: Int? = null,
 ) {
     companion object {
-        fun of(config: dev.dwhipstock.pos.sdk.CustomerConfig, pairingRequired: Boolean, kitchenPrinting: Boolean = false) = HealthResponse(
+        fun of(
+            config: dev.dwhipstock.pos.sdk.CustomerConfig, pairingRequired: Boolean,
+            kitchenPrinting: Boolean = false, forecourt: Boolean = false,
+        ) = HealthResponse(
             status = "ok",
             pairingRequired = pairingRequired,
             venue = config.displayName,
@@ -510,6 +582,7 @@ data class HealthResponse(
             legalAge = config.legalAge,
             cashRounding = if (config.roundingPolicy == dev.dwhipstock.pos.sdk.RoundingPolicy.NoRounding) "off" else "nickel",
             kitchenPrinting = kitchenPrinting,
+            forecourt = forecourt,
         )
     }
 }

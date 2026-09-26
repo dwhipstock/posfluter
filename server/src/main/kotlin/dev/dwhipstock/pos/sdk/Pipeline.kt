@@ -25,16 +25,22 @@ object TransactionPipeline {
      */
     fun computeTotals(
         lines: List<BasketLine>, corkageBottles: Int, config: CustomerConfig, discount: Money = Money.ZERO,
+        /** Promotions that applied (stage 2): taken off before tax, each on its own goods. */
+        promotions: List<PromoHit> = emptyList(),
     ): Totals {
         val itemsSubtotal = lines.fold(Money.ZERO) { acc, l -> acc + priceLine(l.unitPrice, l.qty) }
         require(discount >= Money.ZERO) { "discount must not be negative" }
-        val discountApplied = minOf(discount, itemsSubtotal)
+        val promoOff = Money(promotions.sumOf { it.amount.cents })
+        val promoTaxableOff = Money(promotions.sumOf { it.taxableAmount.cents })
+        val discountApplied = minOf(discount + promoOff, itemsSubtotal)
         val discounted = itemsSubtotal - discountApplied
         // tax-exempt lines (retail snacks, ice) stay out of the taxable base;
-        // a discount comes off the taxable goods first. Every pub line is
+        // a plain discount comes off the taxable goods first; a promotion
+        // comes off the goods it was on (its taxable share). Every pub line is
         // taxable, so there this is exactly the discounted items.
         val exempt = lines.filterNot { it.taxable }.fold(Money.ZERO) { acc, l -> acc + priceLine(l.unitPrice, l.qty) }
-        val taxableItems = maxOf(Money.ZERO, discounted - exempt)
+        val taxableGross = itemsSubtotal - exempt
+        val taxableItems = maxOf(Money.ZERO, taxableGross - promoTaxableOff - minOf(discount, taxableGross))
         // bottle deposits (California CRV): per unit sold, never discounted
         val deposits = lines.fold(Money.ZERO) { acc, l -> acc + l.depositPerUnit * l.qty }
 
@@ -54,6 +60,7 @@ object TransactionPipeline {
             discount = discountApplied,
             taxableBase = taxableBase,
             taxLines = tax.lines,
+            promotions = promotions,
         )
     }
 
@@ -182,6 +189,8 @@ data class Totals(
     val taxableBase: Money = Money.ZERO,
     /** Taxes added on top, one per component; empty for inclusive / no tax. */
     val taxLines: List<TaxLine> = emptyList(),
+    /** Promotions inside [discount] (their discount lines). */
+    val promotions: List<PromoHit> = emptyList(),
 ) {
     /** Taxes added on top of [subtotal]. */
     val taxAdded: Money get() = Money(taxLines.sumOf { it.amount.cents })

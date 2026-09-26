@@ -90,6 +90,8 @@ object Checks : IntIdTable("checks") {
     // per tax [{code,labelFr,labelEn,ratePercent,registrationNumber,amountCents}]
     val lockedTaxAddedCents = long("locked_tax_added_cents").nullable()
     val lockedTaxesJson = text("locked_taxes_json").nullable()
+    // promotions taken at lock (047): [{code,label,labelEs,amountCents,taxableCents}]
+    val lockedDiscountsJson = text("locked_discounts_json").nullable().databaseGenerated()
     // stamped when the check closes or voids; null = closed outside any shift
     val shiftId = integer("shift_id").nullable()
     val voidReason = varchar("void_reason", 300).nullable()
@@ -114,6 +116,10 @@ object CheckLines : IntIdTable("check_lines") {
     val taxable = bool("taxable").databaseGenerated() // DEFAULT 1
     val depositCents = long("deposit_cents").databaseGenerated() // DEFAULT 0
     val ageRestricted = bool("age_restricted").databaseGenerated() // DEFAULT 0
+    // a fuel or prepay line's row in fuel_sales (046); NULL on every other line
+    val fuelSaleId = integer("fuel_sale_id").nullable().databaseGenerated()
+    // the variant's cost at ring-up (047), like the price; NULL = unknown
+    val unitCostCents = long("unit_cost_cents").nullable().databaseGenerated()
 }
 
 /**

@@ -45,7 +45,7 @@ class PinPadState extends State<PinPad> {
   Widget build(BuildContext context) {
     final big = widget.keySize.height >= 72;
     // the pubs: navy on cream, as always; a store with its own brand wears its theme
-    final branded = StoreProfile.current.isSagePoppy;
+    final branded = StoreProfile.current.hasOwnBrand;
     final scheme = Theme.of(context).colorScheme;
     final ink = branded ? scheme.primary : T.navy;
     final keyBg = branded ? scheme.surface : T.surface;

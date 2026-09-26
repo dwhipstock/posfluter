@@ -17,6 +17,7 @@ export 'stock/stock_models.dart';
 export 'store_profile.dart';
 
 part 'kitchen/kitchen_api.dart';
+part 'forecourt/forecourt_api.dart';
 
 /// Thin API client for the store server. The client owns NO money logic —
 /// pricing, tax, rounding all live server-side (architecture principle #2).
@@ -1265,9 +1266,10 @@ class Api {
     String? scan,
     String? dateOfBirth,
     bool cashierSawId = false,
+    bool visual = false,
   }) async => AgeCheckResult.fromJson(
     await _post('/retail/sales/$saleId/age-check', {
-      'method': scan != null ? 'SCAN' : 'MANUAL',
+      'method': visual ? 'VISUAL' : (scan != null ? 'SCAN' : 'MANUAL'),
       'scan': ?scan,
       'dateOfBirth': ?dateOfBirth,
       'cashierSawId': cashierSawId,
@@ -2188,6 +2190,9 @@ class CheckLine {
   /// Retail: needs an ID check; bottle deposit (CRV) per unit; taxed or not.
   final bool ageRestricted, taxable;
   final int depositCents;
+
+  /// A gas station's fuel or prepay line: pump, grade, gallons, price per gallon.
+  final FuelLine? fuel;
   CheckLine(
     this.id,
     this.itemId,
@@ -2203,6 +2208,7 @@ class CheckLine {
     this.ageRestricted = false,
     this.taxable = true,
     this.depositCents = 0,
+    this.fuel,
   });
   factory CheckLine.fromJson(Map<String, dynamic> j) => CheckLine(
     j['id'],
@@ -2219,6 +2225,22 @@ class CheckLine {
     ageRestricted: j['ageRestricted'] ?? false,
     taxable: j['taxable'] ?? true,
     depositCents: j['depositCents'] ?? 0,
+    fuel: j['fuel'] is Map<String, dynamic>
+        ? FuelLine.fromJson(j['fuel'])
+        : null,
+  );
+}
+
+/// One promotion on a sale ("2 for \$5 energy drinks"): [amountCents] off.
+class Discount {
+  final String code, label, labelEs;
+  final int amountCents;
+  const Discount(this.code, this.label, this.labelEs, this.amountCents);
+  factory Discount.fromJson(Map<String, dynamic> j) => Discount(
+    j['code'] ?? '',
+    j['label'] ?? '',
+    j['labelEs'] ?? j['label'] ?? '',
+    (j['amountCents'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -2400,6 +2422,9 @@ class Check {
   /// last check failed and none passed (remove the restricted items).
   final bool ageCheckRequired, ageCleared, ageCheckFailed;
 
+  /// Promotions taken off before tax (a c-store's deals).
+  final List<Discount> discounts;
+
   /// What's left if paid in CASH (server-rounded to the nickel) and the signed
   /// difference from [outstandingCents] (e.g. -2, +1). Card is always exact.
   /// Older servers omit them: cash due = outstanding, no rounding.
@@ -2423,6 +2448,7 @@ class Check {
     this.ageCheckRequired = false,
     this.ageCleared = true,
     this.ageCheckFailed = false,
+    this.discounts = const [],
     int? cashDueCents,
     this.cashRoundingCents = 0,
   }) : subtotalCents = subtotalCents ?? grandTotalCents,
@@ -2448,6 +2474,10 @@ class Check {
     ageCheckRequired: j['ageCheckRequired'] ?? false,
     ageCleared: j['ageCleared'] ?? true,
     ageCheckFailed: j['ageCheckFailed'] ?? false,
+    discounts: [
+      for (final d in (j['discounts'] as List? ?? const []))
+        Discount.fromJson(d as Map<String, dynamic>),
+    ],
     cashDueCents: j['cashDueCents'],
     cashRoundingCents: j['cashRoundingCents'] ?? 0,
   );

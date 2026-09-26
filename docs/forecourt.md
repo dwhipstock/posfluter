@@ -175,4 +175,54 @@ the member spec before building a real adapter.
 
 ## The POS side
 
-_Filled in by the POS change._
+The store server (Kotlin) talks to the forecourt; the counter (Flutter) only
+ever talks to its store. `server/.../forecourt/`:
+
+- **`ForecourtAdapter`** — the store's interface to a forecourt controller:
+  `snapshot()` (every pump and every uncleared transaction), `authorise`
+  (postpay, or prepay with a `maxAmountCents` limit and a `posRef`), `free`,
+  `stop` / `resume`, `emergencyStop` (one pump or all), `reset`, `lock` /
+  `unlock` / `clear` a transaction, `setPrices`. Failures are typed:
+  `ForecourtUnavailable` (no answer: pumps show offline) and
+  `ForecourtRefused` (the controller's reason code: `PUMP_BUSY`,
+  `EMERGENCY_STOP`, `TRX_LOCKED`…). Sub-second timeouts; nothing on a
+  selling path waits for it.
+- **`SimulatorAdapter`** — the implementation for this simulator
+  (`FORECOURT_URL`, default `http://127.0.0.1:8086`). A real FDC adapter is
+  a second implementation of the same interface: it would open the IFSF
+  POS-to-FDC channels (request/response and unsolicited), send the same
+  messages as XML and map the FDC's device and transaction states onto
+  `PumpState` / `TrxState`. Nothing else in the store changes.
+- **`ForecourtService`** — polls the adapter every 300 ms (`FORECOURT_POLL_MS`)
+  for the pump grid and keeps the store's own record, `fuel_sales` (store
+  migration 046), in step with the controller:
+  - **postpay**: the cashier authorises the pump; the customer fills up and
+    hangs up; the payable transaction is **locked** onto the sale as a fuel
+    line (pump, grade, gallons, price per gallon; `posRef = sale-<id>`), and
+    **cleared** when the sale closes. Taken off the sale → unlocked.
+  - **prepay**: "$40 on pump 3" is a prepay line on the sale. When the sale is
+    paid the pump is authorised with a $40 limit (`posRef = prepay-<id>`).
+    When the pump finishes the store refunds the unused amount on that sale
+    (same tender, cash to the nickel), the tile shows **CHANGE $x.xx** until
+    the cashier taps "change given", and the transaction is cleared.
+  - Offline: pumps show offline, pump commands and new prepays are refused
+    (`forecourt_offline`), **in-store sales go on**. A prepay paid while the
+    controller is down is authorised when it answers again; a settled sale is
+    cleared at the controller later. The store's rows are the truth for
+    money, the controller's for what the pump dispensed.
+- Fuel lines carry **no added sales tax** (Texas fuel taxes are in the pump
+  price); in-store taxable goods get the store's sales tax. Receipts show
+  `Pump 3 · 10.052 gal @ 3.299/gal`.
+- Sync (`cloud/CONTRACT.md` §2, Fuel): `check.closed` fuel lines carry a
+  `fuel` object; each settled fuelling sends a `fuel.sale` event (grade,
+  gallons, price, amount, cost, prepay and refund).
+- Store API for the counter: `GET /forecourt`, `POST /forecourt/pumps/{n}/
+  authorise|stop|resume|reset|emergency-stop`, `POST /forecourt/emergency-stop`,
+  `POST /forecourt/prepays/{id}/cancel|change-given`,
+  `POST /retail/sales/{id}/fuel {trxId}`, `POST /retail/sales/{id}/prepay
+  {pump, amountCents}`.
+
+Tests: the pump state machine lives in `forecourt/simulator/test`; the
+store's side (prepay refunds, postpay locking, offline handling, fuel tax,
+sync) in `server/src/test/.../GasStationTest.kt` against an in-memory
+`FakeForecourt`, and the adapter's wire format in `SimulatorAdapterTest.kt`.

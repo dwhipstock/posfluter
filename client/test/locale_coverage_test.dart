@@ -28,6 +28,7 @@ const _tables = [
   _Table('lib/i18n.dart', ['fr', 'en', 'es']),
   _Table('lib/retail/retail_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/stock/stock_i18n.dart', ['en', 'es', 'fr']),
+  _Table('lib/forecourt/forecourt_i18n.dart', ['en', 'es', 'fr']),
 ];
 
 /// Words a French or Spanish text may share with the English one: proper
@@ -38,6 +39,9 @@ const _sameWords = {
   // proper nouns and abbreviations
   'Copper', 'Lantern', 'Sage', '&', 'Poppy', 'Stripe', 'Wi-Fi', 'OK', 'PIN',
   'CRV', 'QR', 'IPA',
+  // the gas station: fuel grade names both languages use, the town, gallons
+  'Regular', 'Premium', 'Diesel', 'Pronghorn', 'Dripping', 'Springs', 'TX',
+  'gal', 'ERROR', 'Jumbo', 'Mango',
   // the same word in French (Menu, Table, Zones, Total, Bar) or Spanish (Total,
   // Subtotal)
   'Total', 'Subtotal', 'Menu', 'Table', 'Zones', 'Bar',

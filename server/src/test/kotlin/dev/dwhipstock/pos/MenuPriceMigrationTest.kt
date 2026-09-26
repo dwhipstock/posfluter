@@ -34,7 +34,7 @@ class MenuPriceMigrationTest {
         Database.connect(SQLiteDataSource().apply { url = "jdbc:sqlite:$path" })
 
     private fun prices(db: Database) = transaction(db) {
-        ItemVariants.selectAll().associate { it[ItemVariants.id] to it[ItemVariants.priceCents] }
+        ItemVariants.select(ItemVariants.id, ItemVariants.priceCents).associate { it[ItemVariants.id] to it[ItemVariants.priceCents] }
     }
 
     private fun priceEvents(db: Database) = transaction(db) {

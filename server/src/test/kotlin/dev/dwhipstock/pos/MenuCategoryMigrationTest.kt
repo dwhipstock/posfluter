@@ -117,7 +117,7 @@ class MenuCategoryMigrationTest {
         val db = connect(path)
         assertEquals(oldLayout.keys.toList() + plateauExtras, categoryIds(db), "fixture is the old 15 + Plateau")
         val variantsBefore = transaction(db) {
-            ItemVariants.selectAll().associate { it[ItemVariants.id] to (it[ItemVariants.priceCents] to it[ItemVariants.deletedAt]) }
+            ItemVariants.select(ItemVariants.id, ItemVariants.priceCents, ItemVariants.deletedAt).associate { it[ItemVariants.id] to (it[ItemVariants.priceCents] to it[ItemVariants.deletedAt]) }
         }
 
         Migrations.run(db)
@@ -154,7 +154,7 @@ class MenuCategoryMigrationTest {
             assertEquals("wings.jpg", rows["wings"]!![Items.photoPath])
             assertTrue(rows["onion-rings"]!![Items.deletedAt] != null)
             assertFalse(rows["saison"]!![Items.active])
-            val variantsAfter = ItemVariants.selectAll().associate { it[ItemVariants.id] to (it[ItemVariants.priceCents] to it[ItemVariants.deletedAt]) }
+            val variantsAfter = ItemVariants.select(ItemVariants.id, ItemVariants.priceCents, ItemVariants.deletedAt).associate { it[ItemVariants.id] to (it[ItemVariants.priceCents] to it[ItemVariants.deletedAt]) }
             assertEquals(variantsBefore, variantsAfter)
             assertEquals(5250L, variantsAfter["malbec:bottle"]!!.first)
             assertEquals(1, CheckLines.selectAll().where { CheckLines.checkId eq checkId }.count().toInt())
