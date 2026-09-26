@@ -32,6 +32,12 @@ interface CustomerConfig {
     val profile: StoreProfile get() = StoreProfile.QUEBEC_PUB
     /** Minimum age for age-restricted items: POS_LEGAL_AGE / legal.age, else the profile's. */
     val legalAge: Int get() = profile.legalAge
+    /**
+     * The card terminal this store uses when `payment.terminal` is unset: the
+     * built-in simulator unless the customer says otherwise (Copper Lantern: Stripe).
+     */
+    val defaultPaymentTerminal: dev.dwhipstock.pos.payments.terminal.TerminalKind
+        get() = dev.dwhipstock.pos.payments.terminal.TerminalKind.SIMULATOR
 
     /** Deals applied to the basket before tax ([Promotions]); none by default. */
     val promotions: List<Promotion> get() = emptyList()

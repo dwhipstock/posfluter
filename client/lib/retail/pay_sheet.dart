@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
+import '../payments/terminal.dart';
 import 'retail_i18n.dart';
 import 'sp_theme.dart';
 
@@ -14,14 +15,36 @@ import 'sp_theme.dart';
 /// Resolves to the closed sale, or null if dismissed before payment.
 class PaySheet extends StatefulWidget {
   final Check sale;
-  const PaySheet({super.key, required this.sale});
 
-  static Future<PayResult?> show(BuildContext context, Check sale) =>
-      showDialog<PayResult>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => PaySheet(sale: sale),
-      );
+  /// Test seams for "Card (terminal)" (the simulator / J.P. Morgan). Defaults:
+  /// GET /payments/terminal and the store.
+  final Future<TerminalStatus> Function()? terminalStatus;
+  final TerminalClient terminalClient;
+  final SimReaderClient simReader;
+  const PaySheet({
+    super.key,
+    required this.sale,
+    this.terminalStatus,
+    this.terminalClient = const TerminalClient(),
+    this.simReader = const SimReaderClient(),
+  });
+
+  static Future<PayResult?> show(
+    BuildContext context,
+    Check sale, {
+    Future<TerminalStatus> Function()? terminalStatus,
+    TerminalClient terminalClient = const TerminalClient(),
+    SimReaderClient simReader = const SimReaderClient(),
+  }) => showDialog<PayResult>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => PaySheet(
+      sale: sale,
+      terminalStatus: terminalStatus,
+      terminalClient: terminalClient,
+      simReader: simReader,
+    ),
+  );
 
   @override
   State<PaySheet> createState() => _PaySheetState();
@@ -48,6 +71,52 @@ class _PaySheetState extends State<PaySheet> {
   String _digits = ''; // keypad entry in cents
   bool _busy = false;
   PayResult? _done;
+
+  /// The store-driven card terminal (simulator / J.P. Morgan); null = loading.
+  TerminalStatus? _terminal;
+  bool get _terminalShown => _terminal?.storeDriven == true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTerminal();
+  }
+
+  Future<void> _loadTerminal() async {
+    TerminalStatus st;
+    try {
+      st = await (widget.terminalStatus ?? widget.terminalClient.status)();
+    } catch (_) {
+      st = TerminalStatus.none;
+    }
+    if (mounted) setState(() => _terminal = st);
+  }
+
+  /// Card (terminal): the reader flow on its own screen; the store records
+  /// the tender on approval. Nothing recorded → the sheet is as before.
+  Future<void> _terminalPay() async {
+    final st = _terminal;
+    if (_busy || st == null || !st.available) return;
+    final result = await StoreTerminalCardPayment(
+      status: st,
+      client: widget.terminalClient,
+      reader: widget.simReader,
+    ).run(context, checkId: _sale.id);
+    if (!mounted) return;
+    if (result == null) {
+      _loadTerminal();
+      return;
+    }
+    await _guard(() async {
+      _sale = result.check;
+      if (_sale.outstandingCents == 0) {
+        final closed = await Api.finalizeCheck(_sale.id);
+        setState(() => _done = PayResult(closed, 0));
+      } else {
+        setState(() {});
+      }
+    });
+  }
 
   int get _due => _sale.outstandingCents;
 
@@ -207,12 +276,22 @@ class _PaySheetState extends State<PaySheet> {
               icon: const Icon(LucideIcons.creditCard),
               label: Text(r.cardTerminal),
             ),
+            if (_terminalShown)
+              ButtonSegment(
+                value: 'TERMINAL',
+                icon: const Icon(LucideIcons.nfc),
+                label: Text(L.of(context).cardTerminalTender),
+              ),
           ],
           selected: {_method},
           onSelectionChanged: (s) => setState(() => _method = s.first),
         ),
         const SizedBox(height: 18),
-        _method == 'CASH' ? _cashPane(r, c) : _cardPane(r, c),
+        switch (_method) {
+          'CASH' => _cashPane(r, c),
+          'TERMINAL' => _terminalPane(c),
+          _ => _cardPane(r, c),
+        },
       ],
     );
   }
@@ -357,6 +436,57 @@ class _PaySheetState extends State<PaySheet> {
           icon: const Icon(LucideIcons.badgeCheck),
           label: Text(
             r.cardApproved,
+            style: T.text(size: 20, weight: FontWeight.w700, color: c.onPoppy),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _terminalPane(SpColors c) {
+    final l = L.of(context);
+    final st = _terminal;
+    final blocked = st == null || !st.available;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: c.surfaceAlt,
+            borderRadius: T.radiusLarge,
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.nfc, size: 40, color: c.sage),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  blocked
+                      ? l.terminalUnavailableHint(st?.reason)
+                      : st.embedded
+                      ? l.terminalBuiltIn
+                      : l.followTerminal(st.address),
+                  key: const ValueKey('terminal-hint'),
+                  style: T.text(size: 17, color: c.text),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          key: const ValueKey('terminal-charge'),
+          style: FilledButton.styleFrom(
+            backgroundColor: c.poppy,
+            foregroundColor: c.onPoppy,
+            minimumSize: const Size.fromHeight(64),
+          ),
+          onPressed: _busy || blocked ? null : _terminalPay,
+          icon: const Icon(LucideIcons.nfc),
+          label: Text(
+            l.chargeCardTerminal,
             style: T.text(size: 20, weight: FontWeight.w700, color: c.onPoppy),
           ),
         ),

@@ -75,6 +75,9 @@ class CopperLanternConfig(
             )
         }
 
+    // Stripe Terminal (test mode) unless payment.terminal says otherwise
+    override val defaultPaymentTerminal get() = dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE
+
     override val electronicTenders: List<TenderMethod>
         get() = settings.get().let { s ->
             listOf(

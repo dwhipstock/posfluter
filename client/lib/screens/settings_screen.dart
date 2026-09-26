@@ -8,6 +8,7 @@ import '../design/widgets.dart';
 import '../i18n.dart';
 import '../kitchen/kitchen_i18n.dart';
 import '../kitchen/kitchen_setup_screen.dart';
+import '../payments/terminal_settings.dart';
 import '../server_discovery.dart';
 
 /// Manager-only venue settings: the DATA the owner tunes at runtime
@@ -688,6 +689,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
+                    // the card terminal (simulator / J.P. Morgan): pair a LAN one
+                    const CardTerminalSettings(),
                     ..._guestWifiSection(l),
                     SizedBox(
                       height: T.minTouch,

@@ -49,6 +49,8 @@ import dev.dwhipstock.pos.payments.StripeException
 import dev.dwhipstock.pos.payments.StripeHttp
 import dev.dwhipstock.pos.payments.StripeService
 import dev.dwhipstock.pos.api.stripeRoutes
+import dev.dwhipstock.pos.api.terminalRoutes
+import dev.dwhipstock.pos.payments.simulator.simulatorRoutes
 import dev.dwhipstock.pos.api.printerRoutes
 import dev.dwhipstock.pos.api.kitchenRoutes
 import dev.dwhipstock.pos.api.forecourtRoutes
@@ -152,6 +154,16 @@ fun Application.module(
     // age.check=always|looks-under:N (POS_AGE_CHECK / POS_CONFIG_FILE). Default
     // always: an ID for every age-restricted sale; tobacco and vape always.
     ageCheckMode: dev.dwhipstock.pos.sdk.AgeCheckMode = dev.dwhipstock.pos.sdk.AgeCheckMode.fromEnv(),
+    // payment.terminal=stripe|simulator|jpmorgan|external|off (+ .host, .timeoutSeconds;
+    // POS_PAYMENT_TERMINAL* / POS_CONFIG_FILE; the tablet passes its store.properties).
+    // Unset → the store's default (Copper Lantern: stripe; everyone else: simulator).
+    paymentTerminal: dev.dwhipstock.pos.sdk.PaymentTerminalConfig.Resolved = dev.dwhipstock.pos.sdk.PaymentTerminalConfig.fromEnv(),
+    // test seams: the built-in simulator (a fake clock), how the store reaches a
+    // LAN simulator, the J.P. Morgan terminal connection, and J.P. Morgan online
+    terminalDevice: dev.dwhipstock.pos.payments.simulator.SimulatedTerminalDevice? = null,
+    simulatorLinkFactory: ((String, Int, () -> String?) -> dev.dwhipstock.pos.payments.simulator.SimulatorLink)? = null,
+    jpmConnector: dev.dwhipstock.pos.payments.jpm.JpmConnector? = null,
+    jpmOnline: dev.dwhipstock.pos.payments.jpm.JpmOnlineApi? = null,
 ) {
     // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
     // Angeles for the US store); an existing store keeps its settings row's
@@ -228,7 +240,7 @@ fun Application.module(
     val publicUrlProvider = {
         publicUrl ?: detectLanIpv4()?.let { "http://$it:$lanPort" } ?: publicBaseUrl
     }
-    val config: dev.dwhipstock.pos.sdk.CustomerConfig = if (pronghorn) PronghornConfig(
+    val baseConfig: dev.dwhipstock.pos.sdk.CustomerConfig = if (pronghorn) PronghornConfig(
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,
@@ -252,6 +264,23 @@ fun Application.module(
         publicUrlProvider = publicUrlProvider,
         cashRounding = cashRounding.rounding,
     )
+    // Which card terminal (payment.terminal). Stripe is Canada-only (a CAD
+    // account) for now; a store elsewhere asking for it gets the external terminal.
+    paymentTerminal.warnings.forEach { log.warn("Card terminal config ignored: $it") }
+    val terminalKind = paymentTerminal.resolveFor(baseConfig.defaultPaymentTerminal).let { k ->
+        if (k == dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE && baseConfig.profile.currency != "CAD") {
+            log.info("Card terminal: stripe is CAD-only; ${baseConfig.displayName} uses its external card terminal")
+            dev.dwhipstock.pos.payments.terminal.TerminalKind.EXTERNAL
+        } else k
+    }
+    log.info(paymentTerminal.describe(terminalKind))
+    // payment.terminal=off: no card tender at all, not even the hand-keyed one
+    val config: dev.dwhipstock.pos.sdk.CustomerConfig =
+        if (terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.OFF) baseConfig
+        else object : dev.dwhipstock.pos.sdk.CustomerConfig by baseConfig {
+            override val electronicTenders get() = baseConfig.electronicTenders.filter { it.type != dev.dwhipstock.pos.sdk.TenderType.CARD }
+            override fun tenderMethod(type: dev.dwhipstock.pos.sdk.TenderType) = electronicTenders.firstOrNull { it.type == type }
+        }
     cashRounding.warning?.let { log.warn("Cash rounding config ignored: $it") }
     log.info("Cash rounding: ${cashRounding.rounding.wire} (${cashRounding.source})")
     log.info("Store: ${config.displayName} (POS_VENUE=${config.venueId}, ${config.profile.country}, " +
@@ -300,13 +329,25 @@ fun Application.module(
     // background account lookup only; a missing key or no internet changes nothing else
     // Stripe is Canada-only (a CAD account) for now: a store in another country
     // takes cash and its own external card terminal, and never contacts Stripe
-    val storeStripe = if (config.profile.currency == "CAD") stripeConfig else {
-        if (stripeConfig.enabled) log.info("Stripe: off for this store (${config.profile.currency}); the Stripe integration is CAD-only")
-        StripeConfig.OFF
+    val storeStripe = when {
+        config.profile.currency != "CAD" -> {
+            if (stripeConfig.enabled) log.info("Stripe: off for this store (${config.profile.currency}); the Stripe integration is CAD-only")
+            StripeConfig.OFF
+        }
+        terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE -> {
+            if (stripeConfig.enabled) log.info("Stripe: off for this store (payment.terminal=${terminalKind.wire})")
+            StripeConfig.OFF
+        }
+        else -> stripeConfig
     }
     val stripeService = StripeService(storeStripe, checkService, config.venueId, config.displayName, stripeHttp)
         .also { it.start() }
     ageCheckMode.let { if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Age check: ${it.wire}") }
+    val terminals = dev.dwhipstock.pos.payments.PaymentTerminals.build(
+        kind = terminalKind, config = paymentTerminal, checks = checkService, customer = config,
+        stripe = stripeService, device = terminalDevice, simulatorLinkFactory = simulatorLinkFactory,
+        jpmConnector = jpmConnector, jpmOnline = jpmOnline,
+    )
     val retailService = dev.dwhipstock.pos.retail.RetailService(
         config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup(), ageCheckMode)
     if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
@@ -393,9 +434,10 @@ fun Application.module(
                 mapOf("error" to (cause.message ?: "manager approval required"),
                     "code" to "manager_approval_required"))
         }
-        exception<StripeException> { call, cause ->
+        // Stripe and every other card terminal (StripeException is a TerminalException)
+        exception<dev.dwhipstock.pos.payments.terminal.TerminalException> { call, cause ->
             call.respond(HttpStatusCode.fromValue(cause.status), buildMap {
-                put("error", cause.message ?: "stripe error")
+                put("error", cause.message ?: "card terminal error")
                 put("code", cause.code)
                 cause.declineCode?.let { put("declineCode", it) }
             })
@@ -466,10 +508,16 @@ fun Application.module(
         authRoutes(authService)
         staffAdminRoutes(authService)
         pairingRoutes(pairingService)
-        posRoutes(checkService, authService, photoStore, stripeService)
+        posRoutes(checkService, authService, photoStore, stripeService, terminals)
         retailRoutes(retailService, authService)
         stockRoutes(stockService, authService)
         stripeRoutes(stripeService)
+        terminalRoutes(terminals)
+        // the built-in simulator's reader page (/terminal): any browser on the
+        // store LAN, or the tablet's own reader sheet, plays the card reader
+        terminals.simulators?.let { hub ->
+            simulatorRoutes(hub.embedded, "/terminal", api = false)
+        }
         tableRoutes(authService)
         floorObjectRoutes(authService)
         zoneManagementRoutes(authService)

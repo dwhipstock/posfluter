@@ -544,12 +544,14 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
       'CARD': l.card,
       'BANK_TRANSFER': l.bankTransfer,
       'STRIPE': l.cardStripe,
+      'TERMINAL': l.cardTerminalTender,
     };
     const tenderColors = {
       'CASH': T.primary,
       'CARD': T.textPrimary,
       'BANK_TRANSFER': T.textMuted,
       'STRIPE': T.accent,
+      'TERMINAL': T.accent,
     };
 
     Widget kv(String label, String value, {bool bold = false, Color? color}) =>

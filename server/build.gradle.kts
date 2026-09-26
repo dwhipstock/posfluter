@@ -54,3 +54,13 @@ dependencies {
 kotlin {
     jvmToolchain(17)
 }
+
+// The stand-alone card terminal simulator (scripts/demo-terminal.sh): a pretend
+// countertop reader on this machine that the tablet POS reaches over the LAN.
+tasks.register<JavaExec>("runTerminal") {
+    group = "application"
+    description = "Run the card terminal simulator (TERMINAL_PORT, default 8090)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.dwhipstock.pos.tools.TerminalSimulatorMainKt")
+    standardInput = System.`in`
+}

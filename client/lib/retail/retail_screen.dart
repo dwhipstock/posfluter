@@ -8,6 +8,7 @@ import '../forecourt/forecourt_i18n.dart';
 import '../forecourt/food_panel.dart';
 import '../forecourt/pump_grid.dart';
 import '../i18n.dart';
+import '../payments/terminal_settings.dart';
 import '../screens/login_screen.dart';
 import '../screens/receipt_screen.dart';
 import '../screens/shift_screen.dart';
@@ -595,6 +596,20 @@ class _RetailScreenState extends State<RetailScreen> {
     if (code != null && mounted) await _scan(code);
   }
 
+  /// The card terminal panel (state, pair a LAN terminal) in a dialog.
+  Future<void> _cardTerminal() => showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      content: const SizedBox(width: 440, child: CardTerminalSettings()),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: Text(L.of(ctx).ok),
+        ),
+      ],
+    ),
+  );
+
   Future<void> _signOut() async {
     await Api.logout();
     if (!mounted) return;
@@ -1128,6 +1143,7 @@ class _RetailScreenState extends State<RetailScreen> {
               if (v == 'close') await _closeRegister();
               if (v == 'count') await _stock(true);
               if (v == 'receive') await _stock(false);
+              if (v == 'terminal') await _cardTerminal();
               if (v == 'out') await _signOut();
             },
             itemBuilder: (_) => [
@@ -1137,6 +1153,12 @@ class _RetailScreenState extends State<RetailScreen> {
                 PopupMenuItem(value: 'close', child: Text(r.closeRegister)),
               PopupMenuItem(value: 'count', child: Text(r.countStock)),
               PopupMenuItem(value: 'receive', child: Text(r.receiveDelivery)),
+              // pair the card terminal (manager; simulator / J.P. Morgan stores)
+              if (Api.currentUser?.isManager == true)
+                PopupMenuItem(
+                  value: 'terminal',
+                  child: Text(L.of(context).sectionCardTerminal),
+                ),
               PopupMenuItem(value: 'out', child: Text(r.signOut)),
             ],
           ),
