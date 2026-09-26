@@ -149,9 +149,13 @@ class AiPhotoRoutesTest {
         assertEquals(3, candidates.size)
         // the pub's house style reached the prompt, with the item's own text
         val prompt = fake.prompts.single()
-        assertTrue(prompt.contains("Classic Poutine") && prompt.contains("cheese curds") && prompt.contains("wooden table"), prompt)
+        assertTrue(prompt.contains("classic poutine") && prompt.contains("cheese curds") && prompt.contains("natural medium-toned wood"), prompt)
 
-        // counts are clamped to 2..4
+        // counts are clamped to 1..4 (1 = a bulk fill that takes the first)
+        val one = manager.post("/items/poutine/ai-photo/generate") {
+            contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234","count":1}""")
+        }
+        assertEquals(1, obj(one.bodyAsText())["candidates"]!!.jsonArray.size)
         val many = manager.post("/items/poutine/ai-photo/generate") {
             contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234","count":9}""")
         }
@@ -203,6 +207,22 @@ class AiPhotoRoutesTest {
         }.status)
         val after = Json.parseToJsonElement(manager.get("/items").bodyAsText()).jsonArray
         assertEquals("original", after.first { it.jsonObject.s("id") == "poutine" }.jsonObject.s("photoSource"))
+
+        // an AI photo copied from another store keeps its provenance; a made-up source is refused
+        suspend fun upload(source: String) = manager.post("/items/poutine/photo") {
+            setBody(MultiPartFormDataContent(formData {
+                append("managerPin", "1234")
+                append("source", source)
+                append("photo", png, Headers.build {
+                    append(HttpHeaders.ContentType, "image/png")
+                    append(HttpHeaders.ContentDisposition, "filename=\"p.png\"")
+                })
+            }))
+        }
+        val copied = upload("ai_generated")
+        assertEquals(HttpStatusCode.Created, copied.status)
+        assertEquals("ai_generated", obj(copied.bodyAsText()).s("photoSource"))
+        assertEquals(HttpStatusCode.BadRequest, upload("stock").status)
     }
 
     @Test

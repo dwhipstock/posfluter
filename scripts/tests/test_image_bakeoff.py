@@ -55,9 +55,72 @@ class BakeoffTest(unittest.TestCase):
         joined = re.sub(r'"\s*\+\s*\n\s*"', "", kotlin)
         for s in (bake.CPR_SHOT, bake.CPR_SCENE, bake.CLEAN):
             self.assertIn(s, joined)
+        for w in bake.CPR_DROP_WORDS:
+            self.assertIn(f'"{w}"', kotlin)
+        for c in bake.COURSES:
+            self.assertIn(f'"{c}"', kotlin)
         p = bake.generate_prompt(bake.ITEMS[0])
-        self.assertIn("Copper Lantern Burger", p)
+        self.assertIn("The subject: burger. Beef, cheddar", p)
+        self.assertNotIn("Lantern", p)
         self.assertIn("45-degree", p)
+
+    def test_prompt_leads_with_the_description_not_the_name(self):
+        lager = bake.Item("x", "Lantern House Lager", "Crisp, malty lager brewed in Montréal.", "Beer & Cider")
+        self.assertEqual(
+            "A professional food and drink menu photograph for a pub. "
+            "The subject: Crisp, malty lager brewed in Montréal. Menu category: Beer & Cider. "
+            f"House style, shared by every photo on this menu: {bake.CPR_SCENE}. "
+            "One single serving is the only subject, centred and filling most of the frame, realistic, "
+            "appetising and true to how it is actually served. "
+            "Plain, unbranded glassware, bottles and plates with no printing, labels or engraving. "
+            "No text, no captions, no logos or readable brand names, no watermark, "
+            "no people or hands, no cutlery clutter.",
+            bake.generate_prompt(lager))
+        for item in bake.ITEMS:
+            p = bake.generate_prompt(item)
+            for brand in ("Copper", "Lantern"):
+                self.assertNotIn(brand, p, item.id)
+
+    def test_what_it_is_matches_the_store(self):
+        """Same cases as HouseStyleTest.whatItIsWhenTheDescriptionDoesNotSay (keeps the two in step)."""
+        I = bake.Item
+        cases = [
+            (I("a", "Maple Cheesecake", "Maple cheesecake with toasted pecans.", "Desserts"),
+             "Maple cheesecake with toasted pecans"),
+            (I("a", "Eastern Townships Pinot Noir", "Light red with cherry and spice.", "Wine"),
+             "pinot noir wine. Light red with cherry and spice"),
+            (I("a", "Copper Old Fashioned", "Canadian whisky, maple, bitters and orange.", "Cocktails"),
+             "old fashioned cocktail. Canadian whisky, maple, bitters and orange"),
+            (I("a", "Classic Poutine", "Fries, cheese curds and savoury gravy.", "Starters"),
+             "classic poutine. Fries, cheese curds and savoury gravy"),
+            (I("a", "Avocado Cucumber Maki", "Six vegetarian pieces.", "Sushi & Sake"),
+             "avocado cucumber maki. Six vegetarian pieces"),
+            (I("a", "North Trail IPA", "", "Beer & Cider"), "IPA"),
+            (I("a", "Hazy Hills IPA 4-pack 16 oz cans", "", "Beer", "Hazy Hills", "Hazy IPA"),
+             "hazy IPA 4-pack 16 oz cans"),
+            (I("a", "Silver Coast Vodka 750 ml", "", "Spirits", "Silver Coast", "Vodka"), "vodka 750 ml"),
+            (I("a", "Cola 2 L", "", "Mixers & Soda", "House", "Soda"), "cola 2 L soda"),
+            (I("a", "Copper Lantern", "", "Cocktails"), "cocktail"),
+        ]
+        for item, want in cases:
+            self.assertEqual(want, bake.subject(item), item.name)
+
+    def test_only_runs_the_named_items(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "sheet"
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = bake.main(["--fake", "--out", str(out), "--only", "pinot-noir,lantern-lager"])
+            self.assertEqual(0, code)
+            page = (out / "index.html").read_text()
+            self.assertIn("pinot-noir--fake.png", page)
+            self.assertIn("lantern-lager--fake.png", page)
+            self.assertEqual(2, page.count("<tr><th class=item>"))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = bake.main(["--fake", "--out", str(out), "--only", "nope"])
+        self.assertEqual(2, code)
+        self.assertIn("Unknown item id(s): nope", buf.getvalue())
 
     def test_env_file_parsing(self):
         with tempfile.TemporaryDirectory() as d:

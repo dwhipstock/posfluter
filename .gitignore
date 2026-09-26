@@ -98,3 +98,6 @@ cloud/infra/clients/
 
 # AI menu photo bake-off output (scripts/image-bakeoff.py): generated images + contact sheet
 .image-bakeoff/
+
+# Whole-menu AI photo runs (scripts/ai-menu-photos.py): chosen images, state + contact sheet
+.ai-menu-photos/

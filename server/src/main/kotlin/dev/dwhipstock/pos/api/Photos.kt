@@ -27,7 +27,11 @@ internal val ALLOWED_TYPES = setOf("image/jpeg", "image/png")
  */
 fun Route.photoRoutes(photos: PhotoStore, auth: AuthService) {
 
-    /** Multipart: `photo` file part + `managerPin` form field. Replaces any existing photo. */
+    /**
+     * Multipart: `photo` file part + `managerPin` form field. Replaces any existing photo.
+     * Optional `source` (original | ai_generated | ai_enhanced, default original): copying an AI
+     * photo from another store (scripts/ai-menu-photos.py --copy-to) keeps its provenance badge.
+     */
     post("/items/{itemId}/photo") {
         val itemId = call.parameters["itemId"]!!
         transaction {
@@ -35,11 +39,15 @@ fun Route.photoRoutes(photos: PhotoStore, auth: AuthService) {
         } ?: throw NotFoundException("item $itemId not found")
 
         var managerPin: String? = null
+        var source: String? = null
         var bytes: ByteArray? = null
         var contentType: String? = null
         call.receiveMultipart().forEachPart { part ->
             when (part) {
-                is PartData.FormItem -> if (part.name == "managerPin") managerPin = part.value
+                is PartData.FormItem -> when (part.name) {
+                    "managerPin" -> managerPin = part.value
+                    "source" -> source = part.value
+                }
                 is PartData.FileItem -> {
                     contentType = part.contentType?.toString()?.lowercase()
                     bytes = part.provider().toByteArray()
@@ -49,6 +57,9 @@ fun Route.photoRoutes(photos: PhotoStore, auth: AuthService) {
             part.dispose()
         }
         requireManagerApproval(auth, managerPin)
+        val photoSource = source?.let { raw ->
+            PhotoSource.entries.firstOrNull { it.wire == raw } ?: throw IllegalArgumentException("unknown photo source")
+        } ?: PhotoSource.ORIGINAL
 
         var data = bytes ?: throw IllegalArgumentException("photo file part required")
         require(contentType in ALLOWED_TYPES) { "only JPEG or PNG photos are supported" }
@@ -56,7 +67,7 @@ fun Route.photoRoutes(photos: PhotoStore, auth: AuthService) {
         // portrait camera shots: bake EXIF rotation into the pixels once, here
         if (contentType == "image/jpeg") data = dev.dwhipstock.pos.sdk.Images.normalizeJpegOrientation(data)
 
-        call.respond(HttpStatusCode.Created, savePhoto(photos, itemId, data, contentType!!, PhotoSource.ORIGINAL))
+        call.respond(HttpStatusCode.Created, savePhoto(photos, itemId, data, contentType!!, photoSource))
     }
 
     /** Open route: streams the photo with cache headers; ?v= busts on replace.

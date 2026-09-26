@@ -110,5 +110,7 @@ private fun itemFacts(itemId: String): ItemFacts = transaction {
         name = row[Items.nameEn].ifBlank { row[Items.nameFr] },
         description = row[Items.descriptionEn].ifBlank { row[Items.descriptionFr] },
         category = category?.let { it[Categories.nameEn].ifBlank { it[Categories.nameFr] } } ?: row[Items.categoryId],
+        brand = row[Items.brand],
+        subcategory = row[Items.subcategory],
     )
 }
