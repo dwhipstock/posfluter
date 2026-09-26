@@ -60,6 +60,13 @@ FIXES = [
      "Restaurant with a year of sales, 10 devices: 670 sales/min, p95 124 ms.",
      "2,170 sales/min, p95 29 ms.",
      "`server/src/main/resources/migrations/049_split_indexes.sql`, test `SplitIndexesTest`"),
+    ("The gas station slowed down as its fuel history grew",
+     "Every forecourt poll (every 300 ms) read every fuelling the store had ever sold, and the pump "
+     "screen and the poll looked for open fuellings with no index. Now the poll looks up only what the "
+     "controller currently holds, and two indexes cover the open-fuelling lookups.",
+     "Gas station with a year of sales (68,000 fuellings), 10 devices: p95 214 ms (fresh store: 5 ms).",
+     "p95 8 ms.",
+     "`server/.../forecourt/ForecourtService.kt`, `.../migrations/050_fuel_sales_indexes.sql`, test `SplitIndexesTest`"),
     ("A year's sales report ran the store out of memory",
      "The X / Z report and the date-range report loaded every sale of the range, then its payments and "
      "lines. They are now sums in SQLite.",

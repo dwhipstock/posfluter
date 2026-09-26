@@ -18,7 +18,7 @@ import time
 import urllib.parse
 
 from . import store as store_lt
-from .common import PORTS, WORK, Client, fresh_dir, log, save_result, start_simulator, start_store, summary
+from .common import PORTS, WORK, Client, fresh_dir, load_result, log, save_result, start_simulator, start_store, summary
 
 # table → primary key, foreign keys (column → table), unique text columns, timestamps
 TABLES = {
@@ -178,7 +178,7 @@ def history_calls(kind: str) -> list[tuple[str, str]]:
 
 
 def run(kinds: list[str], target: int, seconds: float) -> dict:
-    results = {}
+    results = load_result("bigdb") or {}  # a rerun of some kinds keeps the others
     for kind in kinds:
         src = os.path.join(store_lt.store_dir(kind), "pos.db")
         if not os.path.exists(src):
