@@ -13,6 +13,9 @@
 #   scripts/tablet-cloud-config.sh --print       # show the settings (key masked), no adb
 #   scripts/tablet-cloud-config.sh --install-id <id>   # adopt this sync identity (see below)
 #   scripts/tablet-cloud-config.sh --app sagepoppy     # the Sage & Poppy app (see below)
+#   scripts/tablet-cloud-config.sh --from <store.env>  # the store's OWN client portal instead:
+#                                     # a store file from cloud/infra/new-client.sh
+#                                     # (CLOUD_SYNC_URL + key; the key is never printed)
 #
 # --app copperlantern|sagepoppy picks which POS app on the tablet (default
 # copperlantern = Vieux-Port, key STORE_API_KEY; sagepoppy = Sage & Poppy, key
@@ -42,30 +45,40 @@ case "$TABLET_APP" in
   *) KEY_NAME=STORE_API_KEY; STORE_NAME="Vieux-Port";;
 esac
 MODE=""
+FROM=""
 INSTALL_ID="${STORE_INSTALL_ID:-}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-restart|--print) MODE="$1"; shift;;
+    --from) FROM="${2:-}"; [[ -f "$FROM" ]] || { echo "ERROR: --from needs a store file (cloud/infra/new-client.sh)." >&2; exit 2; }; shift 2;;
     --install-id) INSTALL_ID="${2:-}"; [[ -n "$INSTALL_ID" ]] || { echo "ERROR: --install-id needs a value." >&2; exit 2; }; shift 2;;
     *) echo "ERROR: unknown argument $1" >&2; exit 2;;
   esac
 done
 
-[[ -f "$ENV_FILE" ]] || { echo "ERROR: $ENV_FILE missing — run scripts/demo-up.sh first." >&2; exit 1; }
-KEY="$(grep "^$KEY_NAME=" "$ENV_FILE" | tail -1 | cut -d= -f2-)"
-[[ -n "$KEY" && "$KEY" != replace-with-* ]] || { echo "ERROR: no $KEY_NAME in $ENV_FILE — run scripts/demo-up.sh." >&2; exit 1; }
+if [[ -n "$FROM" ]]; then
+  fget() { grep "^$1=" "$FROM" | tail -1 | cut -d= -f2- || true; }
+  [[ -z "$(fget POS_VENUE)" || "$(fget POS_VENUE)" == "$TABLET_VENUE" ]] || { echo "ERROR: $FROM is for store '$(fget POS_VENUE)', this app is $TABLET_VENUE." >&2; exit 1; }
+  KEY="$(fget CLOUD_SYNC_API_KEY)"; SYNC_URL="$(fget CLOUD_SYNC_URL)"; PORTAL_URL="$(fget REPORTING_PORTAL_URL)"
+  PORTAL_URL="${PORTAL_URL:-$SYNC_URL}"
+  [[ -n "$KEY" && -n "$SYNC_URL" ]] || { echo "ERROR: $FROM has no CLOUD_SYNC_URL / CLOUD_SYNC_API_KEY." >&2; exit 1; }
+else
+  [[ -f "$ENV_FILE" ]] || { echo "ERROR: $ENV_FILE missing — run scripts/demo-up.sh first." >&2; exit 1; }
+  KEY="$(grep "^$KEY_NAME=" "$ENV_FILE" | tail -1 | cut -d= -f2-)"
+  [[ -n "$KEY" && "$KEY" != replace-with-* ]] || { echo "ERROR: no $KEY_NAME in $ENV_FILE — run scripts/demo-up.sh." >&2; exit 1; }
 
-LAN_IP="${LAN_IP:-$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)}"
-[[ -n "$LAN_IP" ]] || { echo "ERROR: no LAN IP on en0/en1; set LAN_IP=<this Mac's Wi-Fi address>." >&2; exit 1; }
-SYNC_URL="http://${LAN_IP}:8081"
-PORTAL_URL="http://${LAN_IP}:3000"
+  LAN_IP="${LAN_IP:-$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)}"
+  [[ -n "$LAN_IP" ]] || { echo "ERROR: no LAN IP on en0/en1; set LAN_IP=<this Mac's Wi-Fi address>." >&2; exit 1; }
+  SYNC_URL="http://${LAN_IP}:8081"
+  PORTAL_URL="http://${LAN_IP}:3000"
+fi
 
 if ! curl -fsS -m 5 "$SYNC_URL/health" >/dev/null 2>&1; then
   echo "WARN: $SYNC_URL/health does not answer from this Mac — is demo-up.sh running?" >&2
 fi
 
 if [[ "$MODE" == "--print" ]]; then
-  printf 'cloud.url=%s\ncloud.apiKey=%s…\nportal.url=%s\n' "$SYNC_URL" "${KEY:0:8}" "$PORTAL_URL"
+  printf 'cloud.url=%s\ncloud.apiKey=(set, not shown)\nportal.url=%s\n' "$SYNC_URL" "$PORTAL_URL"
   [[ -n "$INSTALL_ID" ]] && printf 'store.installId=%s\n' "$INSTALL_ID"
   exit 0
 fi

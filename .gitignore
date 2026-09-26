@@ -92,3 +92,6 @@ _handoff/
 # Local two-store demo runtime (Plateau desktop store DB, logs, pid)
 .demo/
 __pycache__/
+
+# Client portal instances: per-client settings + secrets (cloud/infra/new-client.sh)
+cloud/infra/clients/

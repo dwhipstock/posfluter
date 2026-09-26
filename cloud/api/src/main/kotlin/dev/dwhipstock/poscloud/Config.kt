@@ -24,6 +24,13 @@ data class CloudConfig(
     // polls don't count), and never live past the absolute cap regardless of activity.
     val sessionIdleMinutes: Long = env("PORTAL_SESSION_IDLE_MINUTES")?.toLongOrNull()?.takeIf { it > 0 } ?: 60,
     val sessionMaxHours: Long = env("PORTAL_SESSION_MAX_HOURS")?.toLongOrNull()?.takeIf { it > 0 } ?: 12,
+    // This deployment's tenant id. One client = one portal instance with its own
+    // database, so a database holds one tenant; the id only has to be stable for
+    // that database (never change it on an existing one). Default: the first
+    // client's id, which every existing database already uses.
+    val tenantId: String = env("TENANT_ID")
+        ?.also { require(TENANT_ID_RE.matches(it)) { "TENANT_ID must match ${TENANT_ID_RE.pattern}" } }
+        ?: Bootstrap.TENANT,
     // The group (tenant) name shown in the portal; synced onto the tenant row at boot.
     val venueName: String = env("VENUE_NAME") ?: "Copper Lantern",
     val venueTz: String = env("VENUE_TZ") ?: "America/New_York",
@@ -57,6 +64,9 @@ data class CloudConfig(
 
 /** One store (venue) the boot seed provisions for the tenant. */
 data class StoreSeed(val venueId: String, val name: String)
+
+/** A tenant id: lowercase letters, digits and dashes (it also names the client's portal instance). */
+internal val TENANT_ID_RE = Regex("^[a-z0-9][a-z0-9-]{1,39}$")
 
 /** The primary store's venue id (formerly "main"; migration 014 renames it). */
 const val PRIMARY_VENUE = "vieux-port"

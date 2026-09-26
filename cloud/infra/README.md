@@ -4,6 +4,36 @@ This directory contains generic infrastructure for deploying the POS cloud API,
 portal, and per-venue store services. It contains no production credentials or venue
 data.
 
+## One portal per client
+
+Each client (a restaurant group, a shop chain…) gets its **own** manager portal:
+own domain, sign-in, brand, languages, currency and database. The same two
+images (`pos-cloud-api`, `pos-cloud-web`) serve every client; everything
+client-specific is runtime config. Runbook: [`docs/new-client-in-a-day.md`](../../docs/new-client-in-a-day.md).
+
+| File | What it is |
+|---|---|
+| `docker-compose.client.yml` | ONE client: Postgres (own volume) + API + web. One compose project per client. |
+| `docker-compose.proxy.yml`, `Caddyfile.proxy`, `proxy.sh` | The shared edge proxy: one Caddy per box, ports 80/443, TLS, routes each client's hostname over the `pos-edge` network. |
+| `new-client.sh` | Provisions/updates a client: writes `clients/<id>/.env` (secrets generated, 600), `clients/<id>/compose.sh`, one `clients/<id>/stores/<venue>.env` per store, and `clients/proxy-sites/<id>.caddy`. Idempotent; `--dry-run`; never prints a secret. `--up` starts it and reloads the proxy. |
+| `sql/remove-venue.sql` | Removes one store and all its cloud data from a client's database (one transaction, counts before/after, rehearsal mode). |
+| `tests/new-client-test.sh` | Dry-run, idempotence, adoption and no-secret-output tests (CI). |
+| `../web/brands/<id>/` | Brand packs: `brand.json` (name, palette, font, shape, layout, locales, currency) + images. `PORTAL_BRAND` picks one; `PORTAL_BRAND_DIR` mounts a custom one. |
+
+`clients/` is gitignored: it holds each client's secrets. Back it up with the
+databases.
+
+```sh
+cloud/infra/proxy.sh up                                  # once per box
+cloud/infra/new-client.sh <id> <domain> … --dry-run      # read the plan
+cloud/infra/new-client.sh <id> <domain> … --up           # create/refresh the client
+cloud/infra/clients/<id>/compose.sh ps | logs -f api     # day to day
+```
+
+A client moves to a box of its own by copying `clients/<id>/` and its
+database, then running `proxy.sh up` and `clients/<id>/compose.sh up -d` there.
+Locally, `scripts/demo-clients.sh up --stores` runs two clients side by side.
+
 ## Components
 
 - `docker-compose.yml` runs PostgreSQL, the Kotlin cloud API, the web portal, and Caddy.
@@ -39,9 +69,10 @@ outbox. Upgrade the cloud API **before** the stores: an upgraded store asks
 until it is upgraded (cloud/CONTRACT.md §0), so `scripts/upgrade-venue.sh`'s
 sync-caught-up gate would fail and roll the venue back.
 
-## Independent manager portal
+## Independent manager portal (single-client, before the edge proxy)
 
-`docker-compose.manager.yml` runs a reporting-only deployment on its own host and
+Superseded by the per-client files above (the migration: `docs/hosted-client-split.md`);
+kept for rollback. `docker-compose.manager.yml` runs a reporting-only deployment on its own host and
 volumes. It uses immutable ECR image tags produced by the build workflow and the
 exact-host-only `Caddyfile.manager`, so it cannot intercept or modify existing venue
 store traffic. Set `REGISTRY`, `IMAGE_TAG`, `DOMAIN`, `LEGACY_DOMAIN`, `ACME_EMAIL`,

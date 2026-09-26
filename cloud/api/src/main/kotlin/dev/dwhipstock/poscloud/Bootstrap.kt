@@ -20,7 +20,8 @@ import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 
 /**
- * Idempotent boot seed (CONTRACT §6): tenant 'copperlantern' and its stores
+ * Idempotent boot seed (CONTRACT §6): the deployment's tenant ([CloudConfig.tenantId],
+ * default 'copperlantern') and its stores
  * ([CloudConfig.stores]; default: 'vieux-port' alone), plus each store's API key
  * and the portal admin when the env vars are set. Existing users are left
  * untouched; only their absence triggers creation. Stores not listed are never
@@ -28,6 +29,7 @@ import java.time.OffsetDateTime
  */
 object Bootstrap {
 
+    /** The default tenant id (TENANT_ID unset): the first client's, kept by every existing database. */
     const val TENANT = "copperlantern"
 
     private val log = LoggerFactory.getLogger(Bootstrap::class.java)
@@ -39,16 +41,17 @@ object Bootstrap {
     }
 
     fun run(config: CloudConfig): Unit = transaction {
+        val tenant = config.tenantId
         val now = dev.dwhipstock.poscloud.CloudTime.now()
         Tenants.insertIgnore {
-            it[id] = TENANT
+            it[id] = tenant
             it[name] = config.venueName
             it[createdAt] = now
         }
         // The group name follows env (VENUE_NAME) on every boot, like the store
         // names below: a tenant row seeded once under an older name would
         // otherwise keep showing it in the portal forever. Name only.
-        Tenants.update({ Tenants.id eq TENANT }) {
+        Tenants.update({ Tenants.id eq tenant }) {
             it[name] = config.venueName
             it[reportingCurrency] = config.reportingCurrency
         }
@@ -57,7 +60,7 @@ object Bootstrap {
             // defaults on the UPDATE path, which erased the store's subdomain,
             // install identity, heartbeat, and LAN URL on every API restart.
             Venues.insertIgnore {
-                it[tenantId] = TENANT
+                it[tenantId] = tenant
                 it[id] = store.venueId
                 it[name] = store.name
                 it[timezone] = config.storeZones[store.venueId] ?: config.venueTz
@@ -67,7 +70,7 @@ object Bootstrap {
             // defaulted VENUE_TZ must never silently re-zone a venue's history.
             // Currency, country and kind follow env too, but only for the stores
             // env names: an unlisted store keeps what it has (CAD, CA, restaurant).
-            Venues.update({ (Venues.tenantId eq TENANT) and (Venues.id eq store.venueId) }) {
+            Venues.update({ (Venues.tenantId eq tenant) and (Venues.id eq store.venueId) }) {
                 it[name] = store.name
                 config.storeCurrencies[store.venueId]?.let { c -> it[currency] = c }
                 config.storeCountries[store.venueId]?.let { c -> it[country] = c }
@@ -81,7 +84,7 @@ object Bootstrap {
                 return@forEach
             }
             StoreApiKeys.insertIgnore {
-                it[tenantId] = TENANT
+                it[tenantId] = tenant
                 it[StoreApiKeys.venueId] = venueId
                 it[keySha256] = sha256Hex(key)
                 it[label] = "bootstrap"
@@ -92,11 +95,11 @@ object Bootstrap {
         val password = config.adminPassword
         if (email != null && password != null) {
             val exists = PortalUsers.selectAll().where {
-                (PortalUsers.tenantId eq TENANT) and (PortalUsers.email eq email)
+                (PortalUsers.tenantId eq tenant) and (PortalUsers.email eq email)
             }.any()
             if (!exists) {
                 PortalUsers.insert {
-                    it[tenantId] = TENANT
+                    it[tenantId] = tenant
                     it[PortalUsers.email] = email
                     it[passwordHash] = hashPassword(password)
                     it[totpEnabled] = false // forces TOTP enrollment at first login
@@ -107,7 +110,7 @@ object Bootstrap {
         }
         config.resetTotpEmail?.let { resetEmail ->
             val users = PortalUsers.selectAll().where {
-                (PortalUsers.tenantId eq TENANT) and (PortalUsers.email eq resetEmail)
+                (PortalUsers.tenantId eq tenant) and (PortalUsers.email eq resetEmail)
             }.map { it[PortalUsers.id] }
             users.forEach { userId ->
                 PortalUsers.update({ PortalUsers.id eq userId }) {
@@ -115,7 +118,7 @@ object Bootstrap {
                     it[totpSecret] = null
                 }
                 PortalBackupCodes.deleteWhere {
-                    (PortalBackupCodes.tenantId eq TENANT) and (PortalBackupCodes.userId eq userId)
+                    (PortalBackupCodes.tenantId eq tenant) and (PortalBackupCodes.userId eq userId)
                 }
             }
             if (users.isEmpty()) log.warn("RESET_TOTP_EMAIL='$resetEmail' matched no portal user")

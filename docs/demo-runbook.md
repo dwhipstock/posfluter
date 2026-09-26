@@ -224,8 +224,22 @@ set as the deployment target; the stock app never uses it); the camera on a
 real iPhone; the Local Network prompt appearing on first discovery; and the
 app icon (still Flutter's default on iOS).
 
-### The portal with two currencies
+### Its own portal
 
+Sage & Poppy is its own client with its **own** portal (its own address,
+sign-in, look, US$ and English/Spanish), not a store inside Copper Lantern's.
+To see the two side by side on this Mac: `scripts/demo-clients.sh up --stores`
+→ `http://cpr.localhost:8088` and `http://sp.localhost:8088`
+(docs/new-client-in-a-day.md). To point the Mac's Sage & Poppy store at its
+own portal: `scripts/demo-point-store.sh sage-poppy --hosted|--local <store file> --yes`
+(the store file comes from `cloud/infra/new-client.sh`; add `--resend` for a
+new, empty portal). `scripts/demo-up.sh` can do the same for its store with
+`SAGE_POPPY_SYNC_URL=… SAGE_POPPY_API_KEY_FILE=<store file>`.
+
+### The portal with two currencies (a multi-currency client)
+
+The legacy single-portal demo (`scripts/demo-up.sh`) still puts all three
+stores in one tenant; a real multi-currency client would look like this.
 "All stores" never adds CAD and USD together: each store is shown exactly in
 its own currency (US$ / CA$), the headline figures have exact per-currency
 rows, and the combined figure is an **approximate** CAD total at the fixed

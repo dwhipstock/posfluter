@@ -1,0 +1,48 @@
+# The shared EDGE PROXY: one Caddy per box, in front of every client portal on
+# that box. It owns ports 80/443 and TLS (Let's Encrypt, one HTTP-01 cert per
+# hostname), and routes each client's hostname to that client's api/web over
+# the shared `pos-edge` network. It holds no client data and no secrets.
+#
+# Sites live one file per client in clients/proxy-sites/<client-id>.caddy
+# (written by new-client.sh). Adding or changing a client is a graceful
+# `caddy reload` — no restart, no dropped connections for the other clients:
+#
+#   cloud/infra/proxy.sh up       # create the network, start the proxy (idempotent)
+#   cloud/infra/proxy.sh reload   # pick up new/changed site files
+#
+# Settings come from clients/proxy.env (proxy.sh writes a default one):
+# ACME_EMAIL, HTTP_PORT / HTTPS_PORT (80/443 on a server; e.g. 8088 locally),
+# CADDY_DATA_VOLUME (certificates; point it at an existing Caddy's data volume
+# to keep its certificates), PROXY_IMAGE.
+name: pos-proxy
+
+services:
+  proxy:
+    image: "${PROXY_IMAGE:-caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648}"
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      ACME_EMAIL: "${ACME_EMAIL:?set ACME_EMAIL in clients/proxy.env (the Lets Encrypt contact address)}"
+    volumes:
+      - ./Caddyfile.proxy:/etc/caddy/Caddyfile:ro
+      - "${SITES_DIR:-./clients/proxy-sites}:/etc/caddy/sites:ro"
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+
+networks:
+  edge:
+    external: true
+    name: "${EDGE_NETWORK:-pos-edge}"
+
+volumes:
+  # external: proxy.sh creates it (or adopts an existing Caddy's) — compose
+  # never recreates the certificate store
+  caddy_data:
+    external: true
+    name: "${CADDY_DATA_VOLUME:-pos-proxy_caddy_data}"
+  caddy_config:

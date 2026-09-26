@@ -1,0 +1,116 @@
+# ONE CLIENT'S manager portal: its own Postgres (own volume), cloud API and web
+# portal. Every client runs this same file with the same images; everything that
+# makes a client itself — name, stores, keys, currency, brand, domain — is in
+# its own env file (clients/<client-id>/.env, written by new-client.sh).
+#
+#   docker compose -p <project> --env-file clients/<id>/.env -f docker-compose.client.yml up -d
+#
+# (new-client.sh --up runs exactly that.) There is no Caddy here: the shared
+# edge proxy (docker-compose.proxy.yml) routes each client's hostname to its
+# api/web over the shared `pos-edge` network, where this client's containers
+# answer as <CLIENT_ID>-api and <CLIENT_ID>-web. Clients never share a
+# database, a network alias or a volume. The same files move a client to a box
+# of its own: copy clients/<id>/, run the proxy and this file there.
+#
+# Deploys are stop-then-start for the api (never two APIs on one database; see
+# README "Deploying a new cloud API") — `up -d` recreating the api does exactly
+# that.
+
+services:
+  db:
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pos_cloud
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD in the client .env}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos_cloud"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  api:
+    image: "${API_IMAGE:-${REGISTRY:?set REGISTRY (or API_IMAGE) in the client .env}/pos-cloud-api:${IMAGE_TAG:?set IMAGE_TAG in the client .env}}"
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "jdbc:postgresql://db:5432/pos_cloud"
+      DB_USER: pos
+      DB_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD in the client .env}"
+      PORT: "8081"
+      MIGRATIONS_DIR: /app/migrations
+      # the client: its tenant id (fixed for the life of its database) and name
+      TENANT_ID: "${TENANT_ID:?set TENANT_ID in the client .env}"
+      VENUE_NAME: "${VENUE_NAME:?set VENUE_NAME in the client .env}"
+      VENUE_TZ: "${VENUE_TZ:-America/New_York}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:?set ADMIN_EMAIL in the client .env}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in the client .env}"
+      TOTP_REQUIRED: "${TOTP_REQUIRED:-true}"
+      RESET_TOTP_EMAIL: "${RESET_TOTP_EMAIL:-}"
+      # its stores: "<venueId>=<name>,…" (first = primary, gets STORE_API_KEY)
+      STORES: "${STORES:?set STORES in the client .env}"
+      STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in the client .env}"
+      STORE_API_KEYS: "${STORE_API_KEYS:-}"
+      STORE_ZONES: "${STORE_ZONES:-}"
+      STORE_CURRENCIES: "${STORE_CURRENCIES:-}"
+      STORE_COUNTRIES: "${STORE_COUNTRIES:-}"
+      RETAIL_STORES: "${RETAIL_STORES:-}"
+      # a single-currency client reports in its own currency; the fixed rates
+      # only matter to a client with stores in several currencies
+      REPORTING_CURRENCY: "${REPORTING_CURRENCY:-CAD}"
+      FX_USD_CAD: "${FX_USD_CAD:-}"
+      FX_CAD_USD: "${FX_CAD_USD:-}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-true}"
+      PORTAL_SESSION_IDLE_MINUTES: "${PORTAL_SESSION_IDLE_MINUTES:-60}"
+      PORTAL_SESSION_MAX_HOURS: "${PORTAL_SESSION_MAX_HOURS:-12}"
+      PUBLIC_BASE_DOMAIN: "${PUBLIC_BASE_DOMAIN:-}"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      default: {}
+      edge:
+        aliases: ["${CLIENT_ID:?set CLIENT_ID in the client .env}-api"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  web:
+    image: "${WEB_IMAGE:-${REGISTRY:?set REGISTRY (or WEB_IMAGE) in the client .env}/pos-cloud-web:${WEB_IMAGE_TAG:-${IMAGE_TAG:?set IMAGE_TAG in the client .env}}}"
+    restart: unless-stopped
+    environment:
+      API_ORIGIN: "http://api:8081"
+      # the portal's look, chosen at run time: a brand pack shipped in the image
+      # (cloud/web/brands/<PORTAL_BRAND>), or a pack mounted at /brand
+      # (clients/<id>/compose.override.yml, written by new-client.sh --brand-dir)
+      PORTAL_BRAND: "${PORTAL_BRAND:?set PORTAL_BRAND in the client .env}"
+      PORTAL_BRAND_DIR: "${PORTAL_BRAND_DIR_IN_CONTAINER:-}"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      default: {}
+      edge:
+        aliases: ["${CLIENT_ID:?set CLIENT_ID in the client .env}-web"]
+
+networks:
+  # private to this client (db ↔ api ↔ web)
+  default: {}
+  # shared with the edge proxy only
+  edge:
+    external: true
+    name: "${EDGE_NETWORK:-pos-edge}"
+
+volumes:
+  # created by new-client.sh (docker volume create) and never by compose, so
+  # compose can never offer to recreate it; an adopted client points this at
+  # the Postgres volume it already has
+  pgdata:
+    external: true
+    name: "${PG_VOLUME:?set PG_VOLUME in the client .env}"

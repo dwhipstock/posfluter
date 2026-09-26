@@ -142,6 +142,43 @@ class StoreProvisioningTest {
     }
 
     @Test
+    fun aClientInstanceSeedsItsOwnTenantAndItsStoreKeysResolveToIt() = testApplication {
+        // a second client's portal instance: its own database, its own tenant id
+        val config = TestSupport.config.copy(
+            tenantId = "sagepoppy",
+            venueName = "Sage & Poppy",
+            storeApiKey = "key-sp",
+            stores = listOf(StoreSeed("sage-poppy", "Sage & Poppy Bottle Shop")),
+            storeCurrencies = mapOf("sage-poppy" to "USD"),
+            reportingCurrency = "USD",
+        )
+        application { module(config) }
+        startApplication()
+        transaction {
+            val tenants = dev.dwhipstock.poscloud.db.Tenants.selectAll().map { it[dev.dwhipstock.poscloud.db.Tenants.id] }
+            assertEquals(listOf("sagepoppy"), tenants)
+            val v = Venues.selectAll().single()
+            assertEquals("sagepoppy", v[Venues.tenantId])
+            assertEquals("USD", v[Venues.currency])
+            assertEquals("sagepoppy", StoreApiKeys.selectAll().single()[StoreApiKeys.tenantId])
+        }
+        ingest("key-sp", event("check.closed", checkClosedPayload(1, 2599, storeTax(2599)), seq = 1))
+        transaction {
+            val c = Checks.selectAll().single()
+            assertEquals("sagepoppy", c[Checks.tenantId])
+            assertEquals("sage-poppy", c[Checks.venueId])
+        }
+    }
+
+    @Test
+    fun tenantIdMustBeASlug() {
+        assertTrue(TENANT_ID_RE.matches("sagepoppy"))
+        assertTrue(TENANT_ID_RE.matches("copperlantern"))
+        assertTrue(!TENANT_ID_RE.matches("Sage Poppy"))
+        assertTrue(!TENANT_ID_RE.matches("x"))
+    }
+
+    @Test
     fun storeListParsesInOrder() {
         assertEquals(linkedMapOf("vieux-port" to "Copper Lantern — Vieux-Port", "plateau" to "Copper Lantern — Plateau"),
             parsePairs(" vieux-port=Copper Lantern — Vieux-Port , plateau=Copper Lantern — Plateau,,junk"))
