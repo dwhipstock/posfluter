@@ -18,6 +18,12 @@
 # LT_PORTAL_DAYS=365 LT_PORTAL_SALES_PER_DAY=100 LT_SOAK_MINUTES=120 LT_JFR=1 (CPU profiles)
 set -euo pipefail
 
+# A Mac left alone goes to sleep and freezes every process for minutes, which
+# looks exactly like a server stall: keep it awake for the whole run.
+if [[ "$(uname)" == Darwin && -z "${LT_CAFFEINATED:-}" ]] && command -v caffeinate >/dev/null; then
+  LT_CAFFEINATED=1 exec caffeinate -dimsu "$0" "$@"
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 WORK="${LOADTEST_DIR:-$REPO_ROOT/.loadtest}"

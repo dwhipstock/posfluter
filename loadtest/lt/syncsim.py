@@ -176,8 +176,13 @@ def worker(args: dict) -> dict:
         status, ms, resp = st.push(body)
         record(status, ms, resp)
         if status != 200:
+            st.failures = getattr(st, "failures", 0) + 1
+            if 400 <= status < 500 or st.failures > 60:
+                st.pending = []  # refused (e.g. install_mismatch): a real store halts; so does this one
+                return False
             st.pending = batch + st.pending  # the store keeps it and retries next tick
             return False
+        st.failures = 0
         r = st.rng.random()
         if r < args.get("resend", 0):
             # a lost acknowledgement: the store sends the same batch again

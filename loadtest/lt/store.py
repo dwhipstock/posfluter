@@ -156,6 +156,8 @@ class Restaurant:
                         c.login(MANAGER)
                     board = c.call("GET", "/kitchen/board", name="GET /kitchen/board")
                     for card in (board.get("cards") or []):
+                        if stop.is_set():
+                            break
                         if card.get("checkId") and card.get("stationId"):
                             c.call("POST", "/kitchen/board/bump",
                                    {"checkId": card["checkId"], "stationId": card["stationId"]},

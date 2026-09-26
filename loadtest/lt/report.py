@@ -47,8 +47,27 @@ FIXES = [
      "With 27 staff, a manager-PIN approval did 27 bcrypt checks (~0.8 s) while holding the database.",
      "An approval does 1-2 checks; other devices keep selling during a sign-in.",
      "`server/.../base/AuthService.kt`, test `PinCheckOutsideTransactionTest`"),
+    ("The portal's \"All stores\" dashboard crashed the cloud API with 200 stores",
+     "Every dashboard call read every sale in range into the API (512 MB) and added them up there. It "
+     "now asks Postgres for the sums, grouped by store and business day (or hour, tender type, item), "
+     "and does the same per-currency arithmetic on those; a new index covers sales by store and closing "
+     "time. The reports that still add up single sales (categories, fuel, tables, exceptions) now answer "
+     "\"too many sales, pick fewer days or one store\" above 150,000 sales instead of crashing.",
+     "200 stores, one busy day (111,000 sales): the API ran out of memory and restarted, for every range.",
+     "Same database: today 7 s, 30 days 30 s, a year 72 s; one store, any range, under 0.4 s; no crash.",
+     "`cloud/api/.../reports/Reports.kt`, `cloud/migrations/025_report_indexes.sql`, test `ReportScaleTest`"),
 ]
 FINDINGS = [
+    ("All-stores reports over long ranges are slow on a small database",
+     "With 200 stores × a year (7.3 million sales, ~11 GB) on a 2-CPU / 2 GB Postgres, the all-stores "
+     "dashboard reads gigabytes for a year (see section 4). The next step, if clients this size are "
+     "expected, is a daily roll-up table per store kept up to date on ingest, and a bigger database "
+     "box; the fuel/margin, categories and tables reports should move to summed queries too (today "
+     "they refuse more than 150,000 sales in scope, so the gas station fuel card on an all-stores "
+     "dashboard shows that message for long ranges)."),
+    ("Leave a Mac awake during a load test",
+     "A Mac left alone goes to sleep and freezes every process for minutes, which looks exactly like "
+     "a server stall (it did, on the first run). `scripts/load-test.sh` now runs under `caffeinate`."),
     ("The sync outbox is most of the store's database",
      "Every event a store sends to its portal stays in `sync_outbox` after the portal has it. In these "
      "runs it is 65-85% of the file. It is harmless for years on a tablet, but backups and copies grow "
