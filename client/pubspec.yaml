@@ -82,6 +82,7 @@ flutter:
     - assets/sage_poppy_mark.png
     - assets/fonts/OFL-Inter.txt
     - assets/fonts/OFL-NotoSans.txt
+    - assets/fonts/OFL-PlusJakartaSans.txt
 
   # Bundled, never fetched: the terminal must render identically offline.
   fonts:
@@ -97,6 +98,19 @@ flutter:
     - family: NotoSans
       fonts:
         - asset: assets/fonts/NotoSans-Regular.ttf
+    # Sage & Poppy's own type (its brand skin): a geometric grotesk, OFL,
+    # Latin subset (English + Spanish); Noto Sans covers anything else.
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-400.ttf
+        - asset: assets/fonts/PlusJakartaSans-500.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-600.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-700.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-800.ttf
+          weight: 800
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

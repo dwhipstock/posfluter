@@ -339,9 +339,20 @@ fun Application.module(
         // inside and drives the gated ordering API with the returned bearer token.
         // Read once — the resource is baked into the jar, and re-reading the
         // 50KB file per request showed up as the slowest route in the logs.
-        val staffAppHtml = StoreAssets.readText("staff-app.html")
+        // The brand skin dresses it: Sage & Poppy's own colours, type and sign-in.
+        val staffAppHtml = StaffAppBrand.apply(StoreAssets.readText("staff-app.html"), config.brand)
         get("/staff-app") {
             call.respondText(staffAppHtml, ContentType.Text.Html)
+        }
+        get("/staff-app/fonts/{file}") {
+            val file = call.parameters["file"]!!
+            val bytes = file.takeIf { it.matches(Regex("[A-Za-z0-9-]+\\.ttf")) }
+                ?.let { StoreAssets.readBytesOrNull("staff-app-fonts/$it") }
+            if (bytes == null) call.respond(HttpStatusCode.NotFound)
+            else {
+                call.response.header(HttpHeaders.CacheControl, "public, max-age=604800")
+                call.respondBytes(bytes, ContentType("font", "ttf"))
+            }
         }
         customerRoutes(checkService, config)
         tableLinkRoutes(config)

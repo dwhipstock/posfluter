@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
+import '../app_mode.dart';
+import '../design/skin.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
 import '../widgets/brand.dart';
 import '../widgets/pin_pad.dart';
 import '../home.dart';
+import '../retail/retail_i18n.dart';
 import '../retail/sp_theme.dart';
 
 /// "Who's clocking in?" — staff tiles + a big centered PIN pad. Nothing else.
+///
+/// The brand skin composes it: the pubs' brand panel beside the pad, or Sage
+/// & Poppy's single airy column (greeting, staff as avatar chips, round keys).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -76,6 +82,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (BrandSkin.of(context).login == LoginLayout.centeredStack) {
+      return _airy(context);
+    }
     return Scaffold(
       body: LayoutBuilder(
         builder: (context, c) {
@@ -170,6 +179,253 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ---- Sage & Poppy: one airy column ----
+
+  Widget _airy(BuildContext context) {
+    final r = R.of(context);
+    final c = SpColors.of(context);
+    final s = BrandSkin.of(context);
+    final selected = _staff.where((x) => x.id == _selected).firstOrNull;
+    return Scaffold(
+      backgroundColor: c.background,
+      body: LayoutBuilder(
+        builder: (context, box) {
+          final phone = box.maxWidth < 700;
+          final tall = box.maxHeight >= 760;
+          final keySize = phone
+              ? const Size(72, 72)
+              : Size.square(tall ? 78 : 70);
+          final pad = Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 26,
+                child: Text(
+                  _error ??
+                      (selected == null
+                          ? r.enterPin
+                          : r.hello(selected.name.split(' ').first)),
+                  style: s.text(
+                    size: 16,
+                    weight: FontWeight.w700,
+                    color: _error != null ? c.bad : c.textMuted,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              PinPad(key: _padKey, onComplete: _tryLogin, keySize: keySize),
+            ],
+          );
+          final staff = Wrap(
+            alignment: WrapAlignment.center,
+            spacing: phone ? 10 : 18,
+            runSpacing: 12,
+            children: [for (final x in _staff) _avatarChip(context, x, phone)],
+          );
+          final header = Padding(
+            padding: EdgeInsets.fromLTRB(
+              phone ? 20 : 32,
+              18,
+              phone ? 12 : 24,
+              0,
+            ),
+            child: Row(
+              children: [
+                BrandLogo(size: phone ? 40 : 46),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sage & Poppy',
+                        style: s.text(
+                          size: phone ? 19 : 21,
+                          weight: FontWeight.w800,
+                          color: c.text,
+                        ),
+                      ),
+                      Text(
+                        AppMode.isStock ? r.stockApp : r.storeLine,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: s.text(
+                          size: 13,
+                          weight: FontWeight.w600,
+                          color: c.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const LangActions(),
+              ],
+            ),
+          );
+          final greeting = Column(
+            children: [
+              Text(
+                r.welcome,
+                textAlign: TextAlign.center,
+                style: s.text(
+                  size: phone ? 30 : 38,
+                  weight: FontWeight.w800,
+                  color: c.strong,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                r.signInHint,
+                textAlign: TextAlign.center,
+                style: s.text(size: phone ? 15 : 17, color: c.textMuted),
+              ),
+            ],
+          );
+          return Stack(
+            children: [
+              // a sun low on the horizon: two soft discs, poppy and sage
+              Positioned(
+                right: -box.maxWidth * .12,
+                top: -box.maxWidth * .16,
+                child: _disc(box.maxWidth * .42, c.sageMist),
+              ),
+              Positioned(
+                left: -box.maxWidth * .08,
+                bottom: -box.maxWidth * .14,
+                child: _disc(box.maxWidth * .3, c.poppySoft),
+              ),
+              SafeArea(
+                child: Column(
+                  children: [
+                    header,
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          child: phone || !tall
+                              ? Column(
+                                  children: [
+                                    greeting,
+                                    SizedBox(height: phone ? 22 : 18),
+                                    if (_staff.isNotEmpty) ...[
+                                      staff,
+                                      SizedBox(height: phone ? 24 : 18),
+                                    ],
+                                    pad,
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    greeting,
+                                    const SizedBox(height: 26),
+                                    if (_staff.isNotEmpty) ...[
+                                      staff,
+                                      const SizedBox(height: 26),
+                                    ],
+                                    pad,
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Text(
+                        AppMode.isStock ? r.storeLine : r.registerLine,
+                        style: s.text(
+                          size: 12.5,
+                          weight: FontWeight.w600,
+                          color: c.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _disc(double d, Color color) => IgnorePointer(
+    child: Container(
+      width: d,
+      height: d,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    ),
+  );
+
+  Widget _avatarChip(BuildContext context, Staff x, bool phone) {
+    final r = R.of(context);
+    final c = SpColors.of(context);
+    final s = BrandSkin.of(context);
+    final on = _selected == x.id;
+    final initials = x.name
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w[0].toUpperCase())
+        .join();
+    return Material(
+      color: on ? c.selectedFill : c.surface,
+      shape: const StadiumBorder(),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: () => setState(() => _selected = x.id),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(6, 6, phone ? 14 : 20, 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: phone ? 20 : 24,
+                backgroundColor: on ? c.surface : c.sageMist,
+                child: Text(
+                  initials,
+                  style: s.text(
+                    size: phone ? 14 : 16,
+                    weight: FontWeight.w800,
+                    color: c.strong,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    x.name,
+                    style: s.text(
+                      size: phone ? 14.5 : 16,
+                      weight: FontWeight.w700,
+                      color: on ? c.onSelected : c.text,
+                    ),
+                  ),
+                  Text(
+                    r.role(x.role),
+                    style: s.text(
+                      size: 12,
+                      weight: FontWeight.w600,
+                      color: on
+                          ? c.onSelected.withValues(alpha: .8)
+                          : c.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

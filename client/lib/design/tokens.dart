@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'skin.dart';
+
 /// Design tokens — the single source of visual truth for The Copper Lantern
 /// Pub terminal: the logo's deep navy as the primary, warm cream surfaces, and
 /// a copper accent kept for the few things that must pop (Pay, the selected
@@ -98,13 +100,18 @@ abstract final class T {
   static const fontFamily = 'Inter';
   static const _fallback = ['NotoSans'];
 
+  /// The family [text] draws with: Inter, unless the store's brand skin
+  /// brings its own (set by that brand's theme builder; the pubs' theme puts
+  /// Inter back, so their screens are unchanged).
+  static String family = fontFamily;
+
   /// Body text: Inter with Noto Sans fallback for any glyph Inter lacks.
   static TextStyle text({
     double size = bodySize,
     FontWeight weight = FontWeight.w400,
     Color color = textPrimary,
   }) => TextStyle(
-    fontFamily: fontFamily,
+    fontFamily: family,
     fontFamilyFallback: _fallback,
     fontSize: size,
     fontWeight: weight,
@@ -142,6 +149,7 @@ abstract final class T {
 /// App-wide theme assembled from the tokens: navy primary, cream surfaces,
 /// 1px borders instead of heavy shadows, 8px default radius, 56pt touch minimums.
 ThemeData buildPosTheme() {
+  T.family = T.fontFamily;
   final textTheme = TextTheme(
     bodyLarge: T.text(),
     bodyMedium: T.text(),
@@ -190,6 +198,8 @@ ThemeData buildPosTheme() {
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
+    // the pubs' skin: the same tokens as above (a no-op for their screens)
+    extensions: [BrandSkin.copper],
     fontFamily: T.fontFamily,
     fontFamilyFallback: const ['NotoSans'],
     scaffoldBackgroundColor: T.background,

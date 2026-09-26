@@ -17,6 +17,11 @@ object StoreAssets {
 
     fun list(path: String): List<String>? = source?.list(path)
 
+    /** Null when the resource is missing (a font the page asked for by name). */
+    fun readBytesOrNull(path: String): ByteArray? =
+        (source?.let { runCatching { it.open(path) }.getOrNull() }
+            ?: StoreAssets::class.java.classLoader.getResourceAsStream(path))?.use { it.readBytes() }
+
     fun readText(path: String): String =
         (source?.open(path) ?: checkNotNull(StoreAssets::class.java.classLoader.getResourceAsStream(path)) {
             "missing store resource: $path"
