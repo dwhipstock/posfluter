@@ -84,21 +84,38 @@ class AuthService(
     private fun idleMinutes(): Long =
         settings?.get()?.sessionIdleMinutes?.toLong() ?: DEFAULT_IDLE_MINUTES
 
-    fun login(pin: String, deviceId: String? = null): AuthUser? = transaction {
+    fun login(pin: String, deviceId: String? = null): AuthUser? {
         rateLimiter.checkNotLocked()
-        val user = activeUserByPin(pin)
-        if (user == null) {
-            rateLimiter.recordFailure()
-            return@transaction null
-        }
-        rateLimiter.recordSuccess()
-        issueSession(user, deviceId)
+        val uid = userIdByPin(pin)
+        val user = uid?.let { id -> transaction { activeUser(id)?.let { issueSession(it, deviceId) } } }
+        if (user == null) rateLimiter.recordFailure() else rateLimiter.recordSuccess()
+        return user
     }
 
-    /** Active, non-deleted staff whose PIN matches (tablet-managed, CONTRACT §7). */
-    private fun activeUserByPin(pin: String): ResultRow? =
-        Users.selectAll().where { (Users.active eq true) and Users.deletedAt.isNull() }
-            .firstOrNull { verifyPin(pin, it[Users.pin]) }
+    /**
+     * The id of the active, non-deleted staff member (tablet-managed, CONTRACT §7)
+     * whose PIN this is, among those [candidates] keeps (all by default).
+     *
+     * The hashes are read in a short transaction and compared after it has
+     * ended. A bcrypt check costs tens of milliseconds per staff member, and the
+     * store runs one transaction at a time ([dev.dwhipstock.pos.db.OneWriterDataSource]),
+     * so comparing inside the transaction held every other device up for the
+     * whole scan on every sign-in and manager approval (load test,
+     * docs/load-test-report.md). PINs are unique, so the first match is the one.
+     */
+    private fun userIdByPin(pin: String, candidates: (ResultRow) -> Boolean = { true }): String? {
+        val hashes = transaction {
+            Users.selectAll().where { (Users.active eq true) and Users.deletedAt.isNull() }
+                .filter(candidates)
+                .map { it[Users.id] to it[Users.pin] }
+        }
+        return hashes.firstOrNull { (_, hash) -> verifyPin(pin, hash) }?.first
+    }
+
+    /** The staff member's row if still active (inside a transaction): the PIN was checked outside it. */
+    private fun activeUser(id: String): ResultRow? =
+        Users.selectAll().where { (Users.id eq id) and (Users.active eq true) and Users.deletedAt.isNull() }
+            .firstOrNull()
 
     /**
      * Mint a new session for [user] and return the AuthUser. Prior sessions stay
@@ -149,10 +166,15 @@ class AuthService(
      *   - "enroll" : no activated authenticator yet → returns the otpauth URI + secret
      *                for the QR; the app collects the first code to activate.
      */
-    fun staffAppBegin(pin: String, deviceTokens: List<String>): StaffAppBegin? = transaction {
+    fun staffAppBegin(pin: String, deviceTokens: List<String>): StaffAppBegin? {
         rateLimiter.checkNotLocked()
-        val user = activeUserByPin(pin)
-        if (user == null) { rateLimiter.recordFailure(); return@transaction null }
+        val uid = userIdByPin(pin)
+        return transaction { staffAppBeginTx(uid, deviceTokens) }
+    }
+
+    private fun staffAppBeginTx(verifiedId: String?, deviceTokens: List<String>): StaffAppBegin? {
+        val user = verifiedId?.let(::activeUser)
+        if (user == null) { rateLimiter.recordFailure(); return null }
         val uid = user[Users.id]
 
         // staff.app.mfa=off (store config; default on). Keep the
@@ -160,14 +182,14 @@ class AuthService(
         // data intact so turning it back on requires it at the next login.
         if (!staffAppMfaRequired) {
             rateLimiter.recordSuccess()
-            return@transaction StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))
+            return StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))
         }
 
         // A still-trusted device completes the login now (PIN only). Clearing the
         // failure counter is correct HERE because authentication is complete.
         if (deviceTokens.any { consumeTrustedDevice(uid, it) }) {
             rateLimiter.recordSuccess()
-            return@transaction StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))
+            return StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))
         }
 
         // The PIN is correct but a TOTP factor is still required — deliberately do
@@ -176,7 +198,7 @@ class AuthService(
         // lockout between code guesses and brute-force the second factor.
         val existing = StaffTotp.selectAll().where { StaffTotp.userId eq uid }.firstOrNull()
         if (existing != null && existing[StaffTotp.activatedAt] != null)
-            return@transaction StaffAppBegin("totp")
+            return StaffAppBegin("totp")
 
         // not yet enrolled: reuse the pending secret if one exists (stable QR) else mint one
         val secret = existing?.get(StaffTotp.secret) ?: Totp.newSecret().also { s ->
@@ -186,7 +208,7 @@ class AuthService(
                 it[createdAt] = VenueClock.now()
             }
         }
-        StaffAppBegin("enroll",
+        return StaffAppBegin("enroll",
             otpauthUri = Totp.otpauthUri("Copper Lantern POS", user[Users.name], secret),
             secret = secret, accountName = user[Users.name])
     }
@@ -197,10 +219,15 @@ class AuthService(
      * THIS device. Returns null on a bad PIN (→ 401); throws (invalid_totp) on a bad
      * code so the app keeps the code field for a retry.
      */
-    fun staffAppTotp(pin: String, code: String): StaffAppSession? = transaction {
+    fun staffAppTotp(pin: String, code: String): StaffAppSession? {
         rateLimiter.checkNotLocked()
-        val user = activeUserByPin(pin)
-        if (user == null) { rateLimiter.recordFailure(); return@transaction null }
+        val verifiedId = userIdByPin(pin)
+        return transaction { staffAppTotpTx(verifiedId, code) }
+    }
+
+    private fun staffAppTotpTx(verifiedId: String?, code: String): StaffAppSession? {
+        val user = verifiedId?.let(::activeUser)
+        if (user == null) { rateLimiter.recordFailure(); return null }
         val uid = user[Users.id]
         val row = StaffTotp.selectAll().where { StaffTotp.userId eq uid }.firstOrNull()
         val step = row?.let { Totp.matchingCounter(it[StaffTotp.secret], code) }
@@ -225,7 +252,7 @@ class AuthService(
             it[createdAt] = now
             it[expiresAt] = expires
         }
-        StaffAppSession(authUser, devToken, VenueClock.iso(expires))
+        return StaffAppSession(authUser, devToken, VenueClock.iso(expires))
     }
 
     /** True if [token] is a live (unexpired) trusted device for [userId]; touches it. */
@@ -319,19 +346,23 @@ class AuthService(
     }
 
     /** Staff change their own PIN; current PIN re-verified, attempts rate-limited. */
-    fun changePin(userId: String, currentPin: String, newPin: String): Unit = transaction {
+    fun changePin(userId: String, currentPin: String, newPin: String) {
         require(newPin.length == 4 && newPin.all { it.isDigit() }) { "PIN must be 4 digits" }
         rateLimiter.checkNotLocked()
-        val user = Users.selectAll().where { Users.id eq userId }.first()
-        if (!verifyPin(currentPin, user[Users.pin])) {
+        // bcrypt outside the transaction (see userIdByPin)
+        val current = transaction { Users.selectAll().where { Users.id eq userId }.first()[Users.pin] }
+        if (!verifyPin(currentPin, current)) {
             rateLimiter.recordFailure()
             throw IllegalArgumentException("current PIN is incorrect")
         }
         rateLimiter.recordSuccess()
-        Users.update({ Users.id eq userId }) { it[pin] = hashPin(newPin) }
-        Outbox.write("user.pin_changed", "user", userId, buildJsonObject {
-            put("userId", userId)
-        })
+        val hashed = hashPin(newPin)
+        transaction {
+            Users.update({ Users.id eq userId }) { it[pin] = hashed }
+            Outbox.write("user.pin_changed", "user", userId, buildJsonObject {
+                put("userId", userId)
+            })
+        }
     }
 
     /**
@@ -339,13 +370,11 @@ class AuthService(
      * staff member's screen. Returns the approver's user id, or null.
      * Shares the terminal-wide rate limit with login.
      */
-    fun verifyManagerPin(pin: String): String? = transaction {
+    fun verifyManagerPin(pin: String): String? {
         rateLimiter.checkNotLocked()
-        val manager = Users.selectAll()
-            .where { (Users.role eq "MANAGER") and (Users.active eq true) and Users.deletedAt.isNull() }
-            .firstOrNull { verifyPin(pin, it[Users.pin]) }
+        val manager = userIdByPin(pin) { it[Users.role] == "MANAGER" }
         if (manager == null) rateLimiter.recordFailure() else rateLimiter.recordSuccess()
-        manager?.get(Users.id)
+        return manager
     }
 
     /**
@@ -354,15 +383,14 @@ class AuthService(
      * default, but the owner can revoke or grant it). Returns the approver's id or
      * null. Shares the terminal-wide rate limit with login.
      */
-    fun verifyApproverPin(pin: String?, permission: String): String? = transaction {
-        if (pin == null) return@transaction null
+    fun verifyApproverPin(pin: String?, permission: String): String? {
+        if (pin == null) return null
         rateLimiter.checkNotLocked()
-        val approver = Users.selectAll()
-            .where { (Users.active eq true) and Users.deletedAt.isNull() }
-            .filter { verifyPin(pin, it[Users.pin]) }
-            .firstOrNull { GrantsRepo.has(it[Users.id], permission) }
+        // only the staff who hold the grant are candidates: one or two bcrypt
+        // checks, where this used to check the PIN against every staff member
+        val approver = userIdByPin(pin) { GrantsRepo.has(it[Users.id], permission) }
         if (approver == null) rateLimiter.recordFailure() else rateLimiter.recordSuccess()
-        approver?.get(Users.id)
+        return approver
     }
 
     /** True if this staff member effectively has [permission]. */
