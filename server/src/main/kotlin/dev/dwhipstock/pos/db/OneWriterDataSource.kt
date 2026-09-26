@@ -38,14 +38,23 @@ import javax.sql.DataSource
  * the next waiter. A connection that fails is dropped and reopened. A caller
  * that waits longer than [waitSeconds] gets an SQLException (a 500) instead of
  * hanging.
+ *
+ * The connection is also closed and reopened every [recycleEvery]
+ * transactions. Some statements are never closed on the way (the driver
+ * keeps them, in Java and native memory, until its connection closes): on a
+ * connection that lived for ever the store grew by ~25 KB a sale and never
+ * gave it back (load test soak probe). Reopening now and then costs about a
+ * millisecond and bounds that to a few hundred transactions' worth.
  */
 class OneWriterDataSource(
     private val inner: DataSource,
     private val waitSeconds: Long = 30,
+    private val recycleEvery: Int = 500,
 ) : DataSource by inner {
 
     private val permit = Semaphore(1, true)
     private var physical: Connection? = null // guarded by [permit]
+    private var uses = 0 // transactions on [physical]; guarded by [permit]
 
     override fun getConnection(): Connection = lease { inner.connection }
 
@@ -57,7 +66,12 @@ class OneWriterDataSource(
             throw SQLException("store database busy for ${waitSeconds}s", "SQLITE_BUSY")
         }
         val connection = try {
-            physical?.takeUnless { it.isClosed } ?: open().also { physical = it }
+            physical?.takeIf { uses >= recycleEvery }?.let { old ->
+                runCatching { old.close() }
+                physical = null
+            }
+            (physical?.takeUnless { it.isClosed } ?: open().also { physical = it; uses = 0 })
+                .also { uses++ }
         } catch (e: Throwable) {
             physical = null
             permit.release()

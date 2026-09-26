@@ -95,6 +95,23 @@ class OneWriterDataSourceTest {
     }
 
     @Test
+    fun `the connection is reopened every recycleEvery transactions`() {
+        // what a driver keeps for unclosed statements is only given back when
+        // its connection closes: a connection that lives for ever leaks
+        val counting = Counting(sqlite(dbFile()))
+        val db = Database.connect(OneWriterDataSource(counting, recycleEvery = 50))
+        transaction(db) { exec("CREATE TABLE t (x INTEGER)") }
+        repeat(199) { i -> transaction(db) { exec("INSERT INTO t VALUES ($i)") } }
+        assertTrue(counting.opened.get() in 4..5, "200 transactions, 50 a connection: opened ${counting.opened.get()}")
+        val n = transaction(db) {
+            var c = 0
+            exec("SELECT count(*) FROM t") { rs -> if (rs.next()) c = rs.getInt(1) }
+            c
+        }
+        assertEquals(199, n, "nothing is lost when a connection is swapped")
+    }
+
+    @Test
     fun `a failed transaction is rolled back and frees the connection`() {
         val db = Database.connect(OneWriterDataSource(sqlite(dbFile())))
         transaction(db) { exec("CREATE TABLE t (x INTEGER)") }
