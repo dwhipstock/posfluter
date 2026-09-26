@@ -364,6 +364,9 @@ class L {
       _t('Table de billard', 'Pool table', 'Mesa de billar');
   String get objectBarFront => _t('Comptoir du bar', 'Bar front', 'Barra');
   String get objectPillar => _t('Colonne', 'Pillar', 'Columna');
+  // the short caption on an unlabelled pool table / bar front on the plan
+  String get objectPoolCaption => _t('Billard', 'Pool', 'Billar');
+  String get objectBarCaption => _t('Bar', 'Bar', 'Barra');
   String get deleteObject =>
       _t('Retirer l’élément', 'Remove object', 'Quitar elemento');
   String deleteObjectConfirm(String name) => _t(

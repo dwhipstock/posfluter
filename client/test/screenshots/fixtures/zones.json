@@ -355,7 +355,8 @@
     "width": 920,
     "height": 80,
     "rotation": 0,
-    "label": "Copper Bar"
+    "labelFr": "Bar en cuivre",
+    "labelEn": "Copper Bar"
    },
    {
     "id": "upper-pillar-1",
@@ -646,7 +647,8 @@
     "width": 500,
     "height": 280,
     "rotation": 0,
-    "label": "Pool"
+    "labelFr": "Billard",
+    "labelEn": "Pool"
    },
    {
     "id": "lower-pillar-1",

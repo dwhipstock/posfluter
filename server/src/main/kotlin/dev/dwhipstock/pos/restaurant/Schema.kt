@@ -62,7 +62,9 @@ object FloorObjects : Table("floor_objects") {
     val width = integer("width").default(100)
     val height = integer("height").default(100)
     val rotation = integer("rotation").default(0) // degrees
-    val label = varchar("label", 64).nullable()
+    // optional caption, per language like zone names (043); the type drives the shape
+    val labelFr = varchar("label_fr", 64).nullable()
+    val labelEn = varchar("label_en", 64).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

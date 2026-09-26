@@ -150,7 +150,7 @@ class ShiftService(private val config: CustomerConfig) {
         val title = if (dir == "IN") msg(CASH_IN_HEADER) else msg(CASH_OUT_HEADER)
         val lines = buildList {
             add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
-            policy.headerLines.forEach { add(PrintLine.Text(it, Align.CENTER)) }
+            policy.header().forEach { add(PrintLine.Text(it, Align.CENTER)) }
             add(PrintLine.Blank)
             add(PrintLine.Header(title))
             add(PrintLine.Blank)

@@ -35,6 +35,8 @@ value class LocaleCode(val tag: String) {
  */
 enum class MessageKey(val id: String) {
     RECEIPT_TABLE("receipt.table"),
+    /** {0} = the store's phone number, from settings: "Tél. {0}" / "Tel. {0}". */
+    RECEIPT_PHONE("receipt.phone"),
     RECEIPT_BILL("receipt.bill"),
     RECEIPT_OPEN("receipt.open"),
     RECEIPT_CLOSE("receipt.close"),

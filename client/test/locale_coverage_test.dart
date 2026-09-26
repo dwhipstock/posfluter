@@ -38,9 +38,9 @@ const _sameWords = {
   // proper nouns and abbreviations
   'Copper', 'Lantern', 'Sage', '&', 'Poppy', 'Stripe', 'Wi-Fi', 'OK', 'PIN',
   'CRV', 'QR', 'IPA',
-  // the same word in French (Menu, Table, Zones, Total) or Spanish (Total,
+  // the same word in French (Menu, Table, Zones, Total, Bar) or Spanish (Total,
   // Subtotal)
-  'Total', 'Subtotal', 'Menu', 'Table', 'Zones',
+  'Total', 'Subtotal', 'Menu', 'Table', 'Zones', 'Bar',
 };
 
 /// A string literal's text, decoded: interpolations become '§'.

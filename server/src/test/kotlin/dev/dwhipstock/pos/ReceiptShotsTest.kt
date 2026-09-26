@@ -1,6 +1,8 @@
 package dev.dwhipstock.pos
 
+import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
 import dev.dwhipstock.pos.customers.sagepoppy.SagePoppy
+import dev.dwhipstock.pos.sdk.Align
 import dev.dwhipstock.pos.sdk.Money
 import dev.dwhipstock.pos.sdk.PrintLine
 import dev.dwhipstock.pos.sdk.Receipt
@@ -50,9 +52,9 @@ class ReceiptShotsTest {
     )
     private val pubPolicy = ReceiptPolicy.Standard(
         "Copper Lantern — Vieux-Port",
-        listOf("47 Lantern Lane, Montréal, QC", "Tél. / Tel. +1 514 555 0142"),
+        listOf(CopperLanternVenue.VIEUX_PORT.address),
         "Merci de votre visite ! / Thank you for visiting!",
-        showTax = false, locale = LocaleCode.FR,
+        showTax = false, locale = LocaleCode.FR, phone = CopperLanternVenue.VIEUX_PORT.phone,
     )
 
     private val spReceipt = Receipt(
@@ -72,9 +74,10 @@ class ReceiptShotsTest {
     )
     private val spPolicy = ReceiptPolicy.Standard(
         "SAGE & POPPY — BOTTLE SHOP",
-        listOf(SagePoppy.ADDRESS, "Tel. ${SagePoppy.PHONE}"),
+        listOf(SagePoppy.ADDRESS),
         "Thank you! · ¡Gracias! · 21+ for alcohol / 21+ para alcohol",
         showTax = false, locale = LocaleCode.ES, retail = true, alwaysCents = true, usDates = true, headerRule = true,
+        phone = SagePoppy.PHONE,
     )
 
     private fun shoot(name: String, lines: List<PrintLine>) {
@@ -95,6 +98,7 @@ class ReceiptShotsTest {
         assertEquals("83,93", kv["Total"])
         assertEquals("16,05", kv["Monnaie rendue"])
         assertTrue(bill.any { it is PrintLine.Header && it.text == "*** ADDITION / CUSTOMER BILL ***" })
+        assertEquals(PrintLine.Text("Tél. +1 514 555 0142", Align.CENTER), receipt[2])
         shoot("receipt-fr.png", receipt)
         shoot("bill-fr.png", bill)
     }
@@ -104,6 +108,7 @@ class ReceiptShotsTest {
         val lines = ReceiptRenderer.render(spReceipt, spPolicy, ReceiptKind.FINAL)
         assertEquals(PrintLine.LogoPlaceholder("SAGE & POPPY — BOTTLE SHOP"), lines.first())
         // address, phone, then the rule under the letterhead
+        assertEquals(PrintLine.Text("Tel. ${SagePoppy.PHONE}", Align.CENTER), lines[2])
         assertEquals(PrintLine.Divider, lines[3])
         val kv = lines.filterIsInstance<PrintLine.KeyValue>().associate { it.left to it.right }
         assertEquals("47.76", kv["Total"])

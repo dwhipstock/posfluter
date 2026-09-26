@@ -10,12 +10,16 @@ package dev.dwhipstock.pos.customers.copperlantern
 enum class CopperLanternVenue(
     val id: String,
     val displayName: String,
-    /** Receipt header for a freshly seeded store (owner-editable afterwards). */
+    /**
+     * Receipt header for a freshly seeded store (owner-editable afterwards).
+     * Fictional streets; the postal codes use the letters Q and U, which
+     * Canada Post never assigns, so they cannot belong to a real address.
+     */
     val address: String,
     val phone: String,
 ) {
-    VIEUX_PORT("vieux-port", "Copper Lantern — Vieux-Port", "47 Lantern Lane, Montréal, QC", "+1 514 555 0142"),
-    PLATEAU("plateau", "Copper Lantern — Plateau", "212 Lantern Row, Montréal, QC", "+1 514 555 0187");
+    VIEUX_PORT("vieux-port", "Copper Lantern — Vieux-Port", "47, rue de la Lanterne, Montréal (Québec) H2Y 1Q7", "+1 514 555 0142"),
+    PLATEAU("plateau", "Copper Lantern — Plateau", "212, avenue du Lampion, Montréal (Québec) H2J 3U4", "+1 514 555 0187");
 
     companion object {
         /** Blank → Vieux-Port; an unknown id fails fast rather than seeding the wrong store. */

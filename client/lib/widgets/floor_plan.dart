@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
+import '../i18n.dart';
 
 /// Geometry is stored server-side in LOGICAL units on a square canvas —
 /// the client scales to its viewport, so one layout fits every screen.
@@ -176,14 +177,15 @@ class FloorObjectShape extends StatelessWidget {
   BorderRadius get _radius =>
       _isPillar ? BorderRadius.circular(999) : T.radiusSmall;
 
-  /// Caption drawn on the slab: the manager's label, else a type default.
-  /// Pillars stay unlabeled — a small block needs no word.
-  String? get _caption {
-    final l = object.label;
-    if (l != null && l.isNotEmpty) return l;
+  /// Caption drawn on the slab: its label in the current language, else a
+  /// type default. Pillars stay unlabeled — a small block needs no word.
+  String? _caption(L l) {
+    final fr = object.labelFr, en = object.labelEn;
+    final label = l.name(fr ?? en ?? '', en ?? fr ?? '');
+    if (label.isNotEmpty) return label;
     return switch (object.type) {
-      'POOL' => 'Pool',
-      'BAR_FRONT' => 'Bar',
+      'POOL' => l.objectPoolCaption,
+      'BAR_FRONT' => l.objectBarCaption,
       _ => null, // PILLAR
     };
   }
@@ -194,7 +196,7 @@ class FloorObjectShape extends StatelessWidget {
     final h = object.height * scale;
     // pillar: a solid muted block. pool/bar: a faint outlined slab.
     final fill = _isPillar ? T.border : T.surfaceAlt.withValues(alpha: .5);
-    final caption = _caption;
+    final caption = _caption(L.of(context));
     final labelSize = (math.min(w, h) * .24).clamp(9.0, 16.0);
     return Container(
       decoration: BoxDecoration(

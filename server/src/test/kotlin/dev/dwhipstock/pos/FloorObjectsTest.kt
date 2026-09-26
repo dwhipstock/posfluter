@@ -68,6 +68,25 @@ class FloorObjectsTest {
     }
 
     @Test
+    fun `captions come in both languages, the seeded ones in French and English`() = testApplication {
+        application { module(dbPath = tempDb()) }
+        val c = loginClient()
+        val pool = zoneObjects(c.get("/zones").bodyAsText(), "lower").single { it["id"]!!.jsonPrimitive.content == "lower-pool" }
+        assertEquals("Billard", pool["labelFr"]!!.jsonPrimitive.content)
+        assertEquals("Pool", pool["labelEn"]!!.jsonPrimitive.content)
+
+        // one caption from an older client fills both sides; per-language wins
+        val shared = json.parseToJsonElement(c.postJson("/zones/outside/objects",
+            """{"type":"POOL","x":100,"y":100,"label":"Snooker","managerPin":"1234"}""").bodyAsText()).jsonObject
+        assertEquals("Snooker", shared["labelFr"]!!.jsonPrimitive.content)
+        assertEquals("Snooker", shared["labelEn"]!!.jsonPrimitive.content)
+        val both = json.parseToJsonElement(c.postJson("/zones/outside/objects",
+            """{"type":"BAR_FRONT","x":100,"y":400,"labelFr":"Bar de la terrasse","labelEn":"Patio Bar","managerPin":"1234"}""").bodyAsText()).jsonObject
+        assertEquals("Bar de la terrasse", both["labelFr"]!!.jsonPrimitive.content)
+        assertEquals("Patio Bar", both["labelEn"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `objects-layout batch-writes geometry, skips unchanged, refuses foreign zone`() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()

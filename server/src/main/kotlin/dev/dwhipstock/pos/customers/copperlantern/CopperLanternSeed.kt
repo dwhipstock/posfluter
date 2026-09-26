@@ -42,7 +42,7 @@ object CopperLanternSeed {
     private data class SeedObject(
         val id: String, val zoneId: String, val type: String,
         val x: Int, val y: Int, val width: Int, val height: Int,
-        val label: String? = null,
+        val labelFr: String? = null, val labelEn: String? = null,
     )
 
     /** Shared menu categories in display order: id, French, English. */
@@ -176,10 +176,10 @@ object CopperLanternSeed {
         SeedTable("l13", "lower", "L-8", 8, 830, 690, 110, 110, "SQUARE", 4),
     )
     private val floorObjects = listOf(
-        SeedObject("upper-bar", "upper", "BAR_FRONT", 40, 30, 920, 80, "Copper Bar"),
+        SeedObject("upper-bar", "upper", "BAR_FRONT", 40, 30, 920, 80, "Bar en cuivre", "Copper Bar"),
         SeedObject("upper-pillar-1", "upper", "PILLAR", 275, 470, 65, 65),
         SeedObject("upper-pillar-2", "upper", "PILLAR", 610, 470, 65, 65),
-        SeedObject("lower-pool", "lower", "POOL", 250, 260, 500, 280, "Pool"),
+        SeedObject("lower-pool", "lower", "POOL", 250, 260, 500, 280, "Billard", "Pool"),
         SeedObject("lower-pillar-1", "lower", "PILLAR", 70, 360, 65, 65),
         SeedObject("lower-pillar-2", "lower", "PILLAR", 865, 360, 65, 65),
     )
@@ -214,7 +214,7 @@ object CopperLanternSeed {
         SeedTable("s11", "sushi", "S-11", 11, 720, 400, 180, 110, "RECT", 4),
     )
     private val plateauObjects = listOf(
-        SeedObject("sushi-counter", "sushi", "BAR_FRONT", 40, 30, 920, 80, "Sushi Counter"),
+        SeedObject("sushi-counter", "sushi", "BAR_FRONT", 40, 30, 920, 80, "Comptoir à sushis", "Sushi Counter"),
     )
 
     /** Item ids on [venue]'s seeded menu (the shared menu plus its additions). */
@@ -282,7 +282,7 @@ object CopperLanternSeed {
             this[FloorObjects.id] = o.id; this[FloorObjects.zoneId] = o.zoneId; this[FloorObjects.type] = o.type
             this[FloorObjects.x] = o.x; this[FloorObjects.y] = o.y
             this[FloorObjects.width] = o.width; this[FloorObjects.height] = o.height
-            this[FloorObjects.label] = o.label
+            this[FloorObjects.labelFr] = o.labelFr; this[FloorObjects.labelEn] = o.labelEn
         }
         Users.insert { it[id] = "manager"; it[name] = "Demo Manager"; it[role] = "MANAGER"; it[pin] = AuthService.hashPin("1234"); it[languageCode] = "en" }
         Users.insert { it[id] = "server1"; it[name] = "Demo Server"; it[role] = "SERVER"; it[pin] = AuthService.hashPin("9999"); it[languageCode] = "en" }

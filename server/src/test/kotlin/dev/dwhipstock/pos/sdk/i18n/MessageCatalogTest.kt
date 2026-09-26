@@ -44,8 +44,8 @@ class MessageCatalogTest {
         tenders = listOf(ReceiptTender("Comptant", "Cash", Money.cad(500), Money(46050), Money(-50), Money.cad(39))),
     )
     private val policy = ReceiptPolicy.Standard(
-        "Copper Lantern — Vieux-Port", listOf("47 Lantern Lane, Montréal, QC", "Tél. / Tel. +1 514 555 0142"), "Merci\u00A0!",
-        showTax = true,
+        "Copper Lantern — Vieux-Port", listOf("47, rue de la Lanterne, Montréal (Québec) H2Y 1Q7"), "Merci\u00A0!",
+        showTax = true, phone = "+1 514 555 0142",
     )
 
     private fun golden(name: String) =
@@ -54,6 +54,17 @@ class MessageCatalogTest {
 
     private fun render(locale: LocaleCode, kind: ReceiptKind) =
         PrinterAdapter.renderText(ReceiptRenderer.render(receipt, policy.withLocale(locale), kind))
+
+    @Test
+    fun thePhoneLabelFollowsTheReceiptLanguageAndTheNumberComesFromSettings() {
+        assertTrue("Tél. +1 514 555 0142" in render(LocaleCode.FR, ReceiptKind.FINAL))
+        assertTrue("Tel. +1 514 555 0142" in render(LocaleCode.EN, ReceiptKind.FINAL))
+        assertTrue("Tel. +1 514 555 0142" in render(LocaleCode.ES, ReceiptKind.PROVISIONAL))
+        assertTrue("Tél. / Tel." !in render(LocaleCode.FR, ReceiptKind.FINAL))
+        // no number in settings, no phone line
+        val noPhone = PrinterAdapter.renderText(ReceiptRenderer.render(receipt, policy.copy(phone = " "), ReceiptKind.FINAL))
+        assertTrue("Tel." !in noPhone && "Tél." !in noPhone)
+    }
 
     @Test
     fun frenchReceiptsUseTheCompleteFrenchCatalog() {

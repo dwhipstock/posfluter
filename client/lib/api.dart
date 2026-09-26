@@ -1780,7 +1780,9 @@ class FloorObject {
   final String id;
   final String type; // POOL | BAR_FRONT | PILLAR
   final int x, y, width, height, rotation;
-  final String? label;
+
+  /// Optional caption per catalog language ("Billard" / "Pool").
+  final String? labelFr, labelEn;
   FloorObject(
     this.id,
     this.type,
@@ -1789,7 +1791,8 @@ class FloorObject {
     this.width,
     this.height,
     this.rotation,
-    this.label,
+    this.labelFr,
+    this.labelEn,
   );
   factory FloorObject.fromJson(Map<String, dynamic> j) => FloorObject(
     j['id'],
@@ -1799,7 +1802,9 @@ class FloorObject {
     j['width'] ?? 100,
     j['height'] ?? 100,
     j['rotation'] ?? 0,
-    j['label'],
+    // an older store sends one `label` for both languages
+    j['labelFr'] ?? j['label'],
+    j['labelEn'] ?? j['label'],
   );
 
   /// Editor-local geometry mutation (drag/resize/rotate); identity carries over.
@@ -1817,7 +1822,8 @@ class FloorObject {
     width ?? this.width,
     height ?? this.height,
     rotation ?? this.rotation,
-    label,
+    labelFr,
+    labelEn,
   );
 
   /// The geometry slice the batch "objects layout" endpoint expects.

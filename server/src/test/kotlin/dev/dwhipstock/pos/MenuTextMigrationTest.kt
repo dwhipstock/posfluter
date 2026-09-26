@@ -84,7 +84,7 @@ class MenuTextMigrationTest {
     fun oldSeededTextIsUpdatedButAManagersEditIsKept() {
         val db = connect(tempDb())
         Migrations.run(db, through = 41)
-        CopperLanternSeed.seedIfEmpty(CopperLanternVenue.PLATEAU)
+        seedOldStore(db, CopperLanternVenue.PLATEAU)
         // put the store back on the old seeded text, as a pre-042 install has
         transaction(db) {
             for (c in MenuTextMigration.CHANGES) {
@@ -119,7 +119,8 @@ class MenuTextMigrationTest {
             for (v in MenuTextMigration.REGULAR_VARIANTS) assertEquals("Standard", labels[v], v)
             val s = VenueSettings.selectAll().single()
             assertEquals("+1 514 555 0142", s[VenueSettings.venuePhone])
-            assertEquals("47 Lantern Lane, Montréal, QC", s[VenueSettings.venueAddress])
+            // 042 moved it to Montréal; 043 then gave it the French-style address
+            assertEquals(CopperLanternVenue.VIEUX_PORT.address, s[VenueSettings.venueAddress])
         }
 
         // one item.updated per changed item, with the full snapshot for the portal
