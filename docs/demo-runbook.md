@@ -67,7 +67,7 @@ brand (sage and poppy, not copper), **USD**, **English + Spanish**,
 | cloud key | `STORE_API_KEY_SAGE_POPPY` in `.env.local` (demo-up.sh mints it) |
 | PINs | manager `1234`, cashier `9999`, Spanish-speaking cashier `5555` (receipts in Spanish) |
 | shelf | ~50 fictional products, each with a made-up UPC-A (number system 4 = in-store codes, valid check digits) |
-| money | 9.5% sales tax on taxable goods (snacks and ice exempt), CRV bottle deposit per container × pack on its own untaxed line, cash to the cent |
+| money | 9.5% sales tax on taxable goods (snacks and ice exempt), CRV bottle deposit per container × pack on its own untaxed line; cash rounds to the nickel (see Cash rounding) |
 | age | ID check at 21 before age-restricted items can be paid for (`POS_LEGAL_AGE`; tablet: `legal.age` in store.properties) |
 | payments | cash, and card on the counter's own external terminal. **No Stripe**: the Stripe integration is Canada-only (CAD) for now |
 
@@ -176,6 +176,28 @@ adb logcat -s TabletStore | grep 'Receipt printing'
 `.env.edge` for `docker-compose.edge.yml`), or `POS_CONFIG_FILE=<path>` to a
 properties file in the same format. The env var wins over the file. Restart
 the store to apply.
+
+## Cash rounding (nickel)
+
+Canada and the US no longer make pennies, so every store rounds the final
+amount of a **cash** payment to the nearest 5¢ on its last cent digit: 1–2
+down to 0, 3–4 up to 5, 6–7 down to 5, 8–9 up to 10 (0 and 5 stay). Prices,
+CRV and each tax are still worked out to the cent first; only the cash that
+settles the balance rounds (on a split bill, each group's cash on its own;
+after a card, only the cash remainder). Card, Stripe and transfers are always
+the exact amount. Cash refunds round the same way. The tender screens, the
+bill (paper, the staff app and the guest's phone) and the receipt show a
+**Rounding / Arrondi / Redondeo** line and the rounded cash total; the X/Z
+drawer counts the rounded cash; the portal reports the net rounding per store
+and per currency, beside the exact revenue and tax.
+
+A config switch (no UI), default `nickel` for every store:
+`cash.rounding=nickel|off`. **Tablet**: add the line to the same
+`store.properties` as `print.receipts` and restart the POS. **Desktop /
+docker store**: `POS_CASH_ROUNDING=nickel|off`, or `cash.rounding` in the
+`POS_CONFIG_FILE` properties file (the env var wins). The store logs
+`Cash rounding: <mode> (<source>)` at startup; a bad value means `nickel`
+(logged) and never fails startup.
 
 ## Stripe (test mode)
 

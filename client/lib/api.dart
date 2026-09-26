@@ -1984,12 +1984,17 @@ class Tender {
     this.changeCents,
     this.groupId,
   );
+
+  /// Cash actually paid into the drawer for this tender (server-rounded):
+  /// applied + rounding. Equals [amountAppliedCents] for non-cash tenders.
+  int get cashPaidCents => amountAppliedCents + roundingAdjustmentCents;
+
   factory Tender.fromJson(Map<String, dynamic> j) => Tender(
     j['id'],
     j['type'],
     j['amountTenderedCents'],
     j['amountAppliedCents'],
-    j['roundingAdjustmentCents'],
+    j['roundingAdjustmentCents'] ?? 0,
     j['changeCents'],
     j['groupId'],
   );
@@ -2017,6 +2022,11 @@ class BillGroup {
 
   /// This bill's share of the check's taxes.
   final List<TaxLine> taxes;
+
+  /// What this group owes if paid in CASH (server-rounded to the nickel) and
+  /// the signed difference from [outstandingCents]. Older servers omit them:
+  /// cash due = outstanding, no rounding.
+  final int cashDueCents, cashRoundingCents;
   BillGroup(
     this.id,
     this.number,
@@ -2030,7 +2040,10 @@ class BillGroup {
     this.outstandingCents, {
     int? subtotalCents,
     this.taxes = const [],
-  }) : subtotalCents = subtotalCents ?? grandTotalCents;
+    int? cashDueCents,
+    this.cashRoundingCents = 0,
+  }) : subtotalCents = subtotalCents ?? grandTotalCents,
+       cashDueCents = cashDueCents ?? outstandingCents;
   factory BillGroup.fromJson(Map<String, dynamic> j) => BillGroup(
     j['id'],
     j['number'],
@@ -2046,6 +2059,8 @@ class BillGroup {
     j['outstandingCents'],
     subtotalCents: j['subtotalCents'],
     taxes: TaxLine.listFrom(j['taxes']),
+    cashDueCents: j['cashDueCents'],
+    cashRoundingCents: j['cashRoundingCents'] ?? 0,
   );
 
   /// Paid = money actually covered this group — an empty $0 group is NOT paid.
@@ -2095,6 +2110,11 @@ class Check {
   /// check. [ageCleared]: none needed or one passed. [ageCheckFailed]: the
   /// last check failed and none passed (remove the restricted items).
   final bool ageCheckRequired, ageCleared, ageCheckFailed;
+
+  /// What's left if paid in CASH (server-rounded to the nickel) and the signed
+  /// difference from [outstandingCents] (e.g. -2, +1). Card is always exact.
+  /// Older servers omit them: cash due = outstanding, no rounding.
+  final int cashDueCents, cashRoundingCents;
   Check(
     this.id,
     this.tableId,
@@ -2114,7 +2134,10 @@ class Check {
     this.ageCheckRequired = false,
     this.ageCleared = true,
     this.ageCheckFailed = false,
-  }) : subtotalCents = subtotalCents ?? grandTotalCents;
+    int? cashDueCents,
+    this.cashRoundingCents = 0,
+  }) : subtotalCents = subtotalCents ?? grandTotalCents,
+       cashDueCents = cashDueCents ?? outstandingCents;
   factory Check.fromJson(Map<String, dynamic> j) => Check(
     j['id'],
     j['tableId'],
@@ -2136,6 +2159,8 @@ class Check {
     ageCheckRequired: j['ageCheckRequired'] ?? false,
     ageCleared: j['ageCleared'] ?? true,
     ageCheckFailed: j['ageCheckFailed'] ?? false,
+    cashDueCents: j['cashDueCents'],
+    cashRoundingCents: j['cashRoundingCents'] ?? 0,
   );
 }
 
@@ -2237,6 +2262,9 @@ class ShiftReport {
       cashRefundCents,
       refundTotalCents;
   final int? expectedCashCents, closingCountCents, overShortCents;
+
+  /// Net cash nickel rounding over the shift (signed; 0 on older servers).
+  final int cashRoundingCents;
   ShiftReport(
     this.shiftId,
     this.shiftStatus,
@@ -2256,8 +2284,9 @@ class ShiftReport {
     this.refundTotalCents,
     this.expectedCashCents,
     this.closingCountCents,
-    this.overShortCents,
-  );
+    this.overShortCents, {
+    this.cashRoundingCents = 0,
+  });
   factory ShiftReport.fromJson(Map<String, dynamic> j) => ShiftReport(
     j['shiftId'],
     j['shiftStatus'],
@@ -2280,6 +2309,7 @@ class ShiftReport {
     j['expectedCashCents'],
     j['closingCountCents'],
     j['overShortCents'],
+    cashRoundingCents: j['cashRoundingCents'] ?? 0,
   );
 }
 
@@ -2310,6 +2340,10 @@ class ClosedCheckSummary {
 class RefundView {
   final int id, checkId, grossCents, netCents, taxCents;
   final String tenderType, reason, refundedBy, createdAt;
+
+  /// Cash refunds only: signed nickel rounding, and the cash actually handed
+  /// back (gross + rounding). Older servers omit them: no rounding, = gross.
+  final int roundingAdjustmentCents, paidOutCents;
   RefundView(
     this.id,
     this.checkId,
@@ -2319,8 +2353,10 @@ class RefundView {
     this.tenderType,
     this.reason,
     this.refundedBy,
-    this.createdAt,
-  );
+    this.createdAt, {
+    this.roundingAdjustmentCents = 0,
+    int? paidOutCents,
+  }) : paidOutCents = paidOutCents ?? grossCents + roundingAdjustmentCents;
   factory RefundView.fromJson(Map<String, dynamic> j) => RefundView(
     j['id'],
     j['checkId'],
@@ -2331,6 +2367,8 @@ class RefundView {
     j['reason'],
     j['refundedBy'],
     j['createdAt'],
+    roundingAdjustmentCents: j['roundingAdjustmentCents'] ?? 0,
+    paidOutCents: j['paidOutCents'],
   );
 }
 

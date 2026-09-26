@@ -531,6 +531,12 @@ export const messages = {
   fx_converted_sub: m("taux fixe {rates}, approximatif", "fixed rate {rates}, approximate"),
   fx_chart_converted: m("≈ en {cur} au taux fixe {rates}", "≈ in {cur} at fixed rate {rates}"),
   fx_stores_in: m("{n} magasin(s)", "{n} store(s)"),
+  // cash payments round to the nearest 5¢; only the cash handed over changes
+  cash_rounding: m("Arrondi des espèces", "Cash rounding"),
+  cash_rounding_note: m(
+    "Les paiements en espèces sont arrondis aux 5 ¢ près. Les ventes et les taxes restent exactes ; l’arrondi est compté à part, dans la devise de chaque magasin.",
+    "Cash payments round to the nearest 5¢. Sales and tax stay exact; the rounding is counted separately, in each store’s own currency."
+  ),
   retail_badge: m("Magasin", "Bottle shop"),
   tax_col_rate: m("{label} {rate} %", "{label} {rate}%"),
   tax_by_code: m("Par taxe", "By tax"),

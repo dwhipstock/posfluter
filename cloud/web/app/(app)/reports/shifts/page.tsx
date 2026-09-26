@@ -77,6 +77,15 @@ function ShiftsPage() {
               align: "right",
               width: 12,
             }),
+            // each shift in its store's own currency
+            ...(data.rows.some((s) => s.cashRoundingCents != null)
+              ? [
+                  col.text<Shift>(t("cash_rounding"), (s) => (s.cashRoundingCents == null ? "—" : m.signedIn(sc(s), s.cashRoundingCents)), {
+                    align: "right",
+                    width: 12,
+                  }),
+                ]
+              : []),
           ]),
           rows: data.rows,
         },
@@ -257,6 +266,9 @@ function ShiftSheet({ shift, onClose }: { shift: Shift | null; onClose: () => vo
                     label={t("shift_counted")}
                     value={shift.closingCountCents === null ? "—" : CAD(shift.closingCountCents)}
                   />
+                  {shift.cashRoundingCents != null && (
+                    <CashRow label={t("cash_rounding")} value={CADSigned(shift.cashRoundingCents)} />
+                  )}
                   <div className="border-t border-neutral-100 pt-2">
                     <CashRow
                       label={t("shift_over_short")}

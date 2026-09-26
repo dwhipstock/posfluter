@@ -135,6 +135,7 @@ def main() -> None:
         shift_gross = 0
         cash_total = 0
         card_total = 0
+        cash_rounding = 0
 
         for sale_index in range(sale_count):
             check_id += 1
@@ -200,17 +201,20 @@ def main() -> None:
                 shift_gross += total
                 tender_id += 1
                 tender_type = "CARD" if rng.random() < 0.82 else "CASH"
-                tendered = total if tender_type == "CARD" else ((total + 499) // 500) * 500
-                change = tendered - total
+                # cash rounds to the nickel (the store's rule); a card is exact
+                rounding = 0 if tender_type == "CARD" else (total + 2) // 5 * 5 - total
+                tendered = total if tender_type == "CARD" else ((total + rounding + 499) // 500) * 500
+                change = tendered - total - rounding
                 sql.append(
                     "INSERT INTO check_tenders (tenant_id,venue_id,tender_id,check_id,type,amount_tendered_cents,"
                     "amount_applied_cents,rounding_adjustment_cents,change_cents,tendered_at) VALUES "
-                    f"({q(TENANT)},{q(VENUE)},{tender_id},{check_id},{q(tender_type)},{tendered},{total},0,{change},{ts(close_time)});"
+                    f"({q(TENANT)},{q(VENUE)},{tender_id},{check_id},{q(tender_type)},{tendered},{total},{rounding},{change},{ts(close_time)});"
                 )
                 if tender_type == "CARD":
                     card_total += total
                 else:
                     cash_total += total
+                    cash_rounding += rounding
 
                 # A small, believable number of full refunds on later days.
                 if day_offset > 2 and rng.random() < 0.012:
@@ -227,7 +231,7 @@ def main() -> None:
                     )
 
         breakdown = json.dumps({"CASH": cash_total, "CARD": card_total}, separators=(",", ":"))
-        expected_cash = 50000 + cash_total
+        expected_cash = 50000 + cash_total + cash_rounding
         over_short = rng.choice([-500, -200, 0, 0, 0, 0, 100, 200, 500])
         sql.append(
             "INSERT INTO shifts (tenant_id,venue_id,shift_id,status,opened_at,opened_by,opening_float_cents,closed_at,closed_by,"

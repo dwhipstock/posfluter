@@ -33,7 +33,9 @@ import dev.dwhipstock.pos.sdk.Align
 import dev.dwhipstock.pos.sdk.PrintLine
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import dev.dwhipstock.pos.sdk.i18n.MessageKey
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_ROUNDING
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_SUBTOTAL
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_CASH_BACK
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_INCLUDED
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_HEADER
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.REFUND_NUMBER
@@ -99,6 +101,13 @@ data class RefundView(
     val createdAt: String,
     /** The added taxes this refund reverses (inside [taxCents]). */
     val taxes: List<TaxView> = emptyList(),
+    /**
+     * CASH refunds: cash handed back − [grossCents], signed (the cash rounds to
+     * the nickel; gross, net and tax stay exact). 0 for card / transfer refunds.
+     */
+    val roundingAdjustmentCents: Long = 0,
+    /** Money that actually went back: gross + rounding. */
+    val paidOutCents: Long = 0,
 )
 
 @kotlinx.serialization.Serializable
@@ -377,8 +386,8 @@ class CheckService(private val config: CustomerConfig) {
     // with integer floor division, so a split's group totals can drop cents
     // relative to the unsplit check — that per-group DOWN drop is deliberate and
     // becomes the check's locked grand total (sum of group totals). Cash rounding
-    // stays a tender-time concern: each group's cash due rounds DOWN independently
-    // through the same RoundingPolicy; electronic tenders settle exact cents.
+    // stays a tender-time concern: each group's cash due rounds to the nickel on
+    // its own through the same RoundingPolicy; electronic tenders settle exact cents.
     //
     // The split is editable only while the check is OPEN. The first group tender
     // locks totals (check → TOTAL_LOCKED), which freezes the split too — further
@@ -593,8 +602,9 @@ class CheckService(private val config: CustomerConfig) {
 
     /**
      * Cash tender. Stage 4 (total lock) happens implicitly at first tender;
-     * stage 5 applies $1 rounding to the CASH due only — and only when this
-     * payment settles the check (partial cash applies at face value).
+     * stage 5 rounds the CASH due only (to the nickel, per the store's
+     * cash.rounding) — and only when this payment settles the check (partial
+     * cash applies at face value). Change is given from the rounded amount.
      * On a split check [groupId] is required and the tender pays into that
      * group: rounding applies to the GROUP's cash due, independently per group.
      */
@@ -768,7 +778,8 @@ class CheckService(private val config: CustomerConfig) {
      * stays OPEN and editable, so this is callable any number of times as items come and
      * go. Refuses on a check that's no longer live (400 check_not_billable) and on
      * unresolved QR lines (409, same guard as tender). Rounding is a tender-time concern
-     * (pipeline stage 5), so the bill shows the exact grand total — no cash-rounding line.
+     * (pipeline stage 5): the bill shows the exact grand total, then — when paying
+     * in cash would round — the rounding and the cash total underneath it.
      * Returns the rendered text for the client preview.
      */
     fun printBill(checkId: Int, groupId: Int? = null): String = transaction {
@@ -780,7 +791,14 @@ class CheckService(private val config: CustomerConfig) {
             .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING") }.count()
         if (pending > 0) throw ConflictException("check $checkId has $pending pending QR lines; accept or reject them first", "pending_lines_unresolved")
 
-        val receipt = if (groupId == null) buildReceipt(checkId) else buildGroupReceipt(checkId, groupId)
+        val built = if (groupId == null) buildReceipt(checkId) else buildGroupReceipt(checkId, groupId)
+        // what is still due, and what it comes to in cash (to the nickel)
+        val paid = if (groupId == null) tenderedSoFar(checkId) else groupTenderedSoFar(groupId)
+        val due = built.grandTotal - paid
+        val receipt = built.copy(
+            cashDue = config.roundingPolicy.roundCashDue(due),
+            cashRounding = config.roundingPolicy.cashAdjustment(due),
+        )
         val lines = ReceiptRenderer.render(receipt, receiptPolicyFor(check), ReceiptKind.PROVISIONAL)
         val text = config.printer.printProvisional(PrintJob(checkId, lines))
         Outbox.write("check.bill_printed", "check", checkId.toString(), buildJsonObject {
@@ -1036,7 +1054,12 @@ class CheckService(private val config: CustomerConfig) {
         val linesJson: JsonArray?,
         /** The added taxes reversed (their sum is inside [tax]). */
         val taxLines: List<TaxLine> = emptyList(),
-    )
+        /** CASH only: cash handed back − [gross] (to the nickel); 0 otherwise. */
+        val rounding: Long = 0,
+    ) {
+        /** What actually goes back to the customer. */
+        val paidOut: Long get() = gross + rounding
+    }
 
     /**
      * Validate a refund (grant, closed check, amount/lines, cumulative cap) and
@@ -1088,7 +1111,9 @@ class CheckService(private val config: CustomerConfig) {
         val addedTaxes = reverseAddedTaxes(check, already, refundGross)
         val refundTax = includedTax + addedTaxes.sumOf { it.amount.cents }
         val refundNet = refundGross - refundTax
-        RefundPlan(checkId, refundGross, refundNet, refundTax, tt, reason, managerId, linesJson, addedTaxes)
+        // cash back rounds to the nickel like a cash sale; card refunds stay exact
+        val rounding = if (tt == TenderType.CASH) config.roundingPolicy.cashAdjustment(Money(refundGross)).cents else 0L
+        RefundPlan(checkId, refundGross, refundNet, refundTax, tt, reason, managerId, linesJson, addedTaxes, rounding)
     }
 
     /**
@@ -1169,6 +1194,7 @@ class CheckService(private val config: CustomerConfig) {
             it[Refunds.stripePaymentIntentId] = stripePaymentIntentId
             it[Refunds.stripeRefundId] = stripeRefundId
             it[taxesJson] = if (plan.taxLines.isEmpty()) null else taxLinesToJson(plan.taxLines).toString()
+            it[roundingAdjustmentCents] = plan.rounding
         }.value
 
         val tz = tableZoneRowOrNull(check[Checks.tableId])
@@ -1184,6 +1210,8 @@ class CheckService(private val config: CustomerConfig) {
             put("taxIncludedCents", refundTax)
             put("taxes", taxLinesToJson(plan.taxLines))
             put("tenderType", tt.name)
+            // cash back − gross (CASH refunds round to the nickel; 0 otherwise)
+            put("roundingAdjustmentCents", plan.rounding)
             put("reason", reason)
             put("refundedBy", managerId)
             put("tableId", check[Checks.tableId])
@@ -1204,7 +1232,7 @@ class CheckService(private val config: CustomerConfig) {
         RefundResult(
             refund = refundView(Refunds.selectAll().where { Refunds.id eq refundId }.first()),
             check = loadCheck(checkId),
-            slipText = renderRefundSlip(check, refundId, refundGross, refundTax, plan.taxLines, tt, reason, now),
+            slipText = renderRefundSlip(check, refundId, refundGross, refundTax, plan.taxLines, tt, reason, now, plan.rounding),
         )
     }
 
@@ -1316,12 +1344,14 @@ class CheckService(private val config: CustomerConfig) {
         refundedBy = r[Refunds.refundedBy],
         createdAt = VenueClock.iso(r[Refunds.createdAt]),
         taxes = r[Refunds.taxesJson]?.let(::taxLinesFromJson).orEmpty().map { it.toView() },
+        roundingAdjustmentCents = r[Refunds.roundingAdjustmentCents],
+        paidOutCents = r[Refunds.grossCents] + r[Refunds.roundingAdjustmentCents],
     )
 
     /** 42-col refund slip, same virtual printer as receipts. Language follows the check owner. */
     private fun renderRefundSlip(
         check: ResultRow, refundId: Int, gross: Long, tax: Long, addedTaxes: List<TaxLine>,
-        tt: TenderType, reason: String, now: java.time.Instant,
+        tt: TenderType, reason: String, now: java.time.Instant, rounding: Long = 0,
     ): String {
         val policy = receiptPolicyFor(check)
         val locale = policy.locale
@@ -1356,6 +1386,11 @@ class CheckService(private val config: CustomerConfig) {
             add(PrintLine.KeyValue(msg(REFUND_TOTAL), Money(gross).format(), emphasized = true))
             if (policy.showTax && taxRate != null) {
                 add(PrintLine.KeyValue(msg(RECEIPT_TAX_INCLUDED, taxRate), Money(tax - addedTaxes.sumOf { it.amount.cents }).format()))
+            }
+            // cash handed back rounds to the nickel: show the adjustment and the cash
+            if (rounding != 0L) {
+                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), ReceiptRenderer.signed(Money(rounding)) { it.format() }))
+                add(PrintLine.KeyValue(msg(REFUND_CASH_BACK), Money(gross + rounding).format(), emphasized = true))
             }
             add(PrintLine.KeyValue(msg(REFUND_VIA), tenderLabel))
             add(PrintLine.Blank)
@@ -1826,6 +1861,8 @@ class CheckService(private val config: CustomerConfig) {
                 outstandingCents = grand - paid,
                 subtotalCents = grand - taxes.sumOf { it.amount.cents },
                 taxes = taxes.map { it.toView() },
+                cashDueCents = config.roundingPolicy.roundCashDue(Money(grand - paid)).cents,
+                cashRoundingCents = config.roundingPolicy.cashAdjustment(Money(grand - paid)).cents,
             )
         }
         val even = groups.any { it[BillGroups.fixedAmountCents] != null }
@@ -1904,6 +1941,8 @@ class CheckService(private val config: CustomerConfig) {
             taxIncludedCents = check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents,
             paidCents = applied,
             outstandingCents = grandTotal - applied,
+            cashDueCents = config.roundingPolicy.roundCashDue(Money(grandTotal - applied)).cents,
+            cashRoundingCents = config.roundingPolicy.cashAdjustment(Money(grandTotal - applied)).cents,
             tenders = tenders,
             split = buildSplitView(check),
             subtotalCents = grandTotal - taxes.sumOf { it.amount.cents },
@@ -1934,6 +1973,13 @@ data class CheckView(
     val taxIncludedCents: Long, // tax inside the shelf price (inclusive policies only)
     val paidCents: Long,
     val outstandingCents: Long,
+    /**
+     * What settling [outstandingCents] in CASH takes: rounded to the nickel
+     * (unless cash rounding is off). [cashRoundingCents] = cashDue − outstanding,
+     * signed (−2, +1). Card and other electronic payments are the exact amount.
+     */
+    val cashDueCents: Long = 0,
+    val cashRoundingCents: Long = 0,
     val tenders: List<TenderView>,
     /** Settlement-time bill groups; null = not split (the default single-bill flow). */
     val split: SplitView? = null,
@@ -1976,6 +2022,9 @@ data class GroupView(
     val subtotalCents: Long = 0,
     /** The group's share of the check's taxes (the groups' shares sum to the check's). */
     val taxes: List<TaxView> = emptyList(),
+    /** The group's outstanding paid in cash, rounded to the nickel; see [CheckView.cashDueCents]. */
+    val cashDueCents: Long = 0,
+    val cashRoundingCents: Long = 0,
 )
 
 @kotlinx.serialization.Serializable

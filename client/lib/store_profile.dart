@@ -75,6 +75,13 @@ class StoreProfile {
 String money(int cents, {String? currency}) =>
     formatMoney(cents, currency ?? StoreProfile.current.currency);
 
+/// A signed adjustment (cash rounding): `+$0.01`, `−$0.02`. Always shows the
+/// sign so the cashier reads it as a correction, not an amount.
+String signedMoney(int cents, {String? currency}) {
+  final abs = money(cents.abs(), currency: currency);
+  return cents < 0 ? '−$abs' : '+$abs';
+}
+
 String formatMoney(int cents, String currency, {String lang = 'en'}) {
   final sign = cents < 0 ? '-' : '';
   final abs = cents.abs();

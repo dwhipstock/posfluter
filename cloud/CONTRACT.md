@@ -155,7 +155,7 @@ additive.
     {
       "tenderId": 5, "type": "CASH",
       "amountTenderedCents": 60000, "amountAppliedCents": 53486,
-      "roundingAdjustmentCents": -1, "changeCents": 6515,
+      "roundingAdjustmentCents": -1, "changeCents": 6515, // cash took 534.85
       "groupId": null
     }
   ]
@@ -167,6 +167,17 @@ additive.
   (mirrors receipts).
 - On split checks `tenders[].groupId` is set; reports only need `type` +
   amounts, groups are informational.
+- **Cash rounding.** Canada and the US no longer make pennies, so a CASH
+  payment that settles the balance (of the check, or of its split group)
+  rounds to the nearest 5¢ on its last cent digit (1–2 → 0, 3–4 → 5,
+  6–7 → 5, 8–9 → 10). Everything else stays exact: prices, fees, every tax,
+  `grandTotalCents`, and `amountAppliedCents` (which clears the exact
+  balance). `roundingAdjustmentCents` is the signed difference: the cash the
+  customer paid is `amountAppliedCents + roundingAdjustmentCents`, and
+  `changeCents = amountTenderedCents − that`. It is `0` on card, Stripe and
+  transfer tenders, on a partial cash payment, and on stores with
+  `cash.rounding=off`. Revenue and tax reports use the exact figures; the
+  rounding is reported on its own (API.md).
 - **Taxes.** `taxIncludedCents` is every tax inside `grandTotalCents` — the
   historical name now also covers taxes added on top, so `net = gross − tax`
   holds for every store. `taxes` itemises the added ones (the sum of their
@@ -221,7 +232,11 @@ zoneNameFr, zoneNameEn, createdAt, lines?` (+ `processor`,
 `stripePaymentIntentId`, `stripeRefundId` for a card refund through Stripe).
 `grossCents` is the money returned, `taxIncludedCents` every tax inside it,
 `netCents = grossCents − taxIncludedCents`, and `taxes` the added taxes it
-reverses (`check.closed` shape). The store reverses each tax in proportion to
+reverses (`check.closed` shape). `roundingAdjustmentCents` (signed, store
+migration 039): a CASH refund hands back `grossCents` rounded to the nickel,
+and this is the difference (cash back = `grossCents + roundingAdjustmentCents`);
+`0` for card / transfer refunds. Gross, net and tax stay exact. Older stores
+send no `roundingAdjustmentCents`: it is read as 0. The store reverses each tax in proportion to
 the money returned, cumulatively, so a full refund — in one go or in parts —
 reverses every tax to the cent. A by-line refund returns the lines' pre-tax
 price plus their share of the tax. Reports net refunds out of sales and tax.
@@ -234,7 +249,11 @@ Existing `shiftId/closedBy/revenueCents/expectedCashCents/closingCountCents/
 overShortCents` plus:
 `openedAt, closedAt, openedBy, openingFloatCents, transactionCount,
 avgCheckCents, corkageCents,
-tenderBreakdown: [{ "type": "CASH", "amountCents": 123400, "count": 9 }]`.
+tenderBreakdown: [{ "type": "CASH", "amountCents": 123400, "count": 9 }]`,
+`cashRoundingCents` (signed: the shift's cash-sale rounding less its cash
+refunds' rounding; absent from older stores). `expectedCashCents` counts the
+rounded cash that actually changed hands. `tenderBreakdown` amounts are the
+exact applied amounts.
 
 ### Catalog snapshots (menu up-sync)
 Every `item.*` event (`item.created`, `item.updated`, `item.deleted`,
@@ -325,6 +344,7 @@ read-only for menu and staff, and `GET /v1/store/photos/{itemId}` is gone.
 | `CLOUD_SYNC_URL` | cloud API base, e.g. `https://api.example.com` | unset → sync disabled |
 | `CLOUD_SYNC_API_KEY` | the store's bearer key | unset → sync disabled |
 | `CLOUD_SYNC_INTERVAL_SECONDS` | drain/poll cadence | `10` |
+| `POS_CASH_ROUNDING` (tablet: `cash.rounding` in store.properties) | `nickel` rounds a cash payment's final amount to 5¢; `off` charges cash to the cent. Local only, never synced down | `nickel` |
 
 State lives in the store DB table `sync_state (key TEXT PK, value TEXT)`:
 `push_hwm` (last acked outbox row id), `catalog_cursor` (last applied

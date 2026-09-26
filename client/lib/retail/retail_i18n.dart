@@ -240,6 +240,9 @@ class R {
   String get cashReceived =>
       _t('Cash received', 'Efectivo recibido', 'Espèces reçues');
   String get exact => _t('Exact', 'Exacto', 'Exact');
+  String get rounding => _t('Rounding', 'Redondeo', 'Arrondi');
+  String get cashTotal =>
+      _t('Cash total', 'Total en efectivo', 'Total comptant');
   String get takeCash => _t('Take cash', 'Cobrar en efectivo', 'Encaisser');
   String get cardHint => _t(
     'Run the card on the counter terminal for the amount due, then confirm.',

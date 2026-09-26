@@ -19,6 +19,34 @@ export interface CurrencyAmount {
   cents: number;
 }
 
+/**
+ * The net cash rounding of a report scope, exactly: the API's single figure
+ * when every in-scope store shares one currency, else one amount per currency
+ * from `byCurrency`. Never added or converted across currencies. Empty when
+ * the API sent no rounding at all (an older API) — nothing to show then.
+ */
+export function cashRoundingAmounts(
+  combined: number | null | undefined,
+  byCurrency: { currency: Currency; cashRoundingCents?: number | null }[] | undefined,
+  scopeCurrency: Currency
+): CurrencyAmount[] {
+  const rows = byCurrency ?? [];
+  const sent = combined !== undefined || rows.some((r) => r.cashRoundingCents != null);
+  if (!sent) return [];
+  if (rows.length > 1) return rows.map((r) => ({ currency: r.currency, cents: r.cashRoundingCents ?? 0 }));
+  if (combined != null) return [{ currency: rows[0]?.currency ?? scopeCurrency, cents: combined }];
+  if (rows.length === 1) return [{ currency: rows[0].currency, cents: rows[0].cashRoundingCents ?? 0 }];
+  return [];
+}
+
+/** Export KPI lines for the cash rounding: one signed figure, or one per currency. */
+export function cashRoundingKpis(label: string, amounts: CurrencyAmount[], signedIn: MoneyApi["signedIn"]) {
+  return amounts.map((a) => ({
+    label: amounts.length > 1 ? `${label} · ${a.currency}` : label,
+    value: signedIn(a.currency, a.cents),
+  }));
+}
+
 export interface MoneyApi {
   /** More than one currency among the tenant's stores. */
   multi: boolean;
@@ -45,6 +73,8 @@ export interface MoneyApi {
   perCurrency: <R>(rows: R[], currencyOfRow: (r: R) => Currency | undefined, value: (r: R) => number) => CurrencyAmount[];
   /** "CA$1,150 · US$43.80" — exact amounts joined. */
   joinAmounts: (amounts: CurrencyAmount[]) => string;
+  /** "+CA$0.15 · -US$0.37" — exact amounts joined, each with its sign. */
+  signedAmounts: (amounts: CurrencyAmount[]) => string;
   /** An export totals cell over per-store rows: a sum in one currency, else the exact amounts joined. */
   totalCell: <R>(rows: R[], currencyOfRow: (r: R) => Currency | undefined, value: (r: R) => number) => Cell;
   /** "1 USD = 1.37 CAD" for each rate the scope used. */
@@ -106,6 +136,8 @@ export function useMoney(): MoneyApi {
       chartValue: (id, cents) => (mixedScope ? toReporting(cents, currencyOf(id)) ?? 0 : cents),
       perCurrency,
       joinAmounts: (amounts) => amounts.map((a) => fmtIn(a.currency, a.cents)).join(" · "),
+      signedAmounts: (amounts) =>
+        amounts.map((a) => (a.cents > 0 ? `+${fmtIn(a.currency, a.cents)}` : fmtIn(a.currency, a.cents))).join(" · "),
       totalCell: (rows, cur, value) => {
         const amounts = perCurrency(rows, cur, value);
         if (amounts.length <= 1) return Money(amounts[0]?.cents ?? 0, amounts[0]?.currency ?? scopeCurrency);

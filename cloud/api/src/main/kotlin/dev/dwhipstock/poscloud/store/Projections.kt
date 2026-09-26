@@ -191,6 +191,8 @@ object Projections {
             it[qstCents] = taxSum(p, "QST")
             it[taxes] = p.arr("taxes")?.toString()
             it[currency] = cur
+            // cash back − gross on a CASH refund; an older store sends none (NULL → 0)
+            it[roundingAdjustmentCents] = p.long("roundingAdjustmentCents")
         }
     }
 
@@ -253,6 +255,7 @@ object Projections {
             it[closingCountCents] = p.long("closingCountCents")
             it[overShortCents] = p.long("overShortCents")
             it[currency] = cur
+            it[cashRoundingCents] = p.long("cashRoundingCents")
         }
     }
 

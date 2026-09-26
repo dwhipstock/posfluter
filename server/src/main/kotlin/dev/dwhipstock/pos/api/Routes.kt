@@ -128,6 +128,9 @@ data class CustomerBillDto(
     /** Pre-tax subtotal; subtotalCents + sum(taxes) = grandTotalCents. */
     val subtotalCents: Long = 0,
     val taxes: List<CustomerBillTaxDto> = emptyList(),
+    /** Paying the balance in cash: rounded to the nickel, and the signed rounding inside it. */
+    val cashDueCents: Long = 0,
+    val cashRoundingCents: Long = 0,
 )
 
 /**
@@ -818,6 +821,8 @@ private fun customerBill(check: CheckView?): CustomerBillDto {
         grandTotalCents = check.grandTotalCents,
         subtotalCents = check.subtotalCents,
         taxes = check.taxes.map { CustomerBillTaxDto(it.labelFr, it.labelEn, it.ratePercent, it.amountCents) },
+        cashDueCents = check.cashDueCents,
+        cashRoundingCents = check.cashRoundingCents,
     )
 }
 

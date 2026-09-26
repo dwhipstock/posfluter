@@ -336,6 +336,7 @@ const STR = {
     langBtn: "EN", logout: "Déconnexion", tabTables: "Tables", tabPending: "En attente",
     free: "Libre", open: "Ouverte", noZones: "Aucune zone pour l'instant", closed: "Fermée",
     addItems: "＋ Ajouter des articles", onCheck: "Sur l’addition", pendingHd: "⏳ Commandes clients à confirmer",
+    rounding: "Arrondi", cashTotal: "Total comptant",
     total: "Total", emptyCheck: "Aucun article — touchez Ajouter des articles pour commencer.",
     basket: "Panier", addToCheck: "Ajouter à l’addition", subtotal: "Sous-total", note: "Remarque (facultatif)",
     add: "＋ Ajouter", sizes: "formats", viewBasket: "Voir le panier", addedOne: "Ajouté ✓",
@@ -355,6 +356,7 @@ const STR = {
     langBtn: "français", logout: "Log out", tabTables: "Tables", tabPending: "Pending",
     free: "Free", open: "Open", noZones: "No zones yet", closed: "Closed",
     addItems: "＋ Add items", onCheck: "On the bill", pendingHd: "⏳ Customer orders (to confirm)",
+    rounding: "Rounding", cashTotal: "Cash total",
     total: "Total", emptyCheck: "No items yet — tap Add items to start",
     basket: "Basket", addToCheck: "Add to bill", subtotal: "Subtotal", note: "Note (optional)",
     add: "＋ Add", sizes: "sizes", viewBasket: "View basket", addedOne: "Added ✓",
@@ -845,6 +847,9 @@ function renderCheck() {
       ${check.fees.map(feeRow).join("")}
       ${taxRows}
       <div class="total"><span>${T().total}</span><span>${cad(check.grandTotalCents)}</span></div>
+      ${check.cashRoundingCents ? `
+      <div class="row"><span class="nm">${T().rounding}</span><span>${check.cashRoundingCents > 0 ? "+" : ""}${cad(check.cashRoundingCents)}</span></div>
+      <div class="row"><span class="nm">${T().cashTotal}</span><span>${cad(check.cashDueCents)}</span></div>` : ""}
     </div>`
     : (check.pendingLines.length ? "" : `<div class="empty"><div class="big">🧾</div><p>${T().emptyCheck}</p></div>`);
 

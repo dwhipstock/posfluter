@@ -78,6 +78,9 @@ class RefundAndCashMovementTest {
         assertEquals(2328L - checkTax, refund["netCents"]!!.jsonPrimitive.long)
         assertEquals(checkTaxes, refund["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long })
         assertEquals("CASH", refund["tenderType"]!!.jsonPrimitive.content)
+        // cash back rounds to the nickel like the sale did (23.28 → 23.30); gross stays exact
+        assertEquals(2L, refund["roundingAdjustmentCents"]!!.jsonPrimitive.long)
+        assertEquals(2330L, refund["paidOutCents"]!!.jsonPrimitive.long)
         // the manager (fr preference) opened the check → French slip, labels pinned exactly
         val slip = refundBody["slipText"]!!.jsonPrimitive.content
         val slipKv = slip.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
@@ -88,6 +91,7 @@ class RefundAndCashMovementTest {
         assertTrue("Facture de référence #$checkId" in slip)
         assertTrue("Remboursement #" in slip)
         assertTrue("Total retourné" in slip)
+        assertTrue("Arrondi | +0.02" in slipKv && "Remis en espèces | 23.30" in slipKv, slip)
         assertTrue("Remboursé par" in slip && "Espèces" in slip)
         assertTrue("Motif : Le client retourne le produit" in slip) // colon + single space + reason
 
@@ -122,12 +126,16 @@ class RefundAndCashMovementTest {
         val x = json.parseToJsonElement(c.get("/shifts/current/report").bodyAsText()).jsonObject
         assertEquals(50000L, x["cashPaidInCents"]!!.jsonPrimitive.long)
         assertEquals(20000L, x["cashPaidOutCents"]!!.jsonPrimitive.long)
-        assertEquals(2328L, x["cashRefundCents"]!!.jsonPrimitive.long)
+        // the cash that left the drawer: 23.30 (the refund's 23.28 rounded to the nickel)
+        assertEquals(2330L, x["cashRefundCents"]!!.jsonPrimitive.long)
+        // the X shows the drawer so far; net rounding: +0.02 on the sale, +0.02 given back
+        assertEquals(130000L, x["expectedCashCents"]!!.jsonPrimitive.long)
+        assertEquals(0L, x["cashRoundingCents"]!!.jsonPrimitive.long)
 
-        // Z-close: expected = 1000 float + 23.30 cash in − 0 change + 500 in − 200 out − 23.28 cash refund = 1300.02
+        // Z-close: expected = 1000 float + 23.30 cash in − 0 change + 500 in − 200 out − 23.30 cash refund = 1300.00
         val z = json.parseToJsonElement(
-            c.postJson("/shifts/current/close", """{"closingCountCents":130002,"managerPin":"1234"}""").bodyAsText()).jsonObject
-        assertEquals(130002L, z["expectedCashCents"]!!.jsonPrimitive.long)
+            c.postJson("/shifts/current/close", """{"closingCountCents":130000,"managerPin":"1234"}""").bodyAsText()).jsonObject
+        assertEquals(130000L, z["expectedCashCents"]!!.jsonPrimitive.long)
         assertEquals(0L, z["overShortCents"]!!.jsonPrimitive.long)
     }
 

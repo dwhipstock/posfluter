@@ -69,10 +69,12 @@ export function StoreSplit<R extends { venueId: string }>({
     if (c.money && m.mixedScope) {
       // several currencies: one exact total per currency, never one sum
       if (c.total) return "";
-      return m.joinAmounts(m.perCurrency(rows, (r) => m.currencyOf(r.venueId), c.value));
+      const amounts = m.perCurrency(rows, (r) => m.currencyOf(r.venueId), c.value);
+      return c.signed ? m.signedAmounts(amounts) : m.joinAmounts(amounts);
     }
     const n = c.total ? c.total(rows) : rows.reduce((s, r) => s + c.value(r), 0);
-    return c.money ? m.fmtIn(m.scopeCurrency, n) : (c.format ?? String)(n);
+    if (!c.money) return (c.format ?? String)(n);
+    return c.signed ? m.signedIn(m.scopeCurrency, n) : m.fmtIn(m.scopeCurrency, n);
   };
   // stacked store bars across currencies are drawn in the reporting currency
   const chartFormat = (n: number) =>
@@ -184,6 +186,19 @@ function SalesSplit({ rows, chart }: { rows: VenueSummaryRow[]; chart: boolean }
         { key: "tax", label: t("col_tax"), value: (r) => r.taxCents, money: true, hide: "sm" },
         { key: "checks", label: t("col_checks"), value: (r) => r.checkCount, format: count },
         { key: "avg", label: t("kpi_avg_check"), value: (r) => r.avgCheckCents, money: true, hide: "md", total: avg },
+        // exact in each store's currency; the footer totals per currency, never converted
+        ...(rows.some((r) => r.cashRoundingCents != null)
+          ? [
+              {
+                key: "rounding",
+                label: t("cash_rounding"),
+                value: (r: VenueSummaryRow) => r.cashRoundingCents ?? 0,
+                money: true,
+                signed: true,
+                hide: "md" as const,
+              },
+            ]
+          : []),
       ]}
     />
   );

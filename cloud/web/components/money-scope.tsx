@@ -1,6 +1,6 @@
 "use client";
 
-import { Coins } from "lucide-react";
+import { Coins, Scale } from "lucide-react";
 import { useT } from "@/lib/i18n/context";
 import { useMoney, type CurrencyAmount } from "@/lib/money";
 import { useStores } from "@/lib/store";
@@ -60,6 +60,33 @@ export function FxNote({ money, className }: { money?: MoneyScope; className?: s
         {money.convertible
           ? t("fx_note", { cur: money.reportingCurrency, rates: m.rateText(money) })
           : t("fx_no_rate")}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The net cash rounding (cash payments round to the nearest 5¢), as a modest
+ * line: one signed figure for one currency, else one per currency — never a
+ * converted or summed figure. Renders nothing when the API sent none.
+ */
+export function CashRoundingNote({ amounts, className }: { amounts: CurrencyAmount[]; className?: string }) {
+  const t = useT();
+  const m = useMoney();
+  if (amounts.length === 0) return null;
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-2 rounded-lg border border-neutral-200 bg-surface-alt px-3 py-2 text-xs text-neutral-600",
+        className
+      )}
+      data-testid="cash-rounding"
+    >
+      <Scale className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-500" />
+      <span>
+        <span className="font-semibold text-neutral-700">{t("cash_rounding")}:</span>{" "}
+        <span className="font-semibold tabular-nums text-neutral-800">{m.signedAmounts(amounts)}</span>
+        <span className="text-neutral-500"> · {t("cash_rounding_note")}</span>
       </span>
     </div>
   );

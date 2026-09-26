@@ -230,6 +230,8 @@ object Shifts : Table("shifts") {
     val closingCountCents = long("closing_count_cents").nullable()
     val overShortCents = long("over_short_cents").nullable()
     val currency = text("currency").nullable()
+    // net nickel rounding on the shift's cash (019); NULL = an older store
+    val cashRoundingCents = long("cash_rounding_cents").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, shiftId)
 }
 
@@ -256,6 +258,8 @@ object Refunds : Table("refunds") {
     // the whole reversed-tax breakdown and the refund's currency (017)
     val taxes = jsonb("taxes").nullable()
     val currency = text("currency").nullable()
+    // CASH refunds: cash handed back − gross, to the nickel (019); NULL = none sent
+    val roundingAdjustmentCents = long("rounding_adjustment_cents").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, refundId)
 }
 

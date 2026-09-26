@@ -48,6 +48,8 @@ enum class MessageKey(val id: String) {
     /** {0} = tax name, {1} = the venue's registration number for it. */
     RECEIPT_TAX_REGISTRATION("receipt.tax_registration"),
     RECEIPT_ROUNDING("receipt.rounding"),
+    /** A cash payment's amount after nickel rounding (also on the bill). */
+    RECEIPT_CASH_TOTAL("receipt.cash_total"),
     RECEIPT_CHANGE("receipt.change"),
     RECEIPT_BILL_BANNER("receipt.bill_banner"),
     RECEIPT_NOT_A_RECEIPT("receipt.not_a_receipt"),
@@ -61,6 +63,8 @@ enum class MessageKey(val id: String) {
     REFUND_NUMBER("refund.number"),
     REFUND_TOTAL("refund.total"),
     REFUND_VIA("refund.via"),
+    /** Cash actually handed back on a cash refund (rounded to the nickel). */
+    REFUND_CASH_BACK("refund.cash_back"),
     TENDER_CASH("tender.cash"),
     SLIP_TIME("slip.time"),
     SLIP_REASON("slip.reason"),

@@ -195,8 +195,11 @@ class RetailStoreTest {
         assertTrue("CRV" in receipt && "0.20" in receipt, receipt)
         assertTrue("Sales Tax 9.5%" in receipt && "0.44" in receipt, receipt)
         assertTrue("Table" !in receipt && "GST" !in receipt, receipt)
-        // US cash is to the cent: 10.00 − 9.71 = 0.29 change, no rounding line
-        assertTrue("Change" in receipt && "0.29" in receipt && "Rounding" !in receipt, receipt)
+        // US cash rounds to the nickel too: 9.71 → 9.70 in cash, 10.00 − 9.70 = 0.30 change
+        val kv = receipt.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
+        assertTrue("Total | 9.71" in kv, receipt) // the sale itself stays exact
+        assertTrue("Rounding | -0.01" in kv && "Cash total | 9.70" in kv, receipt)
+        assertTrue("Change | 0.30" in kv, receipt)
         // US receipt style: cents always, month-first dates on a 12-hour clock
         assertTrue("10.00" in receipt, receipt)
         assertTrue(Regex("""\d{2}/\d{2}/\d{4} \d{1,2}:\d{2} (AM|PM)""").containsMatchIn(receipt), receipt)

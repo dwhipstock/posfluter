@@ -415,7 +415,9 @@ class L {
       _t('Confirmé — L\'argent est arrivé.', 'Confirm — money received');
   String get cashReceivedTitle => _t('Espèces reçues ✓', 'Cash received ✓');
   String get cashReceived => _t('Obtenez de l\'argent', 'Cash received');
-  String get rounding => _t('rond', 'Rounding');
+  String get rounding => _t('Arrondi', 'Rounding', 'Redondeo');
+  String get cashTotal =>
+      _t('Total comptant', 'Cash total', 'Total en efectivo');
   String get change => _t('changement', 'Change');
   String receivedToast(String amount, String due) =>
       _t('$amount reçu — $due à payer', 'Received $amount — $due outstanding');
@@ -661,6 +663,7 @@ class L {
   // shift reconciliation: cash movements + refunds
   String get paidInOut => _t('Entrée/sortie d\'argent', 'Paid in / out');
   String get cashRefunds => _t('remise en argent', 'Cash refunds');
+  String get cashRounding => _t('Arrondi des espèces', 'Cash rounding');
 
   // refunds — return money on a finalized (CLOSED) bill
   String get refunds => _t('Remboursement', 'Refunds');
@@ -700,6 +703,8 @@ class L {
       _t('Confirmer le remboursement', 'Confirm refund');
   String refundDone(String amount) =>
       _t('$amount remboursé', 'Refunded $amount');
+  String cashHandedBack(String amount) =>
+      _t('Remis en espèces $amount', 'Cash handed back $amount');
   String get noClosedBills =>
       _t('Il n’y a pas encore de facture close.', 'No closed bills yet');
   String get refundHistory =>
