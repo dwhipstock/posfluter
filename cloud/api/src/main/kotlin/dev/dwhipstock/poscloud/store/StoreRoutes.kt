@@ -137,7 +137,16 @@ data class CapabilitiesResponse(
     val contractVersion: Int = CONTRACT_VERSION,
     val timestampFormat: String = "instant",
     val revocationsPath: String = "/v1/store/revocations",
+    /** The on-hand feed for a retail store's "expected qty" hint (§9). */
+    val stockPath: String = "/v1/store/stock",
 )
+
+/** One product's on hand, for the store's count screen (CONTRACT §9). */
+@Serializable
+data class OnHandDto(val itemId: String, val onHand: Long)
+
+@Serializable
+data class OnHandResponse(val retail: Boolean, val asOf: String, val items: List<OnHandDto>)
 
 /** The store ⇄ cloud contract version this API speaks (cloud/CONTRACT.md). */
 const val CONTRACT_VERSION = 2
@@ -248,6 +257,25 @@ fun Route.storeRoutes(config: CloudConfig) {
     }
     get("/store/revocations", revocations)
     get("/store/catalog/changes", revocations)
+
+    /**
+     * On hand per product for THIS store (CONTRACT §9) — read-only, the only
+     * other cloud → store data: the count screen's "expected 12" hint. A
+     * restaurant gets an empty list. Never gates anything at the store.
+     */
+    get("/store/stock") {
+        val scope = requireStore(call)
+        val response = transaction {
+            val venue = Venues.selectAll().where { (Venues.tenantId eq scope.tenantId) and (Venues.id eq scope.venueId) }.firstOrNull()
+            val zone = dev.dwhipstock.poscloud.CloudTime.zone(venue?.get(Venues.timezone))
+            val now = dev.dwhipstock.poscloud.CloudTime.now()
+            if (venue?.get(Venues.kind) != "retail") return@transaction OnHandResponse(false, dev.dwhipstock.poscloud.CloudTime.iso(now, zone), emptyList())
+            val ledger = dev.dwhipstock.poscloud.stock.stockLedger(scope.tenantId, listOf(scope.venueId))
+            OnHandResponse(true, dev.dwhipstock.poscloud.CloudTime.iso(now, zone),
+                ledger.map { (key, row) -> OnHandDto(key.second, row.onHand) }.sortedBy { it.itemId })
+        }
+        call.respond(response)
+    }
 
     /**
      * Store liveness + reachable LAN address (M7 / CONTRACT §8). The store posts

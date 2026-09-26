@@ -1312,6 +1312,10 @@ class CheckService(private val config: CustomerConfig) {
         val lineRows = CheckLines.selectAll()
             .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
             .associate { it[CheckLines.id].value to (it[CheckLines.qty] to it[CheckLines.unitPriceCents]) }
+        // the product behind each line: a retail refund puts it back in stock (cloud ledger)
+        val lineItems = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
+            .associate { it[CheckLines.id].value to it[CheckLines.itemId] }
         var gross = 0L
         val arr = buildJsonArray {
             for (l in lines) {
@@ -1325,6 +1329,7 @@ class CheckService(private val config: CustomerConfig) {
                 gross += amount
                 addJsonObject {
                     put("lineId", l.lineId)
+                    lineItems[l.lineId]?.let { put("itemId", it) }
                     put("qty", l.qty)
                     put("amountCents", amount)
                 }

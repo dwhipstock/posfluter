@@ -220,24 +220,49 @@ Documented in CONTRACT.md: `GET /v1/store/capabilities` (handshake), `POST /v1/i
 
 ## Stock (retail stores; session-authed, store-scoped)
 
-Stock lives in the cloud (migration 018): a retail store sells regardless of
-stock — offline too, and it may go negative — and never tracks it. Per
-product, **on hand = received − sold + adjustments**, where sold is the qty of
-every CLOSED sale synced from that store (voided sales never close; refunds do
-not restock — count a returned bottle back in with an adjustment). Only
+Stock lives in the cloud (migrations 018, 020): a retail store sells
+regardless of stock — offline too, and it may go negative — and never keeps
+an on-hand figure itself. Per product, one ledger:
+**on hand = last count + received − sold ± adjustments + returned**, where
+every term after the last count counts only what is dated after it (never
+counted → start from 0). Counts and deliveries come from the store
+(CONTRACT §2 Stock: `stock.counted`, `stock.received`), deliveries and
+adjustments also from the portal; sold = the qty of every CLOSED sale
+(voided sales never close); returned = the products of by-line refunds. Only
 stores whose `kind` is `retail` have stock; restaurants are left out.
+Quantities only — no money, so no currency mixing.
 
 - `GET /v1/stock` (`?venue=` or all retail stores) →
   `{ rows: [{ venueId, itemId, name, categoryId, barcode, active, received, sold,
-  adjusted, onHand, reorderLevel, low }], byVenue: [{ venueId, venueName,
-  products, onHand, lowCount }], totalOnHand, lowCount, retail }`. `low` =
-  on hand at or below the reorder level (no level = never low). The same
-  product id in two stores is two rows, never one count.
+  adjusted, returned, countedQty?, countedAt?, onHand, reorderLevel, low }],
+  byVenue: [{ venueId, venueName, products, onHand, lowCount }], totalOnHand,
+  lowCount, retail }`. `received`/`sold`/`adjusted`/`returned` are since the
+  last count (`countedQty` at `countedAt`), all time when never counted.
+  `low` = on hand at or below the reorder level (no level = never low). The
+  same product id in two stores is two rows, never one count.
+- `GET /v1/stock/low-count` → `{ lowCount, retail }` (the nav badge).
+- `GET /v1/stock/counts` → `{ counts: [{ venueId, venueName, countId, name,
+  submittedBy, approvedBy?, startedAt?, submittedAt, products, units,
+  varianceLines, varianceUnits, lines: [{ itemId, name, counted, expected?,
+  variance?, countedAt }] }], retail }` — the latest 50 counts submitted at
+  the store(s). `expected` is the ledger at the line's count time, before the
+  count; null = the product had no history.
+- `GET /v1/stock/receipts` → `{ receipts: [{ venueId, venueName, receiptId,
+  supplier, reference, receivedBy, receivedAt, units, lines: [{ itemId, name,
+  qty }] }], retail }` — the latest 50 deliveries received at the store(s).
+- `GET /v1/stock/reorder-suggestions?days=28&cover=14` → `{ rows: [{ venueId,
+  venueName, itemId, name, categoryId, barcode, onHand, soldInWindow,
+  avgDaily, target, suggested, reorderLevel, low }], days, coverDays,
+  toOrder, units, retail }`. avg daily = units sold in the last `days`
+  (14–28) ÷ `days`; target = ⌈avg daily × `cover`⌉ (lead time + days of cover,
+  1–120); suggested = target − on hand, never below 0. Sorted by suggested.
+  400 `bad_param` outside the ranges.
 - `POST /v1/stock/movements?venue=<retail store>` `{ itemId, kind, qty, note }`
-  — `RECEIVED` (a delivery, qty > 0) or `ADJUSTMENT` (a count, breakage; qty ≠ 0).
-  → the product's updated row. 400 `venue_required` / `not_retail` / `bad_qty`
-  / `bad_kind`, 404 `unknown_item`.
+  — `RECEIVED` (a delivery, qty > 0) or `ADJUSTMENT` (breakage, a correction;
+  qty ≠ 0). → the product's updated row. 400 `venue_required` / `not_retail` /
+  `bad_qty` / `bad_kind`, 404 `unknown_item`. (Counts come from the store.)
 - `PUT /v1/stock/reorder?venue=<retail store>` `{ itemId, reorderLevel }` (null
   clears) → the updated row.
 - `GET /v1/stock/movements?venue=<retail store>&itemId=` → the latest 100
-  movements `{ id, venueId, itemId, kind, qty, note, createdBy, createdAt }`.
+  movements `{ id, venueId, itemId, kind (RECEIVED | ADJUSTMENT | COUNT), qty,
+  note, createdBy, createdAt, source (portal | store) }`, newest first.

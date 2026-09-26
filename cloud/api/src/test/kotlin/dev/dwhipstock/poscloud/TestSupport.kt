@@ -74,7 +74,8 @@ object TestSupport {
                     "catalog_categories, catalog_items, catalog_variants, catalog_changes, " +
                     "staff, staff_venues, role_grants, staff_grants, " +
                     "pairing_codes, devices, " +
-                    "item_photos, stock_movements, stock_levels RESTART IDENTITY CASCADE"
+                    "item_photos, stock_movements, stock_levels, stock_counts, stock_count_lines, stock_receipts, " +
+                    "refund_lines RESTART IDENTITY CASCADE"
             )
         }
     }
