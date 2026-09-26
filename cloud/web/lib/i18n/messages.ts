@@ -545,8 +545,8 @@ export const messages = {
   nav_stock: m("Stock", "Stock"),
   stock_title: m("Stock", "Stock"),
   stock_sub: m(
-    "En main = reçu − vendu ± ajustements, calculé à partir des ventes synchronisées.",
-    "On hand = received − sold ± adjustments, from the synced sales."
+    "En main = dernier inventaire + reçu − vendu ± ajustements + retours, à partir des ventes et inventaires synchronisés.",
+    "On hand = last count + received − sold ± adjustments + returns, from the synced sales and counts."
   ),
   stock_kpi_products: m("Produits", "Products"),
   stock_kpi_on_hand: m("Unités en main", "Units on hand"),
@@ -598,6 +598,70 @@ export const messages = {
   stock_history: m("Mouvements récents", "Recent movements"),
   stock_kind_RECEIVED: m("Livraison", "Delivery"),
   stock_kind_ADJUSTMENT: m("Ajustement", "Adjustment"),
+  stock_kind_COUNT: m("Inventaire", "Count"),
+  stock_tab_on_hand: m("En main", "On hand"),
+  stock_tab_reorder: m("À commander", "Reorder"),
+  stock_tab_counts: m("Inventaires", "Counts"),
+  stock_tab_deliveries: m("Livraisons", "Deliveries"),
+  stock_col_returned: m("Retours", "Returned"),
+  stock_col_counted: m("Compté", "Counted"),
+  stock_counted_on: m(
+    "Compté {qty} le {when} · chiffres depuis l’inventaire",
+    "Counted {qty} on {when} · figures since the count"
+  ),
+  stock_from_store: m("magasin", "store"),
+  stock_nav_low: m("{n} en stock bas", "{n} low on stock"),
+  // reorder suggestions
+  reorder_title: m("Suggestions de commande", "Reorder suggestions"),
+  reorder_sub: m(
+    "Ventes moyennes par jour × jours à couvrir (délai + réserve), moins l’en-main.",
+    "Average daily sales × days to cover (lead time + buffer), less on hand."
+  ),
+  reorder_days: m("Ventes des derniers", "Sales over the last"),
+  reorder_days_unit: m("jours", "days"),
+  reorder_cover: m("Jours à couvrir", "Days to cover"),
+  reorder_col_sold: m("Vendu ({n} j)", "Sold ({n} d)"),
+  reorder_col_avg: m("Moy./jour", "Avg / day"),
+  reorder_col_target: m("Cible", "Target"),
+  reorder_col_suggested: m("À commander", "Order"),
+  reorder_kpi_products: m("Produits à commander", "Products to order"),
+  reorder_kpi_units: m("Unités suggérées", "Units suggested"),
+  reorder_only: m("À commander seulement", "Only products to order"),
+  reorder_none: m("Rien à commander", "Nothing to order"),
+  reorder_none_hint: m(
+    "L’en-main couvre les ventes récentes pour la période choisie.",
+    "On hand covers the recent sales for the days chosen."
+  ),
+  reorder_as_of: m("{days} jours de ventes · {cover} jours à couvrir", "{days} days of sales · {cover} days to cover"),
+  // counts and deliveries from the store
+  counts_title: m("Inventaires du magasin", "Counts from the store"),
+  counts_sub: m(
+    "Comptés en magasin (appli Stock ou comptoir). Un inventaire fixe l’en-main à l’heure du comptage; l’écart est calculé par rapport au chiffre attendu à ce moment.",
+    "Counted in the store (Stock app or the counter). A count sets on hand as of when it was counted; the variance is against what was expected then."
+  ),
+  counts_empty: m("Aucun inventaire", "No counts yet"),
+  counts_empty_hint: m(
+    "Les inventaires faits en magasin apparaissent ici après la synchronisation.",
+    "Counts done in the store show here after it syncs."
+  ),
+  counts_by: m("par {who}", "by {who}"),
+  counts_approved: m("approuvé par {who}", "approved by {who}"),
+  counts_products: m("{n} produits", "{n} products"),
+  counts_variances: m("{n} écarts", "{n} variances"),
+  counts_no_variance: m("aucun écart", "no variance"),
+  counts_col_expected: m("Attendu", "Expected"),
+  counts_col_variance: m("Écart", "Variance"),
+  deliveries_title: m("Livraisons reçues en magasin", "Deliveries received at the store"),
+  deliveries_empty: m("Aucune livraison", "No deliveries yet"),
+  deliveries_empty_hint: m(
+    "Les livraisons scannées en magasin apparaissent ici après la synchronisation.",
+    "Deliveries scanned in at the store show here after it syncs."
+  ),
+  deliveries_col_supplier: m("Fournisseur", "Supplier"),
+  deliveries_col_reference: m("Référence", "Reference"),
+  deliveries_col_by: m("Reçu par", "Received by"),
+  deliveries_col_units: m("Unités", "Units"),
+  deliveries_col_when: m("Reçu le", "Received"),
   stock_as_of: m("En date de maintenant", "As of now"),
   stock_negative_note: m(
     "Le magasin vend même hors stock : un chiffre négatif veut dire qu’une livraison n’a pas été saisie.",

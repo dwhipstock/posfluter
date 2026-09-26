@@ -91,3 +91,4 @@ _handoff/
 
 # Local two-store demo runtime (Plateau desktop store DB, logs, pid)
 .demo/
+__pycache__/

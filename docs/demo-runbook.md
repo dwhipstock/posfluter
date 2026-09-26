@@ -124,13 +124,26 @@ phone until the store has it.
   Wi-Fi is back (or tap **Send now**). Something the store refused (a
   variance without a manager) stays listed under "Needs attention" with
   **Try again**.
-- The portal's Stock page shows the counts (who, when, variances) and the
-  deliveries after sync; a count sets on hand as of the count time.
+- The portal's **Stock** page (Sage & Poppy, or All stores) has four tabs:
+  **On hand** (a count sets on hand as of its count time; the columns are
+  what happened since), **Reorder** (average daily sales over the last
+  14 / 21 / 28 days × the days to cover — lead time plus buffer — less on
+  hand; export to CSV / Excel / PDF), **Counts** (who, when, the variances,
+  click one for its lines) and **Deliveries**. The nav's Stock item shows a
+  badge with the number of products at or below their reorder level (set a
+  level with the "Reorder at" cell).
+- `demo-up.sh` seeds a little stock history once
+  (`scripts/demo-seed-stock.py`, after the retail sales): two deliveries, a
+  few sales, a by-line refund of a six-pack (it goes back on hand) and a
+  shelf count two products short, submitted by the cashier with the
+  manager's PIN. Sales are all "today", so with 28 days of sales Reorder
+  suggests little; pick 14 days and a longer cover (e.g. 90) to see it work.
 
-The screens (`docs/screenshots/stock/`, rendered by
-`client/test/stock_app_test.dart` with `--dart-define=SHOTS_DIR=…`): phone home,
-counting, review, manager PIN, offline, receiving, and the tablet's count
-screen.
+The screens (`docs/screenshots/stock/`): phone home, counting, review,
+manager PIN, offline, receiving and the tablet's count screen (01–07,
+rendered by `client/test/stock_app_test.dart` with
+`--dart-define=SHOTS_DIR=…`), and the portal's on hand, reorder, counts and
+deliveries tabs after the seed (08–11).
 
 #### Android phone: install, join, pair, count
 

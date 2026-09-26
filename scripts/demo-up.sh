@@ -239,6 +239,14 @@ if [[ "$SEED" == "1" ]]; then
   else
     echo "WARN: retail demo seed failed — re-run: STORE_URL=http://localhost:${SAGE_POPPY_PORT} python3 scripts/demo-seed-retail.py" >&2
   fi
+  # stock history (deliveries, a refund, a shelf count) — after the sales, once
+  if [[ -f "$SAGE_POPPY_DIR/.demo-stock-seeded" ]]; then
+    echo "Sage & Poppy stock history already seeded — skipping."
+  elif STORE_URL="http://localhost:${SAGE_POPPY_PORT}" python3 scripts/demo-seed-stock.py; then
+    touch "$SAGE_POPPY_DIR/.demo-stock-seeded"
+  else
+    echo "WARN: stock demo seed failed — re-run: STORE_URL=http://localhost:${SAGE_POPPY_PORT} python3 scripts/demo-seed-stock.py" >&2
+  fi
 fi
 
 # --- summary ---------------------------------------------------------------------

@@ -25,19 +25,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CountsPanel, DeliveriesPanel, ReorderPanel } from "@/components/stock/store-panels";
 import { cn } from "@/lib/utils";
 
 type Action = { kind: "RECEIVED" | "ADJUSTMENT" | "REORDER"; row: StockRow };
 
 /**
  * Stock of the retail stores (restaurants don't track it). The cloud computes
- * on hand = received − sold ± adjustments from the synced sales; deliveries
- * and adjustments are recorded here and never flow down to the store. With
- * one retail store picked, each row can be received, adjusted and given a
- * reorder level; "All stores" lists every retail store's products.
+ * on hand = last count + received − sold ± adjustments + returns, from the
+ * synced sales and the counts / deliveries done at the store (stock app or
+ * counter); deliveries and adjustments can also be recorded here, and never
+ * flow down to the store. With one retail store picked, each row can be
+ * received, adjusted and given a reorder level; "All stores" lists every
+ * retail store's products. Tabs: on hand, reorder suggestions, the store's
+ * counts, and its deliveries.
  */
 export default function StockPage() {
   const t = useT();
+  const fmt = useFmt();
   const meta = useExportMeta();
   const storeExport = useStoreExport();
   const { store, combined } = useStores();
@@ -45,6 +51,7 @@ export default function StockPage() {
   const [q, setQ] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
+  const [tab, setTab] = useState("on-hand");
   const canRecord = !!store && isRetail(store);
 
   const rows = useMemo(() => {
@@ -76,6 +83,8 @@ export default function StockPage() {
             col.int(t("stock_col_received"), (r) => r.received),
             col.int(t("stock_col_sold"), (r) => r.sold),
             col.int(t("stock_col_adjusted"), (r) => r.adjusted),
+            col.int(t("stock_col_returned"), (r) => r.returned ?? 0),
+            col.text(t("stock_col_counted"), (r) => r.countedQty ?? "", { align: "right", width: 10 }),
             col.int(t("stock_col_on_hand"), (r) => r.onHand),
             col.text(t("stock_col_reorder"), (r) => (r.reorderLevel ?? "") as string | number, { align: "right", width: 10 }),
             col.text(t("stock_col_low"), (r) => (r.low ? t("stock_yes") : ""), { width: 8 }),
@@ -88,6 +97,8 @@ export default function StockPage() {
             Int(rows.reduce((n, r) => n + r.received, 0)),
             Int(rows.reduce((n, r) => n + r.sold, 0)),
             Int(rows.reduce((n, r) => n + r.adjusted, 0)),
+            Int(rows.reduce((n, r) => n + (r.returned ?? 0), 0)),
+            T(""),
             Int(rows.reduce((n, r) => n + r.onHand, 0)),
             T(""),
             T(String(rows.filter((r) => r.low).length)),
@@ -102,7 +113,7 @@ export default function StockPage() {
       <PageHeader
         title={t("stock_title")}
         sub={t("stock_sub")}
-        action={<ExportMenu build={buildDoc} disabled={!data || !data.retail} />}
+        action={tab === "on-hand" ? <ExportMenu build={buildDoc} disabled={!data || !data.retail} /> : undefined}
       />
 
       {isLoading && !data ? (
@@ -118,7 +129,23 @@ export default function StockPage() {
           <EmptyState title={t("stock_not_retail")} hint={t("stock_not_retail_hint")} />
         </Card>
       ) : data ? (
-        <>
+        <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="on-hand">{t("stock_tab_on_hand")}</TabsTrigger>
+            <TabsTrigger value="reorder">{t("stock_tab_reorder")}</TabsTrigger>
+            <TabsTrigger value="counts">{t("stock_tab_counts")}</TabsTrigger>
+            <TabsTrigger value="deliveries">{t("stock_tab_deliveries")}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="reorder">
+            <ReorderPanel />
+          </TabsContent>
+          <TabsContent value="counts">
+            <CountsPanel />
+          </TabsContent>
+          <TabsContent value="deliveries">
+            <DeliveriesPanel />
+          </TabsContent>
+          <TabsContent value="on-hand" className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <Kpi label={t("stock_kpi_products")} value={String(data.rows.length)} />
             <Kpi label={t("stock_kpi_on_hand")} value={String(data.totalOnHand)} accent />
@@ -173,6 +200,11 @@ export default function StockPage() {
                             <span className="font-medium">{r.name}</span>
                             <StoreTag venueId={r.venueId} />
                           </div>
+                          {r.countedAt && (
+                            <div className="text-xs text-neutral-500">
+                              {t("stock_counted_on", { qty: r.countedQty ?? 0, when: fmt.dateTime(r.countedAt) })}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="hidden font-mono text-xs text-neutral-500 lg:table-cell">
                           {r.barcode ?? "—"}
@@ -207,7 +239,10 @@ export default function StockPage() {
                         </TableCell>
                         <TableCell className="hidden text-right tabular-nums md:table-cell">{r.received}</TableCell>
                         <TableCell className="hidden text-right tabular-nums md:table-cell">{r.sold}</TableCell>
-                        <TableCell className="hidden text-right tabular-nums md:table-cell">{r.adjusted}</TableCell>
+                        <TableCell className="hidden text-right tabular-nums md:table-cell">
+                          {r.adjusted}
+                          {!!r.returned && <span className="ml-1 text-xs text-neutral-500">(+{r.returned})</span>}
+                        </TableCell>
                         {canRecord && (
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1.5">
@@ -228,7 +263,8 @@ export default function StockPage() {
             )}
           </Card>
           {data.rows.some((r) => r.onHand < 0) && <p className="text-xs text-neutral-500">{t("stock_negative_note")}</p>}
-        </>
+          </TabsContent>
+        </Tabs>
       ) : null}
 
       {action && store && (
