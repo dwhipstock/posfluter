@@ -51,6 +51,11 @@ enum class MessageKey(val id: String) {
     RECEIPT_CHANGE("receipt.change"),
     RECEIPT_BILL_BANNER("receipt.bill_banner"),
     RECEIPT_NOT_A_RECEIPT("receipt.not_a_receipt"),
+    // retail counter receipts: "Register 1 · Sale #12" instead of table / bill
+    RECEIPT_REGISTER("receipt.register"),
+    RECEIPT_SALE("receipt.sale"),
+    /** {0} = the legal age the customer's ID was checked against (21). */
+    RECEIPT_AGE_VERIFIED("receipt.age_verified"),
     REFUND_HEADER("refund.header"),
     REFUND_REF_BILL("refund.ref_bill"),
     REFUND_NUMBER("refund.number"),
@@ -106,7 +111,20 @@ object Messages {
     fun supports(locale: LocaleCode) = locale.tag in bundles
 
     /** Key ids a locale actually translates (no fallback) — translator/QA visibility. */
-    fun translatedKeys(locale: LocaleCode): Set<String> = bundles[locale.tag]?.keys ?: emptySet()
+    fun translatedKeys(locale: LocaleCode): Set<String> =
+        bundles[locale.tag]?.keys?.filterNot { it.startsWith(DATA_PREFIX) }?.toSet() ?: emptySet()
+
+    /** Catalog entries that translate DATA labels, under `data.` (see [dataLabel]). */
+    const val DATA_PREFIX = "data."
+
+    /**
+     * An optional translation of a DATA label — a tax, fee or tender name the
+     * store's config carries in French and English only — into [locale]:
+     * `data.tax.US_SALES=Impuesto sobre la venta` in messages_es. Only [locale]
+     * itself is consulted (no default-locale fallback), so a key in one pack
+     * can never change another language's receipts. Null = not translated.
+     */
+    fun dataLabel(id: String, locale: LocaleCode): String? = bundles[locale.tag]?.get(DATA_PREFIX + id)
 
     /**
      * Force catalog discovery at startup. Throws (failing boot) when the
@@ -224,7 +242,7 @@ object Messages {
         val allIds = MessageKey.entries.map { it.id }.toSet()
         found.forEach { (tag, messages) ->
             val missing = allIds - messages.keys
-            val unknown = messages.keys - allIds
+            val unknown = messages.keys.filterNot { it.startsWith(DATA_PREFIX) }.toSet() - allIds
             if (missing.isNotEmpty()) {
                 log.warn("i18n: locale '$tag' is missing ${missing.size} key(s) — they fall back to '${defaultLocale.tag}': ${missing.sorted()}")
             }

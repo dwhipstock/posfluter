@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Sage &amp; Poppy Bottle Shop">
+  <!-- Sage & Poppy Bottle Shop: original mark. A sage bottle with a California
+       poppy in front of it, on a warm off-white disc with a sage ring. -->
+  <defs>
+    <clipPath id="disc"><circle cx="256" cy="256" r="232"/></clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="244" fill="#FBF7EF"/>
+  <circle cx="256" cy="256" r="232" fill="none" stroke="#5E7F5A" stroke-width="16"/>
+  <g clip-path="url(#disc)">
+    <!-- rolling hills -->
+    <path d="M24 392 C 120 350, 190 372, 256 384 S 400 350, 488 380 L 488 512 L 24 512 Z" fill="#DDE6D6"/>
+    <path d="M24 430 C 130 400, 220 426, 300 420 S 430 398, 488 414 L 488 512 L 24 512 Z" fill="#C9D8C1"/>
+  </g>
+  <!-- bottle -->
+  <path d="M232 70 h48 v18 h-4 v58 c0 14 8 22 22 36 c22 22 32 42 32 74 v140 c0 18 -12 28 -30 28 h-88 c-18 0 -30 -10 -30 -28 v-140 c0 -32 10 -52 32 -74 c14 -14 22 -22 22 -36 v-58 h-4 z"
+        fill="#4E6B4A"/>
+  <rect x="236" y="62" width="40" height="12" rx="4" fill="#3E5A3B"/>
+  <!-- bottle label -->
+  <rect x="210" y="268" width="92" height="82" rx="10" fill="#FBF7EF"/>
+  <path d="M226 318 c10 -18 22 -26 30 -26 s20 8 30 26" fill="none" stroke="#5E7F5A" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="256" cy="296" r="7" fill="#E8702A"/>
+  <!-- poppy stem + leaf -->
+  <path d="M168 468 C 170 420, 160 380, 150 340" fill="none" stroke="#5E7F5A" stroke-width="9" stroke-linecap="round"/>
+  <path d="M164 420 C 136 404, 118 408, 104 424 C 124 438, 146 436, 164 420 Z" fill="#6F9068"/>
+  <!-- poppy: four cupped petals, dark centre -->
+  <g transform="translate(150 316)">
+    <ellipse cx="-30" cy="-6" rx="40" ry="34" fill="#E8702A" transform="rotate(-18)"/>
+    <ellipse cx="30" cy="-6" rx="40" ry="34" fill="#E8702A" transform="rotate(18)"/>
+    <ellipse cx="0" cy="-34" rx="38" ry="32" fill="#F08A40"/>
+    <ellipse cx="0" cy="14" rx="42" ry="30" fill="#D9601F"/>
+    <path d="M-44 -4 C -30 -22, 30 -22, 44 -4" fill="none" stroke="#C4531A" stroke-width="3" opacity=".6"/>
+    <circle cx="0" cy="-8" r="13" fill="#3B2A1C"/>
+    <g fill="#F6C453">
+      <circle cx="-9" cy="-19" r="3"/><circle cx="9" cy="-19" r="3"/>
+      <circle cx="-15" cy="-6" r="3"/><circle cx="15" cy="-6" r="3"/>
+      <circle cx="0" cy="5" r="3"/>
+    </g>
+  </g>
+</svg>

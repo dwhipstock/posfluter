@@ -49,6 +49,14 @@ private fun itemRowSnapshot(row: ResultRow, photoVersion: Long?): JsonObject {
         put("deleted", row[Items.deletedAt] != null)
         // optional hint; the binary moves via the photo sideband, never here
         photoVersion?.let { put("photoVersion", it) }
+        // retail shelf facts (038), only where they differ from a pub item
+        row[Items.barcode]?.let { put("barcode", it) }
+        if (row[Items.ageRestricted]) put("ageRestricted", true)
+        if (!row[Items.taxable]) put("taxable", false)
+        if (row[Items.crvSize] != "NONE") {
+            put("crvSize", row[Items.crvSize])
+            put("packUnits", row[Items.packUnits])
+        }
         put("variants", JsonArray(variants))
     }
 }

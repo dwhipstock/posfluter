@@ -43,6 +43,29 @@ data class ItemDto(
     val abbrev: String, val isAlcohol: Boolean, val active: Boolean, val variants: List<VariantDto>,
     /** Cache-busting photo version (file mtime); null = no photo → tile shows the badge. */
     val photoVersion: Long? = null,
+    /** Retail shelf facts (038): UPC, ID check, taxable, CRV per unit sold. */
+    val barcode: String? = null,
+    val ageRestricted: Boolean = false,
+    val taxable: Boolean = true,
+    val crvSize: String = "NONE",
+    val packUnits: Int = 1,
+    val depositCents: Long = 0,
+)
+
+/** An item row as the API shows it (menu and retail screens). */
+internal fun itemDtoOf(
+    row: org.jetbrains.exposed.sql.ResultRow, variants: List<VariantDto>, photoVersion: Long? = null,
+) = ItemDto(
+    row[Items.id], row[Items.nameFr], row[Items.nameEn],
+    row[Items.descriptionFr], row[Items.descriptionEn], row[Items.categoryId],
+    row[Items.abbrev], row[Items.isAlcohol], row[Items.active], variants,
+    photoVersion = photoVersion,
+    barcode = row[Items.barcode],
+    ageRestricted = row[Items.ageRestricted],
+    taxable = row[Items.taxable],
+    crvSize = row[Items.crvSize],
+    packUnits = row[Items.packUnits],
+    depositCents = dev.dwhipstock.pos.sdk.Crv.perUnit(dev.dwhipstock.pos.sdk.Crv.size(row[Items.crvSize]), row[Items.packUnits]).cents,
 )
 
 @Serializable
@@ -447,11 +470,8 @@ fun Route.posRoutes(
             val query = if (includeInactive) Items.selectAll().where { Items.deletedAt.isNull() }
             else Items.selectAll().where { (Items.active eq true) and (Items.deletedAt.isNull()) }
             query.map {
-                ItemDto(
-                    it[Items.id], it[Items.nameFr], it[Items.nameEn],
-                    it[Items.descriptionFr], it[Items.descriptionEn], it[Items.categoryId],
-                    it[Items.abbrev], it[Items.isAlcohol], it[Items.active],
-                    variantsByItem[it[Items.id]] ?: emptyList(),
+                itemDtoOf(
+                    it, variantsByItem[it[Items.id]] ?: emptyList(),
                     photoVersion = it[Items.photoPath]?.let { _ -> photos.version(it[Items.id]) },
                 )
             }

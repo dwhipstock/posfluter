@@ -13,6 +13,9 @@ import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_ROUNDING
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_SUBTOTAL
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TABLE
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TOTAL
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_REGISTER
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_SALE
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_AGE_VERIFIED
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_INCLUDED
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_LINE
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_REGISTRATION
@@ -40,6 +43,8 @@ data class Receipt(
     val tenders: List<ReceiptTender>,
     /** Taxes added on top of the pre-tax subtotal, one line each; empty = none. */
     val taxes: List<TaxLine> = emptyList(),
+    /** The legal age a passing ID check cleared the sale at (retail); null = no check. */
+    val ageVerifiedAt: Int? = null,
 ) {
     /** Pre-tax subtotal: the total less the taxes added on top. */
     val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
@@ -57,7 +62,7 @@ data class ReceiptItem(
     val note: String?,
 )
 
-data class ReceiptFee(val labelFr: String, val labelEn: String, val amount: Money)
+data class ReceiptFee(val labelFr: String, val labelEn: String, val amount: Money, val code: String = "")
 
 data class ReceiptTender(
     val labelFr: String,
@@ -66,6 +71,8 @@ data class ReceiptTender(
     val amountApplied: Money,
     val roundingAdjustment: Money,
     val change: Money,
+    /** CASH | CARD | …: lets a locale pack name the tender ([Messages.dataLabel]). */
+    val type: String = "",
 )
 
 /**
@@ -94,6 +101,9 @@ sealed interface ReceiptPolicy {
         return "%04d-%02d-%02d %02d:%02d".format(dt.year, dt.monthValue, dt.dayOfMonth, dt.hour, dt.minute)
     }
 
+    /** A retail counter: "Register 1 · Sale #12" instead of "Table · Bill". */
+    val retail: Boolean get() = false
+
     /** Same venue identity, different print locale — the check owner's preference wins at close time. */
     fun withLocale(locale: LocaleCode): ReceiptPolicy
 
@@ -103,6 +113,7 @@ sealed interface ReceiptPolicy {
         override val footerText: String,
         override val showTax: Boolean,
         override val locale: LocaleCode = LocaleCode.EN,
+        override val retail: Boolean = false,
     ) : ReceiptPolicy {
         override fun withLocale(locale: LocaleCode) = copy(locale = locale)
     }
@@ -129,7 +140,11 @@ object ReceiptRenderer {
             add(PrintLine.Header(msg(RECEIPT_BILL_BANNER)))
             add(PrintLine.Blank)
         }
-        add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " #" + receipt.checkId))
+        if (policy.retail) {
+            add(PrintLine.KeyValue(msg(RECEIPT_REGISTER) + " " + receipt.tableLabel, msg(RECEIPT_SALE) + " #" + receipt.checkId))
+        } else {
+            add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " #" + receipt.checkId))
+        }
         add(PrintLine.KeyValue(msg(RECEIPT_OPEN), policy.formatDate(receipt.openedAt)))
         // provisional: "Printed at" (this snapshot); final: the close/paid time
         add(PrintLine.KeyValue(
@@ -145,7 +160,8 @@ object ReceiptRenderer {
             item.note?.let { add(PrintLine.Text("  • $it")) }
         }
         for (fee in receipt.fees) {
-            add(PrintLine.KeyValue(locale.dataText(fee.labelFr, fee.labelEn), fee.amount.format()))
+            val label = Messages.dataLabel("fee.${fee.code}", locale) ?: locale.dataText(fee.labelFr, fee.labelEn)
+            add(PrintLine.KeyValue(label, fee.amount.format()))
         }
         add(PrintLine.Divider)
 
@@ -162,7 +178,8 @@ object ReceiptRenderer {
                 receipt.taxIncluded.format(),
             ))
         }
-        receipt.taxes.forEach { add(PrintLine.Text(taxRegistrationLine(it.component, locale))) }
+        receipt.taxes.filter { it.component.registrationNumber.isNotBlank() }
+            .forEach { add(PrintLine.Text(taxRegistrationLine(it.component, locale))) }
         add(PrintLine.Blank)
 
         // A provisional bill has no payment yet — omit the tender section, and
@@ -173,7 +190,8 @@ object ReceiptRenderer {
         }
 
         for (tender in receipt.tenders) {
-            add(PrintLine.KeyValue(locale.dataText(tender.labelFr, tender.labelEn), tender.amountTendered.format()))
+            val label = Messages.dataLabel("tender.${tender.type}", locale) ?: locale.dataText(tender.labelFr, tender.labelEn)
+            add(PrintLine.KeyValue(label, tender.amountTendered.format()))
             if (!tender.roundingAdjustment.isZero) {
                 add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), tender.roundingAdjustment.format()))
             }
@@ -182,13 +200,25 @@ object ReceiptRenderer {
             }
         }
 
+        receipt.ageVerifiedAt?.let {
+            add(PrintLine.Blank)
+            add(PrintLine.Text(msg(RECEIPT_AGE_VERIFIED, it), Align.CENTER))
+        }
+
         add(PrintLine.Blank)
         add(PrintLine.Text(policy.footerText, Align.CENTER))
     }
 
-    /** Both languages' names, the print locale's first: "GST/TPS" in English, "TPS/GST" in French. */
-    fun taxName(tax: TaxComponent, locale: LocaleCode): String =
-        locale.dataText("${tax.labelFr}/${tax.labelEn}", "${tax.labelEn}/${tax.labelFr}")
+    /**
+     * Both languages' names, the print locale's first: "GST/TPS" in English,
+     * "TPS/GST" in French. A tax with one name ("Sales Tax") prints it once;
+     * a locale pack may translate it (`data.tax.<code>`).
+     */
+    fun taxName(tax: TaxComponent, locale: LocaleCode): String {
+        Messages.dataLabel("tax.${tax.code}", locale)?.let { return it }
+        if (tax.labelFr == tax.labelEn) return tax.labelEn
+        return locale.dataText("${tax.labelFr}/${tax.labelEn}", "${tax.labelEn}/${tax.labelFr}")
+    }
 
     /** "GST/TPS 5%", "TVQ/QST 9,975 %". */
     fun taxLineLabel(tax: TaxComponent, locale: LocaleCode): String =
