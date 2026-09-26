@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 WORK = os.environ.get("LOADTEST_DIR") or os.path.join(REPO, ".loadtest")
 RESULTS = os.path.join(WORK, "results")
-STORE_JAR = os.path.join(REPO, "server", "build", "libs", "pos-server-all.jar")
+STORE_JAR = os.environ.get("LT_STORE_JAR") or os.path.join(REPO, "server", "build", "libs", "pos-server-all.jar")
 API_JAR = os.path.join(REPO, "cloud", "api", "build", "libs", "api-all.jar")
 
 # Ports the load test may use. The live demo stores (:8080, :8082), the gas
@@ -310,7 +310,7 @@ def start_store(name: str, venue: str, port: int, data_dir: str, extra_env: dict
         env[k.strip()] = v.strip()
     log_path = os.path.join(data_dir, "store.log")
     lf = open(log_path, "ab")
-    jvm = [f"-Xmx{heap}"]
+    jvm = [f"-Xmx{heap}", *os.environ.get("LT_STORE_JVM", "").split()]
     if os.environ.get("LT_JFR"):  # a CPU profile of the store, written when it stops
         jvm.append(f"-XX:StartFlightRecording=filename={os.path.join(data_dir, 'store.jfr')},settings=profile")
     p = subprocess.Popen(["java", *jvm, "-jar", STORE_JAR], cwd=data_dir, env=env,

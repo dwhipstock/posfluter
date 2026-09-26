@@ -47,6 +47,19 @@ FIXES = [
      "With 27 staff, a manager-PIN approval did 27 bcrypt checks (~0.8 s) while holding the database.",
      "An approval does 1-2 checks; other devices keep selling during a sign-in.",
      "`server/.../base/AuthService.kt`, test `PinCheckOutsideTransactionTest`"),
+    ("The store's memory grew with every sale",
+     "Found while soaking the first fix: on its one long-lived database connection the store kept about "
+     "25 KB a sale (the driver holds what unclosed statements keep until its connection closes). The "
+     "connection is now reopened every 500 transactions, which costs about a millisecond.",
+     "5 devices, 8,700 sales: resident memory 355 → 596 MB, heap after GC 21 → 40 MB, still rising.",
+     "Same run: 336 MB and 17.5 MB, flat, same throughput (the soak below is 2 hours of it).",
+     "`server/.../db/OneWriterDataSource.kt`, test `OneWriterDataSourceTest`"),
+    ("Split checks slowed down as history grew",
+     "Every view, payment and close of a split check looked up its groups' payments and its lines' "
+     "allocations with no index, reading the whole table each time.",
+     "Restaurant with a year of sales, 10 devices: 670 sales/min, p95 124 ms.",
+     "2,170 sales/min, p95 29 ms.",
+     "`server/src/main/resources/migrations/049_split_indexes.sql`, test `SplitIndexesTest`"),
     ("A year's sales report ran the store out of memory",
      "The X / Z report and the date-range report loaded every sale of the range, then its payments and "
      "lines. They are now sums in SQLite.",
