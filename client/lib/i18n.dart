@@ -12,7 +12,34 @@ class Prefs extends ChangeNotifier {
 
   static const _storage = FlutterSecureStorage();
 
-  String lang = 'en'; // en | fr
+  String lang = 'en'; // one of the store's languages: en | fr (pubs), en | es (US store)
+
+  /// Every language the terminal has strings for; a store offers a subset.
+  static const known = {'en', 'fr', 'es'};
+
+  /// The store's languages (from its profile), default first.
+  List<String> get storeLocales => StoreProfile.current.locales;
+
+  String _supported(String? value) {
+    final v = value?.trim().toLowerCase() ?? '';
+    if (known.contains(v) && storeLocales.contains(v)) return v;
+    // a language this store doesn't offer: English if it does, else its default
+    return storeLocales.contains('en') ? 'en' : StoreProfile.current.defaultLocale;
+  }
+
+  /// The store described itself (GET /health). A language it doesn't offer
+  /// (a pub's French on a US terminal) falls back; rebuilds on any change.
+  void useStore(StoreProfile profile) {
+    final before = StoreProfile.current;
+    StoreProfile.current = profile;
+    final next = _supported(lang);
+    final changed = next != lang ||
+        before.currency != profile.currency ||
+        before.kind != profile.kind ||
+        before.brand != profile.brand;
+    lang = next;
+    if (changed) notifyListeners();
+  }
 
   // Floor-plan editor toggles — device-local only (per-terminal habit, never
   // synced to the user row). Grid + snap default on (the old hardwired grid);
@@ -25,7 +52,7 @@ class Prefs extends ChangeNotifier {
 
   Future<void> load() async {
     final storedLang = await _storage.read(key: 'pref_lang');
-    lang = storedLang == 'fr' ? 'fr' : 'en';
+    lang = known.contains(storedLang) ? storedLang! : 'en';
     editorShowGrid = (await _storage.read(key: 'pref_editor_grid')) != 'false';
     editorSnap = (await _storage.read(key: 'pref_editor_snap')) != 'false';
     editorGridStep =
@@ -51,15 +78,22 @@ class Prefs extends ChangeNotifier {
 
   /// Login/restore: the user's stored preference wins over the device default.
   void hydrate({required String languageCode}) {
-    lang = languageCode == 'fr' ? 'fr' : 'en';
+    lang = _supported(languageCode);
     _persistLocal();
     notifyListeners();
   }
 
   Future<void> setLang(String value) async {
-    lang = value == 'fr' ? 'fr' : 'en';
+    lang = _supported(value);
     notifyListeners();
     await _persist();
+  }
+
+  /// The toggle: the store's next language (fr ⇄ en at the pubs, en ⇄ es in the US).
+  String get nextLang {
+    final all = storeLocales;
+    final i = all.indexOf(lang);
+    return all[(i < 0 ? 0 : i + 1) % all.length];
   }
 
   Future<void> _persist() async {
@@ -109,21 +143,42 @@ Widget prefsScope({required Widget child}) => PrefsScope(child: child);
 /// All UI strings, both locales inline — compile-checked, no key typos.
 /// `L.of(context)` subscribes the caller to language changes.
 class L {
-  final bool en;
-  const L(this.en);
+  /// en | fr | es
+  final String lang;
+
+  /// English (true) or French (false) — the pubs' pair.
+  const L(bool en) : lang = en ? 'en' : 'fr';
+  const L.forLang(this.lang);
 
   static L of(BuildContext context) {
     context.dependOnInheritedWidgetOfExactType<PrefsScope>();
-    return L(Prefs.instance.isEn);
+    return L.forLang(Prefs.instance.lang);
   }
 
-  String _t(String fr, String enS) => en ? enS : fr;
+  /// The current language, without subscribing (API errors, background work).
+  static L get current => L.forLang(Prefs.instance.lang);
+
+  bool get en => lang != 'fr';
+  bool get es => lang == 'es';
+
+  /// French, English, and (US store) Spanish. A string with no Spanish yet
+  /// shows its English — only the retail flow is translated to Spanish.
+  String _t(String fr, String enS, [String? esS]) =>
+      lang == 'fr' ? fr : (lang == 'es' ? (esS ?? enS) : enS);
 
   /// Data-driven names (items, zones, variants): user's language first.
-  String name(String fr, String enS) => en ? enS : fr;
+  /// The catalog carries French and English; Spanish reads the English.
+  String name(String fr, String enS) => lang == 'fr' ? fr : enS;
 
-  /// The other language, shown as the small secondary line on menu tiles.
-  String nameAlt(String fr, String enS) => en ? fr : enS;
+  /// The other language, shown as the small secondary line on menu tiles
+  /// (none in Spanish: the catalog has no Spanish side).
+  String nameAlt(String fr, String enS) {
+    if (lang == 'es') return '';
+    return lang == 'fr' ? enS : fr;
+  }
+
+  /// The store's currency code, for "($cur)" / "(USD)" field labels.
+  String get cur => StoreProfile.current.currency;
 
   // common
   String get retry => _t('Essayer à nouveau', 'Retry');
@@ -338,13 +393,13 @@ class L {
   String get card => _t('Carte', 'Card');
   String get bankTransfer => _t('transfert', 'Transfer');
   String get cashInHint => _t(
-    'Argent reçu (CAD) — certains ont reçu',
-    'Cash received (CAD) — partial OK',
+    'Argent reçu ($cur) — certains ont reçu',
+    'Cash received ($cur) — partial OK',
   );
   String get receive => _t('obtenir de l\'argent', 'Receive');
   String amountHint(String due) => _t(
-    'Montant (CAD) — vide = totalité de $due',
-    'Amount (CAD) — blank = full $due',
+    'Montant ($cur) — vide = totalité de $due',
+    'Amount ($cur) — blank = full $due',
   );
   String get useCardTerminal =>
       _t('Utiliser le terminal de carte', 'Use card terminal');
@@ -521,7 +576,7 @@ class L {
   // open / misc item
   String get openItem => _t('Articles spéciaux', 'Open item');
   String get openItemName => _t('Nom de l\'article', 'Item name');
-  String get openItemPrice => _t('Prix (CAD)', 'Price (CAD)');
+  String get openItemPrice => _t('Prix ($cur)', 'Price ($cur)');
 
   // split checks (settlement-time bill groups)
   String get splitBill => _t('Divisez la facture', 'Split bill');
@@ -565,7 +620,7 @@ class L {
   String get noShiftOpen =>
       _t('Je n\'ai pas encore ouvert le poste.', 'No shift open');
   String get openingFloat =>
-      _t('Changement initial (CAD)', 'Opening float (CAD)');
+      _t('Changement initial ($cur)', 'Opening float ($cur)');
   String get openShift => _t('Poste ouvert', 'Open shift');
   String get openShiftApproval => _t(
     'Quart de travail ouvert — Le gestionnaire approuve',
@@ -584,7 +639,7 @@ class L {
   String get closeShiftZ =>
       _t('Equipe de fermeture (rapport Z)', 'Close shift (Z-Report)');
   String get countedCash =>
-      _t('Peut compter l\'argent liquide (CAD)', 'Counted cash (CAD)');
+      _t('Peut compter l\'argent liquide ($cur)', 'Counted cash ($cur)');
   String get closeShift => _t('Fermer l\'équipe', 'Close shift');
   String get zReportDone =>
       _t('Equipe fermée — Rapport Z', 'Shift closed — Z-Report');
@@ -630,7 +685,7 @@ class L {
   String get refundByLine => _t('Sélectionner un article', 'By item');
   String get refundByAmount => _t('Précisez le montant', 'By amount');
   String get refundAmountLabel =>
-      _t('Montant du remboursement (CAD)', 'Refund amount (CAD)');
+      _t('Montant du remboursement ($cur)', 'Refund amount ($cur)');
   String get refundTender => _t('renvoyé par', 'Refund via');
   String get refundableLabel =>
       _t('Vous pouvez le retourner à nouveau.', 'Refundable');
@@ -671,7 +726,7 @@ class L {
     'Dépôt d\'argent — Le gestionnaire approuve',
     'Cash out — manager approval',
   );
-  String get cashAmountLabel => _t('Montant (CAD)', 'Amount (CAD)');
+  String get cashAmountLabel => _t('Montant ($cur)', 'Amount ($cur)');
   String get cashReasonLabel => _t('raison', 'Reason');
   String get cashReasonRequired =>
       _t('La raison doit être précisée', 'A reason is required');
@@ -734,7 +789,7 @@ class L {
   String get addSize => _t('augmenter la taille', 'Add size');
   String get sizeLabelFr => _t('Format (français)', 'Size (French)');
   String get sizeLabelEn => _t('Taille (anglais)', 'Size (English)');
-  String get priceCAD => _t('Prix (CAD)', 'Price (CAD)');
+  String get priceCAD => _t('Prix ($cur)', 'Price ($cur)');
   String get fillAllFields =>
       _t('Informations complètes', 'Fill in all fields');
   String get editCategories => _t('Gérer les catégories', 'Edit categories');
@@ -814,8 +869,8 @@ class L {
   String get serviceChargeLabel =>
       _t('Frais de service (%) — 0 = Fermer', 'Service charge (%) — 0 = off');
   String get corkageRateLabel => _t(
-    'Frais d\'ouverture de bouteille (CAD/bouteille) — 0 = fermeture',
-    'Corkage (CAD/bottle) — 0 = off',
+    'Frais d\'ouverture de bouteille ($cur/bouteille) — 0 = fermeture',
+    'Corkage ($cur/bottle) — 0 = off',
   );
   String get receiptFooterLabel =>
       _t('Message à la fin du reçu', 'Receipt footer text');
@@ -1400,9 +1455,9 @@ class LangActionsCompact extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         TextButton(
-          onPressed: () => prefs.setLang(prefs.isEn ? 'fr' : 'en'),
+          onPressed: () => prefs.setLang(prefs.nextLang),
           child: Text(
-            prefs.isEn ? 'EN' : 'FR',
+            prefs.lang.toUpperCase(),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
         ),
@@ -1429,10 +1484,10 @@ class LangActions extends StatelessWidget {
       child: Tooltip(
         message: l.switchLanguage,
         child: OutlinedButton.icon(
-          onPressed: () => prefs.setLang(prefs.isEn ? 'fr' : 'en'),
+          onPressed: () => prefs.setLang(prefs.nextLang),
           icon: Icon(Icons.language, size: 18, color: fg),
           label: Text(
-            prefs.isEn ? 'EN' : 'FR',
+            prefs.lang.toUpperCase(),
             style: TextStyle(
               fontWeight: FontWeight.w700,
               color: fg,

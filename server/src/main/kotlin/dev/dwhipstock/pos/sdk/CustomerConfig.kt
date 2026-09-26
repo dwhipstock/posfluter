@@ -24,6 +24,14 @@ interface CustomerConfig {
     val electronicTenders: List<TenderMethod>
     /** Base URL customer phones can reach — printed into table QR codes (M3). */
     val publicBaseUrl: String
+    /** Which store this is (POS_VENUE): "vieux-port", "plateau", "sage-poppy". */
+    val venueId: String get() = customerId
+    /** Which look the terminal and receipts wear: "copper-lantern" or "sage-poppy". */
+    val brand: String get() = customerId
+    /** Country, currency, languages, zone and kind of this store (policy: a deploy to change). */
+    val profile: StoreProfile get() = StoreProfile.QUEBEC_PUB
+    /** Minimum age for age-restricted items: POS_LEGAL_AGE / legal.age, else the profile's. */
+    val legalAge: Int get() = profile.legalAge
 
     fun tenderMethod(type: TenderType): TenderMethod? = electronicTenders.firstOrNull { it.type == type }
 }

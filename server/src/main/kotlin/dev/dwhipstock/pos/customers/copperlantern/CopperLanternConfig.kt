@@ -10,6 +10,7 @@ import dev.dwhipstock.pos.sdk.Money
 import dev.dwhipstock.pos.sdk.PrinterAdapter
 import dev.dwhipstock.pos.sdk.ReceiptPolicy
 import dev.dwhipstock.pos.sdk.RoundingPolicy
+import dev.dwhipstock.pos.sdk.StoreProfile
 import dev.dwhipstock.pos.sdk.TaxComponent
 import dev.dwhipstock.pos.sdk.TaxPolicy
 import dev.dwhipstock.pos.sdk.TenderMethod
@@ -36,6 +37,10 @@ class CopperLanternConfig(
 
     override val customerId = "copperlantern"
     override val displayName = venue.displayName
+    override val venueId = venue.id
+    override val brand = "copper-lantern"
+    // Montréal: Canada, CAD, French + English (StoreProfile.QUEBEC_PUB)
+    override val profile = StoreProfile.QUEBEC_PUB
 
     // ---- policy: typed, changing these is a deploy, on purpose ----
     // Québec: menu prices are pre-tax; GST (TPS) and QST (TVQ) are added on

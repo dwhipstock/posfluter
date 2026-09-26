@@ -9,6 +9,9 @@ import 'package:http_parser/http_parser.dart' as http_parser;
 
 import 'connection_monitor.dart';
 import 'i18n.dart';
+import 'store_profile.dart';
+
+export 'store_profile.dart';
 
 /// Thin API client for the store server. The client owns NO money logic —
 /// pricing, tax, rounding all live server-side (architecture principle #2).
@@ -187,6 +190,8 @@ class Api {
       if (base == baseUrl && venue is String && venue.trim().isNotEmpty) {
         venueName = venue.trim();
       }
+      // ...and describes itself: screens, brand, languages, currency
+      if (base == baseUrl) Prefs.instance.useStore(StoreProfile.fromHealth(body));
       return body;
     } catch (_) {
       return null;
@@ -1313,15 +1318,15 @@ class ApiException implements Exception {
   /// ids, "HTTP 409", etc.) is never shown to end users; use it only for logs.
   @override
   String toString() => code == 'stripe_declined'
-      ? L(Prefs.instance.isEn).stripeDeclineMessage(declineCode)
-      : L(Prefs.instance.isEn).apiError(code) ??
-            L(Prefs.instance.isEn).apiError('internal')!;
+      ? L.current.stripeDeclineMessage(declineCode)
+      : L.current.apiError(code) ??
+            L.current.apiError('internal')!;
 }
 
 /// 401 — session missing/expired; UI should return to the login screen.
 class AuthException implements Exception {
   @override
-  String toString() => L(Prefs.instance.isEn).apiError('login_required')!;
+  String toString() => L.current.apiError('login_required')!;
 }
 
 /// Mid-session expiry: the redirect to login already happened (or is in
@@ -1336,8 +1341,8 @@ class PairingRequiredException extends SessionExpiredException {
   PairingRequiredException([this.code = 'device_required']);
   @override
   String toString() =>
-      L(Prefs.instance.isEn).apiError(code) ??
-      L(Prefs.instance.isEn).apiError('internal')!;
+      L.current.apiError(code) ??
+      L.current.apiError('internal')!;
 }
 
 class AuthUser {
@@ -1385,20 +1390,9 @@ class Perm {
   static const manageStaff = 'manage_staff';
 }
 
-/// $1,010 for whole CAD, $10.50 otherwise. Cents everywhere on the wire.
-String cad(int cents) {
-  final sign = cents < 0 ? '-' : '';
-  final abs = cents.abs();
-  final whole = abs ~/ 100;
-  final frac = abs % 100;
-  final grouped = whole.toString().replaceAllMapped(
-    RegExp(r'(\d)(?=(\d{3})+$)'),
-    (m) => '${m[1]},',
-  );
-  return frac == 0
-      ? '$sign\$$grouped'
-      : '$sign\$$grouped.${frac.toString().padLeft(2, '0')}';
-}
+/// The pubs' CAD house style: $1,010 for whole dollars, $10.50 otherwise.
+/// Screens call [money], which follows the store's own currency.
+String cad(int cents) => formatMoney(cents, 'CAD');
 
 class Category {
   final String id, nameFr, nameEn;

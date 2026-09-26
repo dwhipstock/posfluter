@@ -96,7 +96,7 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Future<void> _pair() async {
     if (_busy) return;
-    final l = L(Prefs.instance.isEn);
+    final l = L.current;
     final address = Api.normalizeVenueAddress(_addressCtrl.text);
     if (address == null) {
       setState(() => _error = l.enterVenueAddress);
@@ -127,7 +127,7 @@ class _PairingScreenState extends State<PairingScreen> {
     } catch (_) {
       // transport failure: wrong address, no route, server down
       if (mounted) {
-        setState(() => _error = L(Prefs.instance.isEn).pairNetworkError);
+        setState(() => _error = L.current.pairNetworkError);
       }
     } finally {
       if (mounted) setState(() => _busy = false);

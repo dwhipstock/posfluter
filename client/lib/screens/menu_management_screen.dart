@@ -222,7 +222,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
               style: T.text(size: 16),
             ),
             subtitle: Text(
-              '${item.variants.map((v) => cad(v.priceCents)).join(' / ')}'
+              '${item.variants.map((v) => money(v.priceCents)).join(' / ')}'
               '${item.active ? '' : '  ·  ${l.offSale}'}',
               style: T.small(color: item.active ? T.textMuted : T.destructive),
             ),

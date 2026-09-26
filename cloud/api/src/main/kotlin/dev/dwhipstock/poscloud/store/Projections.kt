@@ -34,16 +34,22 @@ object Projections {
 
     private val STAFF_EVENTS = setOf("staff.created", "staff.updated", "staff.deleted")
 
-    fun apply(scope: Scope, event: IngestEvent, zone: java.time.ZoneId) {
+    /**
+     * [venueCurrency] is what a money payload without a `currency` is in: an
+     * older store that sent none sold in its venue's currency (CAD for every
+     * such store).
+     */
+    fun apply(scope: Scope, event: IngestEvent, zone: java.time.ZoneId, venueCurrency: String = "CAD") {
         val payload = event.payload
         val createdAt = dev.dwhipstock.poscloud.CloudTime.parse(event.createdAt, zone) ?: dev.dwhipstock.poscloud.CloudTime.now()
+        val cur = currencyOf(payload, venueCurrency)
         when {
-            event.eventType == "check.closed" -> checkClosed(scope, payload, createdAt, zone)
-            event.eventType == "check.voided" -> checkVoided(scope, payload, createdAt, zone)
-            event.eventType == "refund.created" -> refundCreated(scope, payload, createdAt, zone)
-            event.eventType == "cash.movement" -> cashMovement(scope, payload, createdAt, zone)
+            event.eventType == "check.closed" -> checkClosed(scope, payload, createdAt, zone, cur)
+            event.eventType == "check.voided" -> checkVoided(scope, payload, createdAt, zone, cur)
+            event.eventType == "refund.created" -> refundCreated(scope, payload, createdAt, zone, cur)
+            event.eventType == "cash.movement" -> cashMovement(scope, payload, createdAt, zone, cur)
             event.eventType == "shift.opened" -> shiftOpened(scope, payload, createdAt, zone)
-            event.eventType == "shift.closed" -> shiftClosed(scope, payload, createdAt, zone)
+            event.eventType == "shift.closed" -> shiftClosed(scope, payload, createdAt, zone, cur)
             event.eventType == "catalog.snapshot" -> catalogSnapshot(scope, payload)
             event.eventType == "staff.snapshot" -> staffSnapshot(scope, payload)
             event.eventType in STAFF_EVENTS -> staffEvent(scope, payload)
@@ -57,7 +63,11 @@ object Projections {
         }
     }
 
-    private fun checkClosed(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId) {
+    /** The payload's own `currency` (ISO 4217), else [fallback]. */
+    fun currencyOf(p: JsonObject, fallback: String): String =
+        p.str("currency")?.trim()?.uppercase()?.takeIf { it.length == 3 && it.all(Char::isLetter) } ?: fallback
+
+    private fun checkClosed(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId, cur: String) {
         val checkId = p.int("checkId") ?: return
         val fees = p.arr("fees")?.filterIsInstance<JsonObject>()
         Checks.upsert {
@@ -84,6 +94,7 @@ object Projections {
             it[gstCents] = taxSum(p, "GST")
             it[qstCents] = taxSum(p, "QST")
             it[taxes] = p.arr("taxes")?.toString()
+            it[currency] = cur
         }
         p.arr("lines")?.filterIsInstance<JsonObject>()?.let { lines ->
             CheckLines.deleteWhere {
@@ -126,7 +137,7 @@ object Projections {
         }
     }
 
-    private fun checkVoided(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId) {
+    private fun checkVoided(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId, cur: String) {
         val checkId = p.int("checkId") ?: return
         Checks.upsert {
             it[tenantId] = scope.tenantId
@@ -148,6 +159,7 @@ object Projections {
             it[gstCents] = taxSum(p, "GST")
             it[qstCents] = taxSum(p, "QST")
             it[taxes] = p.arr("taxes")?.toString()
+            it[currency] = cur
         }
     }
 
@@ -156,7 +168,7 @@ object Projections {
      * included tax (gross/net/tax); we only store it. Idempotent by refund_id so
      * a replay is a no-op. Reports net these out of sales + tax.
      */
-    private fun refundCreated(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId) {
+    private fun refundCreated(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId, cur: String) {
         val refundId = p.long("refundId") ?: return
         Refunds.upsert {
             it[tenantId] = scope.tenantId
@@ -177,11 +189,13 @@ object Projections {
             it[Refunds.createdAt] = p.instant("createdAt", zone) ?: createdAt
             it[gstCents] = taxSum(p, "GST")
             it[qstCents] = taxSum(p, "QST")
+            it[taxes] = p.arr("taxes")?.toString()
+            it[currency] = cur
         }
     }
 
     /** A non-sale cash movement (IN/OUT). Idempotent by movement_id. */
-    private fun cashMovement(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId) {
+    private fun cashMovement(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId, cur: String) {
         val movementId = p.long("movementId") ?: return
         CashMovements.upsert {
             it[tenantId] = scope.tenantId
@@ -193,6 +207,7 @@ object Projections {
             it[reason] = p.str("reason")
             it[createdBy] = p.str("user")
             it[CashMovements.createdAt] = p.instant("createdAt", zone) ?: createdAt
+            it[currency] = cur
         }
     }
 
@@ -210,7 +225,7 @@ object Projections {
         }
     }
 
-    private fun shiftClosed(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId) {
+    private fun shiftClosed(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId, cur: String) {
         val shiftId = p.long("shiftId") ?: return
         // Exposed's upsert ON CONFLICT UPDATE covers every non-key column, so an
         // unassigned column gets nulled — read-merge keeps the shift.opened
@@ -237,6 +252,7 @@ object Projections {
             it[expectedCashCents] = p.long("expectedCashCents")
             it[closingCountCents] = p.long("closingCountCents")
             it[overShortCents] = p.long("overShortCents")
+            it[currency] = cur
         }
     }
 

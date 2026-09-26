@@ -18,10 +18,18 @@ import java.time.format.DateTimeFormatter
 object VenueClock {
     const val DEFAULT_ZONE = "America/New_York"
 
-    /** The zone `VENUE_TZ` asks for (or the default) — seeds a new store's settings row. */
+    /**
+     * The zone a brand-new store starts in when `VENUE_TZ` is unset: its store
+     * profile's ([StoreProfile.timeZone]). Set once at startup, before the
+     * database opens; an existing store's settings row always wins.
+     */
+    @Volatile
+    var fallbackZone: String = DEFAULT_ZONE
+
+    /** The zone `VENUE_TZ` asks for (or the store's default) — seeds a new store's settings row. */
     fun configuredZone(): ZoneId =
-        runCatching { ZoneId.of(System.getenv("VENUE_TZ")?.takeIf { it.isNotBlank() } ?: DEFAULT_ZONE) }
-            .getOrDefault(ZoneId.of(DEFAULT_ZONE))
+        runCatching { ZoneId.of(System.getenv("VENUE_TZ")?.takeIf { it.isNotBlank() } ?: fallbackZone) }
+            .getOrElse { runCatching { ZoneId.of(fallbackZone) }.getOrDefault(ZoneId.of(DEFAULT_ZONE)) }
 
     /** The venue zone in force; set from the settings row at startup ([use]). */
     @Volatile

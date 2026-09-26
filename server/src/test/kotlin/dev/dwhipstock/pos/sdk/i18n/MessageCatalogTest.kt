@@ -113,14 +113,18 @@ class MessageCatalogTest {
     @Test
     fun customerBannersStayBilingualInEveryLocale() {
         // anyone at the table must be able to tell a provisional bill from a
-        // receipt — a locale pack overriding these must keep both languages
+        // receipt — a locale pack overriding these must keep both of its
+        // store's languages: French + English at the pubs, Spanish + English
+        // at the US store (es)
+        val second = mapOf("es" to ("NO ES UN RECIBO" to "CUENTA"))
         for (tag in Messages.supportedTags()) {
             val locale = LocaleCode(tag)
+            val (notReceipt2, bill2) = second[tag] ?: ("Pas un reçu" to "Déclaration")
             val notAReceipt = Messages.get(MessageKey.RECEIPT_NOT_A_RECEIPT, locale)
-            assertTrue("NOT A RECEIPT" in notAReceipt && "Pas un reçu" in notAReceipt,
+            assertTrue("NOT A RECEIPT" in notAReceipt && notReceipt2 in notAReceipt,
                 "locale '$tag' de-bilingualized the NOT-A-RECEIPT banner")
             val billBanner = Messages.get(MessageKey.RECEIPT_BILL_BANNER, locale)
-            assertTrue("CUSTOMER BILL" in billBanner && "Déclaration" in billBanner,
+            assertTrue("CUSTOMER BILL" in billBanner && bill2 in billBanner,
                 "locale '$tag' de-bilingualized the customer-bill banner")
         }
     }

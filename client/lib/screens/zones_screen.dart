@@ -849,7 +849,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                 scale: scale,
                 statusColor: tableStatusColor(t, zoneClosed: zone.isClosed),
                 subtitle: t.openCheckId != null
-                    ? cad(t.openCheckTotalCents ?? 0)
+                    ? money(t.openCheckTotalCents ?? 0)
                     : l.seatsShort(t.seats),
                 detail: _openedFor(t, now, l),
                 // seat count is the only optional line: small free tables

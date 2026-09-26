@@ -30,7 +30,7 @@ class TaxRows extends StatelessWidget {
         children: [
           Text(label, style: T.small()),
           Text(
-            cad(cents),
+            money(cents),
             style: T.price(size: priceSize, color: T.textMuted),
           ),
         ],

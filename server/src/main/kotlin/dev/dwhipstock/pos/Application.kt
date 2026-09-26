@@ -35,6 +35,7 @@ import dev.dwhipstock.pos.sdk.NetworkThermalPrinter
 import dev.dwhipstock.pos.sdk.PrinterTarget
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
 import dev.dwhipstock.pos.sdk.StripeConfig
+import dev.dwhipstock.pos.sdk.StoreProfile
 import dev.dwhipstock.pos.payments.StripeException
 import dev.dwhipstock.pos.payments.StripeHttp
 import dev.dwhipstock.pos.payments.StripeService
@@ -274,7 +275,7 @@ fun Application.module(
         // venue = the store's display name ("Copper Lantern — Vieux-Port") so the
         // sign-in screen can say which store this terminal serves before login
         get("/health") {
-            call.respond(HealthResponse(status = "ok", pairingRequired = requireDeviceToken, venue = config.displayName))
+            call.respond(HealthResponse.of(config, requireDeviceToken))
         }
         // Staff ordering web app (M7): a mobile-first page served from the store.
         // Public shell (like the customer menu); it authenticates via POST /login
@@ -344,5 +345,37 @@ private fun wipeMigrationSeedResidueIfNeverSynced() =
         )
     }
 
+/**
+ * Public, pre-login: enough for the terminal to pick its screens, brand,
+ * languages and money format before anyone signs in. Nothing secret.
+ */
 @Serializable
-data class HealthResponse(val status: String, val pairingRequired: Boolean = false, val venue: String = "")
+data class HealthResponse(
+    val status: String,
+    val pairingRequired: Boolean = false,
+    val venue: String = "",
+    val venueId: String = "",
+    val brand: String = "",
+    /** restaurant | retail */
+    val kind: String = StoreProfile.Kind.RESTAURANT.wire,
+    val country: String = "CA",
+    val currency: String = "CAD",
+    /** Languages staff can pick; the first is the store's default. */
+    val locales: List<String> = listOf("fr", "en"),
+    val legalAge: Int = 18,
+) {
+    companion object {
+        fun of(config: dev.dwhipstock.pos.sdk.CustomerConfig, pairingRequired: Boolean) = HealthResponse(
+            status = "ok",
+            pairingRequired = pairingRequired,
+            venue = config.displayName,
+            venueId = config.venueId,
+            brand = config.brand,
+            kind = config.profile.kind.wire,
+            country = config.profile.country,
+            currency = config.profile.currency,
+            locales = config.profile.locales.map { it.tag },
+            legalAge = config.legalAge,
+        )
+    }
+}

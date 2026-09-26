@@ -66,10 +66,20 @@ fun normalizePairingCode(raw: String): String = raw.uppercase().filter { it in C
 data class VenueDto(
     val id: String, val name: String, val timezone: String, val subdomain: String?,
     val storeUrl: String?, val storeOnline: Boolean, val storeSeenAt: String?,
+    /** ISO 4217 / 3166 codes and restaurant | retail (017). */
+    val currency: String = "CAD", val country: String = "CA", val kind: String = "restaurant",
 )
 
+/**
+ * The tenant's stores plus how its money reads across them: the reporting
+ * currency "All stores" converts into, and the fixed rates it uses.
+ */
 @Serializable
-data class VenueListResponse(val venues: List<VenueDto>)
+data class VenueListResponse(
+    val venues: List<VenueDto>,
+    val reportingCurrency: String = "CAD",
+    val rates: List<dev.dwhipstock.poscloud.Fx.RateDto> = emptyList(),
+)
 
 @Serializable
 data class PairingCodeRequest(val label: String? = null)
@@ -141,11 +151,18 @@ fun Route.venueRoutes(config: CloudConfig) {
     /** Every venue of the signed-in tenant — the portal's venue picker. */
     get("/venues") {
         val principal = requirePortal(call)
-        val venues = transaction {
-            Venues.selectAll().where { Venues.tenantId eq principal.tenantId }
+        val response = transaction {
+            val venues = Venues.selectAll().where { Venues.tenantId eq principal.tenantId }
                 .orderBy(Venues.id).map { venueDto(it, config) }
+            val reporting = dev.dwhipstock.poscloud.reportingCurrencyOf(principal.tenantId)
+            val rates = venues.map { it.currency }.distinct().filter { it != reporting }.mapNotNull { c ->
+                config.fxRates.rate(c, reporting)?.let {
+                    dev.dwhipstock.poscloud.Fx.RateDto(c, reporting, it.stripTrailingZeros().toPlainString())
+                }
+            }
+            VenueListResponse(venues, reporting, rates)
         }
-        call.respond(VenueListResponse(venues))
+        call.respond(response)
     }
 
     /** Mint a single-use pairing code for this venue (15-minute TTL). */
@@ -299,5 +316,8 @@ private fun venueDto(row: org.jetbrains.exposed.sql.ResultRow, config: CloudConf
         storeUrl = publicStoreUrl(row, config),
         storeOnline = seenAt != null && Duration.between(seenAt, dev.dwhipstock.poscloud.CloudTime.now()) <= STORE_FRESH,
         storeSeenAt = seenAt?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, dev.dwhipstock.poscloud.CloudTime.zone(row[Venues.timezone])) },
+        currency = row[Venues.currency],
+        country = row[Venues.country],
+        kind = row[Venues.kind],
     )
 }

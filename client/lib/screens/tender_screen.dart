@@ -151,7 +151,7 @@ class _TenderScreenState extends State<TenderScreen> {
         _toast(
           L
               .of(context)
-              .receivedToast(cad(result.tender.amountAppliedCents), cad(_due)),
+              .receivedToast(money(result.tender.amountAppliedCents), money(_due)),
         );
       }
     }
@@ -190,7 +190,7 @@ class _TenderScreenState extends State<TenderScreen> {
         _toast(
           L
               .of(context)
-              .receivedToast(cad(result.tender.amountAppliedCents), cad(_due)),
+              .receivedToast(money(result.tender.amountAppliedCents), money(_due)),
         );
       }
     }
@@ -238,7 +238,7 @@ class _TenderScreenState extends State<TenderScreen> {
         _toast(
           L
               .of(context)
-              .receivedToast(cad(result.tender.amountAppliedCents), cad(_due)),
+              .receivedToast(money(result.tender.amountAppliedCents), money(_due)),
         );
       }
     });
@@ -282,10 +282,10 @@ class _TenderScreenState extends State<TenderScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _row(l.cashReceived, cad(tender.amountTenderedCents)),
+            _row(l.cashReceived, money(tender.amountTenderedCents)),
             if (tender.roundingAdjustmentCents != 0)
-              _row(l.rounding, cad(tender.roundingAdjustmentCents)),
-            _row(l.change, cad(tender.changeCents), big: true),
+              _row(l.rounding, money(tender.roundingAdjustmentCents)),
+            _row(l.change, money(tender.changeCents), big: true),
           ],
         ),
         actions: [
@@ -356,7 +356,7 @@ class _TenderScreenState extends State<TenderScreen> {
                   children: [
                     Text(l.outstanding, style: T.text(weight: FontWeight.w600)),
                     Text(
-                      cad(_due),
+                      money(_due),
                       style: T.price(size: 44, weight: FontWeight.w700),
                     ),
                   ],
@@ -376,8 +376,8 @@ class _TenderScreenState extends State<TenderScreen> {
                     alignment: Alignment.centerRight,
                     child: Text(
                       l.paidOf(
-                        cad(_group?.paidCents ?? _check.paidCents),
-                        cad(_group?.grandTotalCents ?? _check.grandTotalCents),
+                        money(_group?.paidCents ?? _check.paidCents),
+                        money(_group?.grandTotalCents ?? _check.grandTotalCents),
                       ),
                       style: T.small(),
                     ),
@@ -500,7 +500,7 @@ class _TenderScreenState extends State<TenderScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _entryDisplay(l, hint: l.amountHint(cad(_due))),
+        _entryDisplay(l, hint: l.amountHint(money(_due))),
         const SizedBox(height: 8),
         AmountPad(onKey: _numpadKey),
         const SizedBox(height: 12),
@@ -550,7 +550,7 @@ class _TenderScreenState extends State<TenderScreen> {
           Flexible(child: Text(hint, style: T.small())),
           const SizedBox(width: 12),
           Text(
-            _entryCAD == null ? '—' : cad(_entryCAD! * 100),
+            _entryCAD == null ? '—' : money(_entryCAD! * 100),
             style: T.price(size: 26, weight: FontWeight.w600),
           ),
         ],
@@ -579,7 +579,7 @@ class _TenderScreenState extends State<TenderScreen> {
                     ),
                   ),
                   child: Text(
-                    cad(amount),
+                    money(amount),
                     style: T.price(
                       size: 18,
                       color: amount == _due ? T.primary : T.textPrimary,
@@ -614,7 +614,7 @@ class _TenderScreenState extends State<TenderScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _entryDisplay(l, hint: l.amountHint(cad(_due))),
+          _entryDisplay(l, hint: l.amountHint(money(_due))),
           const SizedBox(height: 8),
           AmountPad(onKey: _numpadKey),
           const SizedBox(height: 10),
@@ -636,7 +636,7 @@ class _TenderScreenState extends State<TenderScreen> {
     return Column(
       children: [
         Text(
-          l.amountToPay(cad(instructions.amountCents)),
+          l.amountToPay(money(instructions.amountCents)),
           style: T.price(size: 26, weight: FontWeight.w600),
         ),
         const SizedBox(height: 12),

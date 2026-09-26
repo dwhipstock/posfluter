@@ -50,6 +50,7 @@ object Bootstrap {
         // otherwise keep showing it in the portal forever. Name only.
         Tenants.update({ Tenants.id eq TENANT }) {
             it[name] = config.venueName
+            it[reportingCurrency] = config.reportingCurrency
         }
         for (store in config.stores) {
             // Do not use upsert here: PostgreSQL fills omitted columns from their
@@ -59,13 +60,18 @@ object Bootstrap {
                 it[tenantId] = TENANT
                 it[id] = store.venueId
                 it[name] = store.name
-                it[timezone] = config.venueTz
+                it[timezone] = config.storeZones[store.venueId] ?: config.venueTz
             }
             // The name follows env; the timezone is set on insert only. It decides
             // every business day and report hour, so a boot with a different or
             // defaulted VENUE_TZ must never silently re-zone a venue's history.
+            // Currency, country and kind follow env too, but only for the stores
+            // env names: an unlisted store keeps what it has (CAD, CA, restaurant).
             Venues.update({ (Venues.tenantId eq TENANT) and (Venues.id eq store.venueId) }) {
                 it[name] = store.name
+                config.storeCurrencies[store.venueId]?.let { c -> it[currency] = c }
+                config.storeCountries[store.venueId]?.let { c -> it[country] = c }
+                if (store.venueId in config.retailStores) it[kind] = "retail"
             }
         }
         val known = config.stores.map { it.venueId }.toSet()
