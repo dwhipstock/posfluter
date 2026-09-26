@@ -364,8 +364,8 @@ class _PumpTileState extends State<PumpTile>
                           child: child,
                         ),
                         child: Container(
-                          width: 38,
-                          height: 38,
+                          width: 32,
+                          height: 32,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: look.color,
@@ -375,7 +375,7 @@ class _PumpTileState extends State<PumpTile>
                             '${p.pump}',
                             style: TextStyle(
                               fontFamily: 'BarlowCondensed',
-                              fontSize: 28,
+                              fontSize: 25,
                               height: 1,
                               fontWeight: FontWeight.w800,
                               color: PumpColors.on(look.color),
@@ -383,7 +383,7 @@ class _PumpTileState extends State<PumpTile>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -394,18 +394,18 @@ class _PumpTileState extends State<PumpTile>
                               overflow: TextOverflow.ellipsis,
                               style: s
                                   .text(
-                                    size: 14,
+                                    size: 13,
                                     weight: FontWeight.w800,
                                     color: p.offline ? c.textMuted : look.color,
                                   )
-                                  .copyWith(letterSpacing: .8),
+                                  .copyWith(letterSpacing: .2),
                             ),
                             Text(
                               sub,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: s.text(
-                                size: 12,
+                                size: 11.5,
                                 weight: FontWeight.w600,
                                 color: c.textMuted,
                               ),
@@ -424,7 +424,7 @@ class _PumpTileState extends State<PumpTile>
                         money(amount),
                         style: TextStyle(
                           fontFamily: 'BarlowCondensed',
-                          fontSize: 34,
+                          fontSize: 30,
                           height: 1,
                           fontWeight: FontWeight.w800,
                           fontFeatures: const [FontFeature.tabularFigures()],
@@ -433,11 +433,21 @@ class _PumpTileState extends State<PumpTile>
                       ),
                     ),
                   const SizedBox(height: 2),
+                  // gallons, then the grade and its price: two short lines
+                  // read at a glance on a narrow tile
+                  Text(
+                    p.offline ? '' : f.gal(gallons(volume)),
+                    maxLines: 1,
+                    style: s.figures(
+                      size: 12.5,
+                      weight: FontWeight.w700,
+                      color: dim ? c.textMuted : c.text,
+                    ),
+                  ),
                   Text(
                     p.offline
                         ? ''
                         : [
-                            f.gal(gallons(volume)),
                             if (grade != null)
                               f.grade(grade, p.gradeName ?? grade),
                             if (price > 0) pricePerGallon(price),
@@ -445,7 +455,7 @@ class _PumpTileState extends State<PumpTile>
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: s.figures(
-                      size: 12.5,
+                      size: 11.5,
                       weight: FontWeight.w600,
                       color: c.textMuted,
                     ),

@@ -130,9 +130,21 @@ def fill(n, grade, gallons, hang_up=True):
 
 
 def scan_all(sale_id, items, ids):
+    """Ring up shop items: a barcode is scanned; the counter's own (coffee, a
+    hot dog) are added by size, as "id" or "id|size|flavour"."""
     sale = None
-    for pid in ids:
-        sale = call("POST", f"/retail/sales/{sale_id}/scan", {"barcode": items[pid]["barcode"]})
+    for entry in ids:
+        pid, _, rest = entry.partition("|")
+        size, _, flavour = rest.partition("|")
+        item = items[pid]
+        if item.get("barcode"):
+            sale = call("POST", f"/retail/sales/{sale_id}/scan", {"barcode": item["barcode"]})
+        else:
+            variant = next((v for v in item["variants"] if not size or v["labelEn"] == size), item["variants"][0])
+            body = {"itemId": pid, "variantId": variant["id"], "qty": 1}
+            if flavour:
+                body["note"] = flavour
+            sale = call("POST", f"/checks/{sale_id}/lines", body)
     return sale
 
 
@@ -187,29 +199,43 @@ def main():
     ensure_shift()
     items = items_by_id()
     soda = pick(items, lambda i: i.get("subcategory") == "Soda", 3)
-    energy = pick(items, lambda i: i.get("subcategory") == "Energy", 2)
+    energy = pick(items, lambda i: i.get("subcategory") == "Energy" and i.get("size") == "16 oz can", 4)
     chips = pick(items, lambda i: i.get("subcategory") == "Chips", 2)
     candy = pick(items, lambda i: i.get("category") == "candy", 2)
     water = pick(items, lambda i: i.get("subcategory") == "Water", 1)
-    beer = pick(items, lambda i: i.get("category") == "beer" and i.get("ageRestricted"), 1)
+    beer = pick(items, lambda i: i.get("category") == "beer" and i.get("ageRestricted"), 2)
+    cigs = pick(items, lambda i: i.get("subcategory") == "Cigarettes" and i.get("size") == "Pack", 2)
     oil = pick(items, lambda i: i.get("subcategory") == "Motor Oil", 1)
+    jerky = pick(items, lambda i: i.get("subcategory") == "Jerky & Meat Snacks", 1)
     ice = pick(items, lambda i: i.get("category") == "ice", 1)
+    coffee = "ph-coffee|Medium 16 oz|House Blend"
+    fountain = "ph-fountain-drink|Large 44 oz|Cola"
+    slush = "ph-frozen-slush|Medium 32 oz|Blue Raspberry"
 
+    # a gas station's day: most sales have fuel on them, and plenty of those
+    # also buy from the shop (where the margin is) — coffee with the fuel
+    # deal, the hot dog combo, 2 for $5 energy drinks, a pack of cigarettes
     if fdc_up():
         sim("POST", "/sim/v1/speed", {"multiplier": 20})
         print("Forecourt sales (simulator at " + FDC + "):")
-        postpay(2, "REG", 11.2, items, soda[:1] + chips[:1])
-        postpay(5, "PRE", 13.5, items, [], method="CARD")
-        prepay(3, "REG", 4000, 11.0, items, energy[:1])
+        postpay(2, "REG", 11.2, items, [coffee, "ph-kolache-sausage-cheese"])
+        postpay(5, "PRE", 13.5, items, energy[:2], method="CARD")
+        prepay(3, "REG", 4000, 11.0, items, ["ph-hot-dog", fountain])
+        postpay(1, "MID", 9.3, items, cigs[:1] + candy[:1])
         prepay(7, "MID", 2500, 20.0, items, [])
-        postpay(8, "DSL", 18.4, items, oil + water)
-        postpay(1, "MID", 9.3, items, candy + soda[1:2])
+        postpay(8, "DSL", 18.4, items, oil + water + jerky + [coffee])
+        postpay(4, "REG", 8.7, items, [slush] + chips[:1], method="CARD")
+        postpay(6, "REG", 12.1, items, [])
+        prepay(2, "PRE", 3000, 9.0, items, energy[2:4] + [coffee], method="CARD")
+        postpay(3, "MID", 10.4, items, beer[:1] + chips[1:] + ice)
         sim("POST", "/sim/v1/speed", {"multiplier": 1})
     else:
         print(f"No forecourt simulator at {FDC}: shop sales only.")
     print("Shop sales:")
-    for basket, method in [(chips + soda[2:3], "CASH"), (beer + ice + chips[1:], "CARD"),
-                           (energy + candy[:1], "CASH"), (water + candy[1:], "CARD")]:
+    for basket, method in [(["ph-hot-dog", "ph-fountain-drink|Medium 32 oz|Root Beer"] + chips[:1], "CASH"),
+                           (beer + ice, "CARD"),
+                           (cigs[1:] + energy[:2], "CASH"),
+                           ([coffee, "ph-breakfast-sandwich-sausage-egg-cheese"] + water, "CARD")]:
         sale = call("POST", "/retail/sales")
         sale = scan_all(sale["id"], items, basket)
         print(f"  {usd(pay(sale, method))}")

@@ -24,7 +24,7 @@ class F {
   String get stopAllTitle => _t(
     'Emergency stop every pump?',
     '¿Parada de emergencia en todas las bombas?',
-    'Arrêt d’urgence de toutes les pompes?',
+    'Arrêt d’urgence de toutes les pompes\u00A0?',
   );
   String get stopAllBody => _t(
     'Fuel stops flowing at every dispenser now. Each pump must be reset before it can be used again.',
@@ -38,7 +38,7 @@ class F {
   String state(String s) => switch (s) {
     'IDLE' => _t('READY', 'LISTA', 'PRÊTE'),
     'CALLING' => _t('CALLING', 'LLAMANDO', 'APPEL'),
-    'AUTHORISED' => _t('AUTHORISED', 'AUTORIZADA', 'AUTORISÉE'),
+    'AUTHORISED' => _t('AUTH', 'AUTORIZ.', 'AUTOR.'),
     'FUELLING' => _t('FUELLING', 'DESPACHANDO', 'EN COURS'),
     'SUSPENDED' => _t('STOPPED', 'DETENIDA', 'ARRÊTÉE'),
     'EMERGENCY_STOP' => _t('E-STOP', 'PARO', 'ARRÊT URG.'),
@@ -140,8 +140,93 @@ class F {
   String pumpOn(int n, String amount) => _t(
     'Pump $n is on: $amount prepaid',
     'Bomba $n lista: $amount prepagados',
-    'Pompe $n prête : $amount prépayés',
+    'Pompe $n prête\u00A0: $amount prépayés',
   );
+
+  // the counter's food & drink panel
+  String get foodPanel => _t(
+    'Fountain & hot food',
+    'Refrescos y comida caliente',
+    'Fontaine et mets chauds',
+  );
+  String from(String price) => _t('from $price', 'desde $price', 'dès $price');
+  String get size => _t('Size', 'Tamaño', 'Format');
+  String get flavour => _t('Flavor', 'Sabor', 'Saveur');
+  String get addOns => _t('Add-ons', 'Extras', 'Suppléments');
+  String addFood(String amount) =>
+      _t('Add · $amount', 'Agregar · $amount', 'Ajouter · $amount');
+
+  /// A cup size label as the store names it ("Medium 32 oz", "Refill").
+  String cupSize(String label) {
+    if (lang == 'en') return label;
+    const es = {
+      'Small': 'Chico',
+      'Medium': 'Mediano',
+      'Large': 'Grande',
+      'Jumbo': 'Jumbo',
+      'Refill': 'Rellenado',
+    };
+    const fr = {
+      'Small': 'Petit',
+      'Medium': 'Moyen',
+      'Large': 'Grand',
+      'Jumbo': 'Géant',
+      'Refill': 'Remplissage',
+    };
+    final words = label.split(' ');
+    final map = lang == 'es' ? es : fr;
+    return [map[words.first] ?? words.first, ...words.skip(1)].join(' ');
+  }
+
+  String flavourName(String en) => lang == 'en'
+      ? en
+      : (lang == 'es'
+                ? const {
+                    'House Blend': 'Mezcla de la casa',
+                    'Dark Roast': 'Tostado oscuro',
+                    'Decaf': 'Descafeinado',
+                    'French Vanilla': 'Vainilla francesa',
+                    'Hazelnut': 'Avellana',
+                    'Plain': 'Natural',
+                    'Vanilla': 'Vainilla',
+                    'Caramel': 'Caramelo',
+                    'Mocha': 'Moca',
+                    'Diet Cola': 'Cola light',
+                    'Lemon-Lime': 'Limón-lima',
+                    'Root Beer': 'Root beer',
+                    'Orange': 'Naranja',
+                    'Spiced Cherry': 'Cereza especiada',
+                    'Lemonade': 'Limonada',
+                    'Cherry': 'Cereza',
+                    'Blue Raspberry': 'Frambuesa azul',
+                    'Mango': 'Mango',
+                    'Watermelon': 'Sandía',
+                    'Mixed': 'Mixto',
+                  }
+                : const <String, String>{})[en] ??
+            en;
+
+  /// The panel's dishes in Spanish; the store's own (English) name otherwise.
+  String dish(String id, String fallback) => lang != 'es'
+      ? fallback
+      : const {
+              'ph-coffee': 'Café',
+              'ph-fountain-drink': 'Refresco de máquina',
+              'ph-frozen-slush': 'Granizado',
+              'ph-hot-dog': 'Hot dog',
+              'ph-taquito-beef': 'Taquito de res',
+              'ph-pizza-slice-pepperoni': 'Pizza de pepperoni',
+              'ph-nachos-with-pump-cheese': 'Nachos con queso',
+              'ph-breakfast-sandwich-sausage-egg-cheese':
+                  'Sándwich de desayuno',
+              'ph-kolache-sausage-cheese': 'Kolache de salchicha',
+              'ph-breakfast-taco-egg-bacon': 'Taco de huevo y tocino',
+              'ph-iced-coffee': 'Café helado',
+              'ph-sweet-tea': 'Té dulce',
+              'ph-add-jalapenos': 'Jalapeños extra',
+              'ph-add-chili': 'Chili extra',
+            }[id] ??
+            fallback;
 
   String grade(String code, String fallback) => switch (code) {
     'REG' => _t('Regular', 'Regular', 'Ordinaire'),

@@ -1266,9 +1266,10 @@ class Api {
     String? scan,
     String? dateOfBirth,
     bool cashierSawId = false,
+    bool visual = false,
   }) async => AgeCheckResult.fromJson(
     await _post('/retail/sales/$saleId/age-check', {
-      'method': scan != null ? 'SCAN' : 'MANUAL',
+      'method': visual ? 'VISUAL' : (scan != null ? 'SCAN' : 'MANUAL'),
       'scan': ?scan,
       'dateOfBirth': ?dateOfBirth,
       'cashierSawId': cashierSawId,
@@ -2230,6 +2231,19 @@ class CheckLine {
   );
 }
 
+/// One promotion on a sale ("2 for \$5 energy drinks"): [amountCents] off.
+class Discount {
+  final String code, label, labelEs;
+  final int amountCents;
+  const Discount(this.code, this.label, this.labelEs, this.amountCents);
+  factory Discount.fromJson(Map<String, dynamic> j) => Discount(
+    j['code'] ?? '',
+    j['label'] ?? '',
+    j['labelEs'] ?? j['label'] ?? '',
+    (j['amountCents'] as num?)?.toInt() ?? 0,
+  );
+}
+
 class FeeLine {
   final String code, labelFr, labelEn;
   final int amountCents;
@@ -2408,6 +2422,9 @@ class Check {
   /// last check failed and none passed (remove the restricted items).
   final bool ageCheckRequired, ageCleared, ageCheckFailed;
 
+  /// Promotions taken off before tax (a c-store's deals).
+  final List<Discount> discounts;
+
   /// What's left if paid in CASH (server-rounded to the nickel) and the signed
   /// difference from [outstandingCents] (e.g. -2, +1). Card is always exact.
   /// Older servers omit them: cash due = outstanding, no rounding.
@@ -2431,6 +2448,7 @@ class Check {
     this.ageCheckRequired = false,
     this.ageCleared = true,
     this.ageCheckFailed = false,
+    this.discounts = const [],
     int? cashDueCents,
     this.cashRoundingCents = 0,
   }) : subtotalCents = subtotalCents ?? grandTotalCents,
@@ -2456,6 +2474,10 @@ class Check {
     ageCheckRequired: j['ageCheckRequired'] ?? false,
     ageCleared: j['ageCleared'] ?? true,
     ageCheckFailed: j['ageCheckFailed'] ?? false,
+    discounts: [
+      for (final d in (j['discounts'] as List? ?? const []))
+        Discount.fromJson(d as Map<String, dynamic>),
+    ],
     cashDueCents: j['cashDueCents'],
     cashRoundingCents: j['cashRoundingCents'] ?? 0,
   );

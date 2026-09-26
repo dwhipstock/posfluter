@@ -259,6 +259,36 @@ void main() {
     );
   });
 
+  testWidgets('fountain & hot food: a slush by size and flavour', (
+    tester,
+  ) async {
+    await _shoot(
+      tester,
+      'food-picker',
+      const RetailScreen(),
+      act: (t) async {
+        await _tapKey(t, 'food-ph-frozen-slush');
+        await _tapKey(t, 'size-Large 44 oz');
+        await _tapKey(t, 'flavour-Blue Raspberry');
+      },
+      expectText: 'Add · \$2.99',
+    );
+  });
+
+  testWidgets('nachos with pump cheese and paid add-ons', (tester) async {
+    await _shoot(
+      tester,
+      'food-nachos',
+      const RetailScreen(),
+      act: (t) async {
+        await _tapKey(t, 'food-ph-nachos-with-pump-cheese');
+        await _tapKey(t, 'addon-ph-add-jalapenos');
+        await _tapKey(t, 'addon-ph-add-chili');
+      },
+      expectText: 'Add · \$4.98',
+    );
+  });
+
   testWidgets('change due on a finished prepay', (tester) async {
     await _shoot(
       tester,

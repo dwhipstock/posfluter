@@ -27,6 +27,11 @@ class StoreProfile {
   /// A gas station: the counter shows the pump grid (GET /forecourt).
   final bool forecourt;
 
+  /// `age.check=looks-under:N`: the cashier may pass a customer who clearly
+  /// looks over N without an ID (never for tobacco and vape). Null = an ID
+  /// every time (the default).
+  final int? looksOverAge;
+
   const StoreProfile({
     this.venueId = '',
     this.brand = 'copper-lantern',
@@ -37,6 +42,7 @@ class StoreProfile {
     this.legalAge = 18,
     this.kitchenPrinting = false,
     this.forecourt = false,
+    this.looksOverAge,
   });
 
   /// The Montréal pubs (and any store too old to describe itself).
@@ -87,6 +93,7 @@ class StoreProfile {
       legalAge: j['legalAge'] is int ? j['legalAge'] as int : 18,
       kitchenPrinting: j['kitchenPrinting'] == true,
       forecourt: j['forecourt'] == true,
+      looksOverAge: j['looksOverAge'] is int ? j['looksOverAge'] as int : null,
     );
   }
 }

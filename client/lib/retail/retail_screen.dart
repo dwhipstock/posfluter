@@ -5,6 +5,7 @@ import '../api.dart';
 import '../catalog/catalog_index.dart';
 import '../design/skin.dart';
 import '../forecourt/forecourt_i18n.dart';
+import '../forecourt/food_panel.dart';
 import '../forecourt/pump_grid.dart';
 import '../i18n.dart';
 import '../screens/login_screen.dart';
@@ -406,10 +407,15 @@ class _RetailScreenState extends State<RetailScreen> {
     _dialogOpen = true;
     AgeCheckResult? result;
     try {
+      // tobacco and vape always need the ID, whatever the store allows
+      final tobacco = sale.lines.any(
+        (l) => _index.byId(l.itemId ?? '')?.category == 'tobacco',
+      );
       result = await AgeCheckDialog.show(
         context,
         saleId: sale.id,
         legalAge: StoreProfile.current.legalAge,
+        looksOver: tobacco ? null : StoreProfile.current.looksOverAge,
       );
     } finally {
       _dialogOpen = false;
@@ -862,6 +868,37 @@ class _RetailScreenState extends State<RetailScreen> {
     );
   }
 
+  /// The counter's own: a cup size and flavour (or a dish and its add-ons),
+  /// then each pick becomes a line.
+  Future<void> _addFood(Item item) async {
+    _dialogOpen = true;
+    List<FoodPick>? picks;
+    try {
+      picks = await FoodPicker.pick(context, item, _items);
+    } finally {
+      _dialogOpen = false;
+    }
+    if (picks == null || picks.isEmpty || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      var sale = await _ensureSale();
+      for (final p in picks) {
+        sale = await Api.addLine(
+          sale.id,
+          p.item.id,
+          p.variant.id,
+          1,
+          note: p.note,
+        );
+      }
+      if (mounted) setState(() => _sale = sale);
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _pumpTapped(PumpInfo pump) async {
     final fc = _fc;
     if (fc == null) return;
@@ -1121,7 +1158,28 @@ class _RetailScreenState extends State<RetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (_fc != null) ...[
-            PumpGrid(controller: _fc!, onTap: _pumpTapped, onStopAll: _stopAll),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: PumpGrid(
+                    controller: _fc!,
+                    onTap: _pumpTapped,
+                    onStopAll: _stopAll,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 3,
+                  child: FoodPanel(
+                    items: _items,
+                    categoryName: _categoryName,
+                    onPick: _addFood,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 14),
           ],
           _searchBar(context),
@@ -1813,6 +1871,13 @@ class _RetailScreenState extends State<RetailScreen> {
                   money(sale?.itemsSubtotalCents ?? 0),
                 ),
                 if (crv > 0) _sum(context, r.crvLine, money(crv)),
+                for (final d in sale?.discounts ?? const <Discount>[])
+                  _sum(
+                    context,
+                    L.of(context).lang == 'es' ? d.labelEs : d.label,
+                    '−${money(d.amountCents)}',
+                    color: c.ok,
+                  ),
                 for (final t in sale?.taxes ?? const <TaxLine>[])
                   _sum(
                     context,
@@ -1909,18 +1974,38 @@ class _RetailScreenState extends State<RetailScreen> {
     );
   }
 
-  Widget _sum(BuildContext context, String label, String value) {
+  Widget _sum(
+    BuildContext context,
+    String label,
+    String value, {
+    Color? color,
+  }) {
     final c = SpColors.of(context);
     final s = BrandSkin.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Row(
         children: [
-          Text(label, style: s.text(size: 15.5, color: c.textMuted)),
-          const Spacer(),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: s.text(
+                size: 15.5,
+                color: color ?? c.textMuted,
+                weight: color != null ? FontWeight.w700 : FontWeight.w400,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           Text(
             value,
-            style: s.figures(size: 16, weight: FontWeight.w600, color: c.text),
+            style: s.figures(
+              size: 16,
+              weight: FontWeight.w600,
+              color: color ?? c.text,
+            ),
           ),
         ],
       ),

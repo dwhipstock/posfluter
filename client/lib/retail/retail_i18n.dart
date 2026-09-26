@@ -513,6 +513,11 @@ class R {
           'Tienda de licores · Los Ángeles',
           'Boutique d’alcools · Los Angeles',
         );
+  String looksOver(int n) => _t(
+    'Clearly over $n: no ID needed',
+    'Claramente mayor de $n: sin identificación',
+    'Nettement plus de $n\u00A0ans\u00A0: sans pièce d’identité',
+  );
   String get stockApp =>
       _t('Stock app', 'App de inventario', 'Application d’inventaire');
   String get registerLine => _t(

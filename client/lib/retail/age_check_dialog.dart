@@ -23,19 +23,29 @@ import 'sp_theme.dart';
 class AgeCheckDialog extends StatefulWidget {
   final int saleId;
   final int legalAge;
+
+  /// The store allows a visual check over this age and nothing on the sale
+  /// forbids it (tobacco and vape always need the ID); null = ID only.
+  final int? looksOver;
   const AgeCheckDialog({
     super.key,
     required this.saleId,
     required this.legalAge,
+    this.looksOver,
   });
 
   static Future<AgeCheckResult?> show(
     BuildContext context, {
     required int saleId,
     required int legalAge,
+    int? looksOver,
   }) => showDialog<AgeCheckResult>(
     context: context,
-    builder: (_) => AgeCheckDialog(saleId: saleId, legalAge: legalAge),
+    builder: (_) => AgeCheckDialog(
+      saleId: saleId,
+      legalAge: legalAge,
+      looksOver: looksOver,
+    ),
   );
 
   @override
@@ -86,10 +96,10 @@ class _AgeCheckDialogState extends State<AgeCheckDialog> {
     return false;
   }
 
-  Future<void> _submit({String? scan}) async {
+  Future<void> _submit({String? scan, bool visual = false}) async {
     if (_busy) return;
     String? dob;
-    if (scan == null) {
+    if (scan == null && !visual) {
       if (_year == null || _month == null || _day == null) return;
       dob =
           '${_year!.toString().padLeft(4, '0')}-${_month!.toString().padLeft(2, '0')}-${_day!.toString().padLeft(2, '0')}';
@@ -100,7 +110,8 @@ class _AgeCheckDialogState extends State<AgeCheckDialog> {
         widget.saleId,
         scan: scan,
         dateOfBirth: dob,
-        cashierSawId: _sawId,
+        cashierSawId: visual || _sawId,
+        visual: visual,
       );
       if (!mounted) return;
       setState(() => _result = r);
@@ -296,6 +307,15 @@ class _AgeCheckDialogState extends State<AgeCheckDialog> {
           title: Text(r.sawId, style: T.text(size: 16, color: c.text)),
         ),
         Text(r.privacyNote, style: T.text(size: 13, color: c.textMuted)),
+        if (widget.looksOver != null) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const Key('age-visual'),
+            onPressed: _busy ? null : () => _submit(visual: true),
+            icon: const Icon(Icons.visibility_rounded),
+            label: Text(r.looksOver(widget.looksOver!)),
+          ),
+        ],
       ],
     );
   }
