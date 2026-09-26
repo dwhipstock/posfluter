@@ -120,9 +120,13 @@ class StockCountTest {
         assertNull(view.line("golden-lager-6").intOrNull("expected"))
         assertEquals("false", view["needsApproval"]!!.jsonPrimitive.content)
 
-        // an unknown code is refused, the count keeps what it had
-        cashier.putJson("/stock/counts/$count1/lines", """{"counterId":"$phoneA","lines":[{"barcode":"999999999999","qty":1}]}""")
-            .let { assertEquals(HttpStatusCode.NotFound, it.status) }
+        // an unknown code is left out (and named); the rest of the batch still lands
+        obj(cashier.putJson("/stock/counts/$count1/lines",
+            """{"counterId":"$phoneA","lines":[{"barcode":"999999999999","qty":1},{"itemId":"club-soda","qty":2}]}""").bodyAsText())
+            .let {
+                assertEquals(listOf("999999999999"), it["skipped"]!!.jsonArray.map { s -> s.jsonPrimitive.content })
+                assertEquals(2, it.line("club-soda")["counted"]!!.jsonPrimitive.int)
+            }
 
         // submit twice (the reply was lost): one event, same answer
         repeat(2) {
@@ -136,6 +140,7 @@ class StockCountTest {
         assertEquals("Back room", counted["name"]!!.jsonPrimitive.content)
         assertEquals(13, counted.line("golden-lager-6")["countedQty"]!!.jsonPrimitive.int)
         assertEquals(0, counted.line("ice-7")["countedQty"]!!.jsonPrimitive.int)
+        assertEquals(2, counted.line("club-soda")["countedQty"]!!.jsonPrimitive.int)
         assertTrue(counted.line("ice-7")["countedAt"]!!.jsonPrimitive.content.contains("T"))
         // a submitted count is closed to more lines
         cashier.putJson("/stock/counts/$count1/lines", """{"counterId":"$phoneA","lines":[{"itemId":"ice-7","qty":3}]}""")

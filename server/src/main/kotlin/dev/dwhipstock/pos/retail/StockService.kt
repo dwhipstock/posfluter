@@ -144,6 +144,8 @@ data class CountView(
     val varianceLines: Int = 0,
     /** Submitting needs a manager when there is any variance. */
     val needsApproval: Boolean = false,
+    /** Lines just sent that name no product in the catalog (left out). */
+    val skipped: List<String> = emptyList(),
 )
 
 @Serializable
@@ -284,7 +286,12 @@ class StockService(private val config: CustomerConfig) {
         StockCounts.selectAll().where { StockCounts.id eq id }.firstOrNull()
             ?: throw NotFoundException("no count $id", "count_not_found")
 
-    /** Set this counter's quantities (idempotent: a SET per product, not an increment). */
+    /**
+     * Set this counter's quantities (idempotent: a SET per product, not an
+     * increment). A line whose product is no longer in the catalog is left
+     * out and named in `skipped` — the rest of the batch still lands, so a
+     * phone's queued counts are never refused as a whole.
+     */
     fun setLines(id: String, req: CountLinesRequest, userId: String): CountView = transaction {
         requireRetail()
         val count = requireCount(id)
@@ -295,8 +302,13 @@ class StockService(private val config: CustomerConfig) {
         if (req.lines.size > 2000) throw BadRequestException("too many lines at once", "bad_line")
         val products = products()
         val now = VenueClock.now()
+        val skipped = mutableListOf<String>()
         for (line in req.lines) {
-            val itemId = resolveItem(line.itemId, line.barcode, products)
+            val itemId = runCatching { resolveItem(line.itemId, line.barcode, products) }.getOrElse {
+                if (it !is NotFoundException) throw it
+                skipped += (line.itemId ?: line.barcode ?: "?")
+                null
+            } ?: continue
             if (line.remove) {
                 StockCountLines.deleteWhere {
                     (countId eq id) and (StockCountLines.itemId eq itemId) and (counterId eq counter)
@@ -314,7 +326,7 @@ class StockService(private val config: CustomerConfig) {
                 it[countedAt] = at
             }
         }
-        countView(id, counter)
+        countView(id, counter).copy(skipped = skipped)
     }
 
     /** Whether submitting [id] needs a manager: it is still open and some product's count differs from expected. */
