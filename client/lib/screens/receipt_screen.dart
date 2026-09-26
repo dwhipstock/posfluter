@@ -5,6 +5,7 @@ import '../design/skin.dart';
 import '../design/tokens.dart';
 import '../retail/sp_theme.dart';
 import '../widgets/brand.dart';
+import '../api.dart';
 import '../i18n.dart';
 
 /// Receipt preview after close. Renders the server's 42-col text form on a
@@ -86,7 +87,8 @@ String withoutNameLine(String text) {
     i++;
   }
   if (i < lines.length &&
-      lines[i].trim().toLowerCase().startsWith('sage & poppy')) {
+      (lines[i].trim().toLowerCase().startsWith('sage & poppy') ||
+          lines[i].trim().toLowerCase().startsWith('pronghorn'))) {
     i++;
     while (i < lines.length && stars(lines[i])) {
       i++;
@@ -106,12 +108,16 @@ class _WordmarkHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = BrandSkin.of(context);
     final c = SpColors.light; // paper is always light
+    final pronghorn = StoreProfile.current.isPronghorn;
+    // Pronghorn: its black band, the name in white, FUEL & MARKET in yellow
+    final band = pronghorn ? SpColors.pronghorn.sageDeep : c.sageMist;
+    final name = pronghorn ? 'PRONGHORN' : 'SAGE & POPPY';
+    final sub = pronghorn ? 'FUEL & MARKET' : 'BOTTLE SHOP';
+    final nameColor = pronghorn ? Colors.white : c.sageDeep;
+    final subColor = pronghorn ? SpColors.pronghorn.sage : c.poppy;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: c.sageMist,
-        borderRadius: s.radiusMedium,
-      ),
+      decoration: BoxDecoration(color: band, borderRadius: s.radiusMedium),
       child: Row(
         children: [
           const BrandLogo(size: 40),
@@ -121,19 +127,15 @@ class _WordmarkHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'SAGE & POPPY',
+                  name,
                   style: s
-                      .text(
-                        size: 18,
-                        weight: FontWeight.w800,
-                        color: c.sageDeep,
-                      )
+                      .text(size: 18, weight: FontWeight.w800, color: nameColor)
                       .copyWith(letterSpacing: 2.4),
                 ),
                 Text(
-                  'BOTTLE SHOP',
+                  sub,
                   style: s
-                      .text(size: 11, weight: FontWeight.w700, color: c.poppy)
+                      .text(size: 11, weight: FontWeight.w700, color: subColor)
                       .copyWith(letterSpacing: 3),
                 ),
               ],

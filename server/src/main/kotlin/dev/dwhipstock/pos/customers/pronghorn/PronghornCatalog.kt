@@ -5,7 +5,7 @@ import kotlin.math.exp
 import kotlin.math.roundToLong
 
 /**
- * Pronghorn's convenience store: about 1,150 products, the size of a real
+ * Pronghorn's convenience store: about 900 products, the size of a real
  * c-store (800–1,500 SKUs), plus the fuel items rung up at the pump.
  * Generated from fixed word lists and a fixed seed, so every store, test and
  * demo gets the same shelf, barcodes and prices. Every name is made up.
@@ -154,7 +154,9 @@ object PronghornCatalog {
         return scored.map { it.p.copy(salesWeight = weight.getValue(it.p.id).toInt()) }
     }
 
-    private fun slug(s: String) = s.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(40)
+    private fun slug(s: String) = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "") // jalapeño → jalapeno
+        .replace(Regex("[^a-z0-9]+"), "-").trim('-').take(40)
 
     // ---- departments ----
 

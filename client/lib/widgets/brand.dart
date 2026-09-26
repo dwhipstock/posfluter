@@ -13,20 +13,30 @@ class BrandLogo extends StatelessWidget {
 
   static const asset = 'assets/copper_lantern_logo.png';
   static const sagePoppyAsset = 'assets/sage_poppy_mark.png';
+  static const pronghornAsset = 'assets/pronghorn_mark.png';
 
   @override
   Widget build(BuildContext context) {
-    final sagePoppy = StoreProfile.current.isSagePoppy;
+    final profile = StoreProfile.current;
+    final sagePoppy = profile.isSagePoppy;
     final image = Image.asset(
-      sagePoppy ? sagePoppyAsset : asset,
+      profile.isPronghorn
+          ? pronghornAsset
+          : sagePoppy
+          ? sagePoppyAsset
+          : asset,
       width: size,
       height: size,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.medium,
-      semanticLabel: sagePoppy
+      semanticLabel: profile.isPronghorn
+          ? 'Pronghorn Fuel & Market'
+          : sagePoppy
           ? 'Sage & Poppy Bottle Shop'
           : 'The Copper Lantern Pub',
     );
+    // the Pronghorn badge is its own dark rounded square: no disc
+    if (profile.isPronghorn) return image;
     if (!ring) return image;
     final pad = (size * .045).clamp(2.0, 12.0);
     return Container(

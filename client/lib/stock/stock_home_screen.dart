@@ -71,9 +71,7 @@ class _StockHomeScreenState extends State<StockHomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      StoreProfile.current.isSagePoppy
-                          ? 'Sage & Poppy'
-                          : Api.venueBrand,
+                      StoreProfile.current.brandName ?? Api.venueBrand,
                       overflow: TextOverflow.ellipsis,
                       style: T.text(
                         size: 18,

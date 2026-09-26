@@ -169,14 +169,19 @@ class PosApp extends StatelessWidget {
       child: ListenableBuilder(
         listenable: Prefs.instance,
         builder: (context, _) {
-          final sagePoppy = StoreProfile.current.isSagePoppy;
+          final profile = StoreProfile.current;
+          final sagePoppy = profile.isSagePoppy;
+          final pronghorn = profile.isPronghorn;
+          final brand = profile.brandName ?? 'Copper Lantern';
           return MaterialApp(
             navigatorObservers: [_RouteBarrierLogger()],
             title: AppMode.isStock
-                ? (sagePoppy ? 'Sage & Poppy Stock' : 'POS Stock')
-                : (sagePoppy ? 'Sage & Poppy POS' : 'Copper Lantern POS'),
+                ? (profile.hasOwnBrand ? '$brand Stock' : 'POS Stock')
+                : '$brand POS',
             navigatorKey: rootNavigatorKey,
-            theme: sagePoppy
+            theme: pronghorn
+                ? buildPronghornTheme()
+                : sagePoppy
                 ? buildSagePoppyTheme(Brightness.light)
                 : buildPosTheme(),
             darkTheme: sagePoppy ? buildSagePoppyTheme(Brightness.dark) : null,

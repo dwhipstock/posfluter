@@ -94,6 +94,34 @@ class SpColors extends ThemeExtension<SpColors> {
     receiptPaper: Color(0xFFFFFFFF), // paper stays paper
   );
 
+  /// Pronghorn Fuel & Market: the same roles on a near-black counter —
+  /// signal yellow where Sage & Poppy has sage (selection, focus, the
+  /// brand), a go-green Pay button where it has poppy. One palette, always
+  /// dark: a cashier reads it at a glance under forecourt glare.
+  /// Text pairs ≥ 7:1; black on the yellow ≈ 12:1, black on the green ≈ 9:1.
+  static const pronghorn = SpColors(
+    sage: Color(0xFFFFC400),
+    sageDeep: Color(0xFF07080A),
+    onSage: Color(0xFF111214),
+    sageMist: Color(0xFF2B2612),
+    poppy: Color(0xFF22C55E),
+    onPoppy: Color(0xFF04130A),
+    poppySoft: Color(0xFF3A2610),
+    background: Color(0xFF0E1013),
+    surface: Color(0xFF171A1F),
+    surfaceAlt: Color(0xFF22262E),
+    border: Color(0xFF30353E),
+    text: Color(0xFFF4F6F8),
+    textMuted: Color(0xFFA9B1BC),
+    ok: Color(0xFF4ADE80),
+    okSoft: Color(0xFF10291A),
+    warn: Color(0xFFFFB020),
+    warnSoft: Color(0xFF33270A),
+    bad: Color(0xFFFF6B6B),
+    badSoft: Color(0xFF3A1517),
+    receiptPaper: Color(0xFFFFFFFF),
+  );
+
   static SpColors of(BuildContext context) =>
       Theme.of(context).extension<SpColors>() ?? light;
 
@@ -129,9 +157,19 @@ const spDepartmentHues = {
 };
 
 /// The Material theme the terminal wears when the store is Sage & Poppy.
-ThemeData buildSagePoppyTheme(Brightness brightness) {
-  final c = brightness == Brightness.dark ? SpColors.dark : SpColors.light;
-  final skin = BrandSkin.sagePoppy;
+ThemeData buildSagePoppyTheme(Brightness brightness) => buildRetailTheme(
+  brightness == Brightness.dark ? SpColors.dark : SpColors.light,
+  BrandSkin.sagePoppy,
+);
+
+/// Pronghorn Fuel & Market: always its dark counter.
+ThemeData buildPronghornTheme() =>
+    buildRetailTheme(SpColors.pronghorn, BrandSkin.pronghorn);
+
+/// A retail brand's Material theme from its palette roles and its skin.
+ThemeData buildRetailTheme(SpColors c, BrandSkin skin) {
+  final brightness = c.isDark ? Brightness.dark : Brightness.light;
+  final pillControls = skin.pillControls;
   // the shared screens' T.text() draws in this brand's family too
   T.family = skin.fontFamily;
   TextStyle text({
@@ -165,7 +203,9 @@ ThemeData buildSagePoppyTheme(Brightness brightness) {
     outline: c.border,
     outlineVariant: c.border,
   );
-  const pill = StadiumBorder();
+  final OutlinedBorder pill = pillControls
+      ? const StadiumBorder()
+      : RoundedRectangleBorder(borderRadius: skin.radiusMedium);
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
@@ -244,7 +284,7 @@ ThemeData buildSagePoppyTheme(Brightness brightness) {
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
-        shape: const WidgetStatePropertyAll(pill),
+        shape: WidgetStatePropertyAll(pill),
         side: WidgetStatePropertyAll(BorderSide(color: c.border)),
         backgroundColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected) ? c.sage : c.surface,
@@ -297,7 +337,7 @@ ThemeData buildSagePoppyTheme(Brightness brightness) {
       behavior: SnackBarBehavior.floating,
       backgroundColor: c.isDark ? c.surfaceAlt : c.sageDeep,
       contentTextStyle: skin.text(size: 16, color: Colors.white),
-      shape: const StadiumBorder(),
+      shape: pill,
       elevation: 0,
     ),
     tooltipTheme: TooltipThemeData(

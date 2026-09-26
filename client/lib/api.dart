@@ -17,6 +17,7 @@ export 'stock/stock_models.dart';
 export 'store_profile.dart';
 
 part 'kitchen/kitchen_api.dart';
+part 'forecourt/forecourt_api.dart';
 
 /// Thin API client for the store server. The client owns NO money logic —
 /// pricing, tax, rounding all live server-side (architecture principle #2).
@@ -2188,6 +2189,9 @@ class CheckLine {
   /// Retail: needs an ID check; bottle deposit (CRV) per unit; taxed or not.
   final bool ageRestricted, taxable;
   final int depositCents;
+
+  /// A gas station's fuel or prepay line: pump, grade, gallons, price per gallon.
+  final FuelLine? fuel;
   CheckLine(
     this.id,
     this.itemId,
@@ -2203,6 +2207,7 @@ class CheckLine {
     this.ageRestricted = false,
     this.taxable = true,
     this.depositCents = 0,
+    this.fuel,
   });
   factory CheckLine.fromJson(Map<String, dynamic> j) => CheckLine(
     j['id'],
@@ -2219,6 +2224,9 @@ class CheckLine {
     ageRestricted: j['ageRestricted'] ?? false,
     taxable: j['taxable'] ?? true,
     depositCents: j['depositCents'] ?? 0,
+    fuel: j['fuel'] is Map<String, dynamic>
+        ? FuelLine.fromJson(j['fuel'])
+        : null,
   );
 }
 

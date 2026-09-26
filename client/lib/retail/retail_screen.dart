@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../api.dart';
 import '../catalog/catalog_index.dart';
 import '../design/skin.dart';
+import '../forecourt/forecourt_i18n.dart';
+import '../forecourt/pump_grid.dart';
 import '../i18n.dart';
 import '../screens/login_screen.dart';
 import '../screens/receipt_screen.dart';
@@ -76,6 +78,9 @@ class _RetailScreenState extends State<RetailScreen> {
   DateTime? _lastScanAt;
 
   _View _view = _View.keys;
+
+  /// A gas station's pumps (the forecourt), polled while the counter is up.
+  ForecourtController? _fc;
   String _topCategory = 'all';
   String? _cat, _sub, _size;
 
@@ -99,6 +104,7 @@ class _RetailScreenState extends State<RetailScreen> {
     for (final s in widget.sources) {
       _subs.add(s.scans.listen(_scan));
     }
+    if (ForecourtApi.enabled) _fc = ForecourtController()..start();
     _load();
   }
 
@@ -109,6 +115,7 @@ class _RetailScreenState extends State<RetailScreen> {
       s.cancel();
     }
     _scanner.dispose();
+    _fc?.dispose();
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -158,8 +165,12 @@ class _RetailScreenState extends State<RetailScreen> {
   }
 
   void _setItems(List<Item> items) {
-    _items = items;
-    _index = CatalogIndex(items, _doc);
+    // fuel is sold at the pump, never from the shelf
+    _items = [
+      for (final i in items)
+        if (i.category != 'fuel') i,
+    ];
+    _index = CatalogIndex(_items, _doc);
   }
 
   // ---- scanning ----
@@ -440,6 +451,25 @@ class _RetailScreenState extends State<RetailScreen> {
     }
     if (!mounted) return;
     setState(() => _sale = null);
+    final prepays = [
+      for (final l in sale.lines)
+        if (l.fuel?.prepay == true) l,
+    ];
+    if (_fc != null) {
+      _fc!.refresh();
+      if (prepays.isNotEmpty) {
+        final f = F.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              prepays
+                  .map((l) => f.pumpOn(l.fuel!.pump, money(l.lineTotalCents)))
+                  .join(' · '),
+            ),
+          ),
+        );
+      }
+    }
     try {
       final text = await Api.receiptText(paid.check.id);
       if (!mounted) return;
@@ -652,16 +682,281 @@ class _RetailScreenState extends State<RetailScreen> {
     return Scaffold(
       backgroundColor: c.background,
       body: SafeArea(
-        child: skin.shell == ShellLayout.topBar
-            ? Column(
-                children: [
-                  _topBand(context),
-                  Expanded(child: body),
-                ],
-              )
-            : body,
+        child: switch (skin.shell) {
+          ShellLayout.topBar => Column(
+            children: [
+              _topBand(context),
+              Expanded(child: body),
+            ],
+          ),
+          ShellLayout.forecourt => Column(
+            children: [
+              _commandBar(context),
+              Expanded(child: body),
+            ],
+          ),
+          ShellLayout.leftRail => body,
+        },
       ),
     );
+  }
+
+  // ---- the forecourt (a gas station) ----
+
+  /// Pronghorn's frame: a black command bar — the badge, the store, the
+  /// register, the stock screens, the language and who's signed in.
+  Widget _commandBar(BuildContext context) {
+    final r = R.of(context);
+    final c = SpColors.of(context);
+    final s = BrandSkin.of(context);
+    final g = s.glyphs;
+    final user = Api.currentUser;
+    Widget barButton(
+      String key,
+      IconData icon,
+      String label,
+      VoidCallback onTap, {
+      Color? dot,
+    }) => Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: TextButton.icon(
+        key: Key(key),
+        onPressed: onTap,
+        style: TextButton.styleFrom(
+          foregroundColor: c.text,
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          shape: RoundedRectangleBorder(borderRadius: s.radiusMedium),
+        ),
+        icon: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(icon, size: 22, color: c.text),
+            if (dot != null)
+              Positioned(
+                right: -3,
+                top: -3,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                ),
+              ),
+          ],
+        ),
+        label: Text(
+          label,
+          style: s.text(size: 15.5, weight: FontWeight.w700, color: c.text),
+        ),
+      ),
+    );
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: c.sageDeep,
+        border: Border(bottom: BorderSide(color: c.sage, width: 3)),
+      ),
+      child: Row(
+        children: [
+          const BrandLogo(size: 44),
+          const SizedBox(width: 12),
+          Text(
+            'PRONGHORN',
+            style: s
+                .text(size: 24, weight: FontWeight.w800, color: c.text)
+                .copyWith(letterSpacing: 1.5),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: c.sage,
+              borderRadius: s.radiusSmall,
+            ),
+            child: Text(
+              'FUEL & MARKET',
+              style: TextStyle(
+                fontFamily: 'BarlowCondensed',
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+                color: c.onSage,
+              ),
+            ),
+          ),
+          const Spacer(),
+          barButton(
+            'rail-register',
+            g.register,
+            _shift == null ? r.openRegister : r.register,
+            _shift == null ? _openRegister : _closeRegister,
+            dot: !_shiftLoaded ? null : (_shift == null ? c.warn : c.ok),
+          ),
+          barButton('menu-count', g.count, r.count, () => _stock(true)),
+          barButton('menu-receive', g.receive, r.receive, () => _stock(false)),
+          const SizedBox(width: 6),
+          TextButton(
+            onPressed: () => Prefs.instance.setLang(Prefs.instance.nextLang),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(52, 48),
+              foregroundColor: c.text,
+            ),
+            child: Text(
+              L.of(context).lang.toUpperCase(),
+              style: s.text(size: 16, weight: FontWeight.w800, color: c.text),
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: user?.name ?? r.more,
+            onSelected: (v) {
+              if (v == 'out') _signOut();
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                enabled: false,
+                child: Text(
+                  user?.name ?? '',
+                  style: s.text(
+                    size: 15,
+                    weight: FontWeight.w700,
+                    color: c.text,
+                  ),
+                ),
+              ),
+              PopupMenuItem(value: 'out', child: Text(r.signOut)),
+            ],
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: c.sage,
+                  child: Text(
+                    (user?.name ?? '?')
+                        .split(RegExp(r'\s+'))
+                        .where((w) => w.isNotEmpty)
+                        .take(2)
+                        .map((w) => w[0].toUpperCase())
+                        .join(),
+                    style: s.text(
+                      size: 15,
+                      weight: FontWeight.w800,
+                      color: c.onSage,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  user?.name ?? '',
+                  style: s.text(
+                    size: 15,
+                    weight: FontWeight.w700,
+                    color: c.text,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pumpTapped(PumpInfo pump) async {
+    final fc = _fc;
+    if (fc == null) return;
+    _dialogOpen = true;
+    try {
+      await PumpSheet.show(
+        context,
+        pump: pump,
+        online: fc.state.online,
+        onAddFuel: _addFuel,
+        onPrepay: () => _prepay(pump.pump),
+        onCommand: _pumpCommand,
+      );
+    } finally {
+      _dialogOpen = false;
+    }
+  }
+
+  Future<void> _addFuel(PayableFuel trx) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final sale = await _ensureSale();
+      final updated = await ForecourtApi.addFuel(sale.id, trx.trxId);
+      if (mounted) setState(() => _sale = updated);
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      _fc?.refresh();
+    }
+  }
+
+  Future<void> _prepay(int pump) async {
+    _dialogOpen = true;
+    int? cents;
+    try {
+      cents = await PrepayDialog.show(context, pump);
+    } finally {
+      _dialogOpen = false;
+    }
+    if (cents == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final sale = await _ensureSale();
+      final updated = await ForecourtApi.prepay(sale.id, pump, cents);
+      if (mounted) setState(() => _sale = updated);
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      _fc?.refresh();
+    }
+  }
+
+  Future<void> _pumpCommand(Future<Forecourt> Function() command) async {
+    try {
+      _fc?.set(await command());
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+      _fc?.refresh();
+    }
+  }
+
+  Future<void> _stopAll() async {
+    final f = F.of(context);
+    _dialogOpen = true;
+    bool? go;
+    try {
+      go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(f.stopAllTitle),
+          content: SizedBox(width: 420, child: Text(f.stopAllBody)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(f.cancel),
+            ),
+            FilledButton(
+              key: const Key('stop-all-confirm'),
+              style: FilledButton.styleFrom(
+                backgroundColor: PumpColors.stopped,
+                foregroundColor: Colors.black,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(f.stopNow),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _dialogOpen = false;
+    }
+    if (go == true) await _pumpCommand(() => ForecourtApi.emergencyStop());
   }
 
   // ---- frame: the rail (S&P) or a top band ----
@@ -770,7 +1065,7 @@ class _RetailScreenState extends State<RetailScreen> {
           const BrandLogo(size: 52, ring: true),
           const SizedBox(width: 12),
           Text(
-            StoreProfile.current.isSagePoppy ? 'Sage & Poppy' : Api.venueBrand,
+            StoreProfile.current.brandName ?? Api.venueBrand,
             style: s.text(
               size: 22,
               weight: FontWeight.w700,
@@ -825,6 +1120,10 @@ class _RetailScreenState extends State<RetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_fc != null) ...[
+            PumpGrid(controller: _fc!, onTap: _pumpTapped, onStopAll: _stopAll),
+            const SizedBox(height: 14),
+          ],
           _searchBar(context),
           const SizedBox(height: 14),
           if (_shiftLoaded && _shift == null) ...[
@@ -1649,6 +1948,7 @@ class _RetailScreenState extends State<RetailScreen> {
     final r = R.of(context);
     final c = SpColors.of(context);
     final s = BrandSkin.of(context);
+    if (l.fuel != null) return _fuelLine(context, l, l.fuel!);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
       child: Row(
@@ -1722,6 +2022,108 @@ class _RetailScreenState extends State<RetailScreen> {
                 ),
                 _qtyButton(context, s.glyphs.plus, () => _setQty(l, l.qty + 1)),
               ],
+            ),
+          ),
+          SizedBox(
+            width: 84,
+            child: Text(
+              money(l.lineTotalCents),
+              textAlign: TextAlign.right,
+              style: s.figures(
+                size: 16.5,
+                weight: FontWeight.w700,
+                color: c.text,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A fuel or prepay line: the pump, the grade, gallons at the price per
+  /// gallon (or the prepay's pump), no qty — one fuelling is one line.
+  Widget _fuelLine(BuildContext context, CheckLine l, FuelLine fuel) {
+    final f = F.of(context);
+    final c = SpColors.of(context);
+    final s = BrandSkin.of(context);
+    final color = fuel.prepay ? PumpColors.authorised : PumpColors.payable;
+    return Padding(
+      key: Key('fuel-line-${fuel.fuelSaleId}'),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: s.radiusMedium,
+            ),
+            child: Text(
+              '${fuel.pump}',
+              style: TextStyle(
+                fontFamily: 'BarlowCondensed',
+                fontSize: 26,
+                height: 1,
+                fontWeight: FontWeight.w800,
+                color: PumpColors.on(color),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fuel.prepay
+                      ? f.prepayLine(fuel.pump)
+                      : f.fuelLine(
+                          fuel.pump,
+                          f.grade(fuel.grade ?? '', fuel.gradeName ?? l.nameEn),
+                        ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: s.text(
+                    size: 15.5,
+                    weight: FontWeight.w700,
+                    color: c.text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      fuel.prepay
+                          ? f.startsWhenPaid
+                          : f.perGallon(
+                              gallons(fuel.volumeMilli ?? 0),
+                              pricePerGallon(fuel.priceMills ?? 0),
+                            ),
+                      style: s.figures(
+                        size: 13,
+                        weight: FontWeight.w500,
+                        color: c.textMuted,
+                      ),
+                    ),
+                    _tag(context, f.taxIncluded, c.surfaceAlt, c.textMuted),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 42,
+            height: 42,
+            child: IconButton(
+              key: Key('remove-fuel-${fuel.fuelSaleId}'),
+              padding: EdgeInsets.zero,
+              onPressed: _busy ? null : () => _setQty(l, 0),
+              icon: Icon(s.glyphs.close, size: 20, color: c.textMuted),
             ),
           ),
           SizedBox(

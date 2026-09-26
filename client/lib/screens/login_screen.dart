@@ -242,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Sage & Poppy',
+                        StoreProfile.current.brandName ?? Api.venueBrand,
                         style: s.text(
                           size: phone ? 19 : 21,
                           weight: FontWeight.w800,
@@ -431,14 +431,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Navy at the pubs; the store's own primary where it has a brand.
-  Color _ink(BuildContext context) => StoreProfile.current.isSagePoppy
+  Color _ink(BuildContext context) => StoreProfile.current.hasOwnBrand
       ? Theme.of(context).colorScheme.primary
       : T.navy;
 
   Widget _staffCard(Staff s) {
     final selected = _selected == s.id;
     final manager = s.role == 'MANAGER';
-    final branded = StoreProfile.current.isSagePoppy;
+    final branded = StoreProfile.current.hasOwnBrand;
     final sp = SpColors.of(context);
     final ink = _ink(context);
     return SizedBox(

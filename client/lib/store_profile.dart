@@ -8,7 +8,7 @@ import 'i18n.dart';
 class StoreProfile {
   final String venueId;
 
-  /// 'copper-lantern' | 'sage-poppy'
+  /// 'copper-lantern' | 'sage-poppy' | 'pronghorn'
   final String brand;
 
   /// 'restaurant' | 'retail'
@@ -24,6 +24,9 @@ class StoreProfile {
   /// station setup. Off (the default) and the terminal is exactly as before.
   final bool kitchenPrinting;
 
+  /// A gas station: the counter shows the pump grid (GET /forecourt).
+  final bool forecourt;
+
   const StoreProfile({
     this.venueId = '',
     this.brand = 'copper-lantern',
@@ -33,6 +36,7 @@ class StoreProfile {
     this.locales = const ['fr', 'en'],
     this.legalAge = 18,
     this.kitchenPrinting = false,
+    this.forecourt = false,
   });
 
   /// The Montréal pubs (and any store too old to describe itself).
@@ -42,6 +46,18 @@ class StoreProfile {
 
   bool get isRetail => kind == 'retail';
   bool get isSagePoppy => brand == 'sage-poppy';
+  bool get isPronghorn => brand == 'pronghorn';
+
+  /// A retail brand with its own skin and palette (not the pubs' look).
+  bool get hasOwnBrand => isSagePoppy || isPronghorn;
+
+  /// The short brand name the screens show, or null for the pubs (which
+  /// show the venue's own name from settings).
+  String? get brandName => isSagePoppy
+      ? 'Sage & Poppy'
+      : isPronghorn
+      ? 'Pronghorn'
+      : null;
   String get defaultLocale => locales.first;
 
   /// From /health; missing or odd fields keep the pub defaults.
@@ -70,6 +86,7 @@ class StoreProfile {
       locales: locales,
       legalAge: j['legalAge'] is int ? j['legalAge'] as int : 18,
       kitchenPrinting: j['kitchenPrinting'] == true,
+      forecourt: j['forecourt'] == true,
     );
   }
 }
