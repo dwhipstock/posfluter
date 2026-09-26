@@ -73,7 +73,7 @@ function TaxPage() {
     return {
       ...meta("tax"),
       reportTitle: t("tax_title"),
-      notes: [t("tax_note"), t("tax_no_breakdown")],
+      notes: showQc ? [t("tax_note"), t("tax_no_breakdown")] : [t("tax_note_generic")],
       kpis: [
         { label: t("col_gross"), value: fmtC(data.totals.grossCents) },
         { label: t("col_net"), value: fmtC(data.totals.netCents) },
@@ -215,7 +215,7 @@ function TaxPage() {
               })}
             </Badge>
           ))}
-          <span className="text-xs text-neutral-500">{t("tax_note")}</span>
+          <span className="text-xs text-neutral-500">{t(showQc ? "tax_note" : "tax_note_generic")}</span>
         </div>
         {isLoading ? (
           <TableSkeleton rows={6} />

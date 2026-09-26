@@ -574,3 +574,51 @@ export interface StorePosResponse {
   onlineSeconds: number;
   staleMinutes: number;
 }
+
+// ── stock (retail stores; cloud-owned, GET /v1/stock) ──────────────────
+export interface StockRow {
+  venueId: string;
+  itemId: string;
+  name: string;
+  categoryId: string;
+  barcode?: string | null;
+  active: boolean;
+  received: number;
+  sold: number;
+  adjusted: number;
+  onHand: number;
+  reorderLevel?: number | null;
+  low: boolean;
+}
+
+export interface VenueStockRow {
+  venueId: string;
+  venueName: string;
+  products: number;
+  onHand: number;
+  lowCount: number;
+}
+
+export interface StockResponse {
+  rows: StockRow[];
+  byVenue: VenueStockRow[];
+  totalOnHand: number;
+  lowCount: number;
+  /** False when no store in scope is retail. */
+  retail: boolean;
+}
+
+export interface StockMovement {
+  id: number;
+  venueId: string;
+  itemId: string;
+  kind: "RECEIVED" | "ADJUSTMENT" | string;
+  qty: number;
+  note: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface StockMovementsResponse {
+  movements: StockMovement[];
+}

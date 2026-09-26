@@ -195,6 +195,10 @@ export const messages = {
     "TPS et TVQ ajoutées aux prix avant taxes, telles que facturées à chaque vente — net = brut − taxes",
     "GST and QST added on top of pre-tax prices, as charged on each sale — net = gross − tax."
   ),
+  tax_note_generic: m(
+    "Taxes ajoutées aux prix avant taxes, telles que facturées à chaque vente — net = brut − taxes",
+    "Taxes added on top of pre-tax prices, as charged on each sale — net = gross − tax."
+  ),
   tax_no_breakdown: m(
     "Les ventes synchronisées sans détail des taxes comptent pour 0 en TPS et TVQ.",
     "Sales synced without a tax breakdown count as 0 GST and QST."
@@ -531,6 +535,68 @@ export const messages = {
   tax_col_rate: m("{label} {rate} %", "{label} {rate}%"),
   tax_by_code: m("Par taxe", "By tax"),
   tax_col_tax: m("Taxe", "Tax"),
+  // ── stock (retail stores) ───────────────────────────────────────────────
+  nav_stock: m("Stock", "Stock"),
+  stock_title: m("Stock", "Stock"),
+  stock_sub: m(
+    "En main = reçu − vendu ± ajustements, calculé à partir des ventes synchronisées.",
+    "On hand = received − sold ± adjustments, from the synced sales."
+  ),
+  stock_kpi_products: m("Produits", "Products"),
+  stock_kpi_on_hand: m("Unités en main", "Units on hand"),
+  stock_kpi_low: m("Stock bas", "Low stock"),
+  stock_search: m("Chercher un produit ou un code-barres", "Search a product or barcode"),
+  stock_low_only: m("Stock bas seulement", "Low stock only"),
+  stock_col_product: m("Produit", "Product"),
+  stock_col_barcode: m("Code-barres", "Barcode"),
+  stock_col_on_hand: m("En main", "On hand"),
+  stock_col_reorder: m("Seuil", "Reorder at"),
+  stock_col_received: m("Reçu", "Received"),
+  stock_col_sold: m("Vendu", "Sold"),
+  stock_col_adjusted: m("Ajusté", "Adjusted"),
+  stock_col_low: m("Bas", "Low"),
+  stock_low: m("Bas", "Low"),
+  stock_yes: m("oui", "yes"),
+  stock_receive: m("Recevoir", "Receive"),
+  stock_adjust: m("Ajuster", "Adjust"),
+  stock_set_reorder: m("Seuil de réapprovisionnement", "Reorder level"),
+  stock_receive_title: m("Recevoir une livraison · {name}", "Receive a delivery · {name}"),
+  stock_adjust_title: m("Ajuster le stock · {name}", "Adjust stock · {name}"),
+  stock_reorder_title: m("Seuil de réapprovisionnement · {name}", "Reorder level · {name}"),
+  stock_qty: m("Quantité", "Quantity"),
+  stock_qty_adjust_hint: m(
+    "Négatif pour retirer (casse, vol), positif pour ajouter (retour, recomptage).",
+    "Negative to take off (breakage, shrink), positive to add (a return, a recount)."
+  ),
+  stock_note: m("Note (facultative)", "Note (optional)"),
+  stock_reorder_hint: m(
+    "Le produit est « bas » à ce niveau ou en dessous. Vide = pas de seuil.",
+    "The product shows as low at or below this. Blank = no level."
+  ),
+  stock_save: m("Enregistrer", "Save"),
+  stock_saved: m("Stock mis à jour", "Stock updated"),
+  stock_pick_store: m(
+    "Choisissez un magasin pour enregistrer une livraison ou un ajustement.",
+    "Pick a store to record a delivery or an adjustment."
+  ),
+  stock_not_retail: m("Pas de stock ici", "No stock here"),
+  stock_not_retail_hint: m(
+    "Les restaurants ne suivent pas le stock; seuls les magasins de détail le font.",
+    "Restaurants don't track stock; only retail stores do."
+  ),
+  stock_empty: m("Aucun produit", "No products"),
+  stock_empty_hint: m(
+    "Les produits du magasin apparaissent ici après sa première synchronisation.",
+    "The store's products show here after its first sync."
+  ),
+  stock_history: m("Mouvements récents", "Recent movements"),
+  stock_kind_RECEIVED: m("Livraison", "Delivery"),
+  stock_kind_ADJUSTMENT: m("Ajustement", "Adjustment"),
+  stock_as_of: m("En date de maintenant", "As of now"),
+  stock_negative_note: m(
+    "Le magasin vend même hors stock : un chiffre négatif veut dire qu’une livraison n’a pas été saisie.",
+    "The store sells regardless of stock: a negative figure means a delivery wasn't recorded."
+  ),
 } as const;
 
 export type MsgKey = keyof typeof messages;

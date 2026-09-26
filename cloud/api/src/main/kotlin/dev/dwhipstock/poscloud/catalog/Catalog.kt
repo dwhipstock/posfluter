@@ -68,6 +68,7 @@ object Catalog {
             it[active] = item.bool("active") ?: true
             it[deleted] = item.bool("deleted") ?: false
             it[photoVersion] = photoVer
+            it[barcode] = item.str("barcode")
         }
         item.arr("variants")?.forEach { element ->
             val variant = element as? JsonObject ?: return@forEach
