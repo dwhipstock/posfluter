@@ -114,6 +114,8 @@ object CheckLines : IntIdTable("check_lines") {
     val taxable = bool("taxable").databaseGenerated() // DEFAULT 1
     val depositCents = long("deposit_cents").databaseGenerated() // DEFAULT 0
     val ageRestricted = bool("age_restricted").databaseGenerated() // DEFAULT 0
+    // a fuel or prepay line's row in fuel_sales (046); NULL on every other line
+    val fuelSaleId = integer("fuel_sale_id").nullable().databaseGenerated()
 }
 
 /**
