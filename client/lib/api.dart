@@ -16,6 +16,8 @@ import 'store_profile.dart';
 export 'stock/stock_models.dart';
 export 'store_profile.dart';
 
+part 'kitchen/kitchen_api.dart';
+
 /// Thin API client for the store server. The client owns NO money logic —
 /// pricing, tax, rounding all live server-side (architecture principle #2).
 class Api {

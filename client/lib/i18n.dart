@@ -40,7 +40,8 @@ class Prefs extends ChangeNotifier {
         next != lang ||
         before.currency != profile.currency ||
         before.kind != profile.kind ||
-        before.brand != profile.brand;
+        before.brand != profile.brand ||
+        before.kitchenPrinting != profile.kitchenPrinting;
     lang = next;
     if (changed) notifyListeners();
   }

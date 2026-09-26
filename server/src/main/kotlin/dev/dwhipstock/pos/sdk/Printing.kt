@@ -44,6 +44,14 @@ sealed interface PrintLine {
      */
     @Serializable
     data class QrCode(val data: String, val caption: String? = null) : PrintLine
+
+    /** Kitchen tickets: a big bold line (an item and its quantity). Thermal: [ThermalLayout.Style.LARGE]. */
+    @Serializable
+    data class Large(val text: String, val align: Align = Align.LEFT) : PrintLine
+
+    /** White on a black bar across the paper (a kitchen station name, VOID). */
+    @Serializable
+    data class Banner(val text: String) : PrintLine
 }
 
 enum class Align { LEFT, CENTER, RIGHT }
@@ -132,6 +140,18 @@ sealed interface PrinterAdapter {
                     is PrintLine.QrCode -> {
                         line.caption?.let { appendLine(center(it)) }
                         appendLine(center(line.data))
+                    }
+                    is PrintLine.Large -> appendLine(
+                        when (line.align) {
+                            Align.LEFT -> line.text
+                            Align.CENTER -> center(line.text)
+                            Align.RIGHT -> line.text.padStart(WIDTH)
+                        },
+                    )
+                    is PrintLine.Banner -> {
+                        appendLine("#".repeat(WIDTH))
+                        appendLine(center(line.text))
+                        appendLine("#".repeat(WIDTH))
                     }
                     PrintLine.Divider -> appendLine("-".repeat(WIDTH))
                     PrintLine.Blank -> appendLine()

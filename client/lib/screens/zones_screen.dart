@@ -9,6 +9,9 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../kitchen/kitchen_banner.dart';
+import '../kitchen/kitchen_i18n.dart';
+import '../kitchen/kitchen_screen.dart';
 import '../pending_alerts.dart';
 import '../widgets/brand.dart';
 import '../widgets/floor_plan.dart';
@@ -207,6 +210,16 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
         actions: [
           const LangActions(color: T.onPrimary),
           const SizedBox(width: 4),
+          // the kitchen screen: only when the store has kitchen tickets on
+          if (KitchenApi.enabled)
+            _HeaderAction(
+              icon: LucideIcons.chefHat,
+              label: K.of(context).kitchen,
+              tooltip: K.of(context).kitchen,
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const KitchenScreen())),
+            ),
           _HeaderAction(
             icon: LucideIcons.utensils,
             label: l.navMenu,
@@ -355,6 +368,8 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
           // Global "orders waiting" banner — visible from any zone, above the
           // grid. Clears itself when every pending order is actioned.
           _PendingAlertBanner(alerts: _alerts),
+          // kitchen printer offline / out of paper (kitchen tickets only)
+          const KitchenQueueBanner(),
           Expanded(
             child: FutureBuilder<List<Zone>>(
               future: _zones,

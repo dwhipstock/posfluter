@@ -80,9 +80,25 @@ doesn't need the internet to take money."
    shows its running total and how long it's been open.
 3. **Order.** Tap a free table and add two drinks and two mains. A drink with sizes
    opens a size sheet, and there's a note field ("no ice"). The items go straight on the bill.
-   - *If asked about the kitchen:* there is **no kitchen screen or kitchen ticket
-     yet**. Don't promise one. What prints today: the bill, the receipt, table QR
-     slips and Wi-Fi slips.
+   - *If asked about the kitchen:* kitchen tickets and a kitchen screen are an
+     **optional feature, off by default** (see "Kitchen tickets and the kitchen
+     screen" in `docs/demo-runbook.md`). With it off, what prints is the bill,
+     the receipt, table QR slips and Wi-Fi slips. To show it, turn it on before
+     the meeting (`scripts/tablet-kitchen-printing.sh on`), then:
+     - Tap **Send (4)** on the bill: a **COMMANDE / ORDER** ticket prints for the
+       Kitchen (the mains) and one for the Bar (the drinks), each with only its
+       own items, the table, bill number, server, time and guests.
+     - Add a dessert and tap Send: only the dessert prints, marked **AJOUT / ADD**.
+       Take a drink off and send: the Bar gets **ANNULÉ / VOID**.
+     - Tap **Kitchen** in the floor header: the same orders as cards with
+       timers (yellow at 10 min, red at 20). Tap a card to finish it; **Recall**
+       brings it back. A phone on the pub Wi-Fi can be a kitchen screen too:
+       `http://<tablet IP>:8080/kitchen`, sign in with a PIN.
+     - **Say:** "If the kitchen printer is off or out of paper, the tickets wait
+       and print when it's back, and the sale never stops." (Unplug it to show
+       the red "Kitchen printer offline" banner.)
+
+     ![Kitchen screen](screenshots/kitchen/kitchen-view.png)
 4. **Printer.** Tap **Print bill**. A provisional bill comes out marked
    "NOT A RECEIPT / Pas un reçu", and a preview shows on screen.
 5. **Québec taxes.** Point at the totals: Subtotal, **GST 5%**, **QST 9.975%**,

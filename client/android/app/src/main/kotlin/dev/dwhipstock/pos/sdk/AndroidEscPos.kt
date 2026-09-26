@@ -14,6 +14,7 @@ import java.io.ByteArrayOutputStream
  * Android Canvas counterpart of the desktop Java2D receipt renderer. Line
  * fitting (venue name split, wrap, shrink) is the shared [ThermalLayout],
  * measured here with the same Paint that draws, so nothing clips at the edge.
+ * [toEscPos] takes the head width in dots: 512 (80mm, the default) or 384 (58mm).
  */
 object ThermalReceiptRenderer {
     private const val WIDTH = ThermalLayout.WIDTH
@@ -40,13 +41,14 @@ object ThermalReceiptRenderer {
         is ThermalLayout.Row.Text -> rowHeight(paint(row.style, row.size))
         is ThermalLayout.Row.Pair -> rowHeight(paint(row.style, row.size))
         is ThermalLayout.Row.Qr -> QR_SIZE + PAD * 2
+        is ThermalLayout.Row.Banner -> rowHeight(paint(ThermalLayout.Style.TITLE, row.size)) + PAD
         ThermalLayout.Row.Divider, ThermalLayout.Row.Blank -> 22
     }
 
-    fun toEscPos(lines: List<PrintLine>): ByteArray {
-        val rows = ThermalLayout.layout(lines, measurer)
+    fun toEscPos(lines: List<PrintLine>, width: Int = WIDTH): ByteArray {
+        val rows = ThermalLayout.layout(lines, measurer, ThermalLayout.contentFor(width))
         val totalHeight = (rows.sumOf(::height) + MARGIN * 2).coerceAtLeast(1)
-        val bitmap = Bitmap.createBitmap(WIDTH, totalHeight, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(width, totalHeight, Bitmap.Config.ARGB_8888)
         try {
             val canvas = Canvas(bitmap)
             canvas.drawColor(Color.WHITE)
@@ -54,11 +56,11 @@ object ThermalReceiptRenderer {
             for (row in rows) {
                 val h = height(row)
                 when (row) {
-                    is ThermalLayout.Row.Text -> drawText(canvas, row.text, paint(row.style, row.size), top, row.align)
+                    is ThermalLayout.Row.Text -> drawText(canvas, row.text, paint(row.style, row.size), top, row.align, width)
                     is ThermalLayout.Row.Pair -> {
                         val p = paint(row.style, row.size)
-                        drawText(canvas, row.left, p, top, Align.LEFT)
-                        drawText(canvas, row.right, p, top, Align.RIGHT)
+                        drawText(canvas, row.left, p, top, Align.LEFT, width)
+                        drawText(canvas, row.right, p, top, Align.RIGHT, width)
                     }
                     is ThermalLayout.Row.Qr -> {
                         val hints = buildMap<EncodeHintType, Any> {
@@ -74,13 +76,21 @@ object ThermalReceiptRenderer {
                         val qr = Bitmap.createBitmap(QR_SIZE, QR_SIZE, Bitmap.Config.ARGB_8888)
                         try {
                             qr.setPixels(pixels, 0, QR_SIZE, 0, 0, QR_SIZE, QR_SIZE)
-                            canvas.drawBitmap(qr, ((WIDTH - QR_SIZE) / 2).toFloat(), (top + PAD).toFloat(), null)
+                            canvas.drawBitmap(qr, ((width - QR_SIZE) / 2).toFloat(), (top + PAD).toFloat(), null)
                         } finally { qr.recycle() }
+                    }
+                    is ThermalLayout.Row.Banner -> {
+                        // black bar inside the margins, the text knocked out in white
+                        val bar = Paint().apply { color = Color.BLACK }
+                        canvas.drawRect(MARGIN.toFloat(), top.toFloat(),
+                            (width - MARGIN).toFloat(), (top + h - PAD / 2).toFloat(), bar)
+                        val p = paint(ThermalLayout.Style.TITLE, row.size).apply { color = Color.WHITE }
+                        drawText(canvas, row.text, p, top + PAD / 2, Align.CENTER, width)
                     }
                     ThermalLayout.Row.Divider -> {
                         val ink = paint(ThermalLayout.Style.BODY, ThermalLayout.Style.BODY.size)
                         var x = MARGIN
-                        while (x < WIDTH - MARGIN) {
+                        while (x < width - MARGIN) {
                             canvas.drawRect(x.toFloat(), (top + h / 2).toFloat(),
                                 (x + 8).toFloat(), (top + h / 2 + 2).toFloat(), ink)
                             x += 14
@@ -90,35 +100,37 @@ object ThermalReceiptRenderer {
                 }
                 top += h
             }
-            return rasterJob(bitmap)
+            return rasterJob(bitmap, width)
         } finally {
             bitmap.recycle()
         }
     }
 
-    private fun drawText(canvas: Canvas, text: String, paint: Paint, top: Int, align: Align) {
-        val width = paint.measureText(text)
+    private fun drawText(canvas: Canvas, text: String, paint: Paint, top: Int, align: Align, width: Int) {
+        val w = paint.measureText(text)
         val x = when (align) {
             Align.LEFT -> MARGIN.toFloat()
-            Align.CENTER -> ((WIDTH - width) / 2).coerceAtLeast(MARGIN.toFloat())
-            Align.RIGHT -> WIDTH - MARGIN - width
+            Align.CENTER -> ((width - w) / 2).coerceAtLeast(MARGIN.toFloat())
+            Align.RIGHT -> width - MARGIN - w
         }
         canvas.drawText(text, x, top - paint.fontMetrics.ascent, paint)
     }
 
-    private fun rasterJob(bitmap: Bitmap): ByteArray = ByteArrayOutputStream().apply {
+    private fun rasterJob(bitmap: Bitmap, width: Int): ByteArray = ByteArrayOutputStream().apply {
+        val bytesPerRow = width / 8
         write(byteArrayOf(0x1b, '@'.code.toByte()))
-        val pixels = IntArray(WIDTH * 128)
+        val pixels = IntArray(width * 128)
         var y = 0
         while (y < bitmap.height) {
             val rows = minOf(128, bitmap.height - y)
-            bitmap.getPixels(pixels, 0, WIDTH, 0, y, WIDTH, rows)
+            bitmap.getPixels(pixels, 0, width, 0, y, width, rows)
             write(byteArrayOf(0x1d, 'v'.code.toByte(), '0'.code.toByte(), 0,
-                64, 0, (rows and 0xff).toByte(), (rows shr 8).toByte()))
-            for (row in 0 until rows) for (byteX in 0 until 64) {
+                (bytesPerRow and 0xff).toByte(), (bytesPerRow shr 8).toByte(),
+                (rows and 0xff).toByte(), (rows shr 8).toByte()))
+            for (row in 0 until rows) for (byteX in 0 until bytesPerRow) {
                 var value = 0
                 for (bit in 0 until 8) {
-                    val color = pixels[row * WIDTH + byteX * 8 + bit]
+                    val color = pixels[row * width + byteX * 8 + bit]
                     val r = Color.red(color)
                     val g = Color.green(color)
                     val b = Color.blue(color)

@@ -167,6 +167,9 @@ private fun isOpenRoute(path: String, method: HttpMethod): Boolean =
         // the staff ordering web app shell (M7): the page itself is public — it logs
         // in via the staff-app 2FA steps inside, then calls the gated API with the bearer
         (method == HttpMethod.Get && path == "/staff-app") ||
+        // the LAN kitchen screen's page shell: signs in inside with the same
+        // staff-app steps, then polls the gated /kitchen/board with the bearer
+        (method == HttpMethod.Get && path == "/kitchen") ||
         // the brand's bundled font for that page (Sage & Poppy)
         (method == HttpMethod.Get && path.matches(Regex("/staff-app/fonts/[A-Za-z0-9-]+\\.ttf"))) ||
         // staff-app 2FA login steps run pre-auth, like /login (the bearer is issued by them)
