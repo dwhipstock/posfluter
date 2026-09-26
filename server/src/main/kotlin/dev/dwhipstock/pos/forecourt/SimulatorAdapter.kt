@@ -14,10 +14,8 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Duration
 
 /**
@@ -35,10 +33,6 @@ class SimulatorAdapter(
     private val requestTimeout: Duration = Duration.ofMillis(1500),
 ) : ForecourtAdapter {
     private val base = baseUrl.trimEnd('/')
-    private val http: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(connectTimeout)
-        .version(HttpClient.Version.HTTP_1_1)
-        .build()
     private val json = Json { ignoreUnknownKeys = true }
 
     override val description: String get() = "forecourt simulator at $base"
@@ -92,37 +86,43 @@ class SimulatorAdapter(
 
     // ---- wire ----
 
+    // HttpURLConnection, not java.net.http: the same store code runs embedded on
+    // Android, which has no java.net.http.
     private fun call(method: String, path: String, body: JsonObject? = null): JsonObject {
-        val req = HttpRequest.newBuilder(URI.create(base + path))
-            .timeout(requestTimeout)
-            .header("Accept", "application/json")
-            .let {
-                if (method == "GET") it.GET()
-                else it.header("Content-Type", "application/json")
-                    .method(method, HttpRequest.BodyPublishers.ofString((body ?: JsonObject(emptyMap())).toString()))
+        val (status, text) = try {
+            val conn = URL(base + path).openConnection() as HttpURLConnection
+            try {
+                conn.connectTimeout = connectTimeout.toMillis().toInt()
+                conn.readTimeout = requestTimeout.toMillis().toInt()
+                conn.requestMethod = method
+                conn.setRequestProperty("Accept", "application/json")
+                if (method != "GET") {
+                    conn.doOutput = true
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.outputStream.use { it.write((body ?: JsonObject(emptyMap())).toString().toByteArray(Charsets.UTF_8)) }
+                }
+                val code = conn.responseCode
+                val stream = if (code >= 400) conn.errorStream else conn.inputStream
+                code to (stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: "")
+            } finally {
+                conn.disconnect()
             }
-            .build()
-        val res = try {
-            http.send(req, HttpResponse.BodyHandlers.ofString())
         } catch (e: java.io.IOException) {
             throw ForecourtUnavailable("${e.javaClass.simpleName}: ${e.message ?: "no answer"}", e)
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-            throw ForecourtUnavailable("interrupted", e)
         }
-        val parsed = runCatching { json.parseToJsonElement(res.body()) as? JsonObject }.getOrNull()
-        if (res.statusCode() in 200..299) {
-            return parsed ?: throw ForecourtUnavailable("HTTP ${res.statusCode()}: not JSON")
+        val parsed = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull()
+        if (status in 200..299) {
+            return parsed ?: throw ForecourtUnavailable("HTTP $status: not JSON")
         }
         val err = parsed?.get("error") as? JsonObject
         val code = err?.str("code")
-        if (res.statusCode() in 400..499 && code != null) {
+        if (status in 400..499 && code != null) {
             throw ForecourtRefused(code, err.str("message") ?: code)
         }
-        throw ForecourtUnavailable("HTTP ${res.statusCode()}${code?.let { " $it" } ?: ""}")
+        throw ForecourtUnavailable("HTTP $status${code?.let { " $it" } ?: ""}")
     }
 
-    private fun enc(s: String) = java.net.URLEncoder.encode(s, Charsets.UTF_8)
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
 
     private fun pump(o: JsonObject): Pump {
         val auth = o["authorisation"] as? JsonObject
