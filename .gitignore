@@ -95,3 +95,6 @@ __pycache__/
 
 # Client portal instances: per-client settings + secrets (cloud/infra/new-client.sh)
 cloud/infra/clients/
+
+# AI menu photo bake-off output (scripts/image-bakeoff.py): generated images + contact sheet
+.image-bakeoff/

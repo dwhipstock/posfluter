@@ -52,6 +52,8 @@ private fun itemRowSnapshot(
         put("deleted", row[Items.deletedAt] != null)
         // optional hint; the binary moves via the photo sideband, never here
         photoVersion?.let { put("photoVersion", it) }
+        // provenance of the current photo (044): original | ai_generated | ai_enhanced
+        if (row[Items.photoPath] != null) row[Items.photoSource]?.let { put("photoSource", it) }
         // retail shelf facts (038), only where they differ from a pub item
         row[Items.barcode]?.let { put("barcode", it) }
         if (row[Items.ageRestricted]) put("ageRestricted", true)

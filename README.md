@@ -45,6 +45,11 @@ python3 scripts/demo-menu-photos.py
 The downloaded binaries stay in ignored local store data; photo sources and
 licenses are recorded in `docs/menu-photo-credits.md`.
 
+AI menu photos (a paid add-on, off by default) let a manager generate an item
+photo in the client's house style, or enhance a real photo of the dish, from the
+menu editor. See `docs/ai-photos.md` for setup, costs, the demo steps and the
+provider bake-off (`scripts/image-bakeoff.py`).
+
 For the complete local stack, see `docs/demo-runbook.md`.
 
 ## Sample catalog

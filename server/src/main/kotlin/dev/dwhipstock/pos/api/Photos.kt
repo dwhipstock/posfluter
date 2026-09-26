@@ -1,5 +1,6 @@
 package dev.dwhipstock.pos.api
 
+import dev.dwhipstock.pos.aiphotos.PhotoSource
 import dev.dwhipstock.pos.base.AuthService
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.restaurant.NotFoundException
@@ -17,8 +18,8 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 
-private const val MAX_PHOTO_BYTES = 2 * 1024 * 1024
-private val ALLOWED_TYPES = setOf("image/jpeg", "image/png")
+internal const val MAX_PHOTO_BYTES = 2 * 1024 * 1024
+internal val ALLOWED_TYPES = setOf("image/jpeg", "image/png")
 
 /**
  * Item photos (M5): upload is staff-side and manager-gated; serving is open
@@ -55,18 +56,7 @@ fun Route.photoRoutes(photos: PhotoStore, auth: AuthService) {
         // portrait camera shots: bake EXIF rotation into the pixels once, here
         if (contentType == "image/jpeg") data = dev.dwhipstock.pos.sdk.Images.normalizeJpegOrientation(data)
 
-        val path = photos.save(itemId, data, contentType!!)
-        transaction {
-            Items.update({ Items.id eq itemId }) { it[photoPath] = path }
-            Outbox.write("item.photo_uploaded", "item", itemId, buildJsonObject {
-                put("itemId", itemId)
-                put("path", path)
-                put("bytes", data.size)
-                put("item", itemSnapshotJson(itemId, photoVersion = photos.version(itemId)))
-            })
-        }
-        call.respond(HttpStatusCode.Created,
-            mapOf("itemId" to itemId, "photoVersion" to (photos.version(itemId) ?: 0L).toString()))
+        call.respond(HttpStatusCode.Created, savePhoto(photos, itemId, data, contentType!!, PhotoSource.ORIGINAL))
     }
 
     /** Open route: streams the photo with cache headers; ?v= busts on replace.
@@ -87,6 +77,33 @@ fun Route.photoRoutes(photos: PhotoStore, auth: AuthService) {
         call.response.header(HttpHeaders.CacheControl, "public, max-age=86400")
         call.respondBytes(photo.bytes, ContentType.parse(photo.contentType))
     }
+}
+
+/**
+ * The one photo pipeline: store the bytes, record where they came from, and
+ * write the item.photo_uploaded event (its snapshot carries photoSource, and
+ * CloudSync sends the binary up like any photo). Used by the manager upload
+ * and by a chosen AI candidate.
+ */
+internal fun savePhoto(
+    photos: PhotoStore, itemId: String, data: ByteArray, contentType: String, source: PhotoSource,
+): Map<String, String> {
+    val path = photos.save(itemId, data, contentType)
+    transaction {
+        Items.update({ Items.id eq itemId }) {
+            it[photoPath] = path
+            it[photoSource] = source.wire
+        }
+        Outbox.write("item.photo_uploaded", "item", itemId, buildJsonObject {
+            put("itemId", itemId)
+            put("path", path)
+            put("bytes", data.size)
+            put("source", source.wire)
+            put("item", itemSnapshotJson(itemId, photoVersion = photos.version(itemId)))
+        })
+    }
+    return mapOf("itemId" to itemId, "photoVersion" to (photos.version(itemId) ?: 0L).toString(),
+        "photoSource" to source.wire)
 }
 
 /** Nearest not-smaller thumbnail bucket (capped at the largest). */

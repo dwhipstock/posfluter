@@ -40,7 +40,9 @@ data class MenuItemDto(
     val barcode: String? = null,
     val brand: String? = null,
     val subcategory: String? = null,
-    val size: String? = null)
+    val size: String? = null,
+    // photo provenance (022): original | ai_generated | ai_enhanced; null = not sent
+    val photoSource: String? = null)
 
 @Serializable
 data class MenuCategoryDto(val id: String, val nameFr: String, val nameEn: String, val sortOrder: Int)
@@ -164,4 +166,5 @@ private fun itemDto(scope: Scope, row: ResultRow, variants: List<ResultRow>) = M
     brand = row[CatalogItems.brand],
     subcategory = row[CatalogItems.subcategory],
     size = row[CatalogItems.sizeLabel],
+    photoSource = row[CatalogItems.photoSource],
 )

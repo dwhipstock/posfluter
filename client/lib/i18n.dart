@@ -1114,6 +1114,75 @@ class L {
   String get photoUploaded =>
       _t('Photo téléversée', 'Photo uploaded', 'Foto subida');
 
+  // AI menu photos (paid add-on)
+  String get aiGeneratePhoto =>
+      _t('Générer une photo', 'Generate photo', 'Generar foto');
+  String get aiSnapEnhance => _t(
+    'Photographier et améliorer',
+    'Snap and enhance',
+    'Tomar foto y mejorar',
+  );
+  String aiGenerateFor(String name) => _t(
+    'Générer une photo pour $name',
+    'Generate a photo for $name',
+    'Generar una foto de $name',
+  );
+  String aiEnhanceFor(String name) => _t(
+    'Améliorer une photo de $name',
+    'Enhance a photo of $name',
+    'Mejorar una foto de $name',
+  );
+  String get aiTakePhoto =>
+      _t('Prendre une photo', 'Take a photo', 'Tomar una foto');
+  String get aiChooseFromGallery => _t(
+    'Choisir dans la galerie',
+    'Choose from gallery',
+    'Elegir de la galería',
+  );
+  String get aiWorking => _t(
+    'Création des photos… (jusqu’à une minute)',
+    'Making photos… (up to a minute)',
+    'Creando fotos… (hasta un minuto)',
+  );
+  String get aiPickOne => _t(
+    'Touchez la photo à garder',
+    'Tap the photo to keep',
+    'Toca la foto que quieres conservar',
+  );
+  String get aiUseThis =>
+      _t('Utiliser cette photo', 'Use this photo', 'Usar esta foto');
+  String get aiRegenerate =>
+      _t('Recommencer', 'Regenerate', 'Generar de nuevo');
+  String get aiPhotoSaved =>
+      _t('Photo IA enregistrée', 'AI photo saved', 'Foto con IA guardada');
+  String get aiBadge => _t('IA', 'AI', 'IA');
+  String get aiGeneratedLabel =>
+      _t('Photo générée par IA', 'AI-generated photo', 'Foto generada con IA');
+  String get aiEnhancedLabel => _t(
+    'Photo réelle retouchée par IA',
+    'Real photo, AI-enhanced',
+    'Foto real mejorada con IA',
+  );
+  String get aiEnhanceHint => _t(
+    'Les aliments restent tels quels : seuls l’éclairage, le fond et la présentation changent.',
+    'The food stays as it is: only the lighting, background and presentation change.',
+    'La comida queda igual: solo cambian la luz, el fondo y la presentación.',
+  );
+
+  /// Why the AI photo buttons are greyed out (a note under them).
+  String aiUnavailableNote(String? reason) => switch (reason) {
+    'image_offline' || 'image_unavailable' => _t(
+      'Photos IA : connexion Internet requise. Tout le reste fonctionne normalement.',
+      'AI photos need an internet connection. Everything else works as usual.',
+      'Las fotos con IA necesitan internet. Todo lo demás funciona con normalidad.',
+    ),
+    _ => _t(
+      'Photos IA pas encore configurées sur ce magasin.',
+      'AI photos aren’t set up on this store yet.',
+      'Las fotos con IA aún no están configuradas en esta tienda.',
+    ),
+  };
+
   // pin pad / manager approval
   String get managerPinTitle => _t(
     'Gérant : entrez votre NIP',
@@ -1620,6 +1689,34 @@ class L {
   /// Server error codes → local language. Fallback: raw server message.
   String? apiError(String? code) => switch (code) {
     'invalid_pin' => _t('NIP invalide', 'Invalid PIN', 'PIN no válido'),
+    'image_unavailable' ||
+    'image_offline' => aiUnavailableNote('image_offline'),
+    'image_disabled' => aiUnavailableNote('image_generation_off'),
+    'image_timeout' => _t(
+      'Le service de photos IA a mis trop de temps. Réessayez.',
+      'The AI photo service took too long. Please try again.',
+      'El servicio de fotos con IA tardó demasiado. Inténtalo de nuevo.',
+    ),
+    'image_rate_limited' => _t(
+      'Trop de demandes de photos IA. Réessayez dans une minute.',
+      'Too many AI photo requests. Try again in a minute.',
+      'Demasiadas solicitudes de fotos con IA. Inténtalo en un minuto.',
+    ),
+    'image_quota' => _t(
+      'Le compte de photos IA n’a plus de crédits.',
+      'The AI photo account is out of credits.',
+      'La cuenta de fotos con IA se quedó sin créditos.',
+    ),
+    'image_refused' => _t(
+      'Le service de photos IA a refusé cette demande. Modifiez la description et réessayez.',
+      'The AI photo service declined this request. Adjust the description and try again.',
+      'El servicio de fotos con IA rechazó la solicitud. Ajusta la descripción e inténtalo de nuevo.',
+    ),
+    'image_auth' || 'image_error' => _t(
+      'Le service de photos IA a renvoyé une erreur. Réessayez plus tard.',
+      'The AI photo service returned an error. Try again later.',
+      'El servicio de fotos con IA devolvió un error. Inténtalo más tarde.',
+    ),
     'wifi_not_configured' => wifiNotConfigured,
     'pin_in_use' => _t(
       'Ce NIP est déjà utilisé par un autre employé',

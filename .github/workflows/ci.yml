@@ -1,7 +1,7 @@
 # CI — runs on every PR and on pushes to main. One job per tier, in
 # parallel: the store server, the cloud API (against a real Postgres service
-# container), the Flutter client, the Next.js portal (with its brand tests), and
-# the client provisioning script. This is the gate rec 6
+# container), the Flutter client, the Next.js portal (with its brand tests), the
+# scripts' Python unit tests, and the client provisioning script. This is the gate rec 6
 # (S5c) exists to add: a commit that breaks any tier fails here instead of
 # shipping silently to the box.
 #
@@ -126,6 +126,18 @@ jobs:
       - name: no-leak test (every brand pack, key pages + bundles)
         working-directory: cloud/web
         run: npm run test:brands
+
+  scripts:
+    name: script unit tests (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: unittest (image bake-off, no keys, no network)
+        run: python3 -m unittest discover -s scripts/tests -v
 
   infra:
     name: client provisioning (dry-run + idempotence)

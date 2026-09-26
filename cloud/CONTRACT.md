@@ -330,12 +330,19 @@ post-mutation snapshot under `"item"`:
   "active": true, "deleted": false,
   "photoVersion": 1736590000000,      // optional hint (PhotoStore mtime); may be null/absent.
                                        // Photo binaries move via §3, never via this field.
+  "photoSource": "ai_generated",      // optional: original | ai_generated | ai_enhanced
+                                       // (AI menu photos). Absent = unknown/older store; the
+                                       // cloud keeps its stored value, like photoVersion.
   "variants": [
     { "id": "lantern-lager:bottle", "labelFr": "bouteille", "labelEn": "Bottle",
       "priceCents": 9000, "sortOrder": 0, "deleted": false }
   ]
 }
 ```
+`item.photo_uploaded` also carries a top-level `"source"` (the same provenance
+value) for the audit trail. The portal Menu page shows a small "AI" badge on
+the two AI values.
+
 (`variants` includes soft-deleted rows with `deleted: true` so the cloud can
 mirror deletions.) Every `category.*` event gains
 `"category": { "id", "nameFr", "nameEn", "sortOrder", "deleted" }`;

@@ -88,6 +88,32 @@ class MenuMirrorTest {
     }
 
     @Test
+    fun photoProvenanceIsMirroredAndSurvivesEditsWithoutIt() = testApplication {
+        application { module(TestSupport.config) }
+        fun withPhoto(source: String?) = buildJsonObject {
+            put("itemId", "lantern-lager")
+            source?.let { put("source", it) }
+            put("item", buildJsonObject {
+                itemSnapshot("Lantern House Lager")["item"]!!.jsonObject.forEach { (k, v) -> put(k, v) }
+                put("photoVersion", 1736590000000)
+                source?.let { put("photoSource", it) }
+            })
+        }
+        suspend fun source() = menu()["items"]!!.jsonArray[0].jsonObject["photoSource"]
+        ingest(key, event("item.photo_uploaded", withPhoto("ai_generated"), seq = 1))
+        assertEquals("ai_generated", source()!!.jsonPrimitive.content)
+        // an ordinary edit (no photo fields) keeps the badge
+        ingest(key, event("item.updated", itemSnapshot("Lantern House Lager"), seq = 2))
+        assertEquals("ai_generated", source()!!.jsonPrimitive.content)
+        // a manager's own photo replaces it
+        ingest(key, event("item.photo_uploaded", withPhoto("original"), seq = 3))
+        assertEquals("original", source()!!.jsonPrimitive.content)
+        // an unknown value is ignored rather than shown
+        ingest(key, event("item.photo_uploaded", withPhoto("something-else"), seq = 4))
+        assertEquals("original", source()!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun portalCannotEditTheMenu() = testApplication {
         application { module(TestSupport.config) }
         val attempts = listOf(
