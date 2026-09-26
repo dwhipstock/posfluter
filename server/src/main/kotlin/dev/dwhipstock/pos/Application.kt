@@ -100,7 +100,9 @@ fun Application.module(
     publicUrl: String? = System.getenv("POS_PUBLIC_URL"),
     reportingPortalUrl: String? = System.getenv("REPORTING_PORTAL_URL"),
     physicalPrinterEnabled: Boolean = true,
-    staffAppMfaRequired: Boolean = true,
+    // staff.app.mfa=on|off (POS_STAFF_APP_MFA / POS_CONFIG_FILE; the tablet
+    // passes its store.properties). Default on; off = staff-app sign-in by PIN only.
+    staffAppMfa: dev.dwhipstock.pos.sdk.StaffAppMfa.Resolved = dev.dwhipstock.pos.sdk.StaffAppMfa.fromEnv(),
     // print.receipts=paper|digital (POS_PRINT_RECEIPTS / POS_CONFIG_FILE; the
     // tablet passes its store.properties). Local config only, never the network.
     receiptPrintMode: ReceiptPrintMode.Resolved = ReceiptPrintMode.fromEnv(),
@@ -209,7 +211,9 @@ fun Application.module(
         config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup())
     if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
     val shiftService = ShiftService(config)
-    val authService = AuthService(settingsRepo, staffAppMfaRequired)
+    staffAppMfa.warning?.let { log.warn("Staff app MFA config ignored: $it") }
+    log.info(staffAppMfa.describe())
+    val authService = AuthService(settingsRepo, staffAppMfa.required)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
 
     // Cloud sync (CONTRACT.md): one-way outbox pusher + revocation pull. Never constructed

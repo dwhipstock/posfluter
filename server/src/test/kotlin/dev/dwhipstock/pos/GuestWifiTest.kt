@@ -103,7 +103,7 @@ class GuestWifiTest {
 
     @Test
     fun `staff cannot read settings and the staff app never sees the password`() = testApplication {
-        application { module(dbPath = tempDb(), staffAppMfaRequired = false) }
+        application { module(dbPath = tempDb(), staffAppMfa = dev.dwhipstock.pos.sdk.StaffAppMfa.Resolved(dev.dwhipstock.pos.sdk.StaffAppMfa.OFF, "test")) }
         val mgr = loginClient()
         mgr.configureWifi()
 

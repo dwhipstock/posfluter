@@ -26,7 +26,7 @@ class StaffAppTotpTest {
     private fun tempDb() = Files.createTempDirectory("pos-test").resolve("pos.db").toString()
 
     @Test
-    fun demoBypassKeepsPinCheckAndPreservesTotpForMfaOnBuilds() {
+    fun mfaOffKeepsPinCheckAndPreservesTotpForWhenItIsBackOn() {
         val db = tempDb()
         testApplication {
             application { module(dbPath = db) }
@@ -35,7 +35,7 @@ class StaffAppTotpTest {
                 post("/staff-app/totp", """{"pin":"9999","code":"${Totp.code(secret)}"}""").status)
         }
         testApplication {
-            application { module(dbPath = db, staffAppMfaRequired = false) }
+            application { module(dbPath = db, staffAppMfa = dev.dwhipstock.pos.sdk.StaffAppMfa.Resolved(dev.dwhipstock.pos.sdk.StaffAppMfa.OFF, "test")) }
             val login = post("/staff-app/login", """{"pin":"9999"}""").obj()
             assertEquals("ok", login["status"]!!.jsonPrimitive.content)
             assertTrue(login["user"]!!.jsonObject["token"]!!.jsonPrimitive.content.isNotEmpty())
@@ -46,6 +46,27 @@ class StaffAppTotpTest {
         testApplication {
             application { module(dbPath = db) }
             assertEquals("totp",
+                post("/staff-app/login", """{"pin":"9999"}""").obj()["status"]!!.jsonPrimitive.content)
+        }
+    }
+
+    @Test
+    fun mfaOffFromTheStoreConfigSkipsTotpOnAFreshStore() {
+        val file = Files.createTempDirectory("pos-mfa").resolve("store.properties").toFile()
+            .apply { writeText("staff.app.mfa=off\n") }
+        testApplication {
+            application { module(dbPath = tempDb(), staffAppMfa = dev.dwhipstock.pos.sdk.StaffAppMfa.fromFile(file)) }
+            // never enrolled, no trusted device: PIN alone signs in, no QR/secret
+            val login = post("/staff-app/login", """{"pin":"9999"}""").obj()
+            assertEquals("ok", login["status"]!!.jsonPrimitive.content)
+            assertTrue(login["user"]!!.jsonObject["token"]!!.jsonPrimitive.content.isNotEmpty())
+            assertTrue(login["secret"]?.jsonPrimitive?.contentOrNull == null)
+        }
+        // an invalid value is not "off": MFA stays on
+        file.writeText("staff.app.mfa=nope\n")
+        testApplication {
+            application { module(dbPath = tempDb(), staffAppMfa = dev.dwhipstock.pos.sdk.StaffAppMfa.fromFile(file)) }
+            assertEquals("enroll",
                 post("/staff-app/login", """{"pin":"9999"}""").obj()["status"]!!.jsonPrimitive.content)
         }
     }

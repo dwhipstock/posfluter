@@ -11,6 +11,7 @@ import android.util.Log
 import dev.dwhipstock.pos.module
 import dev.dwhipstock.pos.sdk.CashRounding
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
+import dev.dwhipstock.pos.sdk.StaffAppMfa
 import dev.dwhipstock.pos.sdk.StripeConfig
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
@@ -80,17 +81,6 @@ class TabletStoreService : Service() {
             if (cloudFile.exists() && !cloudReady && !isolatedTest) {
                 Log.w("TabletStore", "Cloud sync disabled: store identity or provisioning is incomplete")
             }
-            // The asset exists only in an explicitly built demo APK. Ordinary
-            // product builds omit it and always require staff-app MFA.
-            val demoSettings = runCatching {
-                Properties().apply {
-                    assets.open("copperlantern-demo.properties").use(::load)
-                }
-            }.getOrNull()
-            val staffAppMfaRequired = demoSettings
-                ?.getProperty("staff.app.mfa.required")
-                ?.trim()?.toBooleanStrictOrNull() ?: true
-            if (!staffAppMfaRequired) Log.w("TabletStore", "Demo build: staff-app MFA bypass enabled")
             val receiptPrintMode = readReceiptPrintMode()
             val stripeConfig = readStripeConfig()
             val storeProps = readStoreProperties()
@@ -102,6 +92,7 @@ class TabletStoreService : Service() {
             val cashRounding = CashRounding.resolve(storeProps?.getProperty(CashRounding.KEY), "store.properties")
             cashRounding.warning?.let { Log.w("TabletStore", "Cash rounding config ignored: $it") }
             if (venueId != null) Log.i("TabletStore", "Store: $venueId (store.properties)")
+            val staffAppMfa = readStaffAppMfa(storeProps)
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = 8080) {
                 module(
                     dbPath = dbFile.absolutePath,
@@ -116,7 +107,7 @@ class TabletStoreService : Service() {
                     cloudSyncApiKey = if (cloudReady) cloud.getProperty("cloud.apiKey") else null,
                     reportingPortalUrl = if (cloudReady) cloud.getProperty("portal.url") else null,
                     physicalPrinterEnabled = !isolatedTest,
-                    staffAppMfaRequired = staffAppMfaRequired,
+                    staffAppMfa = staffAppMfa,
                     receiptPrintMode = receiptPrintMode,
                     stripeConfig = stripeConfig,
                     venueId = venueId,
@@ -147,8 +138,28 @@ class TabletStoreService : Service() {
     }
 
     /**
+     * `staff.app.mfa=on|off` in the external store.properties
+     * (scripts/tablet-staff-mfa.sh). Unset there → the demo APK's baked-in
+     * `staff.app.mfa.required=false` (copperlantern-demo.properties, only in a
+     * POS_DEMO_BUILD) → on. A bad value → on with a warning; never fails startup.
+     */
+    private fun readStaffAppMfa(storeProps: java.util.Properties?): StaffAppMfa.Resolved {
+        val fromStore = StaffAppMfa.resolve(storeProps?.getProperty(StaffAppMfa.KEY), "store.properties")
+        val resolved = if (fromStore.source != "default" || fromStore.warning != null) fromStore else {
+            val demoOff = runCatching {
+                Properties().apply { assets.open("copperlantern-demo.properties").use(::load) }
+                    .getProperty("staff.app.mfa.required")?.trim()?.toBooleanStrictOrNull() == false
+            }.getOrDefault(false)
+            if (demoOff) StaffAppMfa.Resolved(StaffAppMfa.OFF, "demo build") else fromStore
+        }
+        resolved.warning?.let { Log.w("TabletStore", "Staff app MFA config ignored: $it") }
+        Log.i("TabletStore", resolved.describe())
+        return resolved
+    }
+
+    /**
      * The external store.properties itself, for the store switches that are
-     * plain values: `store.venue`, `legal.age` and `cash.rounding`. Missing/unreadable → null;
+     * plain values: `store.venue`, `legal.age`, `cash.rounding` and `staff.app.mfa`. Missing/unreadable → null;
      * never fails startup.
      */
     private fun readStoreProperties(): java.util.Properties? = runCatching {

@@ -9,14 +9,14 @@ flutter test
 flutter run
 ```
 
-## Tablet demo: local staff-app MFA
+## Tablet: staff-app MFA
 
-Normal Android builds require MFA for the tablet-hosted staff ordering app.
-For an isolated demo APK, build with
-`POS_DEMO_BUILD=true flutter build apk --release` from this directory. Only that explicit build packages
-`android/app/src/demo/assets/copperlantern-demo.properties`; set
-`staff.app.mfa.required=false` there to let staff sign in with their PIN alone.
-Set it to `true`, rebuild, and sign out of the staff app to demonstrate the
-normal authenticator flow.
-There is no in-app switch. The owner/manager web portal is unaffected, and
-existing staff authenticator enrollments are kept for MFA-on builds.
+The tablet-hosted staff ordering app requires MFA by default. Turn it off
+(PIN only) with `staff.app.mfa=off` in the tablet's external
+`store.properties`: `scripts/tablet-staff-mfa.sh off` (and `on` to restore).
+An explicit demo APK (`POS_DEMO_BUILD=true flutter build apk --release`) also
+packages `android/app/src/demo/assets/copperlantern-demo.properties`, whose
+`staff.app.mfa.required=false` applies when store.properties does not set the
+key. There is no in-app switch. The owner/manager web portal is unaffected, and
+existing staff authenticator enrollments are kept for when MFA is back on.
+See docs/demo-runbook.md ("Staff app MFA").

@@ -345,6 +345,7 @@ read-only for menu and staff, and `GET /v1/store/photos/{itemId}` is gone.
 | `CLOUD_SYNC_API_KEY` | the store's bearer key | unset → sync disabled |
 | `CLOUD_SYNC_INTERVAL_SECONDS` | drain/poll cadence | `10` |
 | `POS_CASH_ROUNDING` (tablet: `cash.rounding` in store.properties) | `nickel` rounds a cash payment's final amount to 5¢; `off` charges cash to the cent. Local only, never synced down | `nickel` |
+| `POS_STAFF_APP_MFA` (tablet: `staff.app.mfa` in store.properties) | `on` asks staff-app sign-in for an authenticator code after the PIN; `off` is PIN only. Local only, never synced down | `on` |
 
 State lives in the store DB table `sync_state (key TEXT PK, value TEXT)`:
 `push_hwm` (last acked outbox row id), `catalog_cursor` (last applied
