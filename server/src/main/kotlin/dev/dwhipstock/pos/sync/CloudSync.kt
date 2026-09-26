@@ -44,6 +44,10 @@ class CloudSync(
     // The store's current reachable LAN base URL (M7), re-evaluated each tick so a
     // DHCP change is picked up. Null (no LAN / airplane-mode dev) → skip the beat.
     private val lanBaseUrl: () -> String? = { null },
+    // Retail only: where the cloud's on-hand per product lands (the count
+    // screen's "expected" hint, CONTRACT §9). Null → never pulled.
+    private val stock: dev.dwhipstock.pos.retail.StockService? = null,
+    private val stockIntervalSeconds: Long = 300,
 ) {
     private val log = LoggerFactory.getLogger(CloudSync::class.java)
 
@@ -78,6 +82,30 @@ class CloudSync(
         heartbeatOnce()
         drainOnce(capable)
         pullOnce()
+        if (stock != null && System.nanoTime() >= nextStockPullNanos) {
+            // due again after the interval whatever the outcome: a slow hint, never a retry storm
+            nextStockPullNanos = System.nanoTime() + stockIntervalSeconds * 1_000_000_000
+            pullStockOnce()
+        }
+    }
+
+    @Volatile private var nextStockPullNanos = Long.MIN_VALUE
+
+    /**
+     * The on-hand pull (§9): the second, and last, thing the store reads from
+     * the cloud — best-effort and read-only, like revocations. The figures
+     * cover the events the cloud has acknowledged, so they are stamped with
+     * the instant just before the first one it has not; the count screen then
+     * applies this store's own moves since. An older cloud (no route) or no
+     * internet → the hint says "no expected qty" and counting goes on.
+     */
+    fun pullStockOnce() {
+        val service = stock ?: return
+        val page = runCatching { transport.fetchOnHand() }
+            .getOrElse { log.warn("on-hand pull failed: ${it.message}"); return } ?: return
+        val asOf = service.cloudCaughtUpAt(stateLong(PUSH_HWM) ?: 0L)
+        runCatching { service.applyCloudOnHand(asOf, page) }
+            .onFailure { log.warn("on-hand cache update failed: ${it.message}") }
     }
 
     /**

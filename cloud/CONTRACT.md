@@ -20,10 +20,11 @@ Hard rules this contract encodes:
 - **Sync is one-way: store → cloud.** Each store's tablet is authoritative for
   its own menu (items, variants, categories, photos), staff and grants. Edits
   happen on the tablet, offline, and are pushed up as events so the portal can
-  *display* them; the cloud never edits or redistributes them. The single
-  exception is **device revocations** (§4): the owner's remote lock for a lost
-  terminal is the only data the store pulls down. Sync never blocks startup, a
-  sale or a login — with no internet only sync pauses.
+  *display* them; the cloud never edits or redistributes them. Two small,
+  best-effort pulls are the only exceptions: **device revocations** (§4), the
+  owner's remote lock for a lost terminal, and a retail store's **on hand per
+  product** (§9), a read-only hint for the count screen. Sync never blocks
+  startup, a sale, a count or a login — with no internet only sync pauses.
 - **All money is integer cents.**
 - **Timestamps are instants (contract v2).** Every timestamp on the wire is an
   ISO-8601 instant WITH an offset — the store sends its venue's offset at that
@@ -206,9 +207,61 @@ Its lines may also carry `taxable: false` (a tax-exempt food item),
 deposit, not restricted). The deposits total as one fee, `code: "crv"`, never
 taxed. Item snapshots (below) may carry `barcode`, `ageRestricted`,
 `taxable: false`, `crvSize` (`SMALL` | `LARGE`) and `packUnits`.
-The cloud keeps the store's **stock** from these sales (API.md, Stock): on
-hand = received − sold ± adjustments, with deliveries and adjustments
-recorded in the portal and never sent down (sync stays one-way).
+The cloud keeps the store's **stock** from these sales (API.md, Stock) —
+see "Stock" below.
+
+### Stock (retail): `stock.counted`, `stock.received`, refunds
+Counting and receiving happen IN THE STORE (the stock app on a phone, or the
+counter tablet), offline, and are sent up when submitted (store migration
+040). Ids are client-minted UUIDs, so a resend is the same count or
+delivery. The cloud keeps ONE ledger per product (cloud migrations 018, 020):
+
+    on hand = last count + received − sold ± adjustments + returned
+
+where every term after "last count" counts only what is dated AFTER that
+count (a count sets on hand to its qty as of its count time; never counted →
+start from 0). Sales are dated by `closedAt`, deliveries by their receiving
+time, adjustments by when they were entered, returns by the refund's
+`createdAt`. So a sale closed after the count subtracts, and one closed
+before it (even if it syncs later) is already in the counted figure.
+
+`stock.counted` (aggregate `stock_count`, id = the count id):
+```json
+{ "countId": "0d6b3c1e-…", "name": "Friday count",
+  "startedBy": "cashier", "startedAt": "2026-07-20T13:40:00.000-07:00",
+  "submittedBy": "cashier", "submittedByName": "Demo Cashier",
+  "approvedBy": "manager",              // present when a manager approved a variance
+  "submittedAt": "2026-07-20T14:05:00.000-07:00",
+  "lines": [ { "itemId": "golden-lager-6", "countedQty": 19,
+               "countedAt": "2026-07-20T14:00:00.000-07:00",
+               "expectedQty": 21 } ] }  // the store's hint then; absent = no expected qty
+```
+- `countedQty` is the session's total for the product (summed over every
+  phone/tablet that counted it); `0` is a real count. `countedAt` is the last
+  time it was counted (never after `submittedAt`; unparseable → `submittedAt`).
+- The cloud computes its own expected qty per line — the ledger at
+  `countedAt`, before this count — and keeps both for the portal's variance
+  view. Re-ingesting a `countId` it already has is a no-op.
+
+`stock.received` (aggregate `stock_receipt`, id = the receipt id):
+```json
+{ "receiptId": "…", "supplier": "Valley Beverage", "reference": "INV-1042",
+  "receivedBy": "cashier", "receivedByName": "Demo Cashier",
+  "receivedAt": "2026-07-20T09:00:00.000-07:00",
+  "lines": [ { "itemId": "golden-lager-6", "qty": 24 } ] }   // qty > 0, one line per product
+```
+Each line is a `RECEIVED` movement at `receivedAt` (`source: store`).
+Re-ingesting a `receiptId` it already has is a no-op.
+
+**Refunds put stock back.** A by-line `refund.created` names its lines
+(`lines: [{ lineId, itemId, qty, amountCents }]`; `itemId` since store
+migration 040 — for an older store the cloud resolves it from the sale's own
+lines). Those quantities are back on hand at the refund's time. An
+amount-only refund names no products and changes no stock.
+
+Deliveries and adjustments entered in the portal keep working and stay in
+the cloud. Nothing here ever gates a sale: the store sells regardless of
+stock (it may go negative), online or not.
 
 ### `age.checked`
 The outcome of one ID check before age-restricted items were paid for, and
@@ -228,7 +281,8 @@ started, else the same pipeline math it shows on screen); `taxes` has the
 ### `refund.created`
 `refundId, checkId, shiftId?, grossCents, netCents, taxIncludedCents,
 taxes, currency, country, tenderType, reason, refundedBy, tableId, tableLabel, zoneId,
-zoneNameFr, zoneNameEn, createdAt, lines?` (+ `processor`,
+zoneNameFr, zoneNameEn, createdAt, lines?` (by-line refunds:
+`[{ lineId, itemId?, qty, amountCents }]`, see Stock) (+ `processor`,
 `stripePaymentIntentId`, `stripeRefundId` for a card refund through Stripe).
 `grossCents` is the money returned, `taxIncludedCents` every tax inside it,
 `netCents = grossCents − taxIncludedCents`, and `taxes` the added taxes it
@@ -301,7 +355,7 @@ Idempotent overwrite; best-effort (a failed upload is logged and retried the
 next time a photo event for that item is drained; it never blocks the HWM).
 The cloud keeps the binary for portal display only.
 
-## 4. Device revocations (cloud → store) — the only pull
+## 4. Device revocations (cloud → store)
 
 The same store loop polls:
 
@@ -336,6 +390,7 @@ The same store loop polls:
 
 There is no catalog, photo, staff or grant download any more: the portal is
 read-only for menu and staff, and `GET /v1/store/photos/{itemId}` is gone.
+The only other pull is a retail store's on-hand hint (§9).
 
 ## 5. Store configuration
 
@@ -344,13 +399,15 @@ read-only for menu and staff, and `GET /v1/store/photos/{itemId}` is gone.
 | `CLOUD_SYNC_URL` | cloud API base, e.g. `https://api.example.com` | unset → sync disabled |
 | `CLOUD_SYNC_API_KEY` | the store's bearer key | unset → sync disabled |
 | `CLOUD_SYNC_INTERVAL_SECONDS` | drain/poll cadence | `10` |
+| `CLOUD_STOCK_PULL_SECONDS` | retail only: how often the on-hand hint (§9) is pulled | `300` |
 | `POS_CASH_ROUNDING` (tablet: `cash.rounding` in store.properties) | `nickel` rounds a cash payment's final amount to 5¢; `off` charges cash to the cent. Local only, never synced down | `nickel` |
 | `POS_STAFF_APP_MFA` (tablet: `staff.app.mfa` in store.properties) | `on` asks staff-app sign-in for an authenticator code after the PIN; `off` is PIN only. Local only, never synced down | `on` |
 
 State lives in the store DB table `sync_state (key TEXT PK, value TEXT)`:
 `push_hwm` (last acked outbox row id), `catalog_cursor` (last applied
 revocation version), `catalog_snapshot_seq` / `staff_snapshot_seq` (one-time
-bootstrap markers) and `install_id`.
+bootstrap markers) and `install_id`. The §9 hint is cached in the store
+table `stock_expected` (replaced on every successful pull).
 
 ## 7. Staff + grants (store-owned, pushed up)
 
@@ -476,3 +533,26 @@ only its `byCurrency` row is meaningful. `GET /v1/venues` lists each store's
 - The portal reads the last beat as liveness: **online** under 60 s, **stale**
   up to 10 min (the `/staff-app` redirect still trusts the LAN URL), **offline**
   beyond that or never.
+
+## 9. On hand per product (cloud → store, retail, best effort)
+
+A retail store's count screen shows "expected 12" next to each count and
+flags variances. The figure comes from the cloud's ledger, pulled slowly:
+
+`GET {CLOUD_SYNC_URL}/v1/store/stock` — `Authorization: Bearer {key}`
+
+```json
+{ "retail": true, "asOf": "2026-07-20T14:10:00.000-07:00",
+  "items": [ { "itemId": "golden-lager-6", "onHand": 23 } ] }   // products with any history
+```
+
+- Pulled every `CLOUD_STOCK_PULL_SECONDS` (default 300), after the tick's
+  drain; only by retail stores. §0 advertises it as `stockPath`.
+- The store stamps the figures with the instant just before its first
+  outbox event the cloud has NOT acknowledged (or now, when it has them all),
+  then applies its own moves since — sales out, deliveries in, counts
+  submitted there — so the hint is current even between pulls or offline.
+- Read-only and never authoritative: it gates nothing, a count or sale never
+  waits for it. Offline, never synced, an older cloud (`404`) or a product
+  with no history → the app says "no expected qty" and counting goes on.
+- A restaurant gets `{ "retail": false, "items": [] }`.

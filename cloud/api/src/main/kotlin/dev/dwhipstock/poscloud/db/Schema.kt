@@ -411,18 +411,77 @@ object Devices : Table("devices") {
     override val primaryKey = PrimaryKey(tenantId, venueId, deviceId)
 }
 
-/** Cloud-owned stock movements of a retail store (018): deliveries (+) and adjustments (±). */
+/**
+ * The stock ledger of a retail store (018, 020): deliveries (+), adjustments
+ * (±) and counts (COUNT sets on hand to qty as of created_at). Portal-entered
+ * or from the store's outbox ([source]); [sourceRef] dedups store events.
+ */
 object StockMovements : Table("stock_movements") {
     val id = long("id").autoIncrement()
     val tenantId = text("tenant_id")
     val venueId = text("venue_id")
     val itemId = text("item_id")
-    val kind = text("kind") // RECEIVED | ADJUSTMENT
+    val kind = text("kind") // RECEIVED | ADJUSTMENT | COUNT
     val qty = integer("qty")
     val note = text("note")
     val createdBy = text("created_by")
     val createdAt = timestampWithTimeZone("created_at")
+    val origin = text("source").default("portal") // portal | store (column "source")
+    val sourceRef = text("source_ref").nullable() // count:<id> | receipt:<id>
     override val primaryKey = PrimaryKey(id)
+}
+
+/** A count submitted at the store (020). */
+object StockCounts : Table("stock_counts") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val countId = text("count_id")
+    val name = text("name")
+    val startedBy = text("started_by").nullable()
+    val submittedBy = text("submitted_by").nullable()
+    val submittedByName = text("submitted_by_name").nullable()
+    val approvedBy = text("approved_by").nullable()
+    val startedAt = timestampWithTimeZone("started_at").nullable()
+    val submittedAt = timestampWithTimeZone("submitted_at")
+    override val primaryKey = PrimaryKey(tenantId, venueId, countId)
+}
+
+/** Per product of a count: counted vs what the cloud expected at the count time (020). */
+object StockCountLines : Table("stock_count_lines") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val countId = text("count_id")
+    val itemId = text("item_id")
+    val counted = integer("counted")
+    val expected = integer("expected").nullable()
+    val storeExpected = integer("store_expected").nullable()
+    val countedAt = timestampWithTimeZone("counted_at")
+    override val primaryKey = PrimaryKey(tenantId, venueId, countId, itemId)
+}
+
+/** A delivery received at the store (020); its lines are RECEIVED movements. */
+object StockReceipts : Table("stock_receipts") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val receiptId = text("receipt_id")
+    val supplier = text("supplier")
+    val reference = text("reference")
+    val receivedBy = text("received_by").nullable()
+    val receivedByName = text("received_by_name").nullable()
+    val receivedAt = timestampWithTimeZone("received_at")
+    override val primaryKey = PrimaryKey(tenantId, venueId, receiptId)
+}
+
+/** Products a by-line refund returned (020) — back on hand at [createdAt]. */
+object RefundLines : Table("refund_lines") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val refundId = long("refund_id")
+    val lineId = long("line_id")
+    val itemId = text("item_id").nullable()
+    val qty = integer("qty")
+    val createdAt = timestampWithTimeZone("created_at")
+    override val primaryKey = PrimaryKey(tenantId, venueId, refundId, lineId)
 }
 
 /** A product's reorder level (018): low at or below it. */

@@ -15,6 +15,7 @@ import dev.dwhipstock.pos.api.floorObjectRoutes
 import dev.dwhipstock.pos.api.photoRoutes
 import dev.dwhipstock.pos.api.posRoutes
 import dev.dwhipstock.pos.api.retailRoutes
+import dev.dwhipstock.pos.api.stockRoutes
 import dev.dwhipstock.pos.api.settingsRoutes
 import dev.dwhipstock.pos.api.shiftRoutes
 import dev.dwhipstock.pos.api.staffAdminRoutes
@@ -210,6 +211,8 @@ fun Application.module(
     val retailService = dev.dwhipstock.pos.retail.RetailService(
         config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup())
     if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
+    // stock counting / receiving in the store (retail); on hand stays the cloud's
+    val stockService = dev.dwhipstock.pos.retail.StockService(config)
     val shiftService = ShiftService(config)
     staffAppMfa.warning?.let { log.warn("Staff app MFA config ignored: $it") }
     log.info(staffAppMfa.describe())
@@ -236,6 +239,10 @@ fun Application.module(
             transport, photoStore, interval,
             reEmitReportHistory = checkService::backfillReportCompleteClosedEvents,
             lanBaseUrl = lanBaseUrlProvider,
+            // retail: the slow, best-effort on-hand pull for the count screen's
+            // "expected" hint (CONTRACT §9) — read-only, never gates anything
+            stock = if (config.profile.kind == StoreProfile.Kind.RETAIL) stockService else null,
+            stockIntervalSeconds = System.getenv("CLOUD_STOCK_PULL_SECONDS")?.toLongOrNull() ?: 300L,
         ).start(this)
         log.info("cloud sync enabled → $syncUrl (every ${interval}s)")
     }
@@ -340,6 +347,7 @@ fun Application.module(
         pairingRoutes(pairingService)
         posRoutes(checkService, authService, photoStore, stripeService)
         retailRoutes(retailService, authService)
+        stockRoutes(stockService, authService)
         stripeRoutes(stripeService)
         tableRoutes(authService)
         floorObjectRoutes(authService)

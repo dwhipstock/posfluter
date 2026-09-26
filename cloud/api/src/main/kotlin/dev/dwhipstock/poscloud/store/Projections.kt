@@ -50,6 +50,10 @@ object Projections {
             event.eventType == "cash.movement" -> cashMovement(scope, payload, createdAt, zone, cur)
             event.eventType == "shift.opened" -> shiftOpened(scope, payload, createdAt, zone)
             event.eventType == "shift.closed" -> shiftClosed(scope, payload, createdAt, zone, cur)
+            event.eventType == "stock.counted" ->
+                dev.dwhipstock.poscloud.stock.StockProjection.counted(scope, payload, createdAt, zone)
+            event.eventType == "stock.received" ->
+                dev.dwhipstock.poscloud.stock.StockProjection.received(scope, payload, createdAt, zone)
             event.eventType == "catalog.snapshot" -> catalogSnapshot(scope, payload)
             event.eventType == "staff.snapshot" -> staffSnapshot(scope, payload)
             event.eventType in STAFF_EVENTS -> staffEvent(scope, payload)
@@ -194,6 +198,9 @@ object Projections {
             // cash back − gross on a CASH refund; an older store sends none (NULL → 0)
             it[roundingAdjustmentCents] = p.long("roundingAdjustmentCents")
         }
+        // a by-line refund's products go back on hand (retail stock ledger)
+        dev.dwhipstock.poscloud.stock.StockProjection.refundLines(
+            scope, p, refundId, p.instant("createdAt", zone) ?: createdAt)
     }
 
     /** A non-sale cash movement (IN/OUT). Idempotent by movement_id. */

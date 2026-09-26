@@ -60,4 +60,7 @@ interface CloudTransport {
     /** Redeem a portal-minted pairing code for THIS venue (M8). ok=false detail
      *  carries the cloud's machine code (bad_pairing_code) when refused. */
     fun claimPairing(code: String): PushResult = PushResult(false, "pairing unavailable")
+    /** The cloud's on-hand per product for this retail store (§9); null when
+     *  the cloud has no such feed (older cloud). Throws on a transport error. */
+    fun fetchOnHand(): List<dev.dwhipstock.pos.retail.CloudOnHand>? = null
 }

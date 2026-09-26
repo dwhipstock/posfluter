@@ -153,6 +153,19 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
         )
     }
 
+    override fun fetchOnHand(): List<dev.dwhipstock.pos.retail.CloudOnHand>? {
+        val res = request("/v1/store/stock")
+        if (res.status == 404) return null // an older cloud: no expected qty, counting goes on
+        check(res.status == 200) { "HTTP ${res.status} from stock" }
+        val obj = Json.parseToJsonElement(res.text).jsonObject
+        return (obj["items"]?.jsonArray ?: emptyList()).mapNotNull { el ->
+            val o = el.jsonObject
+            val id = o["itemId"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val qty = o["onHand"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+            dev.dwhipstock.pos.retail.CloudOnHand(id, qty)
+        }
+    }
+
     private fun revocationsPath() =
         if (legacyRevocations) "/v1/store/catalog/changes" else "/v1/store/revocations"
 
