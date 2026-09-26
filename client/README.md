@@ -9,6 +9,21 @@ flutter test
 flutter run
 ```
 
+## The stock app (same code, a phone build)
+
+`--dart-define=POS_APP=stock` builds the phone app that counts and receives
+stock (lib/app_mode.dart, lib/stock/): portrait, finds the store on the Wi-Fi,
+staff PIN sign-in, Count / Receive, an offline queue. On Android it installs
+next to the POS as "Stock" (`dev.dwhipstock.pos_stock`) and never starts
+the embedded store:
+
+```bash
+flutter build apk --release --dart-define=POS_APP=stock
+```
+
+An iOS build is the stock app by default (ios/, needs Xcode). See
+docs/demo-runbook.md ("Counting and receiving stock").
+
 ## Tablet: staff-app MFA
 
 The tablet-hosted staff ordering app requires MFA by default. Turn it off

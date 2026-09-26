@@ -1,9 +1,9 @@
 import 'dart:async';
 
-/// Where scanned barcodes come from. Today: a USB / Bluetooth HID scanner,
-/// which "types" the code ([HidScanner] + [ScanBurstDetector]). The seam for a
-/// tablet-camera scanner later: implement this, emit each decoded code on
-/// [scans], and hand it to the retail screen — nothing else changes.
+/// Where scanned barcodes come from: a USB / Bluetooth HID scanner, which
+/// "types" the code ([HidScanner] + [ScanBurstDetector]), or anything else
+/// that emits decoded codes on [scans]. The camera (stock/barcode_scanner.dart)
+/// is opened on demand from the screens instead.
 abstract class BarcodeSource {
   Stream<String> get scans;
   void dispose();
