@@ -68,6 +68,7 @@ class R {
     'mixers' => _t('Mixers & Soda', 'Mezcladores y refrescos', 'Mélanges'),
     'snacks' => _t('Snacks', 'Botanas', 'Grignotines'),
     'ice' => _t('Ice', 'Hielo', 'Glace'),
+    'sundries' => _t('Sundries', 'Artículos varios', 'Divers'),
     _ => fallback,
   };
   String get noMatch => _t(
@@ -336,5 +337,117 @@ class R {
     'Name, price and category are required',
     'Nombre, precio y categoría son obligatorios',
     'Nom, prix et catégorie requis',
+  );
+
+  // the counter at 5,000 products: quick keys, top sellers, browse, search
+  String get sell => _t('Sell', 'Vender', 'Vendre');
+  String get count => _t('Count', 'Contar', 'Compter');
+  String get receive => _t('Receive', 'Recibir', 'Recevoir');
+  String get register => _t('Register', 'Caja', 'Caisse');
+  String get quickKeys => _t('Quick keys', 'Teclas rápidas', 'Touches rapides');
+  String get topSellers =>
+      _t('Top sellers', 'Más vendidos', 'Meilleurs vendeurs');
+  String get browse => _t('Browse', 'Explorar', 'Parcourir');
+  String searchCatalog(int n) => _t(
+    'Scan a barcode or search ${_n(n)} products',
+    'Escanea un código o busca entre ${_n(n)} productos',
+    'Scannez ou cherchez parmi ${_n(n)} produits',
+  );
+  String results(int n, String q) => _t(
+    '${_n(n)} ${n == 1 ? 'match' : 'matches'} for “$q”',
+    '${_n(n)} ${n == 1 ? 'resultado' : 'resultados'} para “$q”',
+    '${_n(n)} résultat${n == 1 ? '' : 's'} pour « $q »',
+  );
+  String get resultsCapped => _t(
+    'Showing the best 200. Type more to narrow.',
+    'Se muestran los 200 mejores. Escribe más para acotar.',
+    'Les 200 meilleurs. Précisez la recherche.',
+  );
+  String sold(int n, int days) => _t(
+    '$n sold · $days days',
+    '$n vendidos · $days días',
+    '$n vendus · $days jours',
+  );
+  String get notSoldYet =>
+      _t('Popular pick', 'Selección popular', 'Choix populaire');
+  String topSellersNote(int n, int total) => _t(
+    'The ${_n(n)} best sellers of ${_n(total)} products, last 28 days',
+    'Los ${_n(n)} más vendidos de ${_n(total)} productos, últimos 28 días',
+    'Les ${_n(n)} meilleurs vendeurs sur ${_n(total)} produits, 28 derniers jours',
+  );
+  String products(int n) => _t(
+    '${_n(n)} ${n == 1 ? 'product' : 'products'}',
+    '${_n(n)} ${n == 1 ? 'producto' : 'productos'}',
+    '${_n(n)} produit${n == 1 ? '' : 's'}',
+  );
+  String get allStyles => _t('All styles', 'Todos los estilos', 'Tous');
+  String get allSizes => _t('Any size', 'Cualquier tamaño', 'Tous formats');
+  String get size => _t('Size', 'Tamaño', 'Format');
+  String get reset => _t('Reset', 'Restablecer', 'Réinitialiser');
+  String get pickDepartment => _t(
+    'Pick a department to browse the shelf',
+    'Elige un departamento para explorar',
+    'Choisissez un rayon',
+  );
+  String get pinKey => _t(
+    'Pin to quick keys',
+    'Fijar en teclas rápidas',
+    'Épingler aux touches rapides',
+  );
+  String get unpinKey => _t(
+    'Unpin from quick keys',
+    'Quitar de teclas rápidas',
+    'Retirer des touches rapides',
+  );
+  String get editKeys => _t('Edit keys', 'Editar teclas', 'Modifier');
+  String get doneEditing => _t('Done', 'Listo', 'Terminé');
+  String get keysHint => _t(
+    'Tap a key to pin or unpin it. Pinned keys stay; the rest follow the last 28 days of sales.',
+    'Toca una tecla para fijarla o quitarla. Las fijas se quedan; el resto sigue las ventas de 28 días.',
+    'Touchez une touche pour l’épingler. Les autres suivent les ventes des 28 derniers jours.',
+  );
+  String get pinnedTag => _t('Pinned', 'Fija', 'Épinglée');
+  String get noBarcode => _t('No barcode', 'Sin código', 'Sans code');
+  String get addToSale => _t('Add', 'Agregar', 'Ajouter');
+  String get loadingShelf => _t(
+    'Loading the shelf…',
+    'Cargando el catálogo…',
+    'Chargement du catalogue…',
+  );
+  String get registerOpenShort =>
+      _t('Register open', 'Caja abierta', 'Caisse ouverte');
+  String get registerClosedShort =>
+      _t('Register closed', 'Caja cerrada', 'Caisse fermée');
+
+  // sign-in (the store's own composition)
+  String get welcome => _t('Welcome back', 'Hola de nuevo', 'Bon retour');
+  String get signInHint => _t(
+    'Tap your name, then enter your 4-digit PIN.',
+    'Toca tu nombre y escribe tu PIN de 4 dígitos.',
+    'Touchez votre nom, puis entrez votre NIP.',
+  );
+  String get enterPin =>
+      _t('Enter your PIN', 'Escribe tu PIN', 'Entrez votre NIP');
+  String hello(String name) => _t('Hi, $name', 'Hola, $name', 'Bonjour, $name');
+  String role(String role) => switch (role) {
+    'MANAGER' => _t('Manager', 'Gerente', 'Gérant'),
+    _ => _t('Cashier', 'Cajero', 'Caissier'),
+  };
+  String get storeLine => _t(
+    'Bottle Shop · Los Angeles',
+    'Tienda de licores · Los Ángeles',
+    'Magasin · Los Angeles',
+  );
+  String get stockApp =>
+      _t('Stock app', 'App de inventario', 'App d’inventaire');
+  String get registerLine => _t(
+    'Register 1 · Staff only',
+    'Caja 1 · Solo personal',
+    'Caisse 1 · Personnel',
+  );
+
+  String _n(int n) => n.toString().replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+$)'),
+    (m) => '${m[1]}${lang == 'fr' ? ' ' : ','}',
   );
 }

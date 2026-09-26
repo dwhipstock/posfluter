@@ -449,16 +449,14 @@ void main() {
   });
 
   testWidgets(
-    'the counter tablet opens the same Count screens from its ⋮ menu',
+    'the counter tablet opens the same Count screens from its rail',
     (tester) async {
       AppMode.isStock = false;
       await http.runWithClient(() async {
         await pump(tester, const RetailScreen(), tablet: true);
-        await tester.tap(find.byTooltip('More'));
-        await settle(tester);
-        expect(find.text('Count stock'), findsOneWidget);
-        expect(find.text('Receive a delivery'), findsOneWidget);
-        await tester.tap(find.text('Count stock'));
+        expect(find.byKey(const Key('menu-count')), findsOneWidget);
+        expect(find.byKey(const Key('menu-receive')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('menu-count')));
         await settle(tester, 10);
         expect(find.byType(CountListScreen), findsOneWidget);
         await tester.tap(find.byKey(const Key('start-count')));

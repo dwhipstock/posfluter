@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
+import '../design/skin.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
 
@@ -49,6 +50,9 @@ class PinPadState extends State<PinPad> {
     final ink = branded ? scheme.primary : T.navy;
     final keyBg = branded ? scheme.surface : T.surface;
     final gap = big ? 12.0 : 8.0;
+    // a skin with pill controls (Sage & Poppy) gets round, flat keys
+    final skin = BrandSkin.of(context);
+    if (skin.pillControls) return _round(context, skin, ink, big);
     Widget key(String label, {Widget? child, VoidCallback? onTap}) => SizedBox(
       width: widget.keySize.width,
       height: widget.keySize.height,
@@ -136,6 +140,99 @@ class PinPadState extends State<PinPad> {
                     ? ''
                     : _pin.substring(0, _pin.length - 1),
               ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _back() => setState(
+    () => _pin = _pin.isEmpty ? '' : _pin.substring(0, _pin.length - 1),
+  );
+
+  /// Round keys on a soft tint, a segmented PIN indicator: the pill-shaped
+  /// skins' pad (the pubs keep their raised square keys).
+  Widget _round(BuildContext context, BrandSkin skin, Color ink, bool big) {
+    final scheme = Theme.of(context).colorScheme;
+    final d = big ? widget.keySize.height + 6 : widget.keySize.height;
+    final gap = big ? 16.0 : 10.0;
+    Widget key(String label, {Widget? child, VoidCallback? onTap}) => SizedBox(
+      width: d,
+      height: d,
+      child: label.isEmpty && child == null
+          ? const SizedBox()
+          : Material(
+              color: child == null
+                  ? scheme.surfaceContainerHigh
+                  : Colors.transparent,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap ?? () => _tap(label),
+                child: Center(
+                  child:
+                      child ??
+                      Text(
+                        label,
+                        style: skin.figures(
+                          size: big ? 32 : 24,
+                          weight: FontWeight.w700,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                ),
+              ),
+            ),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < widget.length; i++)
+              AnimatedContainer(
+                duration: skin.fast,
+                curve: skin.ease,
+                width: i < _pin.length ? (big ? 34 : 26) : (big ? 22 : 18),
+                height: big ? 10 : 8,
+                margin: EdgeInsets.symmetric(horizontal: big ? 5 : 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  color: i < _pin.length ? ink : scheme.outline,
+                ),
+              ),
+          ],
+        ),
+        SizedBox(height: big ? 28 : 18),
+        for (final row in const [
+          ['1', '2', '3'],
+          ['4', '5', '6'],
+          ['7', '8', '9'],
+        ])
+          Padding(
+            padding: EdgeInsets.only(bottom: gap),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              spacing: gap * 1.5,
+              children: [for (final digit in row) key(digit)],
+            ),
+          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: gap * 1.5,
+          children: [
+            key(''),
+            key('0'),
+            key(
+              '',
+              child: Icon(
+                skin.glyphs.backspace,
+                size: big ? 28 : 22,
+                color: scheme.onSurfaceVariant,
+              ),
+              onTap: _back,
             ),
           ],
         ),

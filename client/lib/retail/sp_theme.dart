@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 
+import '../design/skin.dart';
 import '../design/tokens.dart';
 
-/// Sage & Poppy Bottle Shop — its own look, not the pub's: sage green with a
-/// California-poppy orange accent on warm off-white, and a dark mode. No blue.
+/// Sage & Poppy Bottle Shop — a different product on the same code, not a
+/// recolour of the pub: bright and airy modern California retail. Near-white
+/// surfaces with a breath of sage, sage green for navigation and selection, a
+/// California-poppy orange kept for the one thing that must pop (Pay), and a
+/// dark mode. No blue, no cream, no shadows.
+///
 /// Every text/background pair used by the retail screens meets WCAG AA
 /// (4.5:1); the poppy fill carries white bold text at ≥18pt (large-text AA).
 @immutable
 class SpColors extends ThemeExtension<SpColors> {
   final Color sage; // brand primary (fills, focus, selection)
-  final Color sageDeep; // header band, pressed
+  final Color sageDeep; // rail, headings, pressed
   final Color onSage;
+  final Color sageMist; // selected rail item, chips, tile hover
   final Color poppy; // the Pay button, the accent
   final Color onPoppy;
   final Color poppySoft; // tinted rows, chips
@@ -23,6 +29,7 @@ class SpColors extends ThemeExtension<SpColors> {
     required this.sage,
     required this.sageDeep,
     required this.onSage,
+    required this.sageMist,
     required this.poppy,
     required this.onPoppy,
     required this.poppySoft,
@@ -42,51 +49,63 @@ class SpColors extends ThemeExtension<SpColors> {
   });
 
   static const light = SpColors(
-    sage: Color(0xFF52724F), // white on it ≈ 5.3:1 (tuned from #5E7F5A)
-    sageDeep: Color(0xFF3C5639),
+    sage: Color(0xFF4A6B47), // white on it ≈ 5.9:1
+    sageDeep: Color(0xFF263D26),
     onSage: Colors.white,
-    poppy: Color(0xFFBF5317), // white on it ≈ 4.7:1 (tuned from #E8702A)
+    sageMist: Color(0xFFE5EEE1),
+    poppy: Color(0xFFC2511A), // white on it ≈ 4.6:1
     onPoppy: Colors.white,
-    poppySoft: Color(0xFFFBE3D2),
-    background: Color(0xFFF8F4EB),
-    surface: Color(0xFFFFFDF8),
-    surfaceAlt: Color(0xFFEFE9DC),
-    border: Color(0xFFDDD5C4),
-    text: Color(0xFF1F261D), // ≈ 14:1 on background
-    textMuted: Color(0xFF5B6356), // ≈ 5.9:1 on background
-    ok: Color(0xFF2E6B35),
-    okSoft: Color(0xFFDCEBD9),
+    poppySoft: Color(0xFFFDE9DC),
+    background: Color(0xFFF4F6F1), // airy, a breath of sage
+    surface: Color(0xFFFFFFFF),
+    surfaceAlt: Color(0xFFEDF1E9),
+    border: Color(0xFFDFE5DA),
+    text: Color(0xFF172016), // ≈ 16:1 on background
+    textMuted: Color(0xFF586255), // ≈ 6.1:1 on background
+    ok: Color(0xFF2B6A34),
+    okSoft: Color(0xFFDDEFDC),
     warn: Color(0xFF8A4B00),
-    warnSoft: Color(0xFFFBEBD2),
+    warnSoft: Color(0xFFFCEFD9),
     bad: Color(0xFFB0261C),
-    badSoft: Color(0xFFF8DAD6),
-    receiptPaper: Color(0xFFFFFEFB),
+    badSoft: Color(0xFFFBE0DC),
+    receiptPaper: Color(0xFFFFFFFF),
   );
 
   static const dark = SpColors(
-    sage: Color(0xFF8FB388), // dark text on it ≈ 8:1
-    sageDeep: Color(0xFF1B241A),
-    onSage: Color(0xFF11180F),
-    poppy: Color(0xFFF08A40), // dark text on it ≈ 7.6:1
+    sage: Color(0xFF93BA8B), // dark text on it ≈ 8:1
+    sageDeep: Color(0xFF0C110B),
+    onSage: Color(0xFF0F170E),
+    sageMist: Color(0xFF223020),
+    poppy: Color(0xFFF28A44), // dark text on it ≈ 7.6:1
     onPoppy: Color(0xFF1E1005),
     poppySoft: Color(0xFF3A2416),
-    background: Color(0xFF131812),
-    surface: Color(0xFF1B211A),
-    surfaceAlt: Color(0xFF252D23),
-    border: Color(0xFF34402F),
-    text: Color(0xFFEDF1E9),
-    textMuted: Color(0xFFAAB5A4),
+    background: Color(0xFF101410),
+    surface: Color(0xFF171C16),
+    surfaceAlt: Color(0xFF20271F),
+    border: Color(0xFF2E382C),
+    text: Color(0xFFEEF2EA),
+    textMuted: Color(0xFFA9B4A4),
     ok: Color(0xFF8FD199),
     okSoft: Color(0xFF1E3322),
     warn: Color(0xFFF2B86B),
     warnSoft: Color(0xFF3A2C16),
     bad: Color(0xFFFF9A8E),
     badSoft: Color(0xFF3D1E1A),
-    receiptPaper: Color(0xFFFFFEFB), // paper stays paper
+    receiptPaper: Color(0xFFFFFFFF), // paper stays paper
   );
 
   static SpColors of(BuildContext context) =>
       Theme.of(context).extension<SpColors>() ?? light;
+
+  bool get isDark => background.computeLuminance() < .2;
+
+  /// Brand green for text and icons that must read strongly (both modes).
+  Color get strong => isDark ? sage : sageDeep;
+
+  /// A selected chip / segment: deep sage with white (light), sage with
+  /// near-black (dark).
+  Color get selectedFill => isDark ? sage : sageDeep;
+  Color get onSelected => isDark ? onSage : Colors.white;
 
   @override
   SpColors copyWith() => this;
@@ -96,19 +115,35 @@ class SpColors extends ThemeExtension<SpColors> {
       other is SpColors && t >= .5 ? other : this;
 }
 
+/// Department colours: a thin band on each product tile, a dot on a row.
+/// Muted, each ≥ 3:1 against the white tile (non-text contrast).
+const spDepartmentHues = {
+  'beer': Color(0xFFB7791F),
+  'wine': Color(0xFF8C2F4B),
+  'spirits': Color(0xFF7A5230),
+  'seltzers': Color(0xFF2F7A78),
+  'mixers': Color(0xFF3D6B8C),
+  'snacks': Color(0xFFC2511A),
+  'ice': Color(0xFF4E7FA0),
+  'sundries': Color(0xFF6A5A8C),
+};
+
 /// The Material theme the terminal wears when the store is Sage & Poppy.
 ThemeData buildSagePoppyTheme(Brightness brightness) {
   final c = brightness == Brightness.dark ? SpColors.dark : SpColors.light;
+  final skin = BrandSkin.sagePoppy;
+  // the shared screens' T.text() draws in this brand's family too
+  T.family = skin.fontFamily;
   TextStyle text({
     double size = T.bodySize,
     FontWeight weight = FontWeight.w400,
     Color? color,
-  }) => T.text(size: size, weight: weight, color: color ?? c.text);
+  }) => skin.text(size: size, weight: weight, color: color ?? c.text);
   final scheme = ColorScheme(
     brightness: brightness,
     primary: c.sage,
     onPrimary: c.onSage,
-    primaryContainer: c.surfaceAlt,
+    primaryContainer: c.sageMist,
     onPrimaryContainer: c.text,
     secondary: c.poppy,
     onSecondary: c.onPoppy,
@@ -130,95 +165,109 @@ ThemeData buildSagePoppyTheme(Brightness brightness) {
     outline: c.border,
     outlineVariant: c.border,
   );
-  final buttonShape = RoundedRectangleBorder(borderRadius: T.radiusMedium);
+  const pill = StadiumBorder();
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
-    extensions: [c],
-    fontFamily: T.fontFamily,
-    fontFamilyFallback: const ['NotoSans'],
+    extensions: [c, skin],
+    fontFamily: skin.fontFamily,
+    fontFamilyFallback: skin.fontFallback,
     scaffoldBackgroundColor: c.background,
     canvasColor: c.background,
+    splashFactory: InkRipple.splashFactory,
     textTheme: TextTheme(
       bodyLarge: text(),
       bodyMedium: text(),
       bodySmall: text(size: T.smallSize, color: c.textMuted),
-      titleLarge: text(size: T.headlineSize, weight: FontWeight.w600),
+      titleLarge: text(size: T.headlineSize, weight: FontWeight.w700),
       titleMedium: text(weight: FontWeight.w600),
       titleSmall: text(size: T.smallSize, weight: FontWeight.w600),
-      labelLarge: text(weight: FontWeight.w500),
-      labelMedium: text(size: T.smallSize, weight: FontWeight.w500),
+      labelLarge: text(weight: FontWeight.w600),
+      labelMedium: text(size: T.smallSize, weight: FontWeight.w600),
     ),
     iconTheme: IconThemeData(color: c.textMuted),
     appBarTheme: AppBarTheme(
-      backgroundColor: c.surface,
-      foregroundColor: c.sage,
+      backgroundColor: c.background,
+      foregroundColor: c.text,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
-      titleTextStyle: text(
-        size: T.headlineSize,
-        weight: FontWeight.w600,
-        color: c.sage,
-      ),
-      shape: Border(bottom: BorderSide(color: c.border)),
+      titleTextStyle: text(size: 22, weight: FontWeight.w700),
     ),
     dividerTheme: DividerThemeData(color: c.border, thickness: 1, space: 1),
     cardTheme: CardThemeData(
       color: c.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: T.radiusLarge,
-        side: BorderSide(color: c.border),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: skin.radiusMedium),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: T.radiusLarge),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: skin.radiusLarge),
+      titleTextStyle: text(size: 22, weight: FontWeight.w700),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: c.sage,
         foregroundColor: c.onSage,
         minimumSize: const Size(T.minTouch, T.minTouch),
-        shape: buttonShape,
-        textStyle: text(weight: FontWeight.w600),
+        shape: pill,
+        textStyle: text(weight: FontWeight.w700),
+        animationDuration: skin.normal,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: c.text,
         backgroundColor: c.surface,
-        side: BorderSide(color: c.border),
+        side: BorderSide(color: c.border, width: 1.5),
         minimumSize: const Size(T.minTouch, T.minTouch),
-        shape: buttonShape,
-        textStyle: text(weight: FontWeight.w500),
+        shape: pill,
+        textStyle: text(weight: FontWeight.w600),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: c.sage,
         minimumSize: const Size(T.minTouch, T.minTouch),
-        shape: buttonShape,
-        textStyle: text(weight: FontWeight.w500),
+        shape: pill,
+        textStyle: text(weight: FontWeight.w700),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: const Size(T.minTouch, T.minTouch),
+      ),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        shape: const WidgetStatePropertyAll(pill),
+        side: WidgetStatePropertyAll(BorderSide(color: c.border)),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? c.sage : c.surface,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? c.onSage : c.text,
+        ),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: c.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: T.radiusMedium,
+        borderRadius: skin.radiusMedium,
         borderSide: BorderSide(color: c.border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: T.radiusMedium,
+        borderRadius: skin.radiusMedium,
         borderSide: BorderSide(color: c.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: T.radiusMedium,
+        borderRadius: skin.radiusMedium,
         borderSide: BorderSide(color: c.sage, width: 2),
       ),
       labelStyle: text(size: T.smallSize, color: c.textMuted),
@@ -226,22 +275,43 @@ ThemeData buildSagePoppyTheme(Brightness brightness) {
     ),
     chipTheme: ChipThemeData(
       backgroundColor: c.surface,
-      selectedColor: c.sage,
-      labelStyle: text(size: 16, weight: FontWeight.w500),
+      selectedColor: c.sageDeep,
+      labelStyle: text(size: 15, weight: FontWeight.w600),
       secondaryLabelStyle: text(
-        size: 16,
-        weight: FontWeight.w600,
-        color: c.onSage,
+        size: 15,
+        weight: FontWeight.w700,
+        color: Colors.white,
       ),
       side: BorderSide(color: c.border),
-      shape: const StadiumBorder(),
+      shape: pill,
       showCheckmark: false,
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: c.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: skin.radiusMedium),
+      textStyle: text(),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: c.sageDeep,
-      contentTextStyle: T.text(size: 16, color: Colors.white),
+      backgroundColor: c.isDark ? c.surfaceAlt : c.sageDeep,
+      contentTextStyle: skin.text(size: 16, color: Colors.white),
+      shape: const StadiumBorder(),
+      elevation: 0,
     ),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: c.sageDeep,
+        borderRadius: BorderRadius.circular(40),
+      ),
+      textStyle: skin.text(
+        size: 13,
+        weight: FontWeight.w600,
+        color: Colors.white,
+      ),
+    ),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: c.sage),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected) ? c.onSage : c.textMuted,

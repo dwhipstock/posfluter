@@ -53,6 +53,9 @@ void main() {
     'ageRestricted': age,
     'taxable': true,
     'depositCents': crv,
+    'brand': 'House',
+    'subcategory': 'Club Soda',
+    'size': '1 L',
   };
 
   Map<String, dynamic> sale(List<Map<String, dynamic>> lines) {
@@ -96,6 +99,7 @@ void main() {
   late List<String> calls;
   late Set<String> known;
   late Map<String, dynamic>? addedProduct;
+  late Set<String> pinned;
 
   MockClient store() => MockClient((req) async {
     final path = req.url.path;
@@ -121,6 +125,38 @@ void main() {
           'sortOrder': 0,
         },
       ]);
+    }
+    if (path == '/retail/quick-keys') {
+      return json({
+        'keys': [
+          {
+            'itemId': 'club-soda',
+            'pinned': pinned.contains('club-soda'),
+            'units': 4,
+            'source': 'velocity',
+          },
+        ],
+        'windowDays': 28,
+      });
+    }
+    if (path == '/retail/quick-keys/pins' && req.method == 'POST') {
+      pinned.add((jsonDecode(req.body) as Map)['itemId'] as String);
+      return json({
+        'keys': [
+          {'itemId': 'club-soda', 'pinned': true, 'units': 4, 'source': 'pin'},
+        ],
+        'windowDays': 28,
+      });
+    }
+    if (path == '/retail/top-sellers') {
+      return json({
+        'items': [
+          {'itemId': 'club-soda', 'rank': 1, 'units': 4},
+        ],
+        'catalogSize': 1,
+        'windowDays': 28,
+        'percent': 20,
+      });
     }
     if (path == '/shifts/current') return json({'error': 'none'}, 404);
     if (path == '/retail/sales/current') return http.Response('', 204);
@@ -178,6 +214,7 @@ void main() {
     calls = [];
     known = {};
     addedProduct = null;
+    pinned = {};
     StoreProfile.current = us;
     Prefs.instance.lang = 'en';
     Api.currentUser = AuthUser.fromJson({
@@ -260,6 +297,49 @@ void main() {
       // …and it was rung up straight away
       expect(calls.where((c) => c == 'POST /retail/sales/7/scan').length, 2);
       expect(find.text('Sparkling Lemonade'), findsWidgets);
+    }, store);
+  });
+
+  testWidgets('quick keys: a manager pins a key in edit mode', (tester) async {
+    await http.runWithClient(() async {
+      await pumpCounter(tester);
+      expect(find.byKey(const Key('key-club-soda')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('edit-keys')));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const Key('key-club-soda')));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(pinned, {'club-soda'});
+      // in edit mode a tap pins; it never rings the product up
+      expect(calls, isNot(contains('POST /retail/sales/7/scan')));
+    }, store);
+  });
+
+  testWidgets('browse, top sellers and search find the product', (
+    tester,
+  ) async {
+    await http.runWithClient(() async {
+      await pumpCounter(tester);
+      await tester.tap(find.byKey(const Key('tab-top')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('4 sold · 28 days'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('tab-browse')));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const Key('cat-mixers')));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const Key('sub-Club Soda')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        find.textContaining('Mixers & Soda › Club Soda', findRichText: true),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('browse-reset')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.textContaining('›', findRichText: true), findsNothing);
+      await tester.enterText(find.byKey(const Key('counter-search')), 'club 1');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('1 match for “club 1”'), findsOneWidget);
     }, store);
   });
 }

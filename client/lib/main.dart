@@ -32,6 +32,7 @@ Future<void> main() async {
     for (final (family, file) in const [
       ('Inter', 'OFL-Inter.txt'),
       ('Noto Sans', 'OFL-NotoSans.txt'),
+      ('Plus Jakarta Sans', 'OFL-PlusJakartaSans.txt'),
     ]) {
       yield LicenseEntryWithLineBreaks([
         family,
