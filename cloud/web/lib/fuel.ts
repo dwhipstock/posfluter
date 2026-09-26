@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import { useI18n, useT } from "./i18n/context";
-import type { Locale } from "./i18n/messages";
+import type { Locale, MsgKey } from "./i18n/messages";
+import type { InStoreCategoryRow } from "./types";
 
 // Number formats for a gas station's figures (GET /v1/reports/fuel): gallons
 // to the pump's three decimals, margin in cents per gallon (the API sends
@@ -11,6 +12,21 @@ import type { Locale } from "./i18n/messages";
 // never as 0 or 100%.
 
 const NUMBER_LOCALE: Record<Locale, string> = { en: "en-US", fr: "fr-CA", es: "es-US" };
+
+/** A gas station's category ids (CONTRACT §2, Fuel) with portal names in every language. */
+const STORE_CATEGORIES = new Set([
+  "drinks", "beer", "snacks", "candy", "hot-food", "grocery", "automotive", "health", "general", "tobacco", "ice", "fuel",
+]);
+
+/** A category's name: the known ids in the reader's language, else the store's own name, else its id. */
+export function useCategoryName(): (r: Pick<InStoreCategoryRow, "categoryId" | "nameFr" | "nameEn">) => string {
+  const { name } = useI18n();
+  const t = useT();
+  return (r) =>
+    r.categoryId && STORE_CATEGORIES.has(r.categoryId)
+      ? t(`store_cat_${r.categoryId.replace(/-/g, "_")}` as MsgKey)
+      : name(r.nameFr, r.nameEn) || r.categoryId || "—";
+}
 
 export interface FuelFmt {
   /** 10052 → "10.052" */

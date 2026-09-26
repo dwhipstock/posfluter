@@ -5,8 +5,8 @@ import { useApi, useRange, reportKey } from "@/lib/hooks";
 import { useMoney } from "@/lib/money";
 import { FxNote } from "@/components/money-scope";
 import { useFuelKpis } from "@/components/fuel-kpis";
-import { useFuelFmt } from "@/lib/fuel";
-import { useI18n, useT, useFmt } from "@/lib/i18n/context";
+import { useCategoryName, useFuelFmt } from "@/lib/fuel";
+import { useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
@@ -29,7 +29,6 @@ export default function Page() {
 }
 
 const GRADES = new Set(["REG", "MID", "PRE", "DSL"]);
-const TOP_CATEGORIES = 8;
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="px-1 pt-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">{children}</h2>;
@@ -45,7 +44,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function FuelPage() {
   const t = useT();
   const fmt = useFmt();
-  const { name } = useI18n();
   const range = useRange();
   const meta = useExportMeta();
   const storeExport = useStoreExport();
@@ -71,11 +69,12 @@ function FuelPage() {
   const catCur = (r: InStoreCategoryRow) => r.currency ?? data?.currency;
   // the four standard grades in the reader's language; any other, as the store named it
   const gradeName = (r: FuelGradeRow) => (GRADES.has(r.grade) ? t(`fuel_grade_${r.grade}` as MsgKey) : r.gradeName);
-  const catName = (r: InStoreCategoryRow) => name(r.nameFr, r.nameEn) || r.categoryId || "—";
+  const catName = useCategoryName();
   const oneCurrency = new Set((data?.byGrade ?? []).map(gradeCur)).size <= 1;
   const costed = (r: FuelGradeRow) => (r.costedCount ?? 0) > 0;
   const both = (k?: { value: string; sub?: string }) => [k?.value, k?.sub].filter(Boolean).join(" — ");
-  const categories = (data?.inStoreByCategory ?? []).slice(0, TOP_CATEGORIES);
+  // every category, best margin first: a thin-margin one (tobacco) is part of the picture too
+  const categories = data?.inStoreByCategory ?? [];
   const uncostedLines = shop?.uncostedLineCount ?? 0;
   const uncostedFills = pumps?.uncostedCount ?? 0;
   const prepayNote =
@@ -107,7 +106,7 @@ function FuelPage() {
       ],
       sections: [
         {
-          title: t("instore_top_categories"),
+          title: t("instore_categories"),
           columns: [
             col.text<InStoreCategoryRow>(t("col_category"), catName),
             col.money<InStoreCategoryRow>(t("fuel_in_store"), (r) => r.salesCents),
@@ -225,7 +224,7 @@ function FuelPage() {
             loadingCard
           ) : categories.length > 0 ? (
             <Card>
-              <div className="border-b border-neutral-100 px-5 py-3 text-sm font-semibold">{t("instore_top_categories")}</div>
+              <div className="border-b border-neutral-100 px-5 py-3 text-sm font-semibold">{t("instore_categories")}</div>
               <Table>
                 <TableHeader>
                   <TableRow>

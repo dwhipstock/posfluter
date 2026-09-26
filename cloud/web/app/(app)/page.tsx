@@ -34,7 +34,7 @@ import { BarChart, Donut, LineChart } from "@/components/charts";
 import { StoreBreakdown, useStoreSeries } from "@/components/store-breakdown";
 import { useStoreHref, useStores } from "@/lib/store";
 import { useBrand, useChartTheme } from "@/lib/brand/context";
-import { FuelDashboardKpis } from "@/components/fuel-kpis";
+import { FuelDashboardKpis, InStoreCategoryMix } from "@/components/fuel-kpis";
 import { cn } from "@/lib/utils";
 
 export default function Page() {
@@ -67,6 +67,8 @@ function Dashboard() {
   const hourly = useApi<HourlyReport>(reportKey("/v1/reports/hourly", range));
   const items = useApi<ItemsReport>(reportKey("/v1/reports/items", range));
 
+  // a gas station's fuel has its own figures: top items are the shop's
+  const topItems = (items.data?.rows ?? []).filter((r) => !fuel || r.categoryId !== "fuel");
   const s = summary.data;
   const money = s?.money;
   // a combined figure + (mixed currencies) its exact amounts per currency
@@ -317,6 +319,8 @@ function Dashboard() {
         </Card>
       </div>
 
+      {fuel && <InStoreCategoryMix range={range} />}
+
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>{t("dash_top_items")}</CardTitle>
@@ -336,9 +340,9 @@ function Dashboard() {
             </div>
           ) : items.error ? (
             <ErrorState message={items.error.message} onRetry={() => items.mutate()} />
-          ) : items.data && items.data.rows.length > 0 ? (
+          ) : topItems.length > 0 ? (
             <div className="divide-y divide-neutral-200/70">
-              {items.data.rows.slice(0, 5).map((r, i) => (
+              {topItems.slice(0, 5).map((r, i) => (
                 <div key={`${r.itemId ?? `open-${i}`}-${r.currency ?? ""}`} className="flex items-center gap-3 py-2.5">
                   <span className="w-5 text-center text-xs font-semibold text-neutral-500">{i + 1}</span>
                   <div className="min-w-0 flex-1">
