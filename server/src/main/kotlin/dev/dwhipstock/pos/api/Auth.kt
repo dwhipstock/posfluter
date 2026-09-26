@@ -181,7 +181,12 @@ private fun isOpenRoute(path: String, method: HttpMethod): Boolean =
         (method == HttpMethod.Get && path.matches(Regex("/photos/[^/]+"))) ||
         // printable slip pages: opened in a browser with a short-lived ?ticket= (checked in the route)
         (method == HttpMethod.Get && path.matches(Regex("/tables/[^/]+/slip"))) ||
-        (method == HttpMethod.Get && path == "/slips")
+        (method == HttpMethod.Get && path == "/slips") ||
+        // the built-in card terminal SIMULATOR's reader page and its buttons: the
+        // customer side of a pretend reader, played from any browser on the LAN.
+        // Mounted only when payment.terminal=simulator; it moves no real money and
+        // the POS side (starting, recording, refunding a payment) stays gated.
+        path == "/terminal" || path.startsWith("/terminal/ui/")
 
 fun Route.authRoutes(auth: AuthService) {
     /** Open: the login screen shows staff tiles ("who's clocking in?"). Names only, no PINs. */

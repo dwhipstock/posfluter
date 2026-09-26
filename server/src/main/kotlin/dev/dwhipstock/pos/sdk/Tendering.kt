@@ -6,8 +6,12 @@ import kotlinx.serialization.Serializable
  * STRIPE = card taken through Stripe Terminal (optional, test mode). It is never
  * a [TenderMethod] in [CustomerConfig.electronicTenders]: staff cannot confirm
  * it by hand; it is recorded only after Stripe reports the payment captured.
+ *
+ * TERMINAL = card taken on an integrated terminal other than Stripe (the
+ * built-in simulator, J.P. Morgan): same rule, recorded only after the terminal
+ * approved it. CARD stays the hand-keyed "card on the counter's own terminal".
  */
-enum class TenderType { CASH, CARD, BANK_TRANSFER, STRIPE }
+enum class TenderType { CASH, CARD, BANK_TRANSFER, STRIPE, TERMINAL }
 
 /**
  * An electronic tender method the customer offers. Open (not sealed) on purpose:

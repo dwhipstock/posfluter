@@ -99,6 +99,10 @@ object Tenders : IntIdTable("tenders") {
     val createdAt = utcTimestamp("created_at")
     // STRIPE tenders only (035): the PaymentIntent this tender settled
     val stripePaymentIntentId = varchar("stripe_payment_intent_id", 64).nullable()
+    // TERMINAL tenders only (048): the terminal's id for the payment this settled
+    val terminalPaymentRef = varchar("terminal_payment_ref", 64).nullable()
+    // card-present tenders (048): brand, last 4, entry mode, auth code, EMV fields (JSON)
+    val cardJson = text("card_json").nullable()
 }
 
 object Users : Table("users") {

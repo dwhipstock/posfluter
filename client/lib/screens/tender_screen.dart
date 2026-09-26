@@ -7,8 +7,8 @@ import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
 import '../payments/card_reader.dart';
+import '../payments/terminal.dart';
 import 'receipt_screen.dart';
-import 'stripe_payment_screen.dart';
 import '../widgets/tax_rows.dart';
 
 /// Split-tender payment. Three big method tiles across the top, outstanding
@@ -28,6 +28,12 @@ class TenderScreen extends StatefulWidget {
   final Future<StripeStatus> Function()? stripeStatus;
   final CardReader? cardReader;
   final bool? cardReaderSupported;
+
+  /// Test seams for "Card (terminal)" (a terminal the store drives: the
+  /// simulator or J.P. Morgan). Defaults: GET /payments/terminal and the store.
+  final Future<TerminalStatus> Function()? terminalStatus;
+  final TerminalClient terminalClient;
+  final SimReaderClient simReader;
   const TenderScreen({
     super.key,
     required this.check,
@@ -35,6 +41,9 @@ class TenderScreen extends StatefulWidget {
     this.stripeStatus,
     this.cardReader,
     this.cardReaderSupported,
+    this.terminalStatus,
+    this.terminalClient = const TerminalClient(),
+    this.simReader = const SimReaderClient(),
   });
 
   @override
@@ -51,6 +60,31 @@ class _TenderScreenState extends State<TenderScreen> {
   /// null while loading (and when the store has no Stripe key: not shown).
   StripeStatus? _stripe;
   SimulatedTestCard _simCard = SimulatedTestCard.approved;
+
+  /// The store-driven card terminal; null while loading. Shown only for
+  /// simulator / J.P. Morgan stores.
+  TerminalStatus? _terminal;
+  bool get _terminalShown => _terminal?.storeDriven == true;
+  String? get _terminalBlocked => _terminal == null
+      ? 'terminal_unavailable'
+      : _terminal!.available
+      ? null
+      : (_terminal!.reason ?? 'terminal_unavailable');
+
+  /// Like Stripe: never awaited by anything else, cash works at once.
+  Future<void> _loadTerminal() async {
+    TerminalStatus st;
+    try {
+      st = await (widget.terminalStatus ?? widget.terminalClient.status)();
+    } catch (_) {
+      st = TerminalStatus.none;
+    }
+    if (!mounted) return;
+    setState(() {
+      _terminal = st;
+      if (_method == 'TERMINAL' && _terminalBlocked != null) _method = 'CASH';
+    });
+  }
 
   bool get _readerSupported =>
       widget.cardReaderSupported ?? StripeTerminalReader.supported;
@@ -104,6 +138,7 @@ class _TenderScreenState extends State<TenderScreen> {
   void initState() {
     super.initState();
     _loadStripe();
+    _loadTerminal();
     // Recovery: a check already fully paid but still TOTAL_LOCKED (e.g. finalize
     // was interrupted after the last tender, or the app died between the two) has
     // no balance left to tender. Close it directly instead of stranding it — the
@@ -211,17 +246,42 @@ class _TenderScreenState extends State<TenderScreen> {
     final st = _stripe;
     if (_busy || st == null || _stripeBlocked != null) return;
     final amount = _entryCAD == null ? null : _entryCAD! * 100;
-    final result = await Navigator.of(context).push<TenderResult>(
-      MaterialPageRoute(
-        builder: (_) => StripePaymentScreen(
-          checkId: _check.id,
-          groupId: widget.groupId,
-          amountCents: amount,
-          locationId: st.locationId!,
-          simulatedCard: _simCard,
-          reader: widget.cardReader ?? StripeTerminalReader.instance,
-        ),
+    await _runCardPayment(
+      StripeCardPayment(
+        locationId: st.locationId!,
+        simulatedCard: _simCard,
+        reader: widget.cardReader ?? StripeTerminalReader.instance,
       ),
+      amount,
+    );
+  }
+
+  /// Card (terminal): the store drives the reader (simulator / J.P. Morgan).
+  Future<void> _payTerminal() async {
+    final st = _terminal;
+    if (_busy || st == null || _terminalBlocked != null) return;
+    final amount = _entryCAD == null ? null : _entryCAD! * 100;
+    await _runCardPayment(
+      StoreTerminalCardPayment(
+        status: st,
+        // the pub: the reader asks for a tip
+        tipMode: st.tipOnReader ? 'on_reader' : 'none',
+        client: widget.terminalClient,
+        reader: widget.simReader,
+      ),
+      amount,
+    );
+    // re-check the terminal (it may have gone offline)
+    if (mounted) _loadTerminal();
+  }
+
+  /// Either card-present flow: it pops with the recorded tender, or null.
+  Future<void> _runCardPayment(CardPresentPayment payment, int? amount) async {
+    final result = await payment.run(
+      context,
+      checkId: _check.id,
+      groupId: widget.groupId,
+      amountCents: amount,
     );
     if (!mounted) return;
     if (result == null) {
@@ -453,8 +513,38 @@ class _TenderScreenState extends State<TenderScreen> {
                         enabled: _stripeBlocked == null,
                       ),
                     ],
+                    if (_terminalShown) ...[
+                      const SizedBox(width: 8),
+                      _methodTile(
+                        'TERMINAL',
+                        LucideIcons.nfc,
+                        l.cardTerminalTender,
+                        enabled: _terminalBlocked == null,
+                      ),
+                    ],
                   ],
                 ),
+                if (_terminalShown && _terminalBlocked != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          LucideIcons.wifiOff,
+                          size: 16,
+                          color: T.textMuted,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            l.terminalUnavailableHint(_terminalBlocked),
+                            key: const ValueKey('terminal-hint'),
+                            style: T.small(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (_stripeShown && _stripeBlocked != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -481,6 +571,8 @@ class _TenderScreenState extends State<TenderScreen> {
                   _cashSection(l)
                 else if (_method == 'STRIPE')
                   _stripeSection(l)
+                else if (_method == 'TERMINAL')
+                  _terminalSection(l)
                 else
                   _electronicSection(_method, l),
               ],
@@ -582,6 +674,42 @@ class _TenderScreenState extends State<TenderScreen> {
             icon: const Icon(LucideIcons.nfc),
             label: Text(l.chargeCardStripe),
             onPressed: _busy || _stripeBlocked != null ? null : _payStripe,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _terminalSection(L l) {
+    final st = _terminal;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _entryDisplay(l, hint: l.amountHint(money(_due))),
+        const SizedBox(height: 8),
+        AmountPad(onKey: _numpadKey),
+        if (st != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            st.embedded
+                ? '${l.terminalKindName(st.kind)} · ${l.terminalBuiltIn}'
+                : '${l.terminalKindName(st.kind)} · ${st.readerName ?? ''} ${st.address ?? ''}'
+                      .trim(),
+            style: T.small(),
+          ),
+        ],
+        const SizedBox(height: 12),
+        SizedBox(
+          height: T.minTouch,
+          child: FilledButton.icon(
+            key: const ValueKey('terminal-charge'),
+            style: FilledButton.styleFrom(
+              backgroundColor: T.accent,
+              foregroundColor: T.onAccent,
+            ),
+            icon: const Icon(LucideIcons.nfc),
+            label: Text(l.chargeCardTerminal),
+            onPressed: _busy || _terminalBlocked != null ? null : _payTerminal,
           ),
         ),
       ],

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101418">
+<title>Card Terminal</title>
+<!-- The built-in card terminal SIMULATOR (no real card data, no internet).
+     Top: the customer-facing reader screen. Bottom: the "wallet" a demo
+     presenter uses to tap / insert / swipe a test card and pick the outcome.
+     Everything is inline so it works on a LAN with no internet. -->
+<style>
+  :root {
+    --bg: #0b0e11; --device: #161b21; --bezel: #20262e; --screen: #f6f7f4; --ink: #15181c;
+    --muted: #6b7178; --ok: #1f8f4e; --bad: #c0392b; --warn: #b7791f; --accent: #2a6fdb;
+    --chip: #d9b45a; --wallet: #1b2027; --wallet-ink: #e9ecef; --wallet-muted: #9aa3ad;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--wallet-ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center; padding: 16px; gap: 16px; min-height: 100%; }
+  .device { width: min(560px, 100%); background: var(--device); border-radius: 28px; padding: 18px 18px 22px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06); }
+  .brandbar { display: flex; justify-content: space-between; align-items: center; color: #7d8792; font-size: 12px;
+    letter-spacing: .12em; text-transform: uppercase; padding: 0 6px 10px; }
+  .led { width: 8px; height: 8px; border-radius: 50%; background: #3a4048; display: inline-block; margin-left: 6px; }
+  .led.on { background: #3ddc84; box-shadow: 0 0 8px #3ddc84; }
+  .screen { background: var(--screen); color: var(--ink); border-radius: 14px; min-height: 380px; padding: 26px 24px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    border: 6px solid var(--bezel); position: relative; overflow: hidden; }
+  .label { color: var(--muted); font-size: 15px; letter-spacing: .02em; }
+  .amount { font-size: clamp(44px, 11vw, 72px); font-weight: 700; letter-spacing: -.02em; margin: 6px 0 2px;
+    font-variant-numeric: tabular-nums; }
+  .sub { font-size: 15px; color: var(--muted); min-height: 1.3em; }
+  .prompt { font-size: 22px; font-weight: 600; margin-top: 18px; }
+  .contactless { width: 92px; height: 92px; margin: 18px auto 4px; }
+  .contactless path { fill: none; stroke: var(--ink); stroke-width: 7; stroke-linecap: round; }
+  .pulse path { animation: pulse 1.6s infinite; }
+  .pulse path:nth-child(2) { animation-delay: .15s; } .pulse path:nth-child(3) { animation-delay: .3s; }
+  .pulse path:nth-child(4) { animation-delay: .45s; }
+  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  .spinner { width: 64px; height: 64px; border-radius: 50%; border: 7px solid #d9dcd6; border-top-color: var(--accent);
+    animation: spin .9s linear infinite; margin: 22px auto 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .result-icon { width: 96px; height: 96px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    margin: 10px auto 12px; color: white; font-size: 56px; font-weight: 700; }
+  .ok { background: var(--ok); } .bad { background: var(--bad); } .warn { background: var(--warn); }
+  .result-title { font-size: 30px; font-weight: 800; letter-spacing: .04em; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .pin-dots { display: flex; gap: 14px; justify-content: center; margin: 16px 0 10px; }
+  .pin-dots span { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink); }
+  .pin-dots span.f { background: var(--ink); }
+  .keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 10px; justify-content: center; margin-top: 6px; }
+  .keypad button { height: 56px; border-radius: 12px; border: none; background: #e4e6e1; font-size: 24px; font-weight: 600;
+    color: var(--ink); cursor: pointer; }
+  .keypad button.k-ok { background: var(--ok); color: white; font-size: 16px; }
+  .keypad button.k-x { background: var(--bad); color: white; font-size: 16px; }
+  .tips { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 12px; margin-top: 18px; width: 100%; max-width: 340px; }
+  .tips button { padding: 16px 8px; border-radius: 12px; border: 2px solid #d7dad4; background: white; font-size: 18px;
+    font-weight: 700; color: var(--ink); cursor: pointer; }
+  .tips button small { display: block; font-weight: 500; color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .pair-code { font-size: 54px; font-weight: 800; letter-spacing: .18em; margin: 8px 0; }
+  .countdown { position: absolute; bottom: 10px; right: 14px; font-size: 12px; color: var(--muted); }
+  .cardline { margin-top: 8px; font-size: 16px; }
+  .keys { display: flex; justify-content: center; gap: 18px; margin-top: 16px; }
+  .keys button { width: 64px; height: 40px; border-radius: 10px; border: none; color: white; font-weight: 700; cursor: pointer; }
+  .key-x { background: #b83a2e; } .key-ok { background: #2c8a4b; } .key-clr { background: #c49a21; }
+  .slot { height: 10px; width: 62%; margin: 16px auto 0; background: #0a0d10; border-radius: 6px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,.8); }
+
+  .wallet { width: min(560px, 100%); background: var(--wallet); border-radius: 18px; padding: 16px; }
+  .wallet h2 { margin: 0 0 4px; font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--wallet-muted); }
+  .wallet .hint { font-size: 13px; color: var(--wallet-muted); margin: 0 0 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .cards button { width: 92px; height: 58px; border-radius: 9px; border: 2px solid transparent; cursor: pointer; color: white;
+    font-weight: 700; font-size: 13px; text-align: left; padding: 7px 9px; position: relative; }
+  .cards button::after { content: ""; position: absolute; left: 9px; bottom: 9px; width: 16px; height: 12px; border-radius: 3px; background: var(--chip); }
+  .cards button.sel { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+  .c-visa { background: linear-gradient(135deg, #1a3f9c, #0f2a6b); } .c-mastercard { background: linear-gradient(135deg, #2b2b2b, #4b1f14); }
+  .c-amex { background: linear-gradient(135deg, #2e77bb, #1d5a93); } .c-interac { background: linear-gradient(135deg, #f3b61f, #c78c00); color: #1b1b1b !important; }
+  .c-discover { background: linear-gradient(135deg, #ef7d22, #b75408); }
+  .seg { display: flex; flex-wrap: wrap; gap: 8px; }
+  .seg button { padding: 9px 12px; border-radius: 9px; border: 1px solid #39414b; background: #232a33; color: var(--wallet-ink);
+    font-size: 14px; cursor: pointer; }
+  .seg button.sel { background: var(--accent); border-color: var(--accent); }
+  .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .actions button { padding: 16px 6px; border-radius: 12px; border: none; font-size: 16px; font-weight: 700; cursor: pointer;
+    background: #2f3843; color: white; }
+  .actions button:disabled, .seg button:disabled, .cards button:disabled { opacity: .4; cursor: default; }
+  .actions button.primary { background: var(--accent); }
+  .foot { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-top: 12px; font-size: 12px; color: var(--wallet-muted); }
+  .foot button { background: none; border: 1px solid #39414b; color: var(--wallet-muted); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+  .err { color: #ff8a80; min-height: 1.2em; font-size: 13px; margin-top: 6px; }
+  body.kiosk .wallet .foot .fs { display: none; }
+  @media (max-width: 420px) { .keypad { grid-template-columns: repeat(3, 64px); } .cards button { width: 30%; } }
+</style>
+</head>
+<body>
+  <div class="device" role="region" aria-label="Card terminal">
+    <div class="brandbar"><span id="devname">Card terminal</span><span>SIMULATOR<i class="led" id="led"></i></span></div>
+    <div class="screen" id="screen" aria-live="polite"></div>
+    <div class="keys">
+      <button class="key-x" title="Cancel" onclick="post('/ui/cancel', {})">✕</button>
+      <button class="key-clr" title="Clear" onclick="pin=''; render(last)">◀</button>
+      <button class="key-ok" title="OK" onclick="okKey()">●</button>
+    </div>
+    <div class="slot" title="chip slot"></div>
+  </div>
+
+  <div class="wallet">
+    <h2>Customer's card</h2>
+    <p class="hint">Pick a test card and what the bank will say, then tap, insert or swipe it.</p>
+    <div class="row cards" id="cards"></div>
+    <div class="row seg" id="outcomes"></div>
+    <div class="actions">
+      <button class="primary" id="b-tap" onclick="present('tap')">Tap</button>
+      <button id="b-insert" onclick="present('insert')">Insert (PIN)</button>
+      <button id="b-swipe" onclick="present('swipe')">Swipe</button>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="foot">
+      <span id="tid">Test cards only. No real card data.</span>
+      <button class="fs" onclick="document.documentElement.requestFullscreen && document.documentElement.requestFullscreen()">Full screen</button>
+    </div>
+  </div>
+
+<script>
+const BASE = "__BASE__";
+const CARDS = [
+  ["visa", "Visa", "4242"], ["mastercard", "Mastercard", "4444"], ["amex", "Amex", "8431"],
+  ["interac", "Interac", "0002"], ["discover", "Discover", "1117"],
+];
+const OUTCOMES = [
+  ["approve", "Approve"], ["insufficient_funds", "Decline: insufficient funds"],
+  ["do_not_honour", "Decline: do not honour"], ["timeout", "Time out"], ["cancel", "Customer cancels"],
+];
+let card = "visa", outcome = "approve", pin = "", last = null, busy = false;
+if (new URLSearchParams(location.search).has("kiosk")) document.body.classList.add("kiosk");
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (k === "class") e.className = v; else if (k.startsWith("on")) e[k] = v; else e.setAttribute(k, v); }
+  for (const k of kids) e.append(k);
+  return e;
+}
+function money(cents, cur) {
+  if (cents == null) return "";
+  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur || "USD" }).format(cents / 100); }
+  catch { return (cents / 100).toFixed(2); }
+}
+function buildWallet() {
+  const c = document.getElementById("cards"); c.innerHTML = "";
+  for (const [k, name, l4] of CARDS) {
+    c.append(el("button", { class: "c-" + k + (k === card ? " sel" : ""), onclick: () => { card = k; buildWallet(); } },
+      name, el("br"), el("span", { class: "mono" }, "•••• " + l4)));
+  }
+  const o = document.getElementById("outcomes"); o.innerHTML = "";
+  for (const [k, label] of OUTCOMES) {
+    o.append(el("button", { class: k === outcome ? "sel" : "", onclick: () => { outcome = k; buildWallet(); } }, label));
+  }
+}
+async function post(path, body) {
+  document.getElementById("err").textContent = "";
+  try {
+    const r = await fetch(BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) document.getElementById("err").textContent = j.error || ("HTTP " + r.status);
+    else { last = j; render(j); }
+  } catch (e) { document.getElementById("err").textContent = "Can't reach the terminal service."; }
+}
+function present(entry) { pin = ""; post("/ui/present", { entry, card, outcome }); }
+function okKey() { if (last && last.screen === "pin" && pin.length >= 4) { post("/ui/pin", { pin }); pin = ""; } }
+function tip(cents) { post("/ui/tip", { tipCents: cents }); }
+
+const contactless = () => {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("viewBox", "0 0 100 100"); s.setAttribute("class", "contactless pulse");
+  s.innerHTML = '<path d="M30 30 q12 20 0 40"/><path d="M45 22 q18 28 0 56"/><path d="M60 14 q24 36 0 72"/><path d="M75 8 q30 42 0 84"/>';
+  return s;
+};
+
+function render(s) {
+  const scr = document.getElementById("screen"); scr.innerHTML = "";
+  document.getElementById("devname").textContent = s.name || "Card terminal";
+  document.getElementById("tid").textContent = (s.terminalId || "") + " · test cards only, no real card data";
+  document.getElementById("led").className = "led" + (["present", "pin", "tip", "processing"].includes(s.screen) ? " on" : "");
+  const waiting = s.screen === "present";
+  for (const id of ["b-tap", "b-insert", "b-swipe"]) document.getElementById(id).disabled = !waiting;
+  const total = money(s.totalCents, s.currency);
+  const add = (...k) => scr.append(...k);
+  switch (s.screen) {
+    case "pairing":
+      add(el("div", { class: "label" }, "Pair with the POS"), el("div", { class: "pair-code mono" }, s.pairingCode || "------"),
+        el("div", { class: "sub" }, "On the POS: Settings → Card terminal → Pair, and enter this code."));
+      break;
+    case "idle":
+      add(el("div", { class: "prompt" }, "Welcome"), el("div", { class: "sub" }, "Ready for the next payment"));
+      if (s.pairingCode && !s.paired) add(el("div", { class: "sub" }, "Pairing code " + s.pairingCode));
+      break;
+    case "tip": {
+      add(el("div", { class: "label" }, "Add a tip?"), el("div", { class: "amount" }, money(s.amountCents, s.currency)));
+      const t = el("div", { class: "tips" });
+      for (const p of [15, 18, 20]) {
+        const c = Math.round(s.amountCents * p / 100);
+        t.append(el("button", { onclick: () => tip(c) }, p + "%", el("small", {}, money(c, s.currency))));
+      }
+      t.append(el("button", { onclick: () => tip(0) }, "No tip", el("small", {}, "—")));
+      add(t);
+      break;
+    }
+    case "present":
+      add(el("div", { class: "label" }, s.tipCents ? "Total with tip" : "Total"), el("div", { class: "amount" }, total),
+        el("div", { class: "sub" }, s.label || ""), contactless(), el("div", { class: "prompt" }, "Tap, insert or swipe"));
+      break;
+    case "pin": {
+      add(el("div", { class: "label" }, "Total " + total), el("div", { class: "prompt" }, "Enter your PIN"));
+      const dots = el("div", { class: "pin-dots" });
+      for (let i = 0; i < 4; i++) dots.append(el("span", { class: i < pin.length ? "f" : "" }));
+      add(dots);
+      const kp = el("div", { class: "keypad" });
+      for (const k of ["1","2","3","4","5","6","7","8","9","✕","0","OK"]) {
+        kp.append(el("button", { class: k === "OK" ? "k-ok" : k === "✕" ? "k-x" : "",
+          onclick: () => { if (k === "OK") okKey(); else if (k === "✕") post("/ui/cancel", {}); else if (pin.length < 6) { pin += k; render(s); } } }, k));
+      }
+      add(kp);
+      break;
+    }
+    case "processing":
+      add(el("div", { class: "label" }, "Total " + total), el("div", { class: "spinner" }), el("div", { class: "prompt" }, "Processing…"),
+        el("div", { class: "sub" }, "Please don't remove your card"));
+      break;
+    case "approved":
+      add(el("div", { class: "result-icon ok" }, "✓"), el("div", { class: "result-title" }, "APPROVED"), el("div", { class: "amount", style: "font-size:40px" }, total),
+        el("div", { class: "cardline mono" }, (s.brand || "") + " •••• " + (s.last4 || "")),
+        el("div", { class: "sub mono" }, s.authCode ? "Auth " + s.authCode : ""), el("div", { class: "sub" }, "Please remove your card"));
+      break;
+    case "declined":
+      add(el("div", { class: "result-icon bad" }, "✕"), el("div", { class: "result-title" }, "DECLINED"),
+        el("div", { class: "prompt", style: "font-size:18px" }, (s.message || "").replace(/^Declined — /, "")),
+        el("div", { class: "cardline mono" }, (s.brand || "") + " •••• " + (s.last4 || "")));
+      break;
+    case "cancelled":
+      add(el("div", { class: "result-icon warn" }, "!"), el("div", { class: "result-title" }, "CANCELLED"), el("div", { class: "sub" }, s.message || ""));
+      break;
+    case "timeout":
+      add(el("div", { class: "result-icon warn" }, "⏱"), el("div", { class: "result-title" }, "TIMED OUT"), el("div", { class: "sub" }, s.message || "No card presented"));
+      break;
+  }
+  if (s.secondsLeft != null && ["present", "pin", "tip"].includes(s.screen)) add(el("div", { class: "countdown" }, s.secondsLeft + " s"));
+}
+
+async function poll() {
+  if (!busy) {
+    busy = true;
+    try {
+      const r = await fetch(BASE + "/ui/state", { cache: "no-store" });
+      if (r.ok) {
+        const s = await r.json();
+        if (!last || s.txnId !== last.txnId || s.screen !== last.screen) pin = "";
+        // redraw only when something changed (the countdown ticks once a second)
+        if (JSON.stringify(s) !== JSON.stringify(last)) render(s);
+        last = s;
+      }
+    } catch (e) { /* the service is restarting; keep the last screen */ }
+    busy = false;
+  }
+  setTimeout(poll, 400);
+}
+buildWallet();
+render({ screen: "idle", name: "Card terminal" });
+poll();
+</script>
+</body>
+</html>

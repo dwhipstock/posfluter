@@ -12,6 +12,9 @@ import dev.dwhipstock.pos.restaurant.TenderView
 import dev.dwhipstock.pos.sdk.StripeConfig
 import dev.dwhipstock.pos.sdk.TenderType
 import dev.dwhipstock.pos.sdk.VenueClock
+import dev.dwhipstock.pos.payments.terminal.PaymentRequest
+import dev.dwhipstock.pos.payments.terminal.PaymentTerminal
+import dev.dwhipstock.pos.payments.terminal.TerminalRefundRequest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -114,6 +117,12 @@ class StripeService(
     private val client: StripeClient? =
         if (config.enabled) StripeClient(http ?: UrlStripeHttp(config.secretKey!!)) else null
 
+    /** Every money call goes through the [PaymentTerminal] contract (the Stripe Terminal adapter). */
+    private val terminal: StripeTerminalAdapter? = client?.let(::StripeTerminalAdapter)
+
+    /** The Stripe adapter, for callers that speak the generic terminal contract (null = Stripe off). */
+    val adapter: PaymentTerminal? get() = terminal
+
     private data class Account(val id: String, val country: String?, val currency: String, val fetchedAt: Long)
 
     @Volatile private var account: Account? = null
@@ -154,6 +163,9 @@ class StripeService(
     }
 
     private fun requireClient(): StripeClient = client
+        ?: throw StripeException(409, config.disabled?.code ?: "stripe_not_configured", "Stripe is disabled")
+
+    private fun requireTerminal(): StripeTerminalAdapter = terminal
         ?: throw StripeException(409, config.disabled?.code ?: "stripe_not_configured", "Stripe is disabled")
 
     private fun <T> remember(block: () -> T): T = try {
@@ -233,7 +245,7 @@ class StripeService(
     // --- payments ----------------------------------------------------------
 
     fun createIntent(checkId: Int, groupId: Int?, amountCents: Long?): StripeIntentView {
-        val c = requireClient()
+        val t = requireTerminal()
         val acct = ensureAccount()
         val loc = ensureLocation(acct)
         val outstanding = checks.lockForElectronicPayment(checkId, groupId).cents
@@ -253,33 +265,34 @@ class StripeService(
                 it[updatedAt] = now
             }
         }
-        val params = listOfNotNull(
-            "amount" to amount.toString(),
-            "currency" to acct.currency,
-            "payment_method_types[]" to "card_present",
-            "capture_method" to "manual",
-            "description" to "$storeName — check #$checkId" + (groupId?.let { " / group $it" } ?: ""),
-            "metadata[pos_payment_id]" to publicId,
-            "metadata[check_id]" to checkId.toString(),
-            groupId?.let { "metadata[group_id]" to it.toString() },
-            "metadata[tender]" to TenderType.STRIPE.name,
-            "metadata[pos_store]" to storeKey,
+        val request = PaymentRequest(
+            reference = publicId,
+            amountCents = amount,
+            currency = acct.currency,
+            description = "$storeName — check #$checkId" + (groupId?.let { " / group $it" } ?: ""),
+            metadata = listOfNotNull(
+                "pos_payment_id" to publicId,
+                "check_id" to checkId.toString(),
+                groupId?.let { "group_id" to it.toString() },
+                "tender" to TenderType.STRIPE.name,
+                "pos_store" to storeKey,
+            ),
         )
         val pi = try {
-            remember { c.createPaymentIntent(params, "pos-pi-$publicId") }
+            remember { t.startPayment(request) }
         } catch (e: StripeException) {
             mark(publicId, "FAILED", error = e.message)
             throw e
         }
-        val piId = pi.str("id") ?: throw StripeException(502, StripeException.ERROR, "Stripe returned no PaymentIntent id")
+        val piId = pi.terminalRef
         mark(publicId, "CREATED", piId = piId)
         log.info("Stripe PaymentIntent $piId created for check #$checkId: $amount ${acct.currency}")
-        return StripeIntentView(publicId, piId, pi.str("client_secret") ?: "", amount, acct.currency.uppercase(), loc)
+        return StripeIntentView(publicId, piId, pi.clientSecret ?: "", amount, acct.currency.uppercase(), loc)
     }
 
     fun payment(paymentId: String): StripePaymentView {
         val row = row(paymentId)
-        val stripeStatus = row.pi?.let { pi -> runCatching { requireClient().retrievePaymentIntent(pi).str("status") }.getOrNull() }
+        val stripeStatus = row.pi?.let { pi -> runCatching { requireTerminal().result(pi).rawStatus }.getOrNull() }
         return row.view(stripeStatus)
     }
 
@@ -289,7 +302,7 @@ class StripeService(
      * 503, nothing recorded (safe to retry — capture uses a fixed idempotency key).
      */
     fun confirm(paymentId: String): StripeTenderResponse = moneyLock.withLock {
-        val c = requireClient()
+        val t = requireTerminal()
         val row = row(paymentId)
         row.tenderId?.let { return StripeTenderResponse(checks.tenderView(it), checks.getCheck(row.checkId), paymentId) }
         if (row.status == "CANCELED") throw ConflictException("Stripe payment $paymentId was canceled", "stripe_payment_canceled")
@@ -299,37 +312,33 @@ class StripeService(
             mark(paymentId, "RECORDED", tenderId = tid)
             return StripeTenderResponse(checks.tenderView(tid), checks.getCheck(row.checkId), paymentId)
         }
-        var pi = remember { c.retrievePaymentIntent(piId) }
-        if (pi.str("metadata.pos_payment_id") != null && pi.str("metadata.pos_payment_id") != paymentId)
+        var pi = remember { t.result(piId) }
+        if (pi.reference != null && pi.reference != paymentId)
             throw ConflictException("PaymentIntent does not belong to this payment", "stripe_mismatch")
-        if ((pi["amount"]?.jsonPrimitive?.longOrNull ?: row.amount) != row.amount)
+        if ((pi.amountCents ?: row.amount) != row.amount)
             throw ConflictException("PaymentIntent amount changed", "stripe_mismatch")
-        when (val st = pi.str("status")) {
+        when (val st = pi.rawStatus) {
             "requires_capture" -> {
                 // still owed? (the check may have been paid another way meanwhile)
                 val due = runCatching { checks.lockForElectronicPayment(row.checkId, row.groupId).cents }.getOrDefault(0L)
                 if (due < row.amount) {
-                    runCatching { c.cancelPaymentIntent(piId, "pos-cancel-$paymentId") }
+                    runCatching { t.cancel(piId, "pos-cancel-$paymentId") }
                     mark(paymentId, "CANCELED", error = "no longer due")
                     throw ConflictException("the check no longer owes this amount; the card was not charged", "stripe_amount_exceeds_due")
                 }
                 pi = try {
-                    remember { c.capturePaymentIntent(piId, "pos-capture-$paymentId") }
+                    remember { t.capture(piId, "pos-capture-$paymentId") }
                 } catch (e: StripeException) {
                     mark(paymentId, row.status, error = e.message)
                     throw e
                 }
-                if (pi.str("status") != "succeeded")
-                    throw StripeException(409, "stripe_not_ready", "PaymentIntent is ${pi.str("status")} after capture")
+                if (pi.rawStatus != "succeeded")
+                    throw StripeException(409, "stripe_not_ready", "PaymentIntent is ${pi.rawStatus} after capture")
                 mark(paymentId, "CAPTURED")
             }
             "succeeded" -> {} // captured earlier; the tender just wasn't recorded
-            "requires_payment_method" -> {
-                val err = pi["last_payment_error"]?.let { runCatching { it.jsonObject }.getOrNull() }
-                throw StripeException(402, StripeException.DECLINED,
-                    err?.str("message") ?: "card declined",
-                    declineCode = err?.str("decline_code") ?: err?.str("code"))
-            }
+            "requires_payment_method" ->
+                throw StripeException(402, StripeException.DECLINED, pi.message ?: "card declined", declineCode = pi.declineCode)
             "canceled" -> {
                 mark(paymentId, "CANCELED")
                 throw ConflictException("Stripe payment $paymentId was canceled", "stripe_payment_canceled")
@@ -337,14 +346,13 @@ class StripeService(
             else -> throw StripeException(409, "stripe_not_ready", "PaymentIntent is $st")
         }
         val tender = try {
-            checks.recordStripeTender(row.checkId, row.amount, piId, row.groupId)
+            checks.recordStripeTender(row.checkId, row.amount, piId, row.groupId, card = pi.card)
         } catch (e: Exception) {
             // money was taken but the check can't take it (paid meanwhile, voided…):
             // give it straight back rather than keep an unrecorded payment
             log.warn("Stripe $piId captured but not recordable on check #${row.checkId} (${e.message}); refunding")
             try {
-                c.createRefund(listOf("payment_intent" to piId, "metadata[pos_payment_id]" to paymentId),
-                    "pos-autorefund-$paymentId")
+                t.refund(TerminalRefundRequest(piId, null, "pos-autorefund-$paymentId", listOf("pos_payment_id" to paymentId)))
                 mark(paymentId, "FAILED", error = "refunded: ${e.message}")
             } catch (re: StripeException) {
                 mark(paymentId, "CAPTURED", error = "NOT RECORDED, refund failed: ${re.message}")
@@ -371,17 +379,17 @@ class StripeService(
         var error: String? = null
         row.pi?.let { pi ->
             try {
-                stripeStatus = client?.cancelPaymentIntent(pi, "pos-cancel-$paymentId")?.str("status")
+                stripeStatus = terminal?.cancel(pi, "pos-cancel-$paymentId")?.rawStatus
             } catch (e: StripeException) {
                 error = e.message
                 // already canceled / never authorized is fine; captured means the
                 // tender path failed after capture — give the money back
-                val current = runCatching { client?.retrievePaymentIntent(pi) }.getOrNull()
-                stripeStatus = current?.str("status")
+                val current = runCatching { terminal?.result(pi) }.getOrNull()
+                stripeStatus = current?.rawStatus
                 if (stripeStatus == "succeeded") {
                     runCatching {
-                        client?.createRefund(listOf("payment_intent" to pi, "metadata[pos_payment_id]" to paymentId),
-                            "pos-autorefund-$paymentId")
+                        terminal?.refund(TerminalRefundRequest(pi, null, "pos-autorefund-$paymentId",
+                            listOf("pos_payment_id" to paymentId)))
                     }.onFailure { log.error("Stripe $pi captured but canceled at the POS; refund failed — refund it in the Stripe dashboard") }
                 }
             }
@@ -404,7 +412,7 @@ class StripeService(
         checkId: Int, amountCents: Long?, lines: List<RefundLineRequest>?, reason: String, managerId: String,
     ): RefundResult = moneyLock.withLock {
         val plan = checks.planRefund(checkId, amountCents, lines, TenderType.STRIPE.name, reason, managerId)
-        val c = requireClient()
+        val t = requireTerminal()
         val capacity = checks.stripeRefundCapacity(checkId)
         if (capacity.isEmpty()) throw ConflictException("check $checkId has no Stripe card payment", "stripe_no_card_tender")
         val pick = capacity.firstOrNull { it.remainingCents >= plan.gross }
@@ -414,16 +422,14 @@ class StripeService(
         val piId = pick.paymentIntentId
         val key = "pos-refund-$piId-${pick.paidCents - pick.remainingCents}-${plan.gross}"
         val refund = remember {
-            c.createRefund(listOf(
-                "payment_intent" to piId,
-                "amount" to plan.gross.toString(),
-                "metadata[check_id]" to checkId.toString(),
-                "metadata[refunded_by]" to managerId,
-            ), key)
+            t.refund(TerminalRefundRequest(piId, plan.gross, key, listOf(
+                "check_id" to checkId.toString(),
+                "refunded_by" to managerId,
+            )))
         }
-        val refundId = refund.str("id") ?: throw StripeException(502, StripeException.ERROR, "Stripe returned no refund id")
-        if (refund.str("status") in setOf("failed", "canceled"))
-            throw StripeException(502, "stripe_refund_failed", "Stripe refund $refundId is ${refund.str("status")}")
+        val refundId = refund.refundRef
+        if (refund.rawStatus in setOf("failed", "canceled"))
+            throw StripeException(502, "stripe_refund_failed", "Stripe refund $refundId is ${refund.rawStatus}")
         log.info("Stripe refund $refundId: ${plan.gross} on $piId (check #$checkId)")
         checks.recordRefund(plan, stripePaymentIntentId = piId, stripeRefundId = refundId)
     }

@@ -12,6 +12,7 @@ import dev.dwhipstock.pos.module
 import dev.dwhipstock.pos.sdk.CashRounding
 import dev.dwhipstock.pos.sdk.ImageGenConfig
 import dev.dwhipstock.pos.sdk.KitchenPrinting
+import dev.dwhipstock.pos.sdk.PaymentTerminalConfig
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
 import dev.dwhipstock.pos.sdk.StaffAppMfa
 import dev.dwhipstock.pos.sdk.StripeConfig
@@ -107,6 +108,12 @@ class TabletStoreService : Service() {
             val kitchenPrinting = KitchenPrinting.resolve(storeProps?.getProperty(KitchenPrinting.KEY), "store.properties")
             kitchenPrinting.warning?.let { Log.w("TabletStore", "Kitchen tickets config ignored: $it") }
             Log.i("TabletStore", kitchenPrinting.describe())
+            // payment.terminal=stripe|simulator|jpmorgan|external|off (+ payment.terminal.host
+            // for a LAN terminal, e.g. the Mac simulator: scripts/demo-terminal.sh). Unset →
+            // the store's default. Never logs a secret.
+            val paymentTerminal = runCatching { PaymentTerminalConfig.fromProperties(storeProps) }
+                .getOrElse { PaymentTerminalConfig.DEFAULT }
+            paymentTerminal.warnings.forEach { Log.w("TabletStore", "Card terminal config ignored: $it") }
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = BuildConfig.STORE_PORT) {
                 module(
                     dbPath = dbFile.absolutePath,
@@ -131,6 +138,7 @@ class TabletStoreService : Service() {
                     cashRounding = cashRounding,
                     imageGenConfig = imageGenConfig,
                     kitchenPrinting = kitchenPrinting,
+                    paymentTerminal = paymentTerminal,
                 )
             }.start(wait = true)
         } catch (error: Throwable) {

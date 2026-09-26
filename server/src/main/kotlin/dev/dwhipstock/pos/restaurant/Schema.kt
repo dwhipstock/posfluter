@@ -168,6 +168,9 @@ object Refunds : IntIdTable("refunds") {
     // STRIPE refunds only (035): written after Stripe confirmed the refund
     val stripePaymentIntentId = varchar("stripe_payment_intent_id", 64).nullable()
     val stripeRefundId = varchar("stripe_refund_id", 64).nullable()
+    // TERMINAL refunds only (048): written after the terminal confirmed the refund
+    val terminalPaymentRef = varchar("terminal_payment_ref", 64).nullable()
+    val terminalRefundRef = varchar("terminal_refund_ref", 64).nullable()
     // the added taxes this refund reverses, one entry per tax (036); NULL = none
     val taxesJson = text("taxes_json").nullable()
     // CASH refunds (039): cash handed back − gross, to the nickel; 0 otherwise
@@ -187,6 +190,33 @@ object StripePayments : IntIdTable("stripe_payments") {
     val currency = varchar("currency", 3)
     val paymentIntentId = varchar("payment_intent_id", 64).nullable()
     val status = varchar("status", 20)
+    val tenderId = integer("tender_id").nullable()
+    val lastError = varchar("last_error", 300).nullable()
+    val createdAt = utcTimestamp("created_at")
+    val updatedAt = utcTimestamp("updated_at")
+}
+
+/**
+ * One card payment the store asked an integrated terminal for (simulator,
+ * J.P. Morgan; Stripe keeps [StripePayments]). status: CREATING → PENDING →
+ * RECORDED, or DECLINED / CANCELED / TIMEOUT / FAILED. Only RECORDED has a
+ * tender row. [publicId] is the id the client holds.
+ */
+object TerminalPayments : IntIdTable("terminal_payments") {
+    val publicId = varchar("public_id", 40)
+    val provider = varchar("provider", 20)
+    val checkId = integer("check_id")
+    val billGroupId = integer("bill_group_id").nullable()
+    val amountCents = long("amount_cents")
+    val tipCents = long("tip_cents").default(0)
+    val currency = varchar("currency", 3)
+    val terminalRef = varchar("terminal_ref", 64).nullable()
+    val status = varchar("status", 20)
+    val prompt = varchar("prompt", 40).nullable()
+    val cardJson = text("card_json").nullable()
+    val declineCode = varchar("decline_code", 40).nullable()
+    /** Machine code for a FAILED / store-side CANCELED attempt (terminal_amount_exceeds_due…). */
+    val errorCode = varchar("error_code", 40).nullable()
     val tenderId = integer("tender_id").nullable()
     val lastError = varchar("last_error", 300).nullable()
     val createdAt = utcTimestamp("created_at")

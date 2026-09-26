@@ -1426,6 +1426,117 @@ class Api {
     await _stripeCall('POST', '/stripe/payments/$paymentId/cancel');
   }
 
+  // --- Card terminal (payment.terminal): the store drives it ------------------
+  // Simulator (built in, or the stand-alone one on the LAN) or J.P. Morgan.
+  // Like Stripe these wait on something outside the store, so they never feed
+  // the ConnectionMonitor: a dead terminal must not look like the store dropped.
+
+  /// Which card terminal this store has. Any failure → not available (never throws,
+  /// except a lost session).
+  static Future<TerminalStatus> terminalStatus() async {
+    try {
+      return TerminalStatus.fromJson(
+        await _stripeCall(
+          'GET',
+          '/payments/terminal',
+          timeout: const Duration(seconds: 12),
+        ),
+      );
+    } on ApiException catch (e) {
+      // an older store without the route: no integrated terminal
+      if (e.code == null || e.code == 'not_found') return TerminalStatus.none;
+      return TerminalStatus.unavailable(e.code);
+    } on SessionExpiredException {
+      rethrow;
+    } catch (_) {
+      return TerminalStatus.unavailable('terminal_unavailable');
+    }
+  }
+
+  /// Start a card payment on the terminal for the amount due (or [amountCents]).
+  static Future<TerminalPayment> startTerminalPayment(
+    int checkId, {
+    int? amountCents,
+    int? groupId,
+    String tipMode = 'none',
+  }) async => TerminalPayment.fromJson(
+    await _stripeCall(
+      'POST',
+      '/checks/$checkId/terminal/payments',
+      body: {
+        'amountCents': ?amountCents,
+        'groupId': ?groupId,
+        'tipMode': tipMode,
+      },
+      timeout: const Duration(seconds: 20),
+    ),
+  );
+
+  /// Where the payment is now; the store records the tender on approval.
+  static Future<TerminalPayment> terminalPayment(String paymentId) async =>
+      TerminalPayment.fromJson(
+        await _stripeCall(
+          'GET',
+          '/terminal/payments/$paymentId',
+          timeout: const Duration(seconds: 30),
+        ),
+      );
+
+  static Future<TerminalPayment> cancelTerminalPayment(
+    String paymentId,
+  ) async => TerminalPayment.fromJson(
+    await _stripeCall('POST', '/terminal/payments/$paymentId/cancel'),
+  );
+
+  /// Pair a LAN terminal ("192.168.1.50:8090") with the code on its screen.
+  static Future<TerminalStatus> pairTerminal(String host, String code) async =>
+      TerminalStatus.fromJson(
+        await _stripeCall(
+          'POST',
+          '/payments/terminal/pair',
+          body: {'host': host, 'code': code},
+        ),
+      );
+
+  /// Forget the LAN terminal: back to the built-in one.
+  static Future<TerminalStatus> unpairTerminal() async =>
+      TerminalStatus.fromJson(
+        await _stripeCall('POST', '/payments/terminal/unpair'),
+      );
+
+  // The built-in simulator's reader (tablet-only mode): the customer side.
+  static Future<SimScreen> simReaderState() async => SimScreen.fromJson(
+    await _stripeCall(
+      'GET',
+      '/terminal/ui/state',
+      timeout: const Duration(seconds: 8),
+    ),
+  );
+  static Future<SimScreen> simReaderPresent(
+    String entry,
+    String card,
+    String outcome,
+  ) async => SimScreen.fromJson(
+    await _stripeCall(
+      'POST',
+      '/terminal/ui/present',
+      body: {'entry': entry, 'card': card, 'outcome': outcome},
+    ),
+  );
+  static Future<SimScreen> simReaderPin(String pin) async => SimScreen.fromJson(
+    await _stripeCall('POST', '/terminal/ui/pin', body: {'pin': pin}),
+  );
+  static Future<SimScreen> simReaderTip(int tipCents) async =>
+      SimScreen.fromJson(
+        await _stripeCall(
+          'POST',
+          '/terminal/ui/tip',
+          body: {'tipCents': tipCents},
+        ),
+      );
+  static Future<SimScreen> simReaderCancel() async =>
+      SimScreen.fromJson(await _stripeCall('POST', '/terminal/ui/cancel'));
+
   static Future<String> receiptText(int checkId) async =>
       (await _get('/checks/$checkId/receipt'))['text'];
 
@@ -2697,6 +2808,9 @@ class RefundInfo {
 
   /// Still refundable to a Stripe card on this check (0 = no Stripe tender).
   final int stripeRefundableCents;
+
+  /// Still refundable to the card on the store's terminal (0 = no TERMINAL tender).
+  final int terminalRefundableCents;
   RefundInfo(
     this.checkId,
     this.grandTotalCents,
@@ -2704,6 +2818,7 @@ class RefundInfo {
     this.refundableCents,
     this.refunds, {
     this.stripeRefundableCents = 0,
+    this.terminalRefundableCents = 0,
   });
   factory RefundInfo.fromJson(Map<String, dynamic> j) => RefundInfo(
     j['checkId'],
@@ -2712,6 +2827,7 @@ class RefundInfo {
     j['refundableCents'],
     (j['refunds'] as List).map((r) => RefundView.fromJson(r)).toList(),
     stripeRefundableCents: j['stripeRefundableCents'] ?? 0,
+    terminalRefundableCents: j['terminalRefundableCents'] ?? 0,
   );
 }
 
@@ -2845,6 +2961,179 @@ class StripeIntent {
     j['amountCents'],
     j['currency'],
     j['locationId'],
+  );
+}
+
+/// GET /payments/terminal: the store's card terminal (payment.terminal).
+/// [kind] stripe | simulator | jpmorgan | external | off. The "Card (terminal)"
+/// option shows for simulator / jpmorgan ([storeDriven]); greyed with [reason]
+/// when not [available].
+class TerminalStatus {
+  final String kind;
+  final bool integrated, available, embedded, pairingRequired, tipOnReader;
+  final String? reason, readerState, readerName, address, currency;
+  final int timeoutSeconds;
+  const TerminalStatus({
+    required this.kind,
+    this.integrated = false,
+    this.available = false,
+    this.embedded = false,
+    this.pairingRequired = false,
+    this.tipOnReader = false,
+    this.reason,
+    this.readerState,
+    this.readerName,
+    this.address,
+    this.currency,
+    this.timeoutSeconds = 90,
+  });
+
+  /// No integrated terminal (older store, or payment.terminal=external/off).
+  static const none = TerminalStatus(kind: 'external');
+  factory TerminalStatus.unavailable(String? reason) =>
+      TerminalStatus(kind: 'unknown', reason: reason ?? 'terminal_unavailable');
+
+  /// The store drives the reader (the simulator or J.P. Morgan): our own flow.
+  bool get storeDriven => kind == 'simulator' || kind == 'jpmorgan';
+
+  factory TerminalStatus.fromJson(Map<String, dynamic> j) => TerminalStatus(
+    kind: j['kind'] ?? 'external',
+    integrated: j['integrated'] == true,
+    available: j['available'] == true,
+    embedded: j['embedded'] == true,
+    pairingRequired: j['pairingRequired'] == true,
+    tipOnReader: j['tipOnReader'] == true,
+    reason: j['reason'],
+    readerState: j['readerState'],
+    readerName: j['readerName'],
+    address: j['address'],
+    currency: j['currency'],
+    timeoutSeconds: j['timeoutSeconds'] ?? 90,
+  );
+}
+
+/// What the card said (masked last 4 only) and, behind a simulated reader,
+/// the processor's transaction id ([processorRef], e.g. J.P. Morgan's).
+class TerminalCard {
+  final String? brand, last4, authCode, aid, tvr, tsi, appLabel, cvm;
+  final String? processorRef, processor;
+  final String entryMode;
+  final int tipCents;
+  const TerminalCard({
+    this.brand,
+    this.last4,
+    this.entryMode = 'unknown',
+    this.authCode,
+    this.aid,
+    this.tvr,
+    this.tsi,
+    this.appLabel,
+    this.cvm,
+    this.tipCents = 0,
+    this.processorRef,
+    this.processor,
+  });
+  factory TerminalCard.fromJson(Map<String, dynamic> j) => TerminalCard(
+    brand: j['brand'],
+    last4: j['last4'],
+    entryMode: (j['entryMode'] ?? 'UNKNOWN').toString().toLowerCase(),
+    authCode: j['authCode'],
+    aid: j['aid'],
+    tvr: j['tvr'],
+    tsi: j['tsi'],
+    appLabel: j['appLabel'],
+    cvm: j['cvm'],
+    tipCents: j['tipCents'] ?? 0,
+    processorRef: j['processorRef'],
+    processor: j['processor'],
+  );
+}
+
+/// One card payment on the store-driven terminal.
+/// status: PENDING | RECORDED | DECLINED | CANCELED | TIMEOUT | FAILED.
+class TerminalPayment {
+  final String paymentId, status, currency;
+  final int amountCents, tipCents;
+  final String? prompt, declineCode, errorCode, message;
+  final TerminalCard? card;
+  final bool readerOffline, embedded;
+
+  /// Set once RECORDED: the tender and the check after it.
+  final TenderResult? recorded;
+  const TerminalPayment({
+    required this.paymentId,
+    required this.status,
+    required this.amountCents,
+    this.currency = '',
+    this.tipCents = 0,
+    this.prompt,
+    this.declineCode,
+    this.errorCode,
+    this.message,
+    this.card,
+    this.readerOffline = false,
+    this.embedded = false,
+    this.recorded,
+  });
+
+  bool get pending => status == 'PENDING';
+  factory TerminalPayment.fromJson(Map<String, dynamic> j) => TerminalPayment(
+    paymentId: j['paymentId'],
+    status: j['status'],
+    amountCents: j['amountCents'],
+    currency: j['currency'] ?? '',
+    tipCents: j['tipCents'] ?? 0,
+    prompt: j['prompt'],
+    declineCode: j['declineCode'],
+    errorCode: j['errorCode'],
+    message: j['message'],
+    card: j['card'] == null ? null : TerminalCard.fromJson(j['card']),
+    readerOffline: j['readerOffline'] == true,
+    embedded: j['embedded'] == true,
+    recorded: j['tender'] != null && j['check'] != null
+        ? TenderResult(Tender.fromJson(j['tender']), Check.fromJson(j['check']))
+        : null,
+  );
+}
+
+/// The built-in simulator's reader screen (GET /terminal/ui/state).
+/// screen: pairing | idle | tip | present | pin | processing | approved |
+/// declined | cancelled | timeout.
+class SimScreen {
+  final String screen;
+  final String? name, pairingCode, currency, brand, last4, authCode, message;
+  final String? txnId;
+  final int? amountCents, tipCents, totalCents, secondsLeft;
+  const SimScreen({
+    required this.screen,
+    this.name,
+    this.pairingCode,
+    this.currency,
+    this.brand,
+    this.last4,
+    this.authCode,
+    this.message,
+    this.txnId,
+    this.amountCents,
+    this.tipCents,
+    this.totalCents,
+    this.secondsLeft,
+  });
+  static const idle = SimScreen(screen: 'idle');
+  factory SimScreen.fromJson(Map<String, dynamic> j) => SimScreen(
+    screen: j['screen'] ?? 'idle',
+    name: j['name'],
+    pairingCode: j['pairingCode'],
+    currency: j['currency'],
+    brand: j['brand'],
+    last4: j['last4'],
+    authCode: j['authCode'],
+    message: j['message'],
+    txnId: j['txnId'],
+    amountCents: j['amountCents'],
+    tipCents: j['tipCents'],
+    totalCents: j['totalCents'],
+    secondsLeft: j['secondsLeft'],
   );
 }
 

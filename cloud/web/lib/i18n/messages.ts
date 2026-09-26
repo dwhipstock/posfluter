@@ -176,6 +176,7 @@ export const messages = {
   tender_CARD: m("Carte", "Card"),
   tender_BANK_TRANSFER: m("Virement bancaire", "Bank transfer"),
   tender_STRIPE: m("Carte (Stripe)", "Card (Stripe)"),
+  tender_TERMINAL: m("Carte (terminal)", "Card (terminal)"),
 
   // ── dashboard ─────────────────────────────────────────────────────────
   dash_title: m("Tableau de bord", "Dashboard"),
