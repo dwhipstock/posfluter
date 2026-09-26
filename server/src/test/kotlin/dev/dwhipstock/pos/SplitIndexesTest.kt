@@ -30,6 +30,17 @@ class SplitIndexesTest {
     }
 
     @Test
+    fun `the forecourt's open fuellings are found by index`() {
+        // every poll (300 ms) and every pump screen: never a scan of the store's whole fuel history
+        val reconcile = plan("SELECT id FROM fuel_sales WHERE status IN ('IN_BASKET','AUTHORISED','AUTH_FAILED') " +
+            "OR (status = 'SETTLED' AND fdc_cleared = 0)")
+        assertTrue("SCAN fuel_sales" !in reconcile, reconcile)
+        val view = plan("SELECT id FROM fuel_sales WHERE status IN ('IN_BASKET','AUTHORISED','AUTH_FAILED') " +
+            "OR (change_given = 0 AND refund_cents > 0)")
+        assertTrue("SCAN fuel_sales" !in view, view)
+    }
+
+    @Test
     fun `a line's allocations are found by index`() {
         val p = plan("SELECT qty FROM bill_group_allocations WHERE line_id = 7")
         assertTrue("USING INDEX idx_bill_group_allocations_line" in p, p)
