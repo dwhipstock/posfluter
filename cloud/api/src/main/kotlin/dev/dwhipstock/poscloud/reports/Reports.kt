@@ -5,6 +5,7 @@ import dev.dwhipstock.poscloud.CloudTime
 import dev.dwhipstock.poscloud.Fx
 import dev.dwhipstock.poscloud.MoneyScope
 import dev.dwhipstock.poscloud.NotFoundException
+import dev.dwhipstock.poscloud.PayloadTooLargeException
 import dev.dwhipstock.poscloud.VenueScope
 import dev.dwhipstock.poscloud.db.CashMovements
 import dev.dwhipstock.poscloud.db.CatalogCategories
@@ -170,8 +171,10 @@ private fun SqlExpressionBuilder.inScope(
 private fun SqlExpressionBuilder.checksInRange(ctx: ReportCtx) =
     inScope(ctx, Checks.tenantId, Checks.venueId, Checks.closedAt)
 
-private fun closedChecks(ctx: ReportCtx): List<ResultRow> =
-    Checks.selectAll().where { checksInRange(ctx) and (Checks.status eq "CLOSED") }.toList()
+private fun closedChecks(ctx: ReportCtx): List<ResultRow> {
+    requireReportableSize(ctx)
+    return Checks.selectAll().where { checksInRange(ctx) and (Checks.status eq "CLOSED") }.toList()
+}
 
 private fun voidChecks(ctx: ReportCtx): List<ResultRow> =
     Checks.selectAll().where { checksInRange(ctx) and (Checks.status eq "VOID") }.toList()
@@ -756,37 +759,299 @@ data class CashMovementsResponse(
     val inCount: Int, val outCount: Int, val rows: List<CashMovementListRow>,
     val byVenue: List<VenueCashRow>, val money: MoneyScope? = null)
 
+// ------------------------------------------------------------------ summed in Postgres
+//
+// The dashboard (summary, payments, hourly, items) and the per-store comparison
+// used to read every sale in range into the API and add them up there: with
+// 200 stores a single day of sales ran the 512 MB API out of memory (load
+// test, docs/load-test-report.md). They now ask Postgres for the sums, grouped
+// by store and business day (or hour, tender type, item), and do the same
+// arithmetic on those sums — every figure is still the store's own cents,
+// added up, converted per currency exactly as before.
+
+private fun lit(s: String) = "'" + s.replace("'", "''") + "'"
+private fun lit(t: OffsetDateTime) = "'$t'::timestamptz"
+
+/**
+ * The in-scope predicate on table alias [a] over its time column [col] (as
+ * [inScope]). Stores whose business days start at the same instants (the same
+ * zone) share one `venue_id IN (…)` range: with one branch per store, 200
+ * stores made Postgres combine 200 index scans and ran ~7× slower.
+ */
+private fun scopeSql(ctx: ReportCtx, a: String, col: String): String =
+    "$a.tenant_id = ${lit(ctx.tenantId)} AND (" +
+        ctx.venues.groupBy { it.start to it.end }.entries.joinToString(" OR ") { (range, vs) ->
+            "($a.venue_id IN (${vs.joinToString(",") { lit(it.id) }}) AND $a.$col >= ${lit(range.first)} " +
+                "AND $a.$col < ${lit(range.second)})"
+        } + ")"
+
+/** Each store's own zone, for its business day and hour. */
+private fun zoneSql(ctx: ReportCtx, a: String): String =
+    "CASE $a.venue_id " + ctx.venues.joinToString(" ") { "WHEN ${lit(it.id)} THEN ${lit(it.zone.id)}" } + " END"
+
+private fun <T> rowsOf(sql: String, read: (java.sql.ResultSet) -> T): List<T> {
+    val out = mutableListOf<T>()
+    org.jetbrains.exposed.sql.transactions.TransactionManager.current().exec(sql) { rs ->
+        while (rs.next()) out += read(rs)
+    }
+    return out
+}
+
+/** Closed (or void) sales of one store on one business day (or in one hour). */
+private class CheckSums(
+    val venueId: String, val day: LocalDate?, val hour: Int?, val count: Int,
+    val gross: Long, val tax: Long, val gst: Long, val qst: Long, val corkage: Long, val service: Long,
+    val incomplete: Int,
+)
+
+private fun checkSums(ctx: ReportCtx, status: String, by: String = "day"): List<CheckSums> {
+    val z = zoneSql(ctx, "c")
+    val key = when (by) {
+        "day" -> "(c.closed_at AT TIME ZONE $z)::date"
+        "hour" -> "extract(hour FROM c.closed_at AT TIME ZONE $z)::int"
+        else -> "NULL::int"
+    }
+    return rowsOf("""
+        SELECT c.venue_id, $key AS k, count(*),
+               coalesce(sum(c.grand_total_cents), 0), coalesce(sum(c.tax_included_cents), 0),
+               coalesce(sum(c.gst_cents), 0), coalesce(sum(c.qst_cents), 0),
+               coalesce(sum(c.corkage_cents), 0), coalesce(sum(c.service_charge_cents), 0),
+               count(*) FILTER (WHERE coalesce(c.grand_total_cents, 0) > 0 AND c.tax_included_cents IS NULL)
+        FROM checks c WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = ${lit(status)}
+        GROUP BY 1, 2 ORDER BY 1, 2""") { rs ->
+        CheckSums(
+            rs.getString(1),
+            if (by == "day") rs.getDate(2)?.toLocalDate() else null,
+            if (by == "hour") rs.getInt(2) else null,
+            rs.getInt(3), rs.getLong(4), rs.getLong(5), rs.getLong(6), rs.getLong(7), rs.getLong(8), rs.getLong(9),
+            rs.getInt(10),
+        )
+    }
+}
+
+/** One store's tenders of one type on its closed sales in range. */
+private class TenderSums(val venueId: String, val type: String, val count: Int, val applied: Long, val rounding: Long)
+
+private fun tenderSums(ctx: ReportCtx): List<TenderSums> = rowsOf("""
+    SELECT t.venue_id, t.type, count(*), coalesce(sum(t.amount_applied_cents), 0),
+           coalesce(sum(t.rounding_adjustment_cents), 0)
+    FROM check_tenders t JOIN checks c
+      ON c.tenant_id = t.tenant_id AND c.venue_id = t.venue_id AND c.check_id = t.check_id
+    WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED'
+    GROUP BY 1, 2 ORDER BY min(t.tender_id)""") { rs -> TenderSums(rs.getString(1), rs.getString(2), rs.getInt(3), rs.getLong(4), rs.getLong(5)) }
+
+/** One store's charged amount of one tax code (from each sale's own breakdown). */
+private class TaxSums(val venueId: String, val tax: TaxAmount)
+
+private fun taxSums(ctx: ReportCtx): List<TaxSums> = rowsOf("""
+    SELECT c.venue_id, t->>'code', min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
+           min(coalesce(t->>'ratePercent', '')), coalesce(sum((t->>'amountCents')::bigint), 0)
+    FROM checks c CROSS JOIN LATERAL jsonb_array_elements(
+           CASE WHEN jsonb_typeof(c.taxes) = 'array' THEN c.taxes ELSE '[]'::jsonb END) t
+    WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED' AND t->>'code' IS NOT NULL
+    GROUP BY 1, 2""") { rs ->
+    TaxSums(rs.getString(1), TaxAmount(rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getLong(6)))
+}
+
+/** One store's lines of one item on its closed sales in range. */
+private class ItemSums(
+    val venueId: String, val itemId: String?, val categoryId: String?, val nameFr: String?, val nameEn: String?,
+    val qty: Int, val revenue: Long,
+)
+
+private fun itemSums(ctx: ReportCtx): List<ItemSums> = rowsOf("""
+    SELECT l.venue_id, l.item_id, min(l.category_id), min(l.name_fr), min(l.name_en),
+           coalesce(sum(l.qty), 0), coalesce(sum(l.line_total_cents), 0)
+    FROM check_lines l JOIN checks c
+      ON c.tenant_id = l.tenant_id AND c.venue_id = l.venue_id AND c.check_id = l.check_id
+    WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED'
+    GROUP BY 1, 2 ORDER BY min(l.id)""") { rs ->
+    ItemSums(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getInt(6), rs.getLong(7))
+}
+
+/** [taxRates]: the distinct taxes (code, rate, currency) the in-range sales were charged. */
+private fun taxRatesOf(ctx: ReportCtx): List<TaxRateRow> = rowsOf("""
+    SELECT t->>'code', min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
+           coalesce(t->>'ratePercent', ''), coalesce(c.currency, '')
+    FROM checks c CROSS JOIN LATERAL jsonb_array_elements(
+           CASE WHEN jsonb_typeof(c.taxes) = 'array' THEN c.taxes ELSE '[]'::jsonb END) t
+    WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED' AND t->>'code' IS NOT NULL
+    GROUP BY 1, 4, 5""") { rs -> TaxRateRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5)) }
+    .sortedWith(compareBy({ it.code }, { it.ratePercent }))
+
+private fun warnIfUndercountingSums(ctx: ReportCtx, sums: List<CheckSums>) {
+    val incomplete = sums.sumOf { it.incomplete }
+    if (incomplete > 0) log.warn(
+        "reports[${ctx.label}]: $incomplete closed check(s) carry a grand total but no decomposed tax — " +
+            "tax/net undercount until the store's report backfill reaches the cloud")
+}
+
+/** [taxCodeTotals] over summed breakdowns. */
+private fun taxCodeTotalsOf(ctx: ReportCtx, taxes: List<TaxSums>, refunds: List<ResultRow>): List<TaxCodeRow> {
+    data class Key(val code: String, val currency: String)
+    val labels = mutableMapOf<Key, TaxAmount>()
+    val sums = linkedMapOf<Key, Long>()
+    taxes.forEach { s ->
+        val k = Key(s.tax.code, ctx.currencyOf(s.venueId))
+        labels.putIfAbsent(k, s.tax)
+        sums[k] = (sums[k] ?: 0L) + s.tax.amountCents
+    }
+    refunds.forEach { row ->
+        val c = ctx.currencyOf(row[Refunds.venueId])
+        refundTaxes(row).forEach { t ->
+            val k = Key(t.code, c)
+            if (t.labelEn.isNotEmpty()) labels.putIfAbsent(k, t)
+            sums[k] = (sums[k] ?: 0L) - t.amountCents
+        }
+    }
+    return sums.map { (k, cents) ->
+        val l = labels[k]
+        TaxCodeRow(k.code, l?.labelFr.orEmpty(), l?.labelEn.orEmpty(), l?.ratePercent.orEmpty(), k.currency, cents)
+    }.sortedWith(compareBy({ ctx.currencies.indexOf(it.currency) }, { it.code }))
+}
+
+private fun ReportCtx.sums(rows: List<CheckSums>, value: (CheckSums) -> Long) = total(rows, { it.venueId }, value)
+
+/** [byDay] over per-store, per-day sums. */
+private fun byDayOf(ctx: ReportCtx, days: List<CheckSums>, refunds: List<ResultRow>): List<DayRow> {
+    val closedByDay = days.groupBy { it.day!! }
+    val refundByDay = refunds.groupBy { CloudTime.localDate(it[Refunds.createdAt]!!, ctx.zoneOf(it[Refunds.venueId])) }
+    return (closedByDay.keys + refundByDay.keys).toSortedSet().map { date ->
+        val c = closedByDay[date].orEmpty()
+        val r = refundByDay[date].orEmpty()
+        val g = ctx.sums(c) { it.gross } - ctx.refunds(r, ::rGross)
+        val v = ctx.sums(c) { it.tax } - ctx.refunds(r, ::refundTax)
+        val cBy = c.groupBy { it.venueId }
+        val rBy = r.groupBy { it[Refunds.venueId] }
+        val gst = ctx.sums(c) { it.gst } - ctx.refunds(r, ::refundGst)
+        val qst = ctx.sums(c) { it.qst } - ctx.refunds(r, ::refundQst)
+        DayRow(date.toString(), g, g - v, v, c.sumOf { it.count }, ctx.venues.map { venue ->
+            val vc = cBy[venue.id].orEmpty()
+            val vr = rBy[venue.id].orEmpty()
+            val vg = vc.sumOf { it.gross } - vr.sumOf(::rGross)
+            val vt = vc.sumOf { it.tax } - vr.sumOf(::refundTax)
+            VenueDayRow(venue.id, vg, vg - vt, vt, vc.sumOf { it.count },
+                vc.sumOf { it.gst } - vr.sumOf(::refundGst), vc.sumOf { it.qst } - vr.sumOf(::refundQst), venue.currency)
+        }, gst, qst)
+    }
+}
+
+/** [venueSummaries] over sums. */
+private fun venueSummariesOf(
+    ctx: ReportCtx, days: List<CheckSums>, voids: List<CheckSums>, refunds: List<ResultRow>,
+    tenders: List<TenderSums>, taxes: List<TaxSums>,
+): List<VenueSummaryRow> {
+    val closedBy = days.groupBy { it.venueId }
+    val voidsBy = voids.groupBy { it.venueId }
+    val refundsBy = refunds.groupBy { it[Refunds.venueId] }
+    val tendersBy = tenders.groupBy { it.venueId }
+    val taxesBy = taxes.groupBy { it.venueId }
+    return ctx.venues.map { v ->
+        val c = closedBy[v.id].orEmpty()
+        val r = refundsBy[v.id].orEmpty()
+        val n = c.sumOf { it.count }
+        val closedGross = c.sumOf { it.gross }
+        val g = closedGross - r.sumOf(::rGross)
+        val tax = c.sumOf { it.tax } - r.sumOf(::refundTax)
+        VenueSummaryRow(
+            venueId = v.id, venueName = v.venue.name,
+            grossCents = g, netCents = g - tax, taxCents = tax,
+            checkCount = n, avgCheckCents = if (n == 0) 0 else closedGross / n,
+            voidCount = voidsBy[v.id].orEmpty().sumOf { it.count }, refundAmountCents = r.sumOf(::rGross),
+            gstCents = c.sumOf { it.gst } - r.sumOf(::refundGst),
+            qstCents = c.sumOf { it.qst } - r.sumOf(::refundQst),
+            currency = v.currency,
+            taxes = taxCodeTotalsOf(ctx, taxesBy[v.id].orEmpty(), r),
+            cashRoundingCents = tendersBy[v.id].orEmpty().sumOf { it.rounding } - r.sumOf(::refundRounding),
+        )
+    }
+}
+
+/** [currencySummaries] over sums. */
+private fun currencySummariesOf(
+    ctx: ReportCtx, days: List<CheckSums>, voids: List<CheckSums>, refunds: List<ResultRow>, tenders: List<TenderSums>,
+): List<CurrencySummaryRow> = ctx.currencies.map { c ->
+    val sub = ctx.only(c)
+    val ids = sub.venueIds()
+    val cl = days.filter { it.venueId in ids }
+    val vo = voids.filter { it.venueId in ids }
+    val re = refunds.filter { it[Refunds.venueId] in ids }
+    val n = cl.sumOf { it.count }
+    val closedGross = cl.sumOf { it.gross }
+    val g = closedGross - re.sumOf(::rGross)
+    val tax = cl.sumOf { it.tax } - re.sumOf(::refundTax)
+    CurrencySummaryRow(
+        currency = c, venueIds = sub.venues.map { it.id },
+        grossCents = g, netCents = g - tax, taxCents = tax,
+        checkCount = n, avgCheckCents = if (n == 0) 0 else closedGross / n,
+        voidCount = vo.sumOf { it.count }, voidAmountCents = vo.sumOf { it.gross },
+        refundCount = re.size, refundAmountCents = re.sumOf(::rGross),
+        grossReportingCents = ctx.fx.convert(g, c, ctx.reporting),
+        cashRoundingCents = tenders.filter { it.venueId in ids }.sumOf { it.rounding } - re.sumOf(::refundRounding),
+    )
+}
+
+private fun ReportCtx.combinedRoundingOf(tenders: List<TenderSums>, refunds: List<ResultRow>): Long? =
+    if (mixed) null else tenders.sumOf { it.rounding } - refunds.sumOf(::refundRounding)
+
+/** [checkTotals] over sums. */
+private fun checkTotalsOf(ctx: ReportCtx, sums: List<CheckSums>): List<VenueTotalRow> {
+    val by = sums.groupBy { it.venueId }
+    return ctx.venues.map { v ->
+        val c = by[v.id].orEmpty()
+        val n = c.sumOf { it.count }
+        VenueTotalRow(v.id, v.venue.name, c.sumOf { it.gross }, n, n, v.currency)
+    }
+}
+
+/**
+ * Reports that still add up individual sales in the API (tax, categories,
+ * fuel, tables, exceptions, journal) refuse a scope with more sales than
+ * this, rather than run the API out of memory for every user of the portal.
+ * Narrow the dates or pick one store. The dashboard is summed in Postgres
+ * and has no such limit.
+ */
+@Volatile internal var maxReportSales = 150_000
+
+private fun requireReportableSize(ctx: ReportCtx) {
+    val n = rowsOf("SELECT count(*) FROM checks c WHERE ${scopeSql(ctx, "c", "closed_at")}") { it.getLong(1) }.first()
+    if (n > maxReportSales) throw PayloadTooLargeException(
+        "$n sales in this range: too many for this report; pick fewer days or one store", "report_too_large")
+}
+
 fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
 
     get("/reports/summary") {
         val ctx = reportCtx(call, fx)
         val response = transaction {
-            val closed = closedChecks(ctx)
-            val voids = voidChecks(ctx)
+            val days = checkSums(ctx, "CLOSED")
+            val voids = checkSums(ctx, "VOID", by = "store")
             val refunds = refundsInRange(ctx)
-            val tenders = tendersOf(ctx, closed)
-            warnIfUndercounting(ctx, closed)
-            val closedGross = ctx.checks(closed, ::gross)
+            val tenders = tenderSums(ctx)
+            val taxes = taxSums(ctx)
+            warnIfUndercountingSums(ctx, days)
+            val count = days.sumOf { it.count }
+            val closedGross = ctx.sums(days) { it.gross }
             // net sales after refunds; avg check stays a sale-time figure (pre-refund)
             val grossTotal = closedGross - ctx.refunds(refunds, ::rGross)
-            val taxTotal = ctx.checks(closed, ::checkTax) - ctx.refunds(refunds, ::refundTax)
+            val taxTotal = ctx.sums(days) { it.tax } - ctx.refunds(refunds, ::refundTax)
             SummaryResponse(
                 grossCents = grossTotal,
                 netCents = grossTotal - taxTotal,
                 taxCents = taxTotal,
-                checkCount = closed.size,
-                avgCheckCents = if (closed.isEmpty()) 0 else closedGross / closed.size,
-                voidCount = voids.size,
-                voidAmountCents = ctx.checks(voids, ::gross),
+                checkCount = count,
+                avgCheckCents = if (count == 0) 0 else closedGross / count,
+                voidCount = voids.sumOf { it.count },
+                voidAmountCents = ctx.sums(voids) { it.gross },
                 refundCount = refunds.size,
                 refundAmountCents = ctx.refunds(refunds, ::rGross),
-                corkageCents = ctx.checks(closed) { it[Checks.corkageCents] ?: 0 },
-                serviceChargeCents = ctx.checks(closed) { it[Checks.serviceChargeCents] ?: 0 },
-                byDay = byDay(ctx, closed, refunds),
-                byVenue = venueSummaries(ctx, closed, voids, refunds, tenders),
-                byCurrency = currencySummaries(ctx, closed, voids, refunds, tenders),
+                corkageCents = ctx.sums(days) { it.corkage },
+                serviceChargeCents = ctx.sums(days) { it.service },
+                byDay = byDayOf(ctx, days, refunds),
+                byVenue = venueSummariesOf(ctx, days, voids, refunds, tenders, taxes),
+                byCurrency = currencySummariesOf(ctx, days, voids, refunds, tenders),
                 money = ctx.money(),
-                cashRoundingCents = ctx.combinedRounding(tenders, refunds),
+                cashRoundingCents = ctx.combinedRoundingOf(tenders, refunds),
             )
         }
         call.respond(response)
@@ -800,14 +1065,14 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
     get("/reports/by-venue") {
         val ctx = reportCtx(call, fx)
         val response = transaction {
-            val closed = closedChecks(ctx)
-            val voids = voidChecks(ctx)
+            val days = checkSums(ctx, "CLOSED", by = "store")
+            val voids = checkSums(ctx, "VOID", by = "store")
             val refunds = refundsInRange(ctx)
-            val tenders = tendersOf(ctx, closed)
-            val rows = venueSummaries(ctx, closed, voids, refunds, tenders)
+            val tenders = tenderSums(ctx)
+            val rows = venueSummariesOf(ctx, days, voids, refunds, tenders, taxSums(ctx))
             ByVenueResponse(
                 rows, ctx.total(rows, { it.venueId }, { it.grossCents }), rows.sumOf { it.checkCount },
-                currencySummaries(ctx, closed, voids, refunds, tenders), ctx.money())
+                currencySummariesOf(ctx, days, voids, refunds, tenders), ctx.money())
         }
         call.respond(response)
     }
@@ -815,22 +1080,24 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
     get("/reports/tax") {
         val ctx = reportCtx(call, fx)
         val response = transaction {
-            val closed = closedChecks(ctx)
-            val voids = voidChecks(ctx)
+            val days = checkSums(ctx, "CLOSED")
+            val voids = checkSums(ctx, "VOID", by = "store")
             val refunds = refundsInRange(ctx)
-            warnIfUndercounting(ctx, closed)
-            val grossTotal = ctx.checks(closed, ::gross) - ctx.refunds(refunds, ::rGross)
-            val taxTotal = ctx.checks(closed, ::checkTax) - ctx.refunds(refunds, ::refundTax)
-            val (gst, qst) = gstQst(ctx, closed, refunds)
-            val tenders = tendersOf(ctx, closed)
+            val taxes = taxSums(ctx)
+            warnIfUndercountingSums(ctx, days)
+            val grossTotal = ctx.sums(days) { it.gross } - ctx.refunds(refunds, ::rGross)
+            val taxTotal = ctx.sums(days) { it.tax } - ctx.refunds(refunds, ::refundTax)
+            val gst = ctx.sums(days) { it.gst } - ctx.refunds(refunds, ::refundGst)
+            val qst = ctx.sums(days) { it.qst } - ctx.refunds(refunds, ::refundQst)
+            val tenders = tenderSums(ctx)
             TaxReportResponse(
-                rates = taxRates(closed),
-                rows = byDay(ctx, closed, refunds),
-                totals = TaxTotals(grossTotal, grossTotal - taxTotal, taxTotal, closed.size, gst, qst,
-                    ctx.combinedRounding(tenders, refunds)),
-                byVenue = venueSummaries(ctx, closed, voids, refunds, tenders),
-                byTax = taxCodeTotals(ctx, closed, refunds),
-                byCurrency = currencySummaries(ctx, closed, voids, refunds, tenders),
+                rates = taxRatesOf(ctx),
+                rows = byDayOf(ctx, days, refunds),
+                totals = TaxTotals(grossTotal, grossTotal - taxTotal, taxTotal, days.sumOf { it.count }, gst, qst,
+                    ctx.combinedRoundingOf(tenders, refunds)),
+                byVenue = venueSummariesOf(ctx, days, voids, refunds, tenders, taxes),
+                byTax = taxCodeTotalsOf(ctx, taxes, refunds),
+                byCurrency = currencySummariesOf(ctx, days, voids, refunds, tenders),
                 money = ctx.money(),
             )
         }
@@ -910,6 +1177,7 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
     get("/reports/fuel") {
         val ctx = reportCtx(call, fx)
         val response = transaction {
+            requireReportableSize(ctx) // it reads every fuelling and shop line in range
             val sales = FuelSales.selectAll().where {
                 inScope(ctx, FuelSales.tenantId, FuelSales.venueId, FuelSales.completedAt)
             }.toList()
@@ -992,32 +1260,32 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
     get("/reports/payments") {
         val ctx = reportCtx(call, fx)
         val response = transaction {
-            val tenders = tendersOf(ctx, closedChecks(ctx))
+            val tenders = tenderSums(ctx)
             // cash refunds' rounding nets out of the rounding, like refunds out of sales
             val refunds = refundsInRange(ctx)
             val refundsBy = refunds.groupBy { it[Refunds.venueId] }
-            fun applied(r: ResultRow) = r[CheckTenders.amountAppliedCents] ?: 0
-            fun exactRows(group: List<ResultRow>) = group.groupBy { it[CheckTenders.type] }.map { (type, g) ->
-                PaymentRow(type, g.sumOf(::applied), g.size)
+            fun rounding(t: List<TenderSums>, r: List<ResultRow>) = t.sumOf { it.rounding } - r.sumOf(::refundRounding)
+            fun exactRows(group: List<TenderSums>) = group.groupBy { it.type }.map { (type, g) ->
+                PaymentRow(type, g.sumOf { it.applied }, g.sumOf { it.count })
             }.sortedByDescending { it.amountCents }
-            val rows = tenders.groupBy { it[CheckTenders.type] }.map { (type, g) ->
-                PaymentRow(type, ctx.tenders(g, ::applied), g.size)
+            val rows = tenders.groupBy { it.type }.map { (type, g) ->
+                PaymentRow(type, ctx.total(g, { it.venueId }, { it.applied }), g.sumOf { it.count })
             }.sortedByDescending { it.amountCents }
-            val grouped = tenders.groupBy { it[CheckTenders.venueId] }
+            val grouped = tenders.groupBy { it.venueId }
             val byVenue = ctx.venues.map { v ->
                 val vr = exactRows(grouped[v.id].orEmpty())
                 VenuePayments(v.id, vr.sumOf { it.amountCents }, vr, v.venue.name, v.currency,
-                    cashRounding(grouped[v.id].orEmpty(), refundsBy[v.id].orEmpty()))
+                    rounding(grouped[v.id].orEmpty(), refundsBy[v.id].orEmpty()))
             }
             val byCurrency = ctx.currencies.map { c ->
                 val ids = ctx.only(c).venueIds()
-                val ct = tenders.filter { it[CheckTenders.venueId] in ids }
+                val ct = tenders.filter { it.venueId in ids }
                 val cr = exactRows(ct)
                 CurrencyPayments(c, cr.sumOf { it.amountCents }, cr,
-                    cashRounding(ct, refunds.filter { it[Refunds.venueId] in ids }))
+                    rounding(ct, refunds.filter { it[Refunds.venueId] in ids }))
             }
-            PaymentsResponse(rows, ctx.tenders(tenders, ::applied), byVenue, byCurrency, ctx.money(),
-                ctx.combinedRounding(tenders, refunds))
+            PaymentsResponse(rows, ctx.total(tenders, { it.venueId }, { it.applied }), byVenue, byCurrency, ctx.money(),
+                ctx.combinedRoundingOf(tenders, refunds))
         }
         call.respond(response)
     }
@@ -1026,29 +1294,37 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
         val ctx = reportCtx(call, fx)
         val response = transaction {
             val categoryNames = categoryNames(ctx)
-            val closed = closedChecks(ctx)
-            val lines = linesOf(ctx, closed)
-            val rows = lines
+            val items = itemSums(ctx)
+            val rows = items
                 // an item is one row per currency: never add CAD and USD revenue
-                .groupBy { it[CheckLines.itemId] to ctx.currencyOf(it[CheckLines.venueId]) }
+                .groupBy { it.itemId to ctx.currencyOf(it.venueId) }
                 .map { (key, group) ->
                     val (itemId, currency) = key
                     val first = group.first()
-                    val category = categoryNames.lookup(first[CheckLines.venueId], first[CheckLines.categoryId])
+                    val category = categoryNames.lookup(first.venueId, first.categoryId)
+                    val by = group.groupBy { it.venueId }
                     ItemRow(
                         itemId = itemId,
-                        nameFr = if (itemId == null) "Open item" else first[CheckLines.nameFr],
-                        nameEn = if (itemId == null) "Open item" else first[CheckLines.nameEn],
-                        categoryId = first[CheckLines.categoryId],
+                        nameFr = if (itemId == null) "Open item" else first.nameFr,
+                        nameEn = if (itemId == null) "Open item" else first.nameEn,
+                        categoryId = first.categoryId,
                         categoryNameFr = category?.first,
                         categoryNameEn = category?.second,
-                        qty = group.sumOf { it[CheckLines.qty] },
-                        revenueCents = group.sumOf { it[CheckLines.lineTotalCents] },
-                        byVenue = lineSplit(ctx, group),
+                        qty = group.sumOf { it.qty },
+                        revenueCents = group.sumOf { it.revenue },
+                        byVenue = ctx.venues.mapNotNull { v ->
+                            by[v.id]?.let { g -> VenueQtyRow(v.id, g.sumOf { it.qty }, g.sumOf { it.revenue }, v.currency) }
+                        },
                         currency = currency,
                     )
                 }.sortedByDescending { comparable(ctx, it.currency, it.revenueCents) }
-            ItemsResponse(rows, lineTotals(ctx, closed, lines), ctx.money())
+            val checks = checkSums(ctx, "CLOSED", by = "store").groupBy { it.venueId }
+            val itemsBy = items.groupBy { it.venueId }
+            ItemsResponse(rows, ctx.venues.map { v ->
+                val l = itemsBy[v.id].orEmpty()
+                VenueTotalRow(v.id, v.venue.name, l.sumOf { it.revenue }, checks[v.id].orEmpty().sumOf { it.count },
+                    l.sumOf { it.qty }, v.currency)
+            }, ctx.money())
         }
         call.respond(response)
     }
@@ -1083,19 +1359,17 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
         val ctx = reportCtx(call, fx)
         val response = transaction {
             // each check in its own store's local hour
-            val closed = closedChecks(ctx)
-            val byHour = closed.groupBy {
-                CloudTime.localHour(it[Checks.closedAt]!!, ctx.zoneOf(it[Checks.venueId]))
-            }
+            val hours = checkSums(ctx, "CLOSED", by = "hour")
+            val byHour = hours.groupBy { it.hour!! }
             val rows = (0..23).map { hour ->
                 val group = byHour[hour].orEmpty()
-                val byV = group.groupBy { it[Checks.venueId] }
-                HourRow(hour, ctx.checks(group, ::gross), group.size, ctx.venues.map { v ->
+                val byV = group.groupBy { it.venueId }
+                HourRow(hour, ctx.sums(group) { it.gross }, group.sumOf { it.count }, ctx.venues.map { v ->
                     val g = byV[v.id].orEmpty()
-                    VenueHourRow(v.id, g.sumOf(::gross), g.size, v.currency)
+                    VenueHourRow(v.id, g.sumOf { it.gross }, g.sumOf { it.count }, v.currency)
                 })
             }
-            HourlyResponse(rows, checkTotals(ctx, closed), ctx.money())
+            HourlyResponse(rows, checkTotalsOf(ctx, hours), ctx.money())
         }
         call.respond(response)
     }
