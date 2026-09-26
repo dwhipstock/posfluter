@@ -30,12 +30,19 @@ object TransactionPipeline {
         require(discount >= Money.ZERO) { "discount must not be negative" }
         val discountApplied = minOf(discount, itemsSubtotal)
         val discounted = itemsSubtotal - discountApplied
+        // tax-exempt lines (retail snacks, ice) stay out of the taxable base;
+        // a discount comes off the taxable goods first. Every pub line is
+        // taxable, so there this is exactly the discounted items.
+        val exempt = lines.filterNot { it.taxable }.fold(Money.ZERO) { acc, l -> acc + priceLine(l.unitPrice, l.qty) }
+        val taxableItems = maxOf(Money.ZERO, discounted - exempt)
+        // bottle deposits (California CRV): per unit sold, never discounted
+        val deposits = lines.fold(Money.ZERO) { acc, l -> acc + l.depositPerUnit * l.qty }
 
-        val feeCtx = FeeContext(itemsSubtotal = discounted, corkageBottles = corkageBottles)
+        val feeCtx = FeeContext(itemsSubtotal = discounted, corkageBottles = corkageBottles, deposits = deposits)
         val feeLines = config.fees.mapNotNull { it.assess(feeCtx) }
         val feesTotal = feeLines.fold(Money.ZERO) { acc, f -> acc + f.amount }
 
-        val taxableBase = discounted + feeLines.filter { it.taxable }.fold(Money.ZERO) { a, f -> a + f.amount }
+        val taxableBase = taxableItems + feeLines.filter { it.taxable }.fold(Money.ZERO) { a, f -> a + f.amount }
         val tax = config.taxPolicy.assess(taxableBase)
 
         return Totals(
@@ -146,7 +153,17 @@ object TransactionPipeline {
     }
 }
 
-data class BasketLine(val unitPrice: Money, val qty: Int)
+/**
+ * One basket line. [taxable] false keeps it out of the tax base (a
+ * tax-exempt food item); [depositPerUnit] is its container deposit (CRV) per
+ * unit sold, charged through a [Fee.ContainerDeposit].
+ */
+data class BasketLine(
+    val unitPrice: Money,
+    val qty: Int,
+    val taxable: Boolean = true,
+    val depositPerUnit: Money = Money.ZERO,
+)
 
 data class Totals(
     val itemsSubtotal: Money,

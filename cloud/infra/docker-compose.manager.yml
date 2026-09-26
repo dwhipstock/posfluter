@@ -35,6 +35,14 @@ services:
       # extra stores: "<venueId>=<key>,…"; the tenant's stores: "<venueId>=<name>,…" (first = primary)
       STORE_API_KEYS: "${STORE_API_KEYS:-}"
       STORES: "${STORES:-}"
+      # stores outside Canada (cloud migration 017), "<venueId>=<value>,…"; unset = CAD / CA / restaurant
+      STORE_ZONES: "${STORE_ZONES:-}"
+      STORE_CURRENCIES: "${STORE_CURRENCIES:-}"
+      STORE_COUNTRIES: "${STORE_COUNTRIES:-}"
+      RETAIL_STORES: "${RETAIL_STORES:-}"
+      # "All stores" converts into this currency at a fixed rate (approximate, labelled)
+      REPORTING_CURRENCY: "${REPORTING_CURRENCY:-CAD}"
+      FX_USD_CAD: "${FX_USD_CAD:-}"
       COOKIE_SECURE: "true"
       # portal sign-out: idle minutes (background polls don't count) + absolute cap in hours
       PORTAL_SESSION_IDLE_MINUTES: "${PORTAL_SESSION_IDLE_MINUTES:-60}"

@@ -7,7 +7,8 @@ import '../design/widgets.dart';
 import '../i18n.dart';
 import '../widgets/brand.dart';
 import '../widgets/pin_pad.dart';
-import 'zones_screen.dart';
+import '../home.dart';
+import '../retail/sp_theme.dart';
 
 /// "Who's clocking in?" — staff tiles + a big centered PIN pad. Nothing else.
 class LoginScreen extends StatefulWidget {
@@ -58,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.of(
         context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const ZonesScreen()));
+      ).pushReplacement(MaterialPageRoute(builder: (_) => homeScreen()));
     } catch (e) {
       if (mounted) {
         setState(
@@ -127,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: T.text(
                       size: 28,
                       weight: FontWeight.w700,
-                      color: T.navy,
+                      color: _ink(context),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -173,15 +174,25 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  /// Navy at the pubs; the store's own primary where it has a brand.
+  Color _ink(BuildContext context) => StoreProfile.current.isSagePoppy
+      ? Theme.of(context).colorScheme.primary
+      : T.navy;
+
   Widget _staffCard(Staff s) {
     final selected = _selected == s.id;
     final manager = s.role == 'MANAGER';
+    final branded = StoreProfile.current.isSagePoppy;
+    final sp = SpColors.of(context);
+    final ink = _ink(context);
     return SizedBox(
       width: 208, // fits "directeur (Manager)" untruncated
       child: PosPanel(
         raised: !selected,
-        color: selected ? T.surfaceAlt : T.surface,
-        borderColor: selected ? T.navy : T.border,
+        color: branded
+            ? (selected ? sp.surfaceAlt : sp.surface)
+            : (selected ? T.surfaceAlt : T.surface),
+        borderColor: selected ? ink : (branded ? sp.border : T.border),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         onTap: () => setState(() => _selected = s.id),
         child: Column(
@@ -191,12 +202,14 @@ class _LoginScreenState extends State<LoginScreen> {
               height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: selected ? T.navy : T.surfaceAlt,
+                color: selected
+                    ? ink
+                    : (branded ? sp.surfaceAlt : T.surfaceAlt),
               ),
               child: Icon(
                 manager ? LucideIcons.shieldCheck : LucideIcons.user,
                 size: 24,
-                color: selected ? T.onPrimary : T.navy,
+                color: selected ? T.onPrimary : ink,
               ),
             ),
             const SizedBox(height: 10),
@@ -205,7 +218,11 @@ class _LoginScreenState extends State<LoginScreen> {
               maxLines: 2,
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
-              style: T.text(size: 17, weight: FontWeight.w600),
+              style: T.text(
+                size: 17,
+                weight: FontWeight.w600,
+                color: branded ? sp.text : T.textPrimary,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
@@ -230,7 +247,12 @@ class _BrandPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
-    final location = Api.venueLocation;
+    final sagePoppy = StoreProfile.current.isSagePoppy;
+    // Sage & Poppy: its own name, its own colours (sage band, poppy accent)
+    final brand = sagePoppy ? 'Sage & Poppy' : Api.venueBrand;
+    final location = sagePoppy
+        ? 'Bottle Shop · Los Angeles'
+        : Api.venueLocation;
     final names = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: horizontal
@@ -238,7 +260,7 @@ class _BrandPanel extends StatelessWidget {
           : CrossAxisAlignment.center,
       children: [
         Text(
-          Api.venueBrand,
+          brand,
           textAlign: TextAlign.center,
           style: T.text(size: 34, weight: FontWeight.w700, color: T.onPrimary),
         ),
@@ -247,7 +269,11 @@ class _BrandPanel extends StatelessWidget {
           Text(
             location,
             textAlign: TextAlign.center,
-            style: T.text(size: 22, weight: FontWeight.w500, color: T.pending),
+            style: T.text(
+              size: 22,
+              weight: FontWeight.w500,
+              color: sagePoppy ? const Color(0xFFF6B27A) : T.pending,
+            ),
           ),
         ],
         const SizedBox(height: 14),
@@ -260,11 +286,13 @@ class _BrandPanel extends StatelessWidget {
       ],
     );
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [T.navy, T.navyDeep],
+          colors: sagePoppy
+              ? const [Color(0xFF52724F), Color(0xFF2F4630)]
+              : const [T.navy, T.navyDeep],
         ),
       ),
       child: SafeArea(

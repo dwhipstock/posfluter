@@ -189,6 +189,7 @@ class CheckService(private val config: CustomerConfig) {
             .where { (ItemVariants.id eq variantId) and (ItemVariants.itemId eq itemId) and
                 ItemVariants.deletedAt.isNull() }
             .firstOrNull() ?: throw NotFoundException("variant $variantId of item $itemId not found")
+        val item = Items.selectAll().where { Items.id eq itemId }.first()
 
         val lineId = CheckLines.insertAndGetId {
             it[CheckLines.checkId] = checkId
@@ -198,6 +199,7 @@ class CheckService(private val config: CustomerConfig) {
             it[unitPriceCents] = variant[ItemVariants.priceCents]
             it[CheckLines.note] = note
             it[createdAt] = VenueClock.now()
+            captureShelfFacts(it, item)
         }.value
 
         Outbox.write("check.line_added", "check", checkId.toString(), buildJsonObject {
@@ -264,6 +266,7 @@ class CheckService(private val config: CustomerConfig) {
                 .where { (ItemVariants.id eq line.variantId) and (ItemVariants.itemId eq line.itemId) and
                     ItemVariants.deletedAt.isNull() }
                 .firstOrNull() ?: throw NotFoundException("variant ${line.variantId} not found")
+            val item = Items.selectAll().where { Items.id eq line.itemId }.first()
             val lineId = CheckLines.insertAndGetId {
                 it[checkId] = check.id
                 it[itemId] = line.itemId
@@ -273,6 +276,7 @@ class CheckService(private val config: CustomerConfig) {
                 it[note] = line.note
                 it[status] = "PENDING"
                 it[createdAt] = VenueClock.now()
+                captureShelfFacts(it, item)
             }.value
             Outbox.write("check.pending_line_submitted", "check", check.id.toString(), buildJsonObject {
                 put("checkId", check.id)
@@ -664,6 +668,8 @@ class CheckService(private val config: CustomerConfig) {
             throw ConflictException("check $checkId is split; tender a specific group", "group_required")
         if (groups.isEmpty() && groupId != null)
             throw ConflictException("check $checkId is not split", "no_split")
+        // age-restricted items wait for a passing ID check (retail; no pub line is restricted)
+        AgeGate.requireCleared(checkId)
         when (check[Checks.status]) {
             "OPEN" -> { lockTotals(checkId); check = requireCheck(checkId) }
             "TOTAL_LOCKED" -> {}
@@ -831,6 +837,7 @@ class CheckService(private val config: CustomerConfig) {
                     amountApplied = Money(row[Tenders.amountAppliedCents]),
                     roundingAdjustment = Money(row[Tenders.roundingAdjustmentCents]),
                     change = Money(row[Tenders.changeCents]),
+                    type = row[Tenders.type],
                 )
             }
         return Receipt(
@@ -840,7 +847,7 @@ class CheckService(private val config: CustomerConfig) {
             openedAt = VenueClock.local(check[Checks.openedAt]),
             closedAt = VenueClock.local(check[Checks.closedAt] ?: VenueClock.now()),
             items = items,
-            fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
+            fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount, it.code) },
             grandTotal = Money(group[BillGroups.lockedTotalCents] ?: totals.grandTotal.cents),
             taxIncluded = totals.taxIncluded,
             taxRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent,
@@ -913,6 +920,7 @@ class CheckService(private val config: CustomerConfig) {
                 amountApplied = Money(row[Tenders.amountAppliedCents]),
                 roundingAdjustment = Money(row[Tenders.roundingAdjustmentCents]),
                 change = Money(row[Tenders.changeCents]),
+                type = row[Tenders.type],
             )
         }
         return Receipt(
@@ -921,12 +929,13 @@ class CheckService(private val config: CustomerConfig) {
             openedAt = VenueClock.local(check[Checks.openedAt]),
             closedAt = VenueClock.local(check[Checks.closedAt] ?: VenueClock.now()),
             items = items,
-            fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount) },
+            fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount, it.code) },
             grandTotal = Money(check[Checks.lockedGrandTotalCents] ?: totals.grandTotal.cents),
             taxIncluded = Money(check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents),
             taxRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent,
             tenders = tenders,
             taxes = taxLinesOf(check, totals),
+            ageVerifiedAt = AgeGate.passedAt(checkId),
         )
     }
 
@@ -1545,6 +1554,10 @@ class CheckService(private val config: CustomerConfig) {
                     put("unitPriceCents", row[CheckLines.unitPriceCents])
                     put("lineTotalCents", row[CheckLines.unitPriceCents] * row[CheckLines.qty])
                     put("note", row[CheckLines.note])
+                    // retail shelf facts, only where they differ from a pub line
+                    if (!row[CheckLines.taxable]) put("taxable", false)
+                    if (row[CheckLines.depositCents] > 0) put("depositCents", row[CheckLines.depositCents])
+                    if (row[CheckLines.ageRestricted]) put("ageRestricted", true)
                 }
             }
         val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->
@@ -1750,7 +1763,7 @@ class CheckService(private val config: CustomerConfig) {
             val basket = BillGroupAllocations
                 .join(CheckLines, JoinType.INNER, BillGroupAllocations.lineId, CheckLines.id)
                 .selectAll().where { BillGroupAllocations.groupId eq group[BillGroups.id].value }
-                .map { BasketLine(Money(it[CheckLines.unitPriceCents]), it[BillGroupAllocations.qty]) }
+                .map { basketLine(it, it[BillGroupAllocations.qty]) }
             val corkage = if (group[BillGroups.includesCorkage]) check[Checks.corkageBottles] else 0
             TransactionPipeline.computeTotals(basket, corkage, config)
         }
@@ -1767,9 +1780,17 @@ class CheckService(private val config: CustomerConfig) {
         // PENDING (customer-submitted, unaccepted) lines never count toward totals
         val basket = CheckLines.selectAll()
             .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
-            .map { BasketLine(Money(it[CheckLines.unitPriceCents]), it[CheckLines.qty]) }
+            .map { basketLine(it, it[CheckLines.qty]) }
         return TransactionPipeline.computeTotals(basket, check[Checks.corkageBottles], config)
     }
+
+    /** A line as the pipeline sees it: price, qty, and its ring-up tax / deposit facts. */
+    private fun basketLine(row: ResultRow, qty: Int) = BasketLine(
+        unitPrice = Money(row[CheckLines.unitPriceCents]),
+        qty = qty,
+        taxable = row[CheckLines.taxable],
+        depositPerUnit = Money(row[CheckLines.depositCents]),
+    )
 
     private fun tenderedSoFar(checkId: Int): Money =
         Money(Tenders.selectAll().where { Tenders.transactionId eq checkId }.sumOf { it[Tenders.amountAppliedCents] })
@@ -1854,6 +1875,9 @@ class CheckService(private val config: CustomerConfig) {
                     unitPriceCents = row[CheckLines.unitPriceCents],
                     lineTotalCents = row[CheckLines.unitPriceCents] * row[CheckLines.qty],
                     note = row[CheckLines.note],
+                    ageRestricted = row[CheckLines.ageRestricted],
+                    depositCents = row[CheckLines.depositCents],
+                    taxable = row[CheckLines.taxable],
                 ))
             }
         val lines = allLines.filter { it.first == "ACTIVE" }.map { it.second }
@@ -1884,6 +1908,10 @@ class CheckService(private val config: CustomerConfig) {
             split = buildSplitView(check),
             subtotalCents = grandTotal - taxes.sumOf { it.amount.cents },
             taxes = taxes.map { it.toView() },
+            ageCheckRequired = AgeGate.required(checkId),
+            ageCleared = AgeGate.cleared(checkId),
+            ageCheckFailed = AgeGate.latest(checkId)?.let { !it[dev.dwhipstock.pos.base.AgeChecks.passed] } == true &&
+                AgeGate.passedAt(checkId) == null,
         )
     }
 }
@@ -1913,6 +1941,12 @@ data class CheckView(
     val subtotalCents: Long = 0,
     /** Taxes added on top of [subtotalCents], one per tax (GST, QST). */
     val taxes: List<TaxView> = emptyList(),
+    /** Retail: an age-restricted line is on the sale, so payment needs an ID check. */
+    val ageCheckRequired: Boolean = false,
+    /** No ID check needed, or one passed. */
+    val ageCleared: Boolean = true,
+    /** The latest ID check failed (under age / expired) and none has passed. */
+    val ageCheckFailed: Boolean = false,
 )
 
 @kotlinx.serialization.Serializable
@@ -1962,6 +1996,11 @@ data class LineView(
     val unitPriceCents: Long,
     val lineTotalCents: Long,
     val note: String?,
+    /** Retail shelf facts captured at ring-up (038). */
+    val ageRestricted: Boolean = false,
+    /** Container deposit (CRV) per unit. */
+    val depositCents: Long = 0,
+    val taxable: Boolean = true,
 )
 
 @kotlinx.serialization.Serializable
@@ -2029,3 +2068,16 @@ data class TenderView(
     /** Bill group this tender paid into; null = whole-check tender. */
     val groupId: Int? = null,
 )
+
+/**
+ * Freeze a catalog item's shelf facts onto the line being rung (038), like
+ * its price: taxable, the container deposit per unit sold, and whether the
+ * line needs an ID check. Pub items carry the defaults (taxable, no deposit,
+ * not restricted).
+ */
+internal fun captureShelfFacts(st: org.jetbrains.exposed.sql.statements.UpdateBuilder<*>, item: ResultRow) {
+    st[CheckLines.taxable] = item[Items.taxable]
+    st[CheckLines.depositCents] =
+        dev.dwhipstock.pos.sdk.Crv.perUnit(dev.dwhipstock.pos.sdk.Crv.size(item[Items.crvSize]), item[Items.packUnits]).cents
+    st[CheckLines.ageRestricted] = item[Items.ageRestricted]
+}

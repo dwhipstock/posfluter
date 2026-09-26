@@ -13,6 +13,9 @@ import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_ROUNDING
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_SUBTOTAL
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TABLE
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TOTAL
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_REGISTER
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_SALE
+import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_AGE_VERIFIED
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_INCLUDED
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_LINE
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.RECEIPT_TAX_REGISTRATION
@@ -40,6 +43,8 @@ data class Receipt(
     val tenders: List<ReceiptTender>,
     /** Taxes added on top of the pre-tax subtotal, one line each; empty = none. */
     val taxes: List<TaxLine> = emptyList(),
+    /** The legal age a passing ID check cleared the sale at (retail); null = no check. */
+    val ageVerifiedAt: Int? = null,
 ) {
     /** Pre-tax subtotal: the total less the taxes added on top. */
     val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
@@ -57,7 +62,7 @@ data class ReceiptItem(
     val note: String?,
 )
 
-data class ReceiptFee(val labelFr: String, val labelEn: String, val amount: Money)
+data class ReceiptFee(val labelFr: String, val labelEn: String, val amount: Money, val code: String = "")
 
 data class ReceiptTender(
     val labelFr: String,
@@ -66,6 +71,8 @@ data class ReceiptTender(
     val amountApplied: Money,
     val roundingAdjustment: Money,
     val change: Money,
+    /** CASH | CARD | …: lets a locale pack name the tender ([Messages.dataLabel]). */
+    val type: String = "",
 )
 
 /**
@@ -94,6 +101,15 @@ sealed interface ReceiptPolicy {
         return "%04d-%02d-%02d %02d:%02d".format(dt.year, dt.monthValue, dt.dayOfMonth, dt.hour, dt.minute)
     }
 
+    /** A retail counter: "Register 1 · Sale #12" instead of "Table · Bill". */
+    val retail: Boolean get() = false
+
+    /** Always print the cents ("40.00"), US shelf style; the pubs print "40". */
+    val alwaysCents: Boolean get() = false
+
+    /** Money on the receipt, in this policy's style. */
+    fun money(m: Money): String = if (alwaysCents) m.formatCents() else m.format()
+
     /** Same venue identity, different print locale — the check owner's preference wins at close time. */
     fun withLocale(locale: LocaleCode): ReceiptPolicy
 
@@ -103,8 +119,19 @@ sealed interface ReceiptPolicy {
         override val footerText: String,
         override val showTax: Boolean,
         override val locale: LocaleCode = LocaleCode.EN,
+        override val retail: Boolean = false,
+        override val alwaysCents: Boolean = false,
+        /** US receipts: "09/25/2026 5:57 PM" (month first, 12-hour clock). */
+        val usDates: Boolean = false,
     ) : ReceiptPolicy {
         override fun withLocale(locale: LocaleCode) = copy(locale = locale)
+
+        override fun formatDate(dt: LocalDateTime): String {
+            if (!usDates) return super.formatDate(dt)
+            val h = dt.hour % 12
+            val ampm = if (dt.hour < 12) "AM" else "PM"
+            return "%02d/%02d/%04d %d:%02d %s".format(dt.monthValue, dt.dayOfMonth, dt.year, if (h == 0) 12 else h, dt.minute, ampm)
+        }
     }
 }
 
@@ -129,7 +156,11 @@ object ReceiptRenderer {
             add(PrintLine.Header(msg(RECEIPT_BILL_BANNER)))
             add(PrintLine.Blank)
         }
-        add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " #" + receipt.checkId))
+        if (policy.retail) {
+            add(PrintLine.KeyValue(msg(RECEIPT_REGISTER) + " " + receipt.tableLabel, msg(RECEIPT_SALE) + " #" + receipt.checkId))
+        } else {
+            add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " #" + receipt.checkId))
+        }
         add(PrintLine.KeyValue(msg(RECEIPT_OPEN), policy.formatDate(receipt.openedAt)))
         // provisional: "Printed at" (this snapshot); final: the close/paid time
         add(PrintLine.KeyValue(
@@ -140,29 +171,31 @@ object ReceiptRenderer {
         for (item in receipt.items) {
             val name = locale.dataText(item.nameFr, item.nameEn)
             val variant = locale.dataTextOrNull(item.variantLabelFr, item.variantLabelEn)?.let { " ($it)" } ?: ""
-            add(PrintLine.KeyValue("$name$variant ×${item.qty}", item.lineTotal.format()))
-            if (item.qty > 1) add(PrintLine.Text("  @${item.unitPrice.format()}"))
+            add(PrintLine.KeyValue("$name$variant ×${item.qty}", item.lineTotal.let(policy::money)))
+            if (item.qty > 1) add(PrintLine.Text("  @${item.unitPrice.let(policy::money)}"))
             item.note?.let { add(PrintLine.Text("  • $it")) }
         }
         for (fee in receipt.fees) {
-            add(PrintLine.KeyValue(locale.dataText(fee.labelFr, fee.labelEn), fee.amount.format()))
+            val label = Messages.dataLabel("fee.${fee.code}", locale) ?: locale.dataText(fee.labelFr, fee.labelEn)
+            add(PrintLine.KeyValue(label, fee.amount.let(policy::money)))
         }
         add(PrintLine.Divider)
 
         // taxes added on top always print (they change the total): subtotal,
         // one line per tax with its rate, then the total
         if (receipt.taxes.isNotEmpty()) {
-            add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), receipt.subtotal.format()))
-            receipt.taxes.forEach { add(PrintLine.KeyValue(taxLineLabel(it.component, locale), it.amount.format())) }
+            add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), receipt.subtotal.let(policy::money)))
+            receipt.taxes.forEach { add(PrintLine.KeyValue(taxLineLabel(it.component, locale), it.amount.let(policy::money))) }
         }
-        add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.format(), emphasized = true))
+        add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.let(policy::money), emphasized = true))
         if (policy.showTax && receipt.taxRatePercent != null) {
             add(PrintLine.KeyValue(
                 msg(RECEIPT_TAX_INCLUDED, receipt.taxRatePercent),
-                receipt.taxIncluded.format(),
+                receipt.taxIncluded.let(policy::money),
             ))
         }
-        receipt.taxes.forEach { add(PrintLine.Text(taxRegistrationLine(it.component, locale))) }
+        receipt.taxes.filter { it.component.registrationNumber.isNotBlank() }
+            .forEach { add(PrintLine.Text(taxRegistrationLine(it.component, locale))) }
         add(PrintLine.Blank)
 
         // A provisional bill has no payment yet — omit the tender section, and
@@ -173,22 +206,35 @@ object ReceiptRenderer {
         }
 
         for (tender in receipt.tenders) {
-            add(PrintLine.KeyValue(locale.dataText(tender.labelFr, tender.labelEn), tender.amountTendered.format()))
+            val label = Messages.dataLabel("tender.${tender.type}", locale) ?: locale.dataText(tender.labelFr, tender.labelEn)
+            add(PrintLine.KeyValue(label, tender.amountTendered.let(policy::money)))
             if (!tender.roundingAdjustment.isZero) {
-                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), tender.roundingAdjustment.format()))
+                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), tender.roundingAdjustment.let(policy::money)))
             }
             if (!tender.change.isZero) {
-                add(PrintLine.KeyValue(msg(RECEIPT_CHANGE), tender.change.format()))
+                add(PrintLine.KeyValue(msg(RECEIPT_CHANGE), tender.change.let(policy::money)))
             }
+        }
+
+        receipt.ageVerifiedAt?.let {
+            add(PrintLine.Blank)
+            add(PrintLine.Text(msg(RECEIPT_AGE_VERIFIED, it), Align.CENTER))
         }
 
         add(PrintLine.Blank)
         add(PrintLine.Text(policy.footerText, Align.CENTER))
     }
 
-    /** Both languages' names, the print locale's first: "GST/TPS" in English, "TPS/GST" in French. */
-    fun taxName(tax: TaxComponent, locale: LocaleCode): String =
-        locale.dataText("${tax.labelFr}/${tax.labelEn}", "${tax.labelEn}/${tax.labelFr}")
+    /**
+     * Both languages' names, the print locale's first: "GST/TPS" in English,
+     * "TPS/GST" in French. A tax with one name ("Sales Tax") prints it once;
+     * a locale pack may translate it (`data.tax.<code>`).
+     */
+    fun taxName(tax: TaxComponent, locale: LocaleCode): String {
+        Messages.dataLabel("tax.${tax.code}", locale)?.let { return it }
+        if (tax.labelFr == tax.labelEn) return tax.labelEn
+        return locale.dataText("${tax.labelFr}/${tax.labelEn}", "${tax.labelEn}/${tax.labelFr}")
+    }
 
     /** "GST/TPS 5%", "TVQ/QST 9,975 %". */
     fun taxLineLabel(tax: TaxComponent, locale: LocaleCode): String =

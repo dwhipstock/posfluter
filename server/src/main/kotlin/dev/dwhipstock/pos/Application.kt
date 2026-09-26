@@ -14,6 +14,7 @@ import dev.dwhipstock.pos.api.PairingService
 import dev.dwhipstock.pos.api.floorObjectRoutes
 import dev.dwhipstock.pos.api.photoRoutes
 import dev.dwhipstock.pos.api.posRoutes
+import dev.dwhipstock.pos.api.retailRoutes
 import dev.dwhipstock.pos.api.settingsRoutes
 import dev.dwhipstock.pos.api.shiftRoutes
 import dev.dwhipstock.pos.api.staffAdminRoutes
@@ -26,6 +27,9 @@ import dev.dwhipstock.pos.restaurant.ShiftService
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternConfig
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternSeed
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
+import dev.dwhipstock.pos.customers.sagepoppy.SagePoppy
+import dev.dwhipstock.pos.customers.sagepoppy.SagePoppyConfig
+import dev.dwhipstock.pos.customers.sagepoppy.SagePoppySeed
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.sdk.FilesystemPhotoStore
@@ -80,8 +84,17 @@ fun Application.module(
     requireDeviceTokenOverride: Boolean? = null,
     pairingTransport: dev.dwhipstock.pos.sync.CloudTransport? = null,
     seedMode: String = System.getenv("POS_SEED") ?: "copperlantern",
-    // which store this is (POS_VENUE=vieux-port|plateau): display name + first-boot seed
-    venue: CopperLanternVenue = CopperLanternVenue.fromEnv(),
+    // which store this is (POS_VENUE=vieux-port|plateau|sage-poppy): its config,
+    // display name and first-boot seed. sage-poppy is the US retail store.
+    venueId: String? = System.getenv("POS_VENUE"),
+    venue: CopperLanternVenue = if (SagePoppy.matches(venueId)) CopperLanternVenue.VIEUX_PORT else CopperLanternVenue.of(venueId),
+    sagePoppy: Boolean = SagePoppy.matches(venueId),
+    // retail: optional online name lookup for unknown barcodes (test seam)
+    productLookup: dev.dwhipstock.pos.retail.ProductLookup? = null,
+    // retail: minimum age for age-restricted items. The tablet passes its
+    // store.properties `legal.age`; desktop reads POS_LEGAL_AGE. Unset → the
+    // store's own default (21 for the US store).
+    legalAgeOverride: Int? = null,
     cloudSyncUrl: String? = System.getenv("CLOUD_SYNC_URL"),
     cloudSyncApiKey: String? = System.getenv("CLOUD_SYNC_API_KEY"),
     publicUrl: String? = System.getenv("POS_PUBLIC_URL"),
@@ -98,6 +111,10 @@ fun Application.module(
     // test seam: a fake Stripe HTTP layer
     stripeHttp: StripeHttp? = null,
 ) {
+    // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
+    // Angeles for the US store); an existing store keeps its settings row's
+    dev.dwhipstock.pos.sdk.VenueClock.fallbackZone =
+        if (sagePoppy) SagePoppy.TIME_ZONE else dev.dwhipstock.pos.sdk.VenueClock.DEFAULT_ZONE
     initDatabase(dbPath)
     // discover i18n message catalogs now so missing-key warnings surface at
     // boot, not on the first printed receipt
@@ -111,13 +128,13 @@ fun Application.module(
     // also wipes that residue. Gate = no install_id yet: once a store has synced,
     // its data is never touched here again.
     if (seedMode != "none") {
-        CopperLanternSeed.seedIfEmpty(venue)
+        if (sagePoppy) SagePoppySeed.seedIfEmpty() else CopperLanternSeed.seedIfEmpty(venue)
     } else {
         wipeMigrationSeedResidueIfNeverSynced()
         // nobody could ever sign in to an empty store (staff no longer arrive
         // from the cloud), so it gets ONE bootstrap manager — PIN 1234, to be
         // changed on first sign-in
-        CopperLanternSeed.seedBootstrapManagerIfNoStaff()
+        if (sagePoppy) SagePoppySeed.seedBootstrapManagerIfNoStaff() else CopperLanternSeed.seedBootstrapManagerIfNoStaff()
     }
     // every table must have its customer link token (033); covers any row a
     // raw-SQL path wrote without one
@@ -150,21 +167,40 @@ fun Application.module(
             else PrinterTarget("", 9100)
         },
     )
-    val config = CopperLanternConfig(
+    val publicUrlProvider = {
+        publicUrl ?: detectLanIpv4()?.let { "http://$it:8080" } ?: publicBaseUrl
+    }
+    val config: dev.dwhipstock.pos.sdk.CustomerConfig = if (sagePoppy) SagePoppyConfig(
+        settings = settingsRepo,
+        printer = thermalPrinter,
+        publicBaseUrl = publicBaseUrl,
+        publicUrlProvider = publicUrlProvider,
+        legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
+            dev.dwhipstock.pos.sdk.LegalAge.fromEnv(SagePoppy.LEGAL_AGE), legalAgeOverride?.toString()),
+    ) else CopperLanternConfig(
         venue = venue,
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,
-        publicUrlProvider = {
-            publicUrl ?: detectLanIpv4()?.let { "http://$it:8080" } ?: publicBaseUrl
-        },
+        publicUrlProvider = publicUrlProvider,
     )
-    log.info("Store: ${venue.displayName} (POS_VENUE=${venue.id})")
+    log.info("Store: ${config.displayName} (POS_VENUE=${config.venueId}, ${config.profile.country}, " +
+        "${config.profile.currency}, ${config.profile.locales.joinToString("/")}, ${config.profile.kind.wire})")
+    if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Legal age for age-restricted items: ${config.legalAge}")
     log.info("Customers scan: $publicBaseUrl/m/t/{token} (a random link per table, on its QR slip; a manager can regenerate it)  — print slips from the tablet")
     val checkService = CheckService(config)
     // background account lookup only; a missing key or no internet changes nothing else
-    val stripeService = StripeService(stripeConfig, checkService, venue.id, venue.displayName, stripeHttp)
+    // Stripe is Canada-only (a CAD account) for now: a store in another country
+    // takes cash and its own external card terminal, and never contacts Stripe
+    val storeStripe = if (config.profile.currency == "CAD") stripeConfig else {
+        if (stripeConfig.enabled) log.info("Stripe: off for this store (${config.profile.currency}); the Stripe integration is CAD-only")
+        StripeConfig.OFF
+    }
+    val stripeService = StripeService(storeStripe, checkService, config.venueId, config.displayName, stripeHttp)
         .also { it.start() }
+    val retailService = dev.dwhipstock.pos.retail.RetailService(
+        config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup())
+    if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
     val shiftService = ShiftService(config)
     val authService = AuthService(settingsRepo, staffAppMfaRequired)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
@@ -292,6 +328,7 @@ fun Application.module(
         staffAdminRoutes(authService)
         pairingRoutes(pairingService)
         posRoutes(checkService, authService, photoStore, stripeService)
+        retailRoutes(retailService, authService)
         stripeRoutes(stripeService)
         tableRoutes(authService)
         floorObjectRoutes(authService)

@@ -76,6 +76,8 @@ flutter:
     - assets/chime.wav
     # brand badge (cropped from branding/copper-lantern-logo.png)
     - assets/copper_lantern_logo.png
+    # Sage & Poppy Bottle Shop mark (branding/sage-poppy-mark.svg, rendered)
+    - assets/sage_poppy_mark.png
     - assets/fonts/OFL-Inter.txt
     - assets/fonts/OFL-NotoSans.txt
 

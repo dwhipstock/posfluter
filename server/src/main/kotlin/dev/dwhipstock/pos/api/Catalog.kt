@@ -430,11 +430,7 @@ private fun itemDto(itemId: String): ItemDto {
         .orderBy(ItemVariants.sortOrder)
         .map { VariantDto(it[ItemVariants.id], it[ItemVariants.labelFr], it[ItemVariants.labelEn], it[ItemVariants.priceCents]) }
     val row = Items.selectAll().where { Items.id eq itemId }.first()
-    return ItemDto(
-        row[Items.id], row[Items.nameFr], row[Items.nameEn],
-        row[Items.descriptionFr], row[Items.descriptionEn], row[Items.categoryId],
-        row[Items.abbrev], row[Items.isAlcohol], row[Items.active], variants,
-    )
+    return itemDtoOf(row, variants)
 }
 
 private fun categoryDto(categoryId: String): CategoryDto {

@@ -107,6 +107,11 @@ object CheckLines : IntIdTable("check_lines") {
     // accept — excluded from totals and receipts until promoted.
     val status = varchar("status", 10).default("ACTIVE")
     val createdAt = utcTimestamp("created_at")
+    // captured at ring-up (038), like the price: taxable, bottle deposit per
+    // unit, and whether the line needs an ID check before payment
+    val taxable = bool("taxable").databaseGenerated() // DEFAULT 1
+    val depositCents = long("deposit_cents").databaseGenerated() // DEFAULT 0
+    val ageRestricted = bool("age_restricted").databaseGenerated() // DEFAULT 0
 }
 
 /**

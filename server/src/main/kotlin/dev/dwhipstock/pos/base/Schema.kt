@@ -34,6 +34,15 @@ object Items : Table("items") {
     val active = bool("active").default(true) // 86'ing flips this at runtime (M2)
     val photoPath = varchar("photo_path", 300).nullable() // PhotoStore path (M5)
     val deletedAt = utcTimestamp("deleted_at").nullable() // soft delete (M6); history keeps the row
+    // retail shelf facts (038); the pubs keep the defaults. The defaults are
+    // the database's (databaseGenerated: an insert that doesn't set them leaves
+    // them to the column DEFAULT), so code that writes items keeps working on
+    // any schema version.
+    val barcode = varchar("barcode", 32).nullable().databaseGenerated() // UPC-A / EAN-13, unique when set
+    val ageRestricted = bool("age_restricted").databaseGenerated() // ID check before payment (DEFAULT 0)
+    val taxable = bool("taxable").databaseGenerated() // DEFAULT 1
+    val crvSize = varchar("crv_size", 8).databaseGenerated() // NONE | SMALL (<24 oz) | LARGE (≥24 oz)
+    val packUnits = integer("pack_units").databaseGenerated() // containers in the pack (a 6-pack = 6)
     override val primaryKey = PrimaryKey(id)
 }
 

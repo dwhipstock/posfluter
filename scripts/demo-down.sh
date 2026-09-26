@@ -16,6 +16,8 @@ PLATEAU_DIR="$REPO_ROOT/.demo/plateau"
 ENV_FILE=".env.local"
 [[ -f "$ENV_FILE" ]] || ENV_FILE=".env.local.example"   # compose only needs it to parse
 PID_FILE="$PLATEAU_DIR/store.pid"
+SAGE_POPPY_DIR="$REPO_ROOT/.demo/sage-poppy"
+SP_PID_FILE="$SAGE_POPPY_DIR/store.pid"
 
 if docker compose version >/dev/null 2>&1; then
   dc() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" "$@"; }
@@ -31,13 +33,19 @@ if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   for _ in $(seq 1 20); do kill -0 "$(cat "$PID_FILE")" 2>/dev/null || break; sleep 0.5; done
 fi
 rm -f "$PID_FILE"
+if [[ -f "$SP_PID_FILE" ]] && kill -0 "$(cat "$SP_PID_FILE")" 2>/dev/null; then
+  echo "Stopping the Sage & Poppy store (pid $(cat "$SP_PID_FILE"))…"
+  kill "$(cat "$SP_PID_FILE")"
+  for _ in $(seq 1 20); do kill -0 "$(cat "$SP_PID_FILE")" 2>/dev/null || break; sleep 0.5; done
+fi
+rm -f "$SP_PID_FILE"
 
 if [[ "${1:-}" == "--reset" ]]; then
   echo "Tearing down AND wiping the cloud db volume + the Plateau store…"
   dc -f "$COMPOSE_FILE" down
   # only the cloud db: the legacy `storedata` volume (the old Mac store) is kept
   docker volume rm -f "${PROJECT}_pgdata" >/dev/null
-  rm -rf "$PLATEAU_DIR"
+  rm -rf "$PLATEAU_DIR" "$SAGE_POPPY_DIR"
   echo "Done. The next demo-up.sh starts from an empty cloud db and a fresh Plateau store."
   echo "(The tablet keeps its data; after a reset, re-run scripts/tablet-cloud-config.sh.)"
 else

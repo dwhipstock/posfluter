@@ -85,6 +85,11 @@ fun Application.installAuthGate(auth: AuthService, requireDeviceToken: Boolean =
     intercept(ApplicationCallPipeline.Plugins) {
         val path = call.request.path()
         val method = call.request.httpMethod
+        // a browser's CORS preflight carries no credentials by design (the POS
+        // client in a browser — the web build — sends one before every call
+        // with a JSON body or an Authorization header); the CORS plugin answers
+        // it, and the real request that follows goes through the gate below
+        if (method == HttpMethod.Options) return@intercept
         val presented = call.request.headers["X-Device-Token"]?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { DeviceRegistry.byToken(it) }
         if (presented != null && !presented.revoked) call.attributes.put(PairedDeviceKey, presented)

@@ -12,7 +12,8 @@ class Prefs extends ChangeNotifier {
 
   static const _storage = FlutterSecureStorage();
 
-  String lang = 'en'; // one of the store's languages: en | fr (pubs), en | es (US store)
+  String lang =
+      'en'; // one of the store's languages: en | fr (pubs), en | es (US store)
 
   /// Every language the terminal has strings for; a store offers a subset.
   static const known = {'en', 'fr', 'es'};
@@ -24,7 +25,9 @@ class Prefs extends ChangeNotifier {
     final v = value?.trim().toLowerCase() ?? '';
     if (known.contains(v) && storeLocales.contains(v)) return v;
     // a language this store doesn't offer: English if it does, else its default
-    return storeLocales.contains('en') ? 'en' : StoreProfile.current.defaultLocale;
+    return storeLocales.contains('en')
+        ? 'en'
+        : StoreProfile.current.defaultLocale;
   }
 
   /// The store described itself (GET /health). A language it doesn't offer
@@ -33,7 +36,8 @@ class Prefs extends ChangeNotifier {
     final before = StoreProfile.current;
     StoreProfile.current = profile;
     final next = _supported(lang);
-    final changed = next != lang ||
+    final changed =
+        next != lang ||
         before.currency != profile.currency ||
         before.kind != profile.kind ||
         before.brand != profile.brand;
@@ -1134,7 +1138,7 @@ class L {
 
   /// Server error codes → local language. Fallback: raw server message.
   String? apiError(String? code) => switch (code) {
-    'invalid_pin' => _t('Code PIN invalide', 'Invalid PIN'),
+    'invalid_pin' => _t('Code PIN invalide', 'Invalid PIN', 'PIN no válido'),
     'wifi_not_configured' => wifiNotConfigured,
     'pin_in_use' => _t(
       'Ce NIP est déjà utilisé par un autre membre du personnel.',
@@ -1152,6 +1156,7 @@ class L {
     'manager_approval_required' => _t(
       'Doit être approuvé par le gestionnaire',
       'Manager approval required',
+      'Se requiere la aprobación del gerente',
     ),
     'check_not_open' => _t(
       'Ce projet de loi est désormais clos.',
@@ -1214,6 +1219,7 @@ class L {
     'no_open_shift' => _t(
       'Je n\'ai pas encore ouvert le poste.',
       'No shift open',
+      'No hay turno abierto',
     ),
     'shift_already_open' => _t(
       'Vous avez déjà un quart de travail ouvert',
@@ -1431,6 +1437,32 @@ class L {
     'stripe_refund_via_stripe' => _t(
       'Les remboursements par carte (Stripe) passent par Stripe.',
       'Card (Stripe) refunds go through Stripe',
+    ),
+    // retail counter
+    'unknown_barcode' => _t(
+      'Code-barres inconnu',
+      'Unknown barcode',
+      'Código de barras desconocido',
+    ),
+    'age_check_required' => _t(
+      'Vérifiez la pièce d\'identité du client avant le paiement.',
+      'Check the customer\'s ID before payment',
+      'Verifica la identificación del cliente antes de cobrar',
+    ),
+    'age_check_failed' => _t(
+      'Vérification d\'âge échouée : retirez les articles réservés aux adultes.',
+      'ID check failed — remove the age-restricted items',
+      'No pasó la verificación de edad: quita los artículos con restricción de edad',
+    ),
+    'barcode_taken' => _t(
+      'Ce code-barres appartient déjà à un produit.',
+      'That barcode already belongs to a product',
+      'Ese código de barras ya pertenece a un producto',
+    ),
+    'item_inactive' => _t(
+      'Ce produit n\'est pas en vente.',
+      'That product is off sale',
+      'Ese producto no está a la venta',
     ),
     _ => null,
   };

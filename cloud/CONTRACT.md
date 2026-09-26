@@ -186,6 +186,23 @@ additive.
   (`venues.currency`, which is `CAD` for every store that predates this).
   Reports never add two currencies together (§6).
 
+### Retail sales (a store whose kind is retail)
+A retail counter sale is an ordinary `check.closed` on the store's one
+register (`tableId` `register-1`, zone `counter`), in the store's currency.
+Its lines may also carry `taxable: false` (a tax-exempt food item),
+`depositCents` (the container deposit — California CRV — per unit) and
+`ageRestricted: true`; a line without them is a pub line (taxable, no
+deposit, not restricted). The deposits total as one fee, `code: "crv"`, never
+taxed. Item snapshots (below) may carry `barcode`, `ageRestricted`,
+`taxable: false`, `crvSize` (`SMALL` | `LARGE`) and `packUnits`.
+
+### `age.checked`
+The outcome of one ID check before age-restricted items were paid for, and
+nothing else: `checkId, method (SCAN | MANUAL), passed, ageYears?, legalAge,
+reason? (under_age | expired | unreadable | not_confirmed), checkedBy,
+checkedAt`. Never a name, date of birth, licence number or address. The cloud
+stores it raw (not projected yet).
+
 ### `check.voided`
 Existing `checkId`/`reason`/`authorizedBy` plus:
 `tableId, tableLabel, zoneId, zoneNameFr, zoneNameEn, shiftId?, openedAt,

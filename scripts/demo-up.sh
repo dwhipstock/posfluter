@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Bring up the LOCAL two-store Copper Lantern demo on this Mac, detached, and
-# print the LAN URLs. Idempotent: safe to re-run; only rebuilds what changed.
+# Bring up the LOCAL three-store demo on this Mac, detached, and print the LAN
+# URLs. Idempotent: safe to re-run; only rebuilds what changed.
 # NOT for EC2 — that's cloud/infra/docker-compose.yml. Never touches AWS or the
 # hosted portal.
 #
 #   1. cloud side in Docker (docker-compose.local.yml): Postgres + cloud API + portal,
-#      tenant `copperlantern` with stores `vieux-port` and `plateau`, one API key each;
+#      tenant `copperlantern` with stores `vieux-port`, `plateau` and `sage-poppy`,
+#      one API key each;
 #   2. Copper Lantern — Plateau: the desktop store (DesktopMain.kt, POS_VENUE=plateau)
 #      with its own SQLite DB under .demo/plateau/, syncing to the local API;
-#   3. Copper Lantern — Vieux-Port is the Android tablet: point it at this Mac with
+#   3. Sage & Poppy Bottle Shop: the US retail store, a second desktop store
+#      (POS_VENUE=sage-poppy, port 8082, DB under .demo/sage-poppy/), USD, en/es;
+#   4. Copper Lantern — Vieux-Port is the Android tablet: point it at this Mac with
 #      scripts/tablet-cloud-config.sh (printed at the end).
 #
 #   scripts/demo-up.sh            # build + start + seed Plateau demo sales (once)
@@ -24,6 +27,9 @@ PROJECT="${POS_DEMO_PROJECT:-pos-local}"
 ENV_FILE=".env.local"
 PLATEAU_DIR="$REPO_ROOT/.demo/plateau"
 PLATEAU_PORT="${PLATEAU_PORT:-8080}"
+SAGE_POPPY_DIR="$REPO_ROOT/.demo/sage-poppy"
+# not 8081: that's the cloud API
+SAGE_POPPY_PORT="${SAGE_POPPY_PORT:-8082}"
 SEED=1
 [[ "${1:-}" == "--no-seed" ]] && SEED=0
 
@@ -62,7 +68,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   chmod 600 "$ENV_FILE"
   echo ">>> Review $ENV_FILE (DB_PASSWORD, ADMIN_PASSWORD) before a real demo. <<<"
 fi
-for key in STORE_API_KEY STORE_API_KEY_PLATEAU; do
+for key in STORE_API_KEY STORE_API_KEY_PLATEAU STORE_API_KEY_SAGE_POPPY; do
   current="$(env_get "$key")"
   if [[ -z "$current" || "$current" == replace-with-* ]]; then
     set_env "$key" "$(openssl rand -hex 32)"
@@ -70,6 +76,7 @@ for key in STORE_API_KEY STORE_API_KEY_PLATEAU; do
   fi
 done
 STORE_API_KEY_PLATEAU="$(env_get STORE_API_KEY_PLATEAU)"
+STORE_API_KEY_SAGE_POPPY="$(env_get STORE_API_KEY_SAGE_POPPY)"
 VENUE_TZ="$(env_get VENUE_TZ)"; VENUE_TZ="${VENUE_TZ:-America/New_York}"
 
 # --- detect the Mac's LAN IP -----------------------------------------------------
@@ -177,14 +184,66 @@ if [[ "$SEED" == "1" ]]; then
   fi
 fi
 
+# --- Sage & Poppy: the US retail store (a second desktop store) ---------------------
+mkdir -p "$SAGE_POPPY_DIR"
+SP_PID_FILE="$SAGE_POPPY_DIR/store.pid"
+if [[ -f "$SP_PID_FILE" ]] && kill -0 "$(cat "$SP_PID_FILE")" 2>/dev/null; then
+  echo "Sage & Poppy store already running (pid $(cat "$SP_PID_FILE"))."
+else
+  if lsof -nP -iTCP:"$SAGE_POPPY_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "ERROR: port $SAGE_POPPY_PORT is busy. Free it or run with SAGE_POPPY_PORT=<port>." >&2
+    exit 1
+  fi
+  echo "Starting Sage & Poppy Bottle Shop on :${SAGE_POPPY_PORT}…"
+  (
+    cd "$SAGE_POPPY_DIR"
+    # no STRIPE_KEY: Stripe is Canada-only (CAD) for now; the store takes cash
+    # and its own external card terminal
+    POS_VENUE=sage-poppy \
+    POS_PORT="$SAGE_POPPY_PORT" \
+    POS_DB="$SAGE_POPPY_DIR/pos.db" \
+    POS_RECEIPTS_DIR="$SAGE_POPPY_DIR/receipts" \
+    POS_BILLS_DIR="$SAGE_POPPY_DIR/bills" \
+    POS_PHOTOS_DIR="$SAGE_POPPY_DIR/photos" \
+    POS_PUBLIC_URL="http://${LAN_IP}:${SAGE_POPPY_PORT}" \
+    VENUE_TZ="America/Los_Angeles" \
+    POS_LEGAL_AGE="${POS_LEGAL_AGE:-21}" \
+    CLOUD_SYNC_URL="http://localhost:8081" \
+    CLOUD_SYNC_API_KEY="$STORE_API_KEY_SAGE_POPPY" \
+    CLOUD_SYNC_INTERVAL_SECONDS=10 \
+    REPORTING_PORTAL_URL="$PORTAL_URL" \
+    nohup java -jar "$JAR" >> "$SAGE_POPPY_DIR/store.log" 2>&1 &
+    echo $! > "$SP_PID_FILE"
+  )
+fi
+for ((i=0; i<60; i++)); do
+  curl -fsS "http://localhost:${SAGE_POPPY_PORT}/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+if curl -fsS "http://localhost:${SAGE_POPPY_PORT}/health" >/dev/null 2>&1; then
+  echo "  sage-poppy: healthy"
+else
+  echo "ERROR: Sage & Poppy store did not come up — tail $SAGE_POPPY_DIR/store.log" >&2
+  exit 1
+fi
+if [[ "$SEED" == "1" ]]; then
+  if [[ -f "$SAGE_POPPY_DIR/.demo-seeded" ]]; then
+    echo "Sage & Poppy demo sales already seeded — skipping."
+  elif STORE_URL="http://localhost:${SAGE_POPPY_PORT}" python3 scripts/demo-seed-retail.py; then
+    touch "$SAGE_POPPY_DIR/.demo-seeded"
+  else
+    echo "WARN: retail demo seed failed — re-run: STORE_URL=http://localhost:${SAGE_POPPY_PORT} python3 scripts/demo-seed-retail.py" >&2
+  fi
+fi
+
 # --- summary ---------------------------------------------------------------------
 cat <<BANNER
 
 ============================================================
-  Copper Lantern two-store demo is UP
+  Three-store demo is UP (two pubs in Montréal, one bottle shop in LA)
 ============================================================
   LAN IP         : ${LAN_IP}
-  Owner portal   : ${PORTAL_URL}      (store picker: All stores / Vieux-Port / Plateau)
+  Owner portal   : ${PORTAL_URL}      (store picker: All stores / Vieux-Port / Plateau / Sage & Poppy)
   Cloud API      : ${SYNC_URL}/health
   Portal login   : $(env_get ADMIN_EMAIL)  /  (ADMIN_PASSWORD in $ENV_FILE)
                    First login enrolls TOTP — scan the QR in an authenticator app.
@@ -192,11 +251,18 @@ cat <<BANNER
   Store sync (tenant copperlantern, one key per store, keys in $ENV_FILE):
     vieux-port   CLOUD_SYNC_URL=${SYNC_URL}   key: STORE_API_KEY          (Android tablet)
     plateau      CLOUD_SYNC_URL=http://localhost:8081   key: STORE_API_KEY_PLATEAU  (this Mac)
+    sage-poppy   CLOUD_SYNC_URL=http://localhost:8081   key: STORE_API_KEY_SAGE_POPPY (this Mac)
 
   Plateau store  : http://${LAN_IP}:${PLATEAU_PORT}/health   (PIN 1234 manager, 9999 server)
                    staff app: http://${LAN_IP}:${PLATEAU_PORT}/staff-app
                    POS UI on the Mac: cd client && flutter run -d macos
                    log: .demo/plateau/store.log
+
+  Sage & Poppy   : http://${LAN_IP}:${SAGE_POPPY_PORT}/health   (US retail · USD · en/es · 21+)
+                   PINs: manager 1234, cashier 9999, Spanish-speaking cashier 5555
+                   counter UI in Chrome: cd client && flutter run -d chrome \\
+                     --dart-define=SERVER_URL=http://localhost:${SAGE_POPPY_PORT}
+                   log: .demo/sage-poppy/store.log
 
   Vieux-Port tablet → this Mac (tablet on the same Wi-Fi, USB debugging on):
                    scripts/tablet-cloud-config.sh

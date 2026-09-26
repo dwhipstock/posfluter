@@ -312,7 +312,9 @@ class _RefundScreenState extends State<RefundScreen> {
                 padding: const EdgeInsets.all(16),
                 child: FilledButton.icon(
                   icon: const Icon(LucideIcons.undo2),
-                  label: Text('${l.confirmRefund}  ·  ${money(_selectedGross)}'),
+                  label: Text(
+                    '${l.confirmRefund}  ·  ${money(_selectedGross)}',
+                  ),
                   onPressed: _canRefund ? _confirm : null,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(T.minTouch),

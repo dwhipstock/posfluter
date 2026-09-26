@@ -92,6 +92,12 @@ class TabletStoreService : Service() {
             if (!staffAppMfaRequired) Log.w("TabletStore", "Demo build: staff-app MFA bypass enabled")
             val receiptPrintMode = readReceiptPrintMode()
             val stripeConfig = readStripeConfig()
+            val storeProps = readStoreProperties()
+            // which store this tablet is (store.venue=sage-poppy for the US bottle
+            // shop); unset → Vieux-Port, as always
+            val venueId = storeProps?.getProperty("store.venue")?.trim()?.takeIf { it.isNotEmpty() }
+            val legalAge = storeProps?.getProperty("legal.age")?.trim()?.toIntOrNull()
+            if (venueId != null) Log.i("TabletStore", "Store: $venueId (store.properties)")
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = 8080) {
                 module(
                     dbPath = dbFile.absolutePath,
@@ -109,6 +115,8 @@ class TabletStoreService : Service() {
                     staffAppMfaRequired = staffAppMfaRequired,
                     receiptPrintMode = receiptPrintMode,
                     stripeConfig = stripeConfig,
+                    venueId = venueId,
+                    legalAgeOverride = legalAge,
                 )
             }.start(wait = true)
         } catch (error: Throwable) {
@@ -132,6 +140,17 @@ class TabletStoreService : Service() {
         Log.i("TabletStore", "Receipt printing: ${resolved.mode.wire} (${resolved.source})")
         return resolved
     }
+
+    /**
+     * The external store.properties itself, for the store switches that are
+     * plain values: `store.venue` and `legal.age`. Missing/unreadable → null;
+     * never fails startup.
+     */
+    private fun readStoreProperties(): java.util.Properties? = runCatching {
+        val file = getExternalFilesDir(null)?.let { File(it, "store.properties") }
+        if (file == null || !file.exists()) null
+        else java.util.Properties().apply { file.inputStream().use(::load) }
+    }.getOrNull()
 
     /**
      * Optional "Card (Stripe)" tender, TEST MODE only: `stripe.secretKey=sk_test_…`

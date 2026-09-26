@@ -1,12 +1,14 @@
 # Local demo runbook
 
-Two fictional Montréal stores of one owner (tenant `copperlantern`), both in
-`America/New_York`, CAD, English/French:
+Three fictional stores of one owner (tenant `copperlantern`): two Montréal
+pubs in `America/New_York`, CAD, English/French, and a Los Angeles bottle
+shop in USD, English/Spanish (below):
 
 | store | venue id | runs on | cloud key (`.env.local`) |
 | --- | --- | --- | --- |
 | Copper Lantern — Vieux-Port | `vieux-port` | the Android tablet | `STORE_API_KEY` |
 | Copper Lantern — Plateau | `plateau` | this Mac (`DesktopMain.kt`, `POS_VENUE=plateau`) | `STORE_API_KEY_PLATEAU` |
+| Sage & Poppy Bottle Shop | `sage-poppy` | this Mac, `:8082` (`POS_VENUE=sage-poppy`) | `STORE_API_KEY_SAGE_POPPY` |
 
 Both stores share the pub menu in seven categories (Beer & Cider, Wine,
 Cocktails, Starters, Burgers & Sandwiches, Mains & Salads, Desserts). Plateau
@@ -51,6 +53,65 @@ server `9999`.
 The old Mac `store` container is no longer started (compose profile
 `mac-store`). Do not start it next to the tablet: the tablet was imported from
 that database, so both would push as the same store.
+
+## Sage & Poppy Bottle Shop (the US retail store)
+
+The owner's third store, and the first outside Canada: a fictional
+neighbourhood liquor store in Los Angeles (`POS_VENUE=sage-poppy`), its own
+brand (sage and poppy, not copper), **USD**, **English + Spanish**,
+`America/Los_Angeles`, and a **retail counter** instead of tables.
+
+| | |
+| --- | --- |
+| runs on | this Mac, a second desktop store: `:8082` (8081 is the cloud API), DB under `.demo/sage-poppy/` |
+| cloud key | `STORE_API_KEY_SAGE_POPPY` in `.env.local` (demo-up.sh mints it) |
+| PINs | manager `1234`, cashier `9999`, Spanish-speaking cashier `5555` (receipts in Spanish) |
+| shelf | ~50 fictional products, each with a made-up UPC-A (number system 4 = in-store codes, valid check digits) |
+| money | 9.5% sales tax on taxable goods (snacks and ice exempt), CRV bottle deposit per container × pack on its own untaxed line, cash to the cent |
+| age | ID check at 21 before age-restricted items can be paid for (`POS_LEGAL_AGE`; tablet: `legal.age` in store.properties) |
+| payments | cash, and card on the counter's own external terminal. **No Stripe**: the Stripe integration is Canada-only (CAD) for now |
+
+`scripts/demo-up.sh` starts it (after Plateau) and seeds five counter sales
+once (`scripts/demo-seed-retail.py`).
+
+### The counter screen on this Mac (no Xcode needed)
+
+The POS client also builds for the web. Point it at the store and open it in
+Chrome:
+
+```sh
+cd client && flutter run -d chrome --dart-define=SERVER_URL=http://localhost:8082
+```
+
+(or `flutter build web --dart-define=SERVER_URL=http://localhost:8082` and
+serve `client/build/web`). Sign in with a PIN, then:
+
+- **Scan**: a USB/Bluetooth HID scanner types the code and Enter. Without a
+  scanner, type a barcode fast and press Enter, or type it in the search box
+  and press Enter (e.g. `487230001029` = Golden Hour Lager 6-pack). Scanning
+  the same product again bumps its quantity.
+- **ID check**: a basket with alcohol shows "ID check needed (21+)"; Pay opens
+  the check. A 2D scanner reading a licence's barcode types its AAMVA text;
+  otherwise pick the date of birth and tick "I have seen the customer's ID".
+  Under 21 or expired: remove the restricted items and sell the rest. Only the
+  outcome is stored (method, pass/fail, age in years, cashier, time).
+- **Unknown barcode**: "Add product (manager)" — name (suggested from Open Food
+  Facts when online), price, category, 21+, taxable, CRV size × units. It is
+  rung up straight away.
+- **Language**: the EN/ES pill in the header; a cashier's own language
+  (Cajera Demo = Spanish) is used after sign-in and on their receipts.
+
+On a tablet, `store.venue=sage-poppy` in
+`/sdcard/Android/data/dev.dwhipstock.pos_client/files/store.properties` makes it
+this store (one tablet per store).
+
+### The portal with two currencies
+
+"All stores" never adds CAD and USD together: each store is shown exactly in
+its own currency (US$ / CA$), the headline figures have exact per-currency
+rows, and the combined figure is an **approximate** CAD total at the fixed
+rate `FX_USD_CAD` (default 1.37 locally), with the rate shown. Pick the store
+to see it on its own, all in US$. Exports carry a currency column.
 
 ## Vieux-Port tablet → this Mac
 

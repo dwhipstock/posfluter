@@ -54,6 +54,44 @@ sealed interface Fee {
             return FeeLine(code, labelFr, labelEn, perBottle * ctx.corkageBottles, taxable, receiptVisible)
         }
     }
+
+    /**
+     * A beverage container deposit — California Redemption Value (CRV). Each
+     * line carries its own deposit per unit ([Crv.perUnit]); this sums them
+     * into one receipt line. Not taxed: a simplifying assumption (California
+     * does not tax CRV on most beverages; this store treats it as never taxed).
+     */
+    data class ContainerDeposit(
+        override val code: String = "crv",
+        override val labelFr: String = "CRV",
+        override val labelEn: String = "CRV",
+        override val taxable: Boolean = false,
+        override val receiptVisible: Boolean = true,
+        override val waivableByManager: Boolean = false,
+    ) : Fee {
+        override val appliesAt = FeeScope.LINE
+
+        override fun assess(ctx: FeeContext): FeeLine? {
+            if (ctx.deposits.cents <= 0) return null
+            return FeeLine(code, labelFr, labelEn, ctx.deposits, taxable, receiptVisible)
+        }
+    }
+}
+
+/**
+ * California Redemption Value per unit sold: 5¢ per container under 24 oz,
+ * 10¢ per container of 24 oz or more, times the containers in the pack
+ * (a 6-pack of 12 oz cans = 6 × 5¢ = 30¢). Wine and spirits carry none.
+ */
+object Crv {
+    enum class Size(val perContainerCents: Long) { NONE(0), SMALL(5), LARGE(10) }
+
+    fun size(raw: String?): Size = Size.entries.firstOrNull { it.name == raw?.trim()?.uppercase() } ?: Size.NONE
+
+    /** A container of [fluidOunces]: SMALL under 24 oz, LARGE at 24 oz or more. */
+    fun sizeFor(fluidOunces: Double): Size = if (fluidOunces >= 24.0) Size.LARGE else Size.SMALL
+
+    fun perUnit(size: Size, packUnits: Int): Money = Money(size.perContainerCents * packUnits.coerceAtLeast(1))
 }
 
 enum class FeeScope { LINE, TRANSACTION }
@@ -62,6 +100,8 @@ data class FeeContext(
     val itemsSubtotal: Money,
     /** Bottles brought in by the customer, set on the check by staff. */
     val corkageBottles: Int,
+    /** Container deposits of the basket's lines (per unit × qty), e.g. California CRV. */
+    val deposits: Money = Money.ZERO,
 )
 
 data class FeeLine(
