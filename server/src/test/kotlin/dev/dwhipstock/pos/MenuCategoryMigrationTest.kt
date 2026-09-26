@@ -74,7 +74,7 @@ class MenuCategoryMigrationTest {
     private fun oldPlateauStore(path: String): Int {
         val db = connect(path)
         Migrations.run(db, through = 33)
-        CopperLanternSeed.seedIfEmpty(CopperLanternVenue.PLATEAU)
+        seedOldStore(db, CopperLanternVenue.PLATEAU)
         return transaction(db) {
             for ((old, ids) in oldLayout) for (id in ids) {
                 Items.update({ Items.id eq id }) { it[categoryId] = old }

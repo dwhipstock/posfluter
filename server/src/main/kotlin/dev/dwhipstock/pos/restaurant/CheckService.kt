@@ -1370,7 +1370,7 @@ class CheckService(private val config: CustomerConfig) {
         val taxRate = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent
         val lines = buildList {
             add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
-            policy.headerLines.forEach { add(PrintLine.Text(it, Align.CENTER)) }
+            policy.header().forEach { add(PrintLine.Text(it, Align.CENTER)) }
             add(PrintLine.Blank)
             add(PrintLine.Header(msg(REFUND_HEADER)))
             add(PrintLine.Blank)

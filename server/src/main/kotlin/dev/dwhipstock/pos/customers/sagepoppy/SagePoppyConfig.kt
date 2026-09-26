@@ -100,7 +100,8 @@ class SagePoppyConfig(
                 // name in capitals, "BOTTLE SHOP" below (ThermalLayout.venueName
                 // splits on the dash), the address and phone, then a rule
                 logoFallbackText = "SAGE & POPPY — BOTTLE SHOP",
-                headerLines = listOf(s.venueAddress, "Tel. ${s.venuePhone}"),
+                headerLines = listOf(s.venueAddress),
+                phone = s.venuePhone,
                 headerRule = true,
                 footerText = s.receiptFooter,
                 showTax = false,

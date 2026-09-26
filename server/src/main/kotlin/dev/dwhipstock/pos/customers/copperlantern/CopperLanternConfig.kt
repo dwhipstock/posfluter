@@ -68,7 +68,8 @@ class CopperLanternConfig(
         get() = settings.get().let { s ->
             ReceiptPolicy.Standard(
                 logoFallbackText = displayName, // TODO(M2): real logo bitmap for the thermal printer
-                headerLines = listOf(s.venueAddress, "Tél. / Tel. ${s.venuePhone}"),
+                headerLines = listOf(s.venueAddress),
+                phone = s.venuePhone,
                 footerText = s.receiptFooter,
                 showTax = false,
             )

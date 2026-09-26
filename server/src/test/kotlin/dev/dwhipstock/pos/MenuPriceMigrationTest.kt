@@ -67,7 +67,7 @@ class MenuPriceMigrationTest {
         val path = tempDb()
         val db = connect(path)
         Migrations.run(db, through = 36)
-        CopperLanternSeed.seedIfEmpty(CopperLanternVenue.PLATEAU)
+        seedOldStore(db, CopperLanternVenue.PLATEAU)
         // put the store back on the old seeded prices, as a pre-037 install has
         transaction(db) {
             for ((variant, p) in MenuPriceMigration.PRICES) {

@@ -151,7 +151,9 @@ data class CustomerBillDto(
 data class FloorObjectDto(
     val id: String, val type: String,
     val x: Int, val y: Int, val width: Int, val height: Int,
-    val rotation: Int, val label: String? = null,
+    val rotation: Int,
+    /** Optional caption in each catalog language ("Billard" / "Pool"). */
+    val labelFr: String? = null, val labelEn: String? = null,
 )
 
 @Serializable
@@ -542,7 +544,7 @@ fun Route.posRoutes(
                         o[FloorObjects.id], o[FloorObjects.type],
                         o[FloorObjects.x], o[FloorObjects.y],
                         o[FloorObjects.width], o[FloorObjects.height],
-                        o[FloorObjects.rotation], o[FloorObjects.label],
+                        o[FloorObjects.rotation], o[FloorObjects.labelFr], o[FloorObjects.labelEn],
                     )
                 }
             Zones.selectAll().orderBy(Zones.sortOrder).map {

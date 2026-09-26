@@ -92,7 +92,10 @@ enum class ReceiptKind { FINAL, PROVISIONAL }
 /** Customer-tier receipt policy: header/footer identity + formatting decisions. */
 sealed interface ReceiptPolicy {
     val logoFallbackText: String
+    /** Fixed lines under the name (the address); the phone line is added by [header]. */
     val headerLines: List<String>
+    /** The store's phone number from settings; its label follows the receipt language. */
+    val phone: String get() = ""
     val footerText: String
     /** Print the included-tax line (label + rate) under the total when the tax policy has a rate. */
     val showTax: Boolean
@@ -125,6 +128,15 @@ sealed interface ReceiptPolicy {
         if (locale.tag == LocaleCode.FR.tag) Money.frenchFigure(it) else it
     }
 
+    /**
+     * The printed block under the store's name: [headerLines], then the phone
+     * with its label in this receipt's language ("Tél." / "Tel."). A blank
+     * phone prints no line.
+     */
+    fun header(): List<String> =
+        if (phone.isBlank()) headerLines
+        else headerLines + Messages.get(MessageKey.RECEIPT_PHONE, locale, phone.trim())
+
     /** Same venue identity, different print locale — the check owner's preference wins at close time. */
     fun withLocale(locale: LocaleCode): ReceiptPolicy
 
@@ -139,6 +151,7 @@ sealed interface ReceiptPolicy {
         /** US receipts: "09/25/2026 5:57 PM" (month first, 12-hour clock). */
         val usDates: Boolean = false,
         override val headerRule: Boolean = false,
+        override val phone: String = "",
     ) : ReceiptPolicy {
         override fun withLocale(locale: LocaleCode) = copy(locale = locale)
 
@@ -164,7 +177,7 @@ object ReceiptRenderer {
         val provisional = kind == ReceiptKind.PROVISIONAL
 
         add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
-        policy.headerLines.forEach { add(PrintLine.Text(it, Align.CENTER)) }
+        policy.header().forEach { add(PrintLine.Text(it, Align.CENTER)) }
         if (policy.headerRule) add(PrintLine.Divider)
         add(PrintLine.Blank)
         if (provisional) {

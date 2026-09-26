@@ -37,6 +37,9 @@ data class FloorObjectCreateRequest(
     val x: Int, val y: Int,
     val width: Int = 100, val height: Int = 100,
     val rotation: Int = 0,
+    val labelFr: String? = null,
+    val labelEn: String? = null,
+    /** One caption for both languages (older clients); labelFr / labelEn win. */
     val label: String? = null,
     val managerPin: String? = null,
 )
@@ -74,7 +77,9 @@ fun Route.floorObjectRoutes(auth: AuthService) {
                 it[width] = req.width
                 it[height] = req.height
                 it[rotation] = req.rotation
-                it[label] = req.label?.trim()?.ifBlank { null }
+                val shared = req.label?.trim()?.ifBlank { null }
+                it[labelFr] = req.labelFr?.trim()?.ifBlank { null } ?: shared
+                it[labelEn] = req.labelEn?.trim()?.ifBlank { null } ?: shared
             }
             Outbox.write("floor_object.added", "floor_object", objectId, buildJsonObject {
                 put("objectId", objectId)
@@ -181,6 +186,6 @@ private fun floorObjectDto(objectId: String): FloorObjectDto {
         row[FloorObjects.id], row[FloorObjects.type],
         row[FloorObjects.x], row[FloorObjects.y],
         row[FloorObjects.width], row[FloorObjects.height],
-        row[FloorObjects.rotation], row[FloorObjects.label],
+        row[FloorObjects.rotation], row[FloorObjects.labelFr], row[FloorObjects.labelEn],
     )
 }
