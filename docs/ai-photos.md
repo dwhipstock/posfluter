@@ -9,8 +9,8 @@ client's own house style, so the whole menu looks like one photo shoot.
 Two manager actions on the item editor (tablet and desktop, **Menu → tap an
 item**), under "Upload photo":
 
-- **Generate photo.** Makes 3 pictures (2–4, set by the store) from the item's
-  name, description and category plus the client's **house style**. The
+- **Generate photo.** Makes 3 pictures (1–4 through the API) from the item's
+  description and category plus the client's **house style**. The
   manager taps one and chooses "Use this photo", or "Regenerate".
 - **Snap and enhance.** The manager takes or picks a real photo of the dish.
   The provider's edit mode improves the lighting, background and presentation.
@@ -39,10 +39,32 @@ One per brand (`server/.../aiphotos/HouseStyle.kt`):
 
 | Client | Style |
 | --- | --- |
-| Copper Lantern (cpr) | Rustic pub: dark, worn wooden table, warm low tungsten light from the left, gentle shadows, 45° angle, shallow depth of field, blurred brick-and-copper background |
-| Sage & Poppy (SP) | Clean bright studio: white backdrop fading to soft sage green, even diffused softbox light, straight-on eye level, a crisp soft shadow |
+| Copper Lantern (cpr) | Natural pub table of medium-toned wood by a large window: soft daylight, neutral white balance, true-to-life colours, no orange cast or heavy vignette, 45° angle, gentle depth of field, softly blurred pub interior. Reads as an unretouched photo by a food photographer. |
+| Sage & Poppy (SP) | Clean bright studio: white backdrop fading to a very pale sage green, even diffused softbox light, neutral white balance, true-to-life colours, straight-on eye level, a crisp soft shadow |
 
 A store can replace the scene line with `image.style=...` in its config.
+
+The first pub style (warm tungsten light, brick and copper) gave every
+picture an orange, obviously-AI cast. Both styles now ask for neutral colour.
+
+### What the prompt says about the item
+
+The item's name is never given to the model as a name. Asked for "a photo of
+Lantern House Lager", a model prints those words on the glass as garbled
+lettering, even when the prompt says "no text". So:
+
+- The subject is the item's **description** ("Crisp, malty lager brewed in
+  Montréal").
+- When the description doesn't say what the thing is ("Beef, cheddar, bacon,
+  onions and house sauce"), it is led by a plain phrase: the name without the
+  brand and place words, plus a generic noun from a one-word category
+  ("burger", "pinot noir wine", "old fashioned cocktail"). A retail product
+  with no description uses its name without the brand, plus the style when the
+  name doesn't give it ("hazy IPA 4-pack 16 oz cans", "cola 2 L soda").
+- Every prompt also asks for plain, unbranded glassware, bottles and plates
+  with no printing, labels or engraving.
+
+The brand and place words per client are `nameWordsToDrop` in `HouseStyle.kt`.
 
 ## Providers and cost
 
@@ -109,7 +131,12 @@ GET  /ai-photos/status                 {configured, available, provider, model, 
 POST /items/{id}/ai-photo/generate     {managerPin, count?}            → {source, candidates:[{id, contentType, dataBase64}], elapsedMs, estimatedCostUsd}
 POST /items/{id}/ai-photo/enhance      multipart: photo, managerPin, count?   → same
 POST /items/{id}/ai-photo/choose       {managerPin, candidateId}       → {itemId, photoVersion, photoSource}
+POST /items/{id}/photo                 multipart: photo, managerPin, source?   → {itemId, photoVersion, photoSource}
 ```
+
+`count` is 1 to 4 (default 3). The ordinary photo upload takes an optional
+`source` (`original`, the default, or `ai_generated` / `ai_enhanced`), so a
+picture copied from another store keeps its AI badge.
 
 Candidates are held in memory for 30 minutes and are single-use. A candidate
 can only be saved onto the item it was made for.
@@ -148,6 +175,7 @@ without a key are skipped and named.
 python3 scripts/image-bakeoff.py --dry-run                     # the plan and cost estimate, no calls
 python3 scripts/image-bakeoff.py                               # every provider with a key in .env
 python3 scripts/image-bakeoff.py --providers flux,openai --items 3
+python3 scripts/image-bakeoff.py --providers flux --only lantern-lager,pinot-noir   # just these items
 python3 scripts/image-bakeoff.py --env ~/projects/posflutter/.env   # keys from another checkout
 python3 scripts/image-bakeoff.py --fake                        # no keys, no network: try the page
 open .image-bakeoff/*/index.html
@@ -155,6 +183,45 @@ open .image-bakeoff/*/index.html
 
 A full run with all three providers costs about $1.30. Unit tests (a fake
 provider and mocked HTTP): `python3 -m unittest discover -s scripts/tests`.
+
+## Filling a whole menu
+
+`scripts/ai-menu-photos.py` fills a store's menu in one go, through the same
+store endpoints the item editor uses. It signs in with the manager PIN
+(`--pin`, or `DEMO_MANAGER_PIN`, default 1234). The store holds the key and
+builds the prompt, so the script never sees a key.
+
+```bash
+python3 scripts/ai-menu-photos.py --dry-run --skip-ai          # the plan and cost estimate, no spend
+python3 scripts/ai-menu-photos.py --store http://localhost:8080 --skip-ai
+python3 scripts/ai-menu-photos.py --only lantern-lager,poutine --force
+python3 scripts/ai-menu-photos.py --only poutine --count 3     # then: --pick poutine=2
+python3 scripts/ai-menu-photos.py --copy-to http://<tablet-ip>:8080
+open .ai-menu-photos/*/index.html
+```
+
+- **Which items.** By default, items with no photo. `--skip-ai` also replaces
+  non-AI photos (a manager's upload, the imported stock photos) and leaves AI
+  ones alone. `--force` redoes every item. `--only id,id` limits the run to
+  those items.
+- **Candidates.** `--count 1` (the default) saves the one picture straight
+  away. With `--count 2` to `4`, the candidates go on the contact sheet and
+  stay on the store for 30 minutes. Save one per item with `--pick id=N,id=N`.
+- **Idempotent and resumable.** An item that already has what was asked for
+  is skipped, so after an interruption, run the same command again. It stops
+  at the first error that would hit every item (out of credits, bad key,
+  store offline).
+- **Review.** Each run prints one line per item and a total, and writes a
+  contact sheet with the chosen pictures to the gitignored
+  `.ai-menu-photos/<store>/` folder.
+- **Copy to a second store.** `--copy-to URL2` uploads the first store's AI
+  photos onto the same items at the second store (the tablet, or the other
+  pub). They keep their `ai_generated` / `ai_enhanced` provenance, so both
+  menus match and each picture is paid for once. Copying generates nothing.
+  Items that aren't on the other menu are skipped. A photo already copied is
+  skipped unless `--force` is given.
+
+A 75-item pub menu at one FLUX candidate per item costs about $2.25.
 
 ## Verified vs. not yet verified
 

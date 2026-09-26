@@ -79,7 +79,7 @@ class AiPhotoService(
 
     companion object {
         const val DEFAULT_COUNT = 3
-        const val MIN_COUNT = 2
+        const val MIN_COUNT = 1
         const val MAX_COUNT = 4
         private const val CANDIDATE_TTL_MS = 30 * 60 * 1000L
         private const val MAX_CANDIDATES = 24

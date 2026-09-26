@@ -136,7 +136,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: unittest (image bake-off, no keys, no network)
+      - name: unittest (AI photo scripts, no keys, no network)
         run: python3 -m unittest discover -s scripts/tests -v
 
   infra:

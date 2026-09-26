@@ -17,6 +17,7 @@ anywhere else; keys are never printed or written to the output.
 Usage:
   python3 scripts/image-bakeoff.py                 # every provider with a key
   python3 scripts/image-bakeoff.py --providers flux,openai --items 3
+  python3 scripts/image-bakeoff.py --providers flux --only lantern-lager,pinot-noir
   python3 scripts/image-bakeoff.py --dry-run       # the plan and cost estimate, no calls
   python3 scripts/image-bakeoff.py --fake          # a fake provider, no keys, no network
 
@@ -31,9 +32,11 @@ import concurrent.futures
 import html
 import json
 import os
+import re
 import struct
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -46,15 +49,23 @@ REPO = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = REPO / ".image-bakeoff"
 
 # --- the house style: keep in sync with server/.../aiphotos/HouseStyle.kt ----
-# (tests/test_image_bakeoff.py checks these strings are still in that file)
+# (tests/test_image_bakeoff.py checks these strings are still in that file, and
+# that both sides build the same prompt for the same items)
 CPR_SHOT = "professional food and drink menu photograph for a pub"
 CPR_SCENE = (
-    "rustic pub setting: dark, worn wooden table, warm low tungsten light with a soft "
-    "glow from the left, gentle shadows, camera at a 45-degree angle, shallow depth of field, "
-    "blurred background of brick and copper tones"
+    "a pub table of natural medium-toned wood by a large window: soft natural daylight, "
+    "neutral white balance, true-to-life colours with clean whites, no orange or amber colour cast, "
+    "no heavy vignette, moderate contrast, camera at a 45-degree angle, gentle depth of field, "
+    "softly blurred pub interior in the background, looks like an unretouched photo taken by a "
+    "professional food photographer with a DSLR"
 )
-CLEAN = ("No text, no captions, no logos or readable brand names, no watermark, "
+# brand and place words taken out of a name (a model prints a branded name on the glass)
+CPR_DROP_WORDS = ["Copper", "Lantern", "Montreal", "Quebec", "Eastern", "Townships", "Monteregie", "Plateau",
+                  "North", "Trail"]
+CLEAN = ("Plain, unbranded glassware, bottles and plates with no printing, labels or "
+         "engraving. No text, no captions, no logos or readable brand names, no watermark, "
          "no people or hands, no cutlery clutter.")
+COURSES = {"starter", "appetizer", "appetiser", "main", "entree", "side", "special", "snack", "other", "extra"}
 
 
 @dataclass(frozen=True)
@@ -63,6 +74,8 @@ class Item:
     name: str
     description: str
     category: str
+    brand: Optional[str] = None
+    subcategory: Optional[str] = None
 
 
 # Ten varied Copper Lantern items (the soup is not on today's seeded menu; it
@@ -81,11 +94,68 @@ ITEMS = [
 ]
 
 
+def _fold(s: str) -> str:
+    """Lowercase, accents off, surrounding punctuation off: "Montréal," -> "montreal"."""
+    s = "".join(c for c in unicodedata.normalize("NFD", s) if not unicodedata.combining(c)).lower()
+    i, j = 0, len(s)
+    while i < j and not s[i].isalnum():
+        i += 1
+    while j > i and not s[j - 1].isalnum():
+        j -= 1
+    return s[i:j]
+
+
+def _mentions(text: str, word: str) -> bool:
+    w = _fold(word)
+    if not w:
+        return True
+    stem = w[:-1] if len(w) > 3 and w.endswith("s") else w
+    return re.search(r"(^|[^a-z0-9])" + re.escape(stem), _fold(text)) is not None
+
+
+def _plain_name(item: Item, drop_words: list[str]) -> list[str]:
+    keep = {_fold(w) for w in (item.subcategory or "").split()}
+    drop = {_fold(w) for w in drop_words + ((item.brand or "").split())} - keep
+    return [w if any(c.isalpha() for c in w) and w == w.upper() else w.lower()
+            for w in item.name.strip().split() if _fold(w) not in drop]
+
+
+def _category_noun(category: str) -> Optional[str]:
+    c = category.strip().lower()
+    if not c or re.search(r"\s", c) or "&" in c or "," in c:
+        return None
+    noun = c[:-1] if len(c) > 3 and c.endswith("s") and not c.endswith("ss") else c
+    return None if noun in COURSES else noun
+
+
+def what_it_is(item: Item, drop_words: list[str] = CPR_DROP_WORDS) -> str:
+    """Same as PhotoPrompts.whatItIs: "burger", "pinot noir wine", "old fashioned cocktail"."""
+    words = _plain_name(item, drop_words)
+    sub = (item.subcategory or "").strip()
+    noun = sub.lower() if sub else _category_noun(item.category)
+    said = " ".join(words) + " " + item.description
+    if noun is not None and not any(_mentions(said, w) for w in noun.split()):
+        words.append(noun)
+    return " ".join(words) or item.category.strip().lower()
+
+
+def subject(item: Item, drop_words: list[str] = CPR_DROP_WORDS) -> str:
+    """Same as PhotoPrompts.subject: the description, led by what it is when it doesn't say."""
+    desc = item.description.strip().rstrip(".").strip()
+    if not desc:
+        return what_it_is(item, drop_words)
+    plain = _plain_name(item, drop_words)
+    if plain and _mentions(desc, plain[-1]):
+        return desc
+    return f"{what_it_is(item, drop_words)}. {desc}"
+
+
 def generate_prompt(item: Item) -> str:
     """Same template as PhotoPrompts.generate in the store."""
-    desc = item.description.strip().rstrip(".")
-    return (f"A {CPR_SHOT} of {item.name.strip()}" + (f": {desc}" if desc else "") +
-            f". Menu category: {item.category.strip()}. "
+    sub = (item.subcategory or "").strip()
+    category = item.category.strip() + (f" ({sub})" if sub else "")
+    return (f"A {CPR_SHOT}. The subject: {subject(item)}. "
+            f"Menu category: {category}. "
             f"House style, shared by every photo on this menu: {CPR_SCENE}. "
             "One single serving is the only subject, centred and filling most of the frame, realistic, "
             "appetising and true to how it is actually served. " + CLEAN)
@@ -401,6 +471,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--providers", default="flux,gemini,openai", help="comma list (default: all)")
     ap.add_argument("--items", type=int, default=len(ITEMS), help="first N of the 10 items")
+    ap.add_argument("--only", default="", help="comma list of item ids to run (overrides --items)")
     ap.add_argument("--env", type=Path, default=REPO / ".env", help="where the keys are (default: repo .env)")
     ap.add_argument("--out", type=Path, default=None, help="output folder (default: .image-bakeoff/<timestamp>)")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and cost estimate; call nothing")
@@ -408,6 +479,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = ap.parse_args(argv)
 
     items = ITEMS[: max(1, min(args.items, len(ITEMS)))]
+    if args.only.strip():
+        wanted_ids = [i.strip() for i in args.only.split(",") if i.strip()]
+        by_id = {i.id: i for i in ITEMS}
+        unknown = [i for i in wanted_ids if i not in by_id]
+        if unknown:
+            print(f"Unknown item id(s): {', '.join(unknown)}. Choose from: {', '.join(by_id)}")
+            return 2
+        items = [by_id[i] for i in dict.fromkeys(wanted_ids)]
     if args.fake:
         providers: list[Provider] = [FakeProvider("")]
     else:
