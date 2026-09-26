@@ -435,8 +435,9 @@ function StoreCompare() {
           return (
             <Card key={v.id} className="relative overflow-hidden p-4" data-testid="store-card">
               <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: colorOf(v.id) }} aria-hidden />
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-semibold text-navy">{nameOf(v.id)}</span>
+              {/* long names ("Sage & Poppy Bottle Shop") wrap instead of truncating */}
+              <div className="flex items-start gap-2">
+                <span className="min-w-0 break-words text-sm font-semibold leading-snug text-navy" data-testid="store-card-name">{nameOf(v.id)}</span>
                 <RetailBadge venueId={v.id} />
                 {status && <StatusPill status={status} label={t(STATUS_KEY[status])} />}
               </div>

@@ -60,6 +60,29 @@ BASKETS = [
 ]
 
 
+def ring_sale(items, basket, pay, dob=None):
+    """Ring up one counter sale: scan each product id's barcode, check an ID when
+    the basket needs it, take cash (next $20 up) or card, finalize. Returns
+    (sale id, grand total cents, status). Reused by scripts/demo-reset-helper.py."""
+    sale = call("POST", "/retail/sales")
+    for pid in basket:
+        code = items[pid].get("barcode")
+        sale = call("POST", f"/retail/sales/{sale['id']}/scan", {"barcode": code})
+    if sale.get("ageCheckRequired") and not sale.get("ageCleared"):
+        dob = dob or (datetime.date.today() - datetime.timedelta(days=365 * 34)).isoformat()
+        call("POST", f"/retail/sales/{sale['id']}/age-check",
+             {"method": "MANUAL", "dateOfBirth": dob, "cashierSawId": True})
+    total = sale["grandTotalCents"]
+    if pay == "CASH":
+        tendered = ((total // 2000) + 1) * 2000  # next $20 up → shows change
+        call("POST", f"/checks/{sale['id']}/tenders", {"type": "CASH", "amountTenderedCents": tendered})
+    else:
+        call("POST", f"/checks/{sale['id']}/tenders/initiate", {"type": "CARD", "amountCents": total})
+        call("POST", f"/checks/{sale['id']}/tenders/confirm", {"type": "CARD", "amountCents": total})
+    final = call("POST", f"/checks/{sale['id']}/finalize", {})
+    return sale["id"], total, final.get("status")
+
+
 def main():
     print(f"Seeding retail demo sales against {BASE} …")
     login(MANAGER_PIN)
@@ -76,24 +99,9 @@ def main():
             login("5555")
         elif n == 3:
             login(MANAGER_PIN)
-        sale = call("POST", "/retail/sales")
-        for pid in basket:
-            code = items[pid].get("barcode")
-            sale = call("POST", f"/retail/sales/{sale['id']}/scan", {"barcode": code})
-        if sale.get("ageCheckRequired") and not sale.get("ageCleared"):
-            dob = (datetime.date.today() - datetime.timedelta(days=365 * 34)).isoformat()
-            call("POST", f"/retail/sales/{sale['id']}/age-check",
-                 {"method": "MANUAL", "dateOfBirth": dob, "cashierSawId": True})
-        total = sale["grandTotalCents"]
-        if pay == "CASH":
-            tendered = ((total // 2000) + 1) * 2000  # next $20 up → shows change
-            call("POST", f"/checks/{sale['id']}/tenders", {"type": "CASH", "amountTenderedCents": tendered})
-        else:
-            call("POST", f"/checks/{sale['id']}/tenders/initiate", {"type": "CARD", "amountCents": total})
-            call("POST", f"/checks/{sale['id']}/tenders/confirm", {"type": "CARD", "amountCents": total})
-        final = call("POST", f"/checks/{sale['id']}/finalize", {})
+        sale_id, total, status = ring_sale(items, basket, pay)
         grand += total
-        print(f"  sale #{sale['id']}: {len(basket)} products, {usd(total)} {pay} → {final.get('status')}")
+        print(f"  sale #{sale_id}: {len(basket)} products, {usd(total)} {pay} → {status}")
     print(f"Done. {len(BASKETS)} sales, gross {usd(grand)} USD. In the portal after the next sync tick.")
 
 

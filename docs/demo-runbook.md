@@ -346,3 +346,20 @@ scripts/demo-down.sh --reset  # also wipe the cloud db and .demo/plateau
 
 After a `--reset`, re-run `scripts/tablet-cloud-config.sh` so the tablet
 re-sends its history to the fresh cloud db.
+
+## Before a meeting: reset, autostart, walkthrough
+
+The scripted 10–15 minute tour, its checklist and recovery tips are in
+[demo-walkthrough.md](demo-walkthrough.md).
+
+```sh
+scripts/demo-reset.sh --store sage-poppy          # print the plan, change nothing
+scripts/demo-reset.sh --store sage-poppy --yes    # back up, reseed, 2 days of sales, restart
+scripts/demo-reset.sh --store all --yes           # plateau, sage-poppy, then the tablet (safe reset)
+scripts/demo-autostart.sh install                 # start both Mac stores at login
+scripts/demo-autostart.sh status | restart --store plateau
+```
+
+Each Mac store's settings (including its cloud key) live in the gitignored
+`.demo/<store>/store.env`, captured from the running store on the first reset;
+`--hosted` / `--local` / `--offline` picks the cloud it syncs to afterwards.

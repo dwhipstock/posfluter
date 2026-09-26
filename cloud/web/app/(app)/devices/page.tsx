@@ -135,7 +135,7 @@ function StoreCard({ store: s, onChanged }: { store: StorePos; onChanged: () => 
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", STATUS_DOT[s.status])} aria-hidden />
-          <CardTitle className="truncate">{s.venueName}</CardTitle>
+          <CardTitle className="min-w-0 break-words leading-snug">{s.venueName}</CardTitle>
           <StatusBadge status={s.status} />
         </div>
         <CardDescription>{storeSeenLabel(t, fmt, s)}</CardDescription>
