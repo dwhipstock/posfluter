@@ -72,6 +72,7 @@ picked; rows from a specific store carry `venueId`):
 | cash-movements | `{ venueId, venueName, paidInCents, paidOutCents, netCents, inCount, outCount }` |
 | shifts | `{ venueId, venueName, shiftCount, openCount, revenueCents, transactionCount, overShortCents }` |
 | journal | `{ venueId, venueName, closedCount, voidCount, closedCents }` over the whole filtered range, not the page |
+| fuel | `{ venueId, venueName, fuelVolumeMilli, fuelAmountCents, fuelCount, inStoreSalesCents, inStoreCheckCount, fuelMarginCents, fuelMarginMillsPerGallon, inStoreMarginCents, inStoreMarginBasisPoints }` |
 
 **Currency (every report).** Every per-store row (`byVenue` entries, list rows
 such as journal / refunds / voids / cash movements / shifts / zones / tables)
@@ -166,6 +167,58 @@ counts 0.
   ```
   (open shift included with nulls for the close-only fields — that's the live
   X view; `GET /v1/reports/shifts/{id}` returns one.)
+- `GET /v1/reports/fuel` — a gas station's shop and pumps, with margins
+  (CONTRACT §2, Fuel; costs and promotions). Fuel from `fuel.sale` rows whose
+  `completedAt` falls in the range (each store's business days): what the
+  pumps dispensed, tax-inclusive. A prepay's unused change is a
+  `refund.created` (Refunds report) and is not subtracted from fuel again.
+  In-store = the lines of closed checks in the range whose `categoryId` is not
+  `fuel`, before tax: `grossSalesCents` = Σ `lineTotalCents`, `salesCents` =
+  gross − `discountCents` (the checks' promotions).
+  ```json
+  { "currency": "USD",
+    "inStore": { "salesCents": 33710, "grossSalesCents": 34494, "discountCents": 784,
+                 "lineCount": 75, "qty": 106, "checkCount": 33,
+                 "costedLineCount": 66, "uncostedLineCount": 9, "costedSalesCents": 30485,
+                 "costCents": 14447, "marginCents": 16038, "marginBasisPoints": 5261 },
+    "inStoreByCategory": [ { "categoryId": "snacks", "nameFr", "nameEn", "salesCents", "qty", "lineCount",
+                             "costedSalesCents", "costCents", "marginCents", "marginBasisPoints",
+                             "uncostedLineCount", "currency" } ],
+    "fuel": { "volumeMilli": 398234, "amountCents": 128355, "count": 31,
+              "prepayCount": 8, "prepaidCents": 41000, "prepayRefundCents": 4601,
+              "costedCount": 31, "uncostedCount": 0, "costedVolumeMilli": 398234,
+              "costedAmountCents": 128355, "costCents": 119349, "marginCents": 9006,
+              "marginMillsPerGallon": 226 },
+    "byGrade": [ { "grade": "REG", "gradeName": "Regular", "volumeMilli": 219337,
+                   "amountCents": 65779, "count": 18, "currency": "USD",
+                   "costedCount": 18, "costedVolumeMilli": 219337, "costedAmountCents": 65779,
+                   "costCents": 61173, "marginCents": 4606, "marginMillsPerGallon": 210 } ],
+    "byVenue": [ { "venueId", "venueName", "fuelVolumeMilli", "fuelAmountCents", "fuelCount",
+                   "inStoreSalesCents", "inStoreCheckCount", "currency",
+                   "fuelMarginCents", "fuelMarginMillsPerGallon",
+                   "inStoreMarginCents", "inStoreMarginBasisPoints" } ],
+    "money": { … } }
+  ```
+  - `volumeMilli` = thousandths of a US gallon. Grade rows are one per (grade,
+    currency), ordered Regular, Mid-Grade, Premium, Diesel, then others;
+    categories are one per (category, currency), best margin first, those
+    with no costed line last.
+  - **Margins only where the cost is known** (an older store sends none:
+    unknown, never zero). `costed*` is the basis, `uncosted*` counts what was
+    left out. Fuel: `marginCents` = costed `amountCents` − `costCents`;
+    `marginMillsPerGallon` = `marginCents` × 10 000 ÷ `costedVolumeMilli`,
+    half-up, in tenths of a cent (226 = 22.6¢/gal). In-store: a check's
+    promotions are shared over its shop lines pro rata to their totals (the
+    largest line takes the rounding cent) so every line has a net figure;
+    `marginCents` = Σ net of costed lines − Σ `unitCostCents × qty`;
+    `marginBasisPoints` = `marginCents` × 10 000 ÷ `costedSalesCents`, half-up
+    (5261 = 52.61%). A ratio is `null` when nothing in scope was costed.
+  - `fuel` and `inStore` money is combined per the currency rules above
+    (ratios then come from the combined, converted figures). A store with no
+    fuel sales returns empty `byGrade` and zeros. The portal shows this report
+    and a leading KPI row on the dashboard (in-store sales and margin, fuel
+    gallons and margin per gallon) when the brand pack sets
+    `"features": { "fuel": true }`.
 - `GET /v1/reports/journal?from&to&q&limit=50&offset=0` — searchable
   transaction journal over closed+voided checks. `q` matches check id, table
   label, or exact CAD amount.

@@ -14,7 +14,14 @@ export type BrandLocale = (typeof SUPPORTED_LOCALES)[number];
 export type BrandLayout = "sidebar" | "topbar";
 /** The sign-in page: a dark header band over a card, or a split panel. */
 export type BrandLogin = "band" | "split";
-export type BrandFont = "inter" | "jakarta";
+export type BrandFont = "inter" | "jakarta" | "barlow";
+export const BRAND_FONTS = ["inter", "jakarta", "barlow"] as const;
+
+/** Optional portal features a client turns on in its pack (default: all off). */
+export interface BrandFeatures {
+  /** A gas station: the Fuel report (fuel by grade beside in-store sales). */
+  fuel: boolean;
+}
 
 export interface BrandPalette {
   /** Chrome + strong brand colour (sidebar, headings). Tailwind: `navy`. */
@@ -72,6 +79,7 @@ export interface Brand {
   locales: { default: BrandLocale; available: BrandLocale[] };
   /** The client's currency: the fallback when a store doesn't say. */
   currency: string;
+  features: BrandFeatures;
   /** File names inside the brand pack (served at /brand/<file>). */
   assets: { mark: string; markLarge: string; icon: string; logo?: string };
   palette: BrandPalette;
@@ -150,6 +158,11 @@ export function parseBrand(raw: unknown): Brand {
   const currency = typeof raw.currency === "string" ? raw.currency.toUpperCase() : "CAD";
   if (!/^[A-Z]{3}$/.test(currency)) throw new BrandError("brand.currency: a 3-letter code");
 
+  const f = raw.features === undefined ? {} : raw.features;
+  if (!isObj(f)) throw new BrandError("brand.features: an object of on/off flags");
+  if (f.fuel !== undefined && typeof f.fuel !== "boolean") throw new BrandError("brand.features.fuel: true or false");
+  const features: BrandFeatures = { fuel: f.fuel === true };
+
   const a = isObj(raw.assets) ? raw.assets : {};
   const assets = {
     mark: str(a, "mark", "brand.assets", FILE),
@@ -197,9 +210,10 @@ export function parseBrand(raw: unknown): Brand {
     wordmarkSub,
     layout: oneOf(raw, "layout", ["sidebar", "topbar"] as const, "sidebar", "brand"),
     login: oneOf(raw, "login", ["band", "split"] as const, "band", "brand"),
-    font: oneOf(raw, "font", ["inter", "jakarta"] as const, "inter", "brand"),
+    font: oneOf(raw, "font", BRAND_FONTS, "inter", "brand"),
     locales: { default: def as BrandLocale, available: available as BrandLocale[] },
     currency,
+    features,
     assets,
     palette,
     neutral,
@@ -248,7 +262,7 @@ export function brandCssVars(b: Brand): Record<string, string> {
     "--radius-control-sm": b.shape.controlSm,
     "--radius-control-lg": b.shape.controlLg,
     "--shadow-raised": b.shape.shadow,
-    "--font-brand": b.font === "jakarta" ? "var(--font-jakarta)" : "var(--font-inter)",
+    "--font-brand": `var(--font-${b.font})`,
   };
   for (const [step, hex] of Object.entries(b.neutral)) vars[`--c-n-${step}`] = hexChannels(hex);
   return vars;

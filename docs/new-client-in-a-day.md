@@ -47,12 +47,16 @@ Stores are unchanged: each still runs fully on its own, offline, and only
    * `name`, `legalName`, `wordmarkSub` — what the portal and browser tab say;
    * `palette` and `neutral` — their colours (every text colour on its
      background should reach 4.5:1 contrast);
-   * `font` — `inter` or `jakarta`; `shape` — corner radii, `9999px` for pill
-     buttons, `shadow` or `none` for a flat look;
+   * `font` — `inter`, `jakarta` or `barlow`; `shape` — corner radii, `9999px`
+     for pill buttons, `shadow` or `none` for a flat look;
    * `layout` — `sidebar` (dark side menu) or `topbar` (light top bar);
      `login` — `band` or `split`;
    * `locales` — e.g. `{"default": "en", "available": ["en", "es"]}`
-     (English, French and Spanish are built in); `currency` — e.g. `USD`.
+     (English, French and Spanish are built in); `currency` — e.g. `USD`;
+   * `features` — optional extras, off unless set: `{"fuel": true}` adds the
+     "Fuel & in-store" report and puts a gas station's headline row first on
+     the dashboard (in-store sales and margin, fuel gallons and margin per
+     gallon).
 4. Check it: `cd cloud/web && npm test && npm run build && npm run test:brands`
    — the last one renders every page under every pack and fails if any page
    names another client.
@@ -102,12 +106,53 @@ The owner signs in at their address with the admin email and the password
 from `clients/<id>/.env` (`ADMIN_PASSWORD`), enrols their authenticator app,
 and changes the password. Done.
 
+## Worked example: the third client, a gas station
+
+Pronghorn Fuel & Market is a fictional Texas gas station with a convenience
+store: one store, US dollars, Central time, English with Spanish, a shop (so
+`--retail`) whose counter also settles the pumps.
+
+**The brand pack** is `cloud/web/brands/pronghorn/`: the round mark
+(`mark-192.png`, `mark-384.png`, rendered from `branding/pronghorn-mark-round.svg`),
+the favicon (`icon.png`, from `branding/pronghorn-mark.svg`), the wide logo
+(`logo.png`, the existing `branding/pronghorn-logo.png` resized — the logo's
+Barlow lettering is kept from that PNG, not re-rendered), and `brand.json`:
+the dark `sidebar` layout with the `band` sign-in, near-black chrome with a
+signal-yellow accent, the `barlow` face (bundled in `cloud/web/app/fonts`,
+SIL Open Font License), `en` + `es`, `USD`, and `"features": {"fuel": true}`
+for the Fuel report.
+
+**DNS** (placeholder — use the client's real name when there is one): create
+one record, `pronghorn-manager.example.com`, pointing at the server that runs
+the edge proxy — an `A` record to its public IPv4 address (plus `AAAA` for
+IPv6), or a `CNAME` to the server's own hostname. Create it before the first
+visit: the proxy fetches the certificate then.
+
+**Provision** (on the server; read the `--dry-run` plan first):
+
+```sh
+cloud/infra/new-client.sh pronghorn pronghorn-manager.example.com \
+  --name "Pronghorn Fuel & Market" --brand pronghorn \
+  --store "pronghorn=Pronghorn Fuel & Market" \
+  --zone America/Chicago --currency USD --country US --retail \
+  --admin-email owner@pronghorn.example.com \
+  --registry <registry> --image-tag <git-sha> --up
+```
+
+That gives tenant `pronghorn` its own database, API and portal, one store key
+and `clients/pronghorn/stores/pronghorn.env` for the store. The store is
+started with `POS_VENUE=pronghorn` and that file's `CLOUD_SYNC_URL` / key /
+zone. It sells and runs its pumps with no internet at all; when it is online
+it sends its sales — fuel sales (`fuel.sale`, CONTRACT §2) included — up to
+this portal only.
+
 ## Try it on a laptop
 
-`scripts/demo-clients.sh up --stores` runs two clients side by side behind one
-local proxy — `http://cpr.localhost:8088` (a Montréal pub group, CAD, French and
-English) and `http://sp.localhost:8088` (a California bottle shop, USD, English
-and Spanish) — each with demo stores syncing to it.
+`scripts/demo-clients.sh up --stores` runs three clients side by side behind
+one local proxy — `http://cpr.localhost:8088` (a Montréal pub group, CAD,
+French and English), `http://sp.localhost:8088` (a California bottle shop, USD,
+English and Spanish) and `http://pf.localhost:8088` (a Texas gas station, USD,
+English and Spanish) — each with demo stores syncing to it.
 
 ## Reference
 

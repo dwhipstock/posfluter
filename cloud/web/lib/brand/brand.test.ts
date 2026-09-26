@@ -13,7 +13,7 @@ const pack = (id: string) => JSON.parse(fs.readFileSync(path.join(WEB, "brands",
 
 test("every shipped brand pack parses and has its files", () => {
   const ids = fs.readdirSync(path.join(WEB, "brands")).filter((d) => fs.existsSync(path.join(WEB, "brands", d, "brand.json")));
-  assert.ok(ids.includes("copperlantern") && ids.includes("sagepoppy"), ids.join(","));
+  assert.ok(ids.includes("copperlantern") && ids.includes("sagepoppy") && ids.includes("pronghorn"), ids.join(","));
   for (const id of ids) {
     const b = loadBrandFrom(path.join(WEB, "brands", id));
     assert.equal(b.id, id, "the pack's id matches its folder");
@@ -126,4 +126,77 @@ test("pickLocale honours a saved choice only when the client offers it", () => {
   assert.equal(pickLocale(cl, "es"), "en", "no Spanish at the pub");
   assert.equal(pickLocale(cl, "fr"), "fr");
   assert.equal(pickLocale(cl, undefined), "en");
+});
+
+test("the gas station wears its own look: dark sidebar, Barlow, English + Spanish, USD, the Fuel report on", () => {
+  const ph = parseBrand(pack("pronghorn"));
+  assert.equal(ph.layout, "sidebar");
+  assert.equal(ph.login, "band");
+  assert.equal(ph.font, "barlow");
+  assert.equal(ph.currency, "USD");
+  assert.deepEqual(ph.locales, { default: "en", available: ["en", "es"] });
+  assert.equal(ph.features.fuel, true);
+  assert.equal(brandCssVars(ph)["--font-brand"], "var(--font-barlow)");
+  // the two other clients keep the Fuel report off
+  assert.equal(parseBrand(pack("copperlantern")).features.fuel, false);
+  assert.equal(parseBrand(pack("sagepoppy")).features.fuel, false);
+});
+
+test("features are on/off flags", () => {
+  const r = pack("sagepoppy");
+  r.features = { fuel: "yes" };
+  assert.throws(() => parseBrand(r), /features\.fuel/);
+  r.features = ["fuel"];
+  assert.throws(() => parseBrand(r), /brand\.features/);
+});
+
+// WCAG 2 relative luminance / contrast ratio
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test("every pack's text colours reach 4.5:1 on the backgrounds they sit on", () => {
+  const ids = fs.readdirSync(path.join(WEB, "brands")).filter((d) => fs.existsSync(path.join(WEB, "brands", d, "brand.json")));
+  const W = "#FFFFFF"; // the portal's text-white on chrome and buttons
+  for (const id of ids) {
+    const { palette: p, neutral: n } = parseBrand(pack(id));
+    const pairs: [string, string, string][] = [
+      ["text on background", p.text, p.background],
+      ["text on surface", p.text, p.surface],
+      ["text on surfaceAlt", p.text, p.surfaceAlt],
+      ["textMuted on background", p.textMuted, p.background],
+      ["textMuted on surface", p.textMuted, p.surface],
+      ["textMuted on surfaceAlt", p.textMuted, p.surfaceAlt],
+      ["accentText on background", p.accentText, p.background],
+      ["accentText on surface", p.accentText, p.surface],
+      ["accentText on accentSoft", p.accentText, p.accentSoft],
+      ["white on action", W, p.action],
+      ["white on actionHover", W, p.actionHover],
+      ["white on primary", W, p.primary],
+      ["white on primaryDeep", W, p.primaryDeep],
+      ["onPrimaryMuted on primary", p.onPrimaryMuted, p.primary],
+      ["onPrimaryMuted on primaryDeep", p.onPrimaryMuted, p.primaryDeep],
+      ["accentSoft on primary", p.accentSoft, p.primary],
+      ["primaryDeep on surface", p.primaryDeep, p.surface],
+      ["destructive on surface", p.destructive, p.surface],
+      ["white on destructive", W, p.destructive],
+      ["success on surface", p.success, p.surface],
+      ["attention on surface", p.attention, p.surface],
+      ["neutral-400 on surface", n["400"], p.surface],
+      ["neutral-500 on background", n["500"], p.background],
+    ];
+    for (const [what, fg, bg] of pairs) {
+      const r = contrast(fg, bg);
+      assert.ok(r >= 4.5, `${id}: ${what} is ${r.toFixed(2)}:1 (${fg} on ${bg})`);
+    }
+  }
 });

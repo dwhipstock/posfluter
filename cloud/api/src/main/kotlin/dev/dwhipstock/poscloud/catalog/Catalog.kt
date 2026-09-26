@@ -93,6 +93,7 @@ object Catalog {
             this[CatalogItems.brand] = item.str("brand")?.trim()?.takeIf { it.isNotEmpty() }
             this[CatalogItems.subcategory] = item.str("subcategory")?.trim()?.takeIf { it.isNotEmpty() }
             this[CatalogItems.sizeLabel] = item.str("size")?.trim()?.takeIf { it.isNotEmpty() }
+            this[CatalogItems.costCents] = item.long("costCents")
         }
         val variants = LinkedHashMap<String, Pair<String, JsonObject>>()
         for ((itemId, item) in byId) {

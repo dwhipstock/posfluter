@@ -12,6 +12,7 @@ import dev.dwhipstock.poscloud.db.CashMovements
 import dev.dwhipstock.poscloud.db.CheckLines
 import dev.dwhipstock.poscloud.db.CheckTenders
 import dev.dwhipstock.poscloud.db.Checks
+import dev.dwhipstock.poscloud.db.FuelSales
 import dev.dwhipstock.poscloud.db.Refunds
 import dev.dwhipstock.poscloud.db.Shifts
 import dev.dwhipstock.poscloud.staff.StaffProjection
@@ -48,6 +49,7 @@ object Projections {
             event.eventType == "check.voided" -> checkVoided(scope, payload, createdAt, zone, cur)
             event.eventType == "refund.created" -> refundCreated(scope, payload, createdAt, zone, cur)
             event.eventType == "cash.movement" -> cashMovement(scope, payload, createdAt, zone, cur)
+            event.eventType == "fuel.sale" -> fuelSale(scope, payload, createdAt, zone, cur)
             event.eventType == "shift.opened" -> shiftOpened(scope, payload, createdAt, zone)
             event.eventType == "shift.closed" -> shiftClosed(scope, payload, createdAt, zone, cur)
             event.eventType == "stock.counted" ->
@@ -99,6 +101,9 @@ object Projections {
             it[qstCents] = taxSum(p, "QST")
             it[taxes] = p.arr("taxes")?.toString()
             it[currency] = cur
+            val discounts = p.arr("discounts")?.filterIsInstance<JsonObject>()
+            it[Checks.discounts] = p.arr("discounts")?.toString()
+            it[discountCents] = discounts?.sumOf { d -> d.long("amountCents") ?: 0 }
         }
         p.arr("lines")?.filterIsInstance<JsonObject>()?.let { lines ->
             CheckLines.deleteWhere {
@@ -121,6 +126,8 @@ object Projections {
                     it[qty] = line.int("qty") ?: 0
                     it[unitPriceCents] = line.long("unitPriceCents") ?: 0
                     it[lineTotalCents] = line.long("lineTotalCents") ?: 0
+                    it[fuel] = line.obj("fuel")?.toString()
+                    it[unitCostCents] = line.long("unitCostCents")
                 }
             }
         }
@@ -217,6 +224,37 @@ object Projections {
             it[createdBy] = p.str("user")
             it[CashMovements.createdAt] = p.instant("createdAt", zone) ?: createdAt
             it[currency] = cur
+        }
+    }
+
+    /**
+     * One settled fuelling (a gas station). Idempotent by fuel_sale_id: a
+     * re-delivery overwrites the row with the same figures. amountCents is
+     * what was dispensed; a prepay's unused change arrives separately as a
+     * refund.created and refundCents is only a note of it.
+     */
+    private fun fuelSale(scope: Scope, p: JsonObject, createdAt: OffsetDateTime, zone: java.time.ZoneId, cur: String) {
+        val fuelSaleId = p.long("fuelSaleId") ?: return
+        FuelSales.upsert {
+            it[tenantId] = scope.tenantId
+            it[venueId] = scope.venueId
+            it[FuelSales.fuelSaleId] = fuelSaleId
+            it[checkId] = p.int("checkId")
+            it[pump] = p.int("pump")
+            it[nozzle] = p.int("nozzle")
+            it[grade] = p.str("grade")
+            it[gradeName] = p.str("gradeName")
+            it[volumeMilli] = p.long("volumeMilli")
+            it[priceMills] = p.long("priceMills")
+            it[amountCents] = p.long("amountCents")
+            it[mode] = p.str("mode")
+            it[prepaidCents] = p.long("prepaidCents")
+            it[refundCents] = p.long("refundCents")
+            it[fdcTransactionId] = p.str("fdcTransactionId")
+            it[completedAt] = p.instant("completedAt", zone) ?: createdAt
+            it[currency] = cur
+            it[costMills] = p.long("costMills")
+            it[costCents] = p.long("costCents")
         }
     }
 

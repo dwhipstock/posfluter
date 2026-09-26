@@ -174,6 +174,9 @@ object Checks : Table("checks") {
     val taxes = jsonb("taxes").nullable()
     // the currency the store sent (017); NULL = older store → the venue's
     val currency = text("currency").nullable()
+    // promotions taken off before tax, as sent, and their sum (024); NULL = none sent
+    val discounts = jsonb("discounts").nullable()
+    val discountCents = long("discount_cents").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, checkId)
 }
 
@@ -194,6 +197,10 @@ object CheckLines : Table("check_lines") {
     val qty = integer("qty")
     val unitPriceCents = long("unit_price_cents")
     val lineTotalCents = long("line_total_cents")
+    // a fuel line's pump details as the store sent them (023); NULL = not fuel
+    val fuel = jsonb("fuel").nullable()
+    // the item's cost per unit at ring-up (024); NULL = unknown, never zero
+    val unitCostCents = long("unit_cost_cents").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -277,6 +284,32 @@ object CashMovements : Table("cash_movements") {
     override val primaryKey = PrimaryKey(tenantId, venueId, movementId)
 }
 
+/** One settled fuelling (023): volume, pump price and the dispensed amount, as the store sent them. */
+object FuelSales : Table("fuel_sales") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val fuelSaleId = long("fuel_sale_id")
+    val checkId = integer("check_id").nullable()
+    val pump = integer("pump").nullable()
+    val nozzle = integer("nozzle").nullable()
+    val grade = text("grade").nullable()
+    val gradeName = text("grade_name").nullable()
+    // thousandths of a US gallon / of a dollar per gallon
+    val volumeMilli = long("volume_milli").nullable()
+    val priceMills = long("price_mills").nullable()
+    val amountCents = long("amount_cents").nullable()
+    val mode = text("mode").nullable()
+    val prepaidCents = long("prepaid_cents").nullable()
+    val refundCents = long("refund_cents").nullable()
+    val fdcTransactionId = text("fdc_transaction_id").nullable()
+    val completedAt = timestampWithTimeZone("completed_at").nullable()
+    val currency = text("currency").nullable()
+    // the fuelling's cost (024): per gallon (mills) and in total (cents); NULL = unknown
+    val costMills = long("cost_mills").nullable()
+    val costCents = long("cost_cents").nullable()
+    override val primaryKey = PrimaryKey(tenantId, venueId, fuelSaleId)
+}
+
 object CatalogCategories : Table("catalog_categories") {
     val tenantId = text("tenant_id")
     val venueId = text("venue_id")
@@ -310,6 +343,8 @@ object CatalogItems : Table("catalog_items") {
     val brand = text("brand").nullable()
     val subcategory = text("subcategory").nullable()
     val sizeLabel = text("size_label").nullable()
+    // the item's current cost (024); NULL = not sent
+    val costCents = long("cost_cents").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, id)
 }
 

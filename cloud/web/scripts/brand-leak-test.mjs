@@ -38,7 +38,7 @@ if (packs.length < 2) {
   process.exit(2);
 }
 
-const PAGES = ["/login", "/", "/reports", "/reports/payments", "/stock", "/menu", "/staff", "/devices", "/account", "/staff-app", "/manifest.webmanifest"];
+const PAGES = ["/login", "/", "/reports", "/reports/payments", "/reports/fuel", "/stock", "/menu", "/staff", "/devices", "/account", "/staff-app", "/manifest.webmanifest"];
 
 const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

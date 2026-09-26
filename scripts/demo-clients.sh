@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# LOCAL proof of "one portal per client": two client portal instances side by
-# side on this Mac behind ONE shared edge proxy, exactly as on a server —
+# LOCAL proof of "one portal per client": three client portal instances side
+# by side on this Mac behind ONE shared edge proxy, exactly as on a server —
 #
 #   http://cpr.localhost:8088   Copper Lantern (Vieux-Port + Plateau, CAD, fr/en)
 #   http://sp.localhost:8088    Sage & Poppy   (one bottle shop, USD, en/es)
+#   http://pf.localhost:8088    Pronghorn      (one gas station, USD, en/es)
 #
 # each with its own Postgres, API and branded portal (the same two images), and
 # optionally a throwaway desktop store per venue syncing to ITS client's portal.
 # Nothing here touches .demo/plateau, .demo/sage-poppy*, the tablet, the hosted
-# portal or AWS; it uses its own ports.
+# portal or AWS; it uses its own ports. The gas station's demo store is the
+# same store server started with POS_VENUE=pronghorn; its demo sales come from
+# scripts/demo-seed-fuel.py when that script is present.
 #
 #   scripts/demo-clients.sh up [--build] [--stores]   # --build: rebuild the local images
 #                                                     # --stores: + demo stores, seeded once
@@ -18,7 +21,7 @@
 # Sign in: owner@example.test, password = ADMIN_PASSWORD in
 # .demo/clients/<client>/.env (authenticator sign-in is off for this local demo).
 # *.localhost resolves to this Mac in Chrome/Safari/curl; the Java demo stores get
-# the two names from a hosts file (jdk.net.hosts.file).
+# the client names from a hosts file (jdk.net.hosts.file).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -31,10 +34,13 @@ WEB_IMAGE=pos-cloud-web:local
 JAR="$REPO_ROOT/server/build/libs/pos-server-all.jar"
 CPR_HOST=cpr.localhost
 SP_HOST=sp.localhost
+PF_HOST=pf.localhost
+CLIENTS="copperlantern sagepoppy pronghorn"
 # venue  port  client  seed
 STORE_TABLE="vieux-port 8093 copperlantern pub
 plateau 8094 copperlantern pub
-sage-poppy 8095 sagepoppy retail"
+sage-poppy 8095 sagepoppy retail
+pronghorn 8097 pronghorn fuel"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -56,7 +62,7 @@ start_store() { # venue port client kind
   [[ -f "$file" ]] || die "no store file $file"
   mkdir -p "$dir/receipts" "$dir/bills" "$dir/photos"
   if [[ -n "$(store_pid "$port")" ]]; then echo "  $venue: already up on :$port"; return; fi
-  printf '127.0.0.1 localhost %s %s\n::1 localhost\n' "$CPR_HOST" "$SP_HOST" > "$STORES_DIR/hosts"
+  printf '127.0.0.1 localhost %s %s %s\n::1 localhost\n' "$CPR_HOST" "$SP_HOST" "$PF_HOST" > "$STORES_DIR/hosts"
   local url key portal zone
   url="$(grep '^CLOUD_SYNC_URL=' "$file" | cut -d= -f2-)"
   key="$(grep '^CLOUD_SYNC_API_KEY=' "$file" | cut -d= -f2-)"
@@ -81,6 +87,13 @@ start_store() { # venue port client kind
   echo "  $venue: up on :$port → $client portal"
   if [[ ! -f "$dir/.seeded" ]]; then
     if [[ "$kind" == pub ]]; then STORE_URL="http://localhost:$port" python3 "$REPO_ROOT/scripts/demo-seed.py" >/dev/null
+    elif [[ "$kind" == fuel ]]; then
+      # the gas station seeds its own pumps and shop, when the store side ships a seeder
+      if [[ -f "$REPO_ROOT/scripts/demo-seed-fuel.py" ]]; then
+        STORE_URL="http://localhost:$port" python3 "$REPO_ROOT/scripts/demo-seed-fuel.py" >/dev/null || true
+      else
+        echo "  $venue: no scripts/demo-seed-fuel.py — started without demo sales"
+      fi
     else
       STORE_URL="http://localhost:$port" python3 "$REPO_ROOT/scripts/demo-seed-retail.py" >/dev/null
       STORE_URL="http://localhost:$port" python3 "$REPO_ROOT/scripts/demo-seed-stock.py" >/dev/null || true
@@ -118,6 +131,10 @@ case "$cmd" in
     "$INFRA/new-client.sh" sagepoppy "$SP_HOST" --name "Sage & Poppy" --brand sagepoppy \
       --store "sage-poppy=Sage & Poppy Bottle Shop" \
       --zone America/Los_Angeles --currency USD --country US --retail "${common[@]}"
+    echo
+    "$INFRA/new-client.sh" pronghorn "$PF_HOST" --name "Pronghorn Fuel & Market" --brand pronghorn \
+      --store "pronghorn=Pronghorn Fuel & Market" \
+      --zone America/Chicago --currency USD --country US --retail "${common[@]}"
     if [[ "$WITH_STORES" == 1 ]]; then
       [[ -f "$JAR" ]] || (cd "$REPO_ROOT/server" && ./gradlew -q --no-daemon buildFatJar)
       echo; echo "Demo stores (each syncs to its own client's portal):"
@@ -125,23 +142,24 @@ case "$cmd" in
     fi
     cat <<EOF
 
-  Two client portals behind one edge proxy:
+  Three client portals behind one edge proxy:
     Copper Lantern : http://$CPR_HOST:$PORT     (Vieux-Port + Plateau · CAD · fr/en)
     Sage & Poppy   : http://$SP_HOST:$PORT      (the bottle shop · USD · en/es)
+    Pronghorn      : http://$PF_HOST:$PORT      (the gas station · USD · en/es)
   Sign in        : owner@example.test / ADMIN_PASSWORD in .demo/clients/<client>/.env
   Tear down      : scripts/demo-clients.sh down [--reset]
 EOF
     ;;
   status)
     "$INFRA/proxy.sh" status || true
-    for c in copperlantern sagepoppy; do [[ -x "$CLIENTS_DIR/$c/compose.sh" ]] && "$CLIENTS_DIR/$c/compose.sh" ps; done
+    for c in $CLIENTS; do [[ -x "$CLIENTS_DIR/$c/compose.sh" ]] && "$CLIENTS_DIR/$c/compose.sh" ps; done
     while read -r venue port _ _; do
       printf '  %-11s %s\n' "$venue" "$( [[ -n "$(store_pid "$port")" ]] && echo "up :$port" || echo down)"
     done <<<"$STORE_TABLE"
     ;;
   down)
     while read -r venue port _ _; do stop_store "$venue" "$port"; done <<<"$STORE_TABLE"
-    for c in copperlantern sagepoppy; do
+    for c in $CLIENTS; do
       [[ -x "$CLIENTS_DIR/$c/compose.sh" ]] || continue
       "$CLIENTS_DIR/$c/compose.sh" down
       if [[ "$RESET" == 1 ]]; then
@@ -152,5 +170,5 @@ EOF
     [[ -f "$CLIENTS_DIR/proxy.env" ]] && "$INFRA/proxy.sh" down || true
     if [[ "$RESET" == 1 ]]; then rm -rf "$CLIENTS_DIR" "$STORES_DIR"; echo "  local client settings and demo stores deleted"; fi
     ;;
-  *) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2;;
+  *) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 2;;
 esac
