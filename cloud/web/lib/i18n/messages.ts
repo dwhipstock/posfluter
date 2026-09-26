@@ -1,4 +1,4 @@
-// Portal UI strings, both locales inline — one object, compile-checked keys.
+// Portal UI strings, French and English inline — one object, compile-checked keys.
 // French is first-class: it is the default and the source of truth for shared
 // domain terms, which mirror the POS client (client/lib/i18n.dart) so the
 // portal and the till say the same words for the same things.
@@ -10,7 +10,11 @@
 // Interpolation: values may contain {placeholders}; pass vars to t().
 // Money ($, grouping, cents) lives in lib/format.ts and follows the locale.
 
-export type Locale = "fr" | "en";
+// Each client offers some of these (its brand pack's `locales`, e.g. fr/en for
+// a Québec pub, en/es for a California shop). Spanish (US) lives in
+// messages.es.ts, keyed by the same MsgKey — a missing Spanish key is a
+// compile error.
+export type Locale = "fr" | "en" | "es";
 
 type Msg = { fr: string; en: string };
 
@@ -42,6 +46,21 @@ export const messages = {
   couldnt_load: m("Chargement impossible", "Couldn’t load this"),
   something_wrong: m("Une erreur s’est produite", "Something went wrong"),
   switch_language: m("Changer de langue", "Switch language"),
+  login_welcome: m("Bon retour", "Welcome back"),
+  login_welcome_body: m(
+    "Connectez-vous pour voir vos ventes, votre stock et votre équipe.",
+    "Sign in to see your sales, stock and team."
+  ),
+  // the portal's /staff-app page when the store can't be reached (no app chrome)
+  staff_offline_title: m("Personnel", "Staff"),
+  staff_offline_body: m(
+    "Impossible de joindre l’établissement pour l’instant. Connectez-vous au Wi-Fi de l’établissement, puis réessayez.",
+    "Can't reach the store right now. Connect to the store Wi-Fi and try again."
+  ),
+  staff_offline_hint: m(
+    "Ou ouvrez l’appli du personnel directement sur le réseau de l’établissement :",
+    "Or open the staff app directly on the store network:"
+  ),
 
   // ── export (PDF / Excel, every report) ────────────────────────────────
   export: m("Exporter", "Export"),
@@ -356,7 +375,7 @@ export const messages = {
   account_venue: m("Établissement", "Venue"),
   account_not_signed_in: m("Non connecté.", "Not signed in."),
   account_sign_out: m("Se déconnecter", "Sign out"),
-  account_footer: m("Portail infonuagique Copper Lantern · v{version}", "Copper Lantern cloud portal · v{version}"),
+  account_footer: m("Portail infonuagique {brand} · v{version}", "{brand} cloud portal · v{version}"),
   account_display: m("Affichage", "Display"),
   account_language: m("Langue", "Language"),
   account_devices: m("Appareils", "Devices"),

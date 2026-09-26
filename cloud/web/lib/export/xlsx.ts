@@ -7,14 +7,24 @@
 // text is plain UTF-8 in the sheet XML, so it needs no special handling here.
 
 import ExcelJS from "exceljs";
-import type { Cell, ExportDoc, Section } from "./doc";
+import type { Cell, ExportColors, ExportDoc, Section } from "./doc";
 import { saveBlob } from "./download";
 
-const MUTED = "FF62574B";
-const FAINT = "FF6F6456";
-const HEADER_FILL = "FFEFE6D6";
-const ACCENT = "FF17456E";
-const RULE = "FFDCCFB9";
+// ARGB; each export carries its client's brand colours (doc.colors), else these
+let MUTED = "FF62574B";
+let FAINT = "FF6F6456";
+let HEADER_FILL = "FFEFE6D6";
+let ACCENT = "FF17456E";
+let RULE = "FFDCCFB9";
+const argb = (hex: string) => `FF${hex.replace("#", "").toUpperCase()}`;
+function applyColors(c: ExportColors | undefined) {
+  if (!c) return;
+  MUTED = argb(c.muted);
+  FAINT = argb(c.faint);
+  HEADER_FILL = argb(c.headerFill);
+  ACCENT = argb(c.accent);
+  RULE = argb(c.rule);
+}
 const MONEY_FMT = "#,##0.00";
 const INT_FMT = "#,##0";
 
@@ -107,8 +117,9 @@ function writeKpis(ws: ExcelJS.Worksheet, doc: ExportDoc) {
 }
 
 export function buildWorkbook(doc: ExportDoc, kpiSheetName: string): ExcelJS.Workbook {
+  applyColors(doc.colors);
   const wb = new ExcelJS.Workbook();
-  wb.creator = "CopperLantern cloud portal";
+  wb.creator = doc.producer ?? "";
   const used = new Set<string>();
 
   if (doc.kpis?.length) {

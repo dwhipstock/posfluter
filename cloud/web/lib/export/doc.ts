@@ -101,6 +101,16 @@ export interface Kpi {
   value: string;
 }
 
+/** The client's colours for the export header rules, headings and table header (#rrggbb). */
+export interface ExportColors {
+  accent: string;
+  text: string;
+  muted: string;
+  faint: string;
+  headerFill: string;
+  rule: string;
+}
+
 export interface ExportDoc {
   /** `{report}_{from}_{to}` — the ".pdf"/".xlsx" is appended per format. */
   filenameBase: string;
@@ -120,6 +130,10 @@ export interface ExportDoc {
   sections: Section[];
   /** The tenant has stores in several currencies: dollars print as CA$ / US$. */
   multiCurrency?: boolean;
+  /** The client's brand colours; absent → the portal's defaults. */
+  colors?: ExportColors;
+  /** The client's name, as the file's creator/producer metadata. */
+  producer?: string;
 }
 
 /**

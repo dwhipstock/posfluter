@@ -33,7 +33,7 @@ import { EmptyState, ErrorState, PageFallback } from "@/components/states";
 import { BarChart, Donut, LineChart } from "@/components/charts";
 import { StoreBreakdown, useStoreSeries } from "@/components/store-breakdown";
 import { useStoreHref, useStores } from "@/lib/store";
-import { SERIES } from "@/lib/theme";
+import { useChartTheme } from "@/lib/brand/context";
 import { cn } from "@/lib/utils";
 
 export default function Page() {
@@ -45,6 +45,7 @@ export default function Page() {
 }
 
 function Dashboard() {
+  const SERIES = useChartTheme().series;
   const t = useT();
   const fmt = useFmt();
   const { name, nameAlt } = useI18n();
@@ -368,6 +369,7 @@ function Dashboard() {
 
 /** The single-store tender mix: a ring plus a labelled legend (never colour alone). */
 function TenderDonut({ report }: { report: PaymentsReport }) {
+  const SERIES = useChartTheme().series;
   const t = useT();
   const m = useMoney();
   const fmtC = (n: number) => m.fmtScope(report.money, n);
@@ -435,7 +437,7 @@ function StoreCompare() {
           return (
             <Card key={v.id} className="relative overflow-hidden p-4" data-testid="store-card">
               <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: colorOf(v.id) }} aria-hidden />
-              {/* long names ("Sage & Poppy Bottle Shop") wrap instead of truncating */}
+              {/* long store names wrap instead of truncating */}
               <div className="flex items-start gap-2">
                 <span className="min-w-0 break-words text-sm font-semibold leading-snug text-navy" data-testid="store-card-name">{nameOf(v.id)}</span>
                 <RetailBadge venueId={v.id} />

@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { shortStoreName, useStores, useStoreHref } from "@/lib/store";
 import { useT } from "@/lib/i18n/context";
 import { ScopeChip } from "@/components/scope-chip";
+import { useBrand } from "@/lib/brand/context";
 
 /**
  * Every page's title row. The scope is part of the title: the picked store's
@@ -29,11 +30,12 @@ export function PageHeader({
   const t = useT();
   const storeHref = useStoreHref();
   const { store, venues, storeId } = useStores();
+  const brandName = useBrand().name;
   const scopeName = storeId ? shortStoreName(store?.name ?? storeId) : venues.length > 1 ? t("store_all") : null;
 
   useEffect(() => {
-    document.title = [title, scoped ? scopeName : null, "Copper Lantern"].filter(Boolean).join(" · ");
-  }, [title, scopeName, scoped]);
+    document.title = [title, scoped ? scopeName : null, brandName].filter(Boolean).join(" · ");
+  }, [title, scopeName, scoped, brandName]);
 
   return (
     <div className="mb-4 flex items-start justify-between gap-3 md:mb-6">

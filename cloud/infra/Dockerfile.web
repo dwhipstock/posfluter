@@ -24,6 +24,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public
+# every client's brand pack; PORTAL_BRAND picks one at run time
+COPY --from=build --chown=node:node /app/brands ./brands
 USER node
 ENV PORT=3000
 # Standalone server binds to HOSTNAME; must be reachable from caddy, not just loopback.

@@ -11,6 +11,8 @@ function parts(s: string) {
 
 const EN_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 // French abbreviated months — the same forms the POS and French receipts use.
+// Spanish abbreviated months (lowercase, with a period, as US Spanish writes them).
+const ES_MONTHS = ["ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sept.", "oct.", "nov.", "dic."];
 const FR_MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juill.", "août", "sept.", "oct.", "nov.", "déc."];
 
 export interface Fmt {
@@ -26,7 +28,7 @@ export interface Fmt {
 }
 
 export function makeFmt(locale: Locale, t: (key: MsgKey, vars?: Record<string, string | number>) => string): Fmt {
-  const months = locale === "fr" ? FR_MONTHS : EN_MONTHS;
+  const months = locale === "fr" ? FR_MONTHS : locale === "es" ? ES_MONTHS : EN_MONTHS;
 
   const day = (date: string) => {
     const p = parts(date);

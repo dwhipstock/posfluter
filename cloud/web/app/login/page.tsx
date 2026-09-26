@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
@@ -13,6 +14,8 @@ import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { LangToggle } from "@/components/lang-toggle";
 import { BrandMark } from "@/components/brand-mark";
+import { useBrand } from "@/lib/brand/context";
+import { brandAssetUrl } from "@/lib/brand/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +38,7 @@ const AUTH_ERR: Record<string, MsgKey> = {
 export default function LoginPage() {
   const router = useRouter();
   const t = useT();
+  const brand = useBrand();
   const [stage, setStage] = useState<Stage>({ step: "creds" });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -124,9 +128,119 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
+  const steps = (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={stage.step}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+      >
+        {stage.step === "creds" && (
+          <form onSubmit={submitCreds} className="space-y-4">
+            {signedOut && (
+              <p role="status" className="rounded-lg border border-copper/30 bg-copper-soft px-3 py-2 text-sm text-copper-text">
+                {signedOut.reason === "idle"
+                  ? t("login_signed_out_idle", { n: signedOut.minutes })
+                  : t("login_signed_out_expired")}
+              </p>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="email">{t("login_email")}</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="owner@example.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">{t("login_password")}</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </div>
+            <Button type="submit" className="w-full" size="lg" disabled={busy}>
+              {busy && <Loader2 className="animate-spin" />}
+              {t("login_signin")}
+            </Button>
+          </form>
+        )}
+
+        {stage.step === "totp" && !backupMode && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold">{t("login_2fa_title")}</h2>
+              <p className="mt-1 text-sm text-neutral-500">{t("login_2fa_body")}</p>
+            </div>
+            <CodeInput ref={codeRef} value={code} onChange={setCode} disabled={busy} />
+            <BusySpinner busy={busy} />
+            <button
+              onClick={() => setBackupMode(true)}
+              className="w-full text-center text-xs text-neutral-500 hover:text-ink"
+            >
+              {t("login_use_backup")}
+            </button>
+            <BackToLogin onClick={() => setStage({ step: "creds" })} />
+          </div>
+        )}
+
+        {stage.step === "totp" && backupMode && (
+          <BackupEntry
+            busy={busy}
+            onSubmit={(v) => void verify(v)}
+            onUseAuthenticator={() => {
+              setBackupMode(false);
+              setCode("");
+              codeRef.current?.focus();
+            }}
+          />
+        )}
+
+        {stage.step === "setup" && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold">{t("login_setup_title")}</h2>
+              <p className="mt-1 text-sm text-neutral-500">{t("login_setup_body")}</p>
+            </div>
+            <div className="flex justify-center">
+              <div className="rounded-xl border border-neutral-200 bg-surface p-3">
+                <QRCodeSVG value={stage.otpauthUri} size={168} />
+              </div>
+            </div>
+            <SecretRow secret={stage.secret} />
+            <CodeInput ref={codeRef} value={code} onChange={setCode} disabled={busy} />
+            <BusySpinner busy={busy} />
+            <BackToLogin onClick={() => setStage({ step: "creds" })} />
+          </div>
+        )}
+
+        {stage.step === "saved" && (
+          <BackupCodes codes={stage.codes} onContinue={() => router.replace("/")} />
+        )}
+      </motion.div>
+    </AnimatePresence>
+  );
+
+  return brand.login === "split" ? <SplitLogin>{steps}</SplitLogin> : <BandLogin>{steps}</BandLogin>;
+}
+
+/** A dark brand band across the top with the round badge on it, the form in a card below. */
+function BandLogin({ children }: { children: React.ReactNode }) {
+  const t = useT();
   return (
     <div className="relative min-h-dvh bg-paper">
-      {/* the tablet's navy header band, with the lantern badge on it */}
+      {/* the tablet's header band, with the brand badge on it */}
       <div className="absolute inset-x-0 top-0 h-[22rem] bg-navy" aria-hidden>
         <div className="absolute inset-x-0 bottom-0 h-1 bg-copper" />
       </div>
@@ -141,110 +255,68 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="rounded-xl border border-neutral-200 bg-surface p-6 shadow-raised">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={stage.step}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-            >
-              {stage.step === "creds" && (
-                <form onSubmit={submitCreds} className="space-y-4">
-                  {signedOut && (
-                    <p role="status" className="rounded-lg border border-copper/30 bg-copper-soft px-3 py-2 text-sm text-copper-text">
-                      {signedOut.reason === "idle"
-                        ? t("login_signed_out_idle", { n: signedOut.minutes })
-                        : t("login_signed_out_expired")}
-                    </p>
-                  )}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email">{t("login_email")}</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      autoComplete="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="owner@example.com"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="password">{t("login_password")}</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      autoComplete="current-password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" size="lg" disabled={busy}>
-                    {busy && <Loader2 className="animate-spin" />}
-                    {t("login_signin")}
-                  </Button>
-                </form>
-              )}
-
-              {stage.step === "totp" && !backupMode && (
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-base font-semibold">{t("login_2fa_title")}</h2>
-                    <p className="mt-1 text-sm text-neutral-500">{t("login_2fa_body")}</p>
-                  </div>
-                  <CodeInput ref={codeRef} value={code} onChange={setCode} disabled={busy} />
-                  <BusySpinner busy={busy} />
-                  <button
-                    onClick={() => setBackupMode(true)}
-                    className="w-full text-center text-xs text-neutral-500 hover:text-ink"
-                  >
-                    {t("login_use_backup")}
-                  </button>
-                  <BackToLogin onClick={() => setStage({ step: "creds" })} />
-                </div>
-              )}
-
-              {stage.step === "totp" && backupMode && (
-                <BackupEntry
-                  busy={busy}
-                  onSubmit={(v) => void verify(v)}
-                  onUseAuthenticator={() => {
-                    setBackupMode(false);
-                    setCode("");
-                    codeRef.current?.focus();
-                  }}
-                />
-              )}
-
-              {stage.step === "setup" && (
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-base font-semibold">{t("login_setup_title")}</h2>
-                    <p className="mt-1 text-sm text-neutral-500">{t("login_setup_body")}</p>
-                  </div>
-                  <div className="flex justify-center">
-                    <div className="rounded-xl border border-neutral-200 bg-surface p-3">
-                      <QRCodeSVG value={stage.otpauthUri} size={168} />
-                    </div>
-                  </div>
-                  <SecretRow secret={stage.secret} />
-                  <CodeInput ref={codeRef} value={code} onChange={setCode} disabled={busy} />
-                  <BusySpinner busy={busy} />
-                  <BackToLogin onClick={() => setStage({ step: "creds" })} />
-                </div>
-              )}
-
-              {stage.step === "saved" && (
-                <BackupCodes codes={stage.codes} onContinue={() => router.replace("/")} />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
+        <div className="rounded-xl border border-neutral-200 bg-surface p-6 shadow-raised">{children}</div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Two panels: the brand's full logo on a soft brand-tinted panel with a short
+ * welcome, the form on a flat white panel beside it (stacked on phones). Bright,
+ * flat, no badge-on-a-band.
+ */
+function SplitLogin({ children }: { children: React.ReactNode }) {
+  const t = useT();
+  const brand = useBrand();
+  return (
+    <div className="flex min-h-dvh flex-col bg-paper md:flex-row">
+      <section className="relative flex flex-col justify-between gap-8 bg-surface-alt px-6 py-8 md:w-[46%] md:px-12 md:py-12">
+        <div className="flex items-center justify-between">
+          <Image
+            src={brandAssetUrl(brand.assets.mark)}
+            alt=""
+            width={44}
+            height={44}
+            unoptimized
+            className="rounded-full"
+          />
+          <div className="md:hidden">
+            <LangToggle tone="light" />
+          </div>
+        </div>
+        <div className="mx-auto w-full max-w-md">
+          {brand.assets.logo ? (
+            <Image
+              src={brandAssetUrl(brand.assets.logo)}
+              alt={brand.legalName}
+              width={560}
+              height={208}
+              unoptimized
+              priority
+              className="h-auto w-full rounded-2xl border border-neutral-200"
+            />
+          ) : (
+            <BrandMark large />
+          )}
+          <p className="mt-8 hidden text-3xl font-extrabold leading-tight tracking-tight text-navy-deep md:block">
+            {t("login_welcome")}
+          </p>
+          <p className="mt-2 hidden max-w-sm text-base text-neutral-600 md:block">{t("login_welcome_body")}</p>
+        </div>
+        <div className="hidden h-1.5 w-24 rounded-full bg-copper md:block" aria-hidden />
+      </section>
+
+      <section className="flex flex-1 flex-col bg-surface px-6 py-8 md:px-12 md:py-12">
+        <div className="hidden justify-end md:flex">
+          <LangToggle tone="light" />
+        </div>
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-copper-text">{t("brand_tagline")}</p>
+          <h1 className="mb-6 mt-2 text-2xl font-extrabold tracking-tight text-ink">{t("login_signin")}</h1>
+          {children}
+        </div>
+      </section>
     </div>
   );
 }
@@ -332,6 +404,7 @@ function BackupEntry({
 
 function BackupCodes({ codes, onContinue }: { codes: string[]; onContinue: () => void }) {
   const t = useT();
+  const brand = useBrand();
   const [copied, setCopied] = useState(false);
   const asText = codes.join("\n");
 
@@ -350,7 +423,7 @@ function BackupCodes({ codes, onContinue }: { codes: string[]; onContinue: () =>
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "copperlantern-backup-codes.txt";
+    a.download = `${brand.id}-backup-codes.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };

@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { brandAssetUrl } from "@/lib/brand/brand";
+import { getBrand } from "@/lib/brand/server";
+import { translate } from "@/lib/i18n/translate";
 
 // The stable staff entry point (M7). Staff bookmark <portal>/staff-app on their
 // phones; this route asks the cloud API for the store's current reachable LAN
@@ -45,30 +48,40 @@ function safeStaffUrl(base: string | undefined): string | null {
   }
 }
 
-// Calm, brand-styled, FR-default bilingual — the store is simply not reachable
-// right now (offline, or hasn't synced since boot). No app chrome; this page is
-// only ever hit when there's nothing to redirect to.
+// Calm, in this client's colours and languages (its default first, then the
+// others) — the store is simply not reachable right now (offline, or hasn't
+// synced since boot). No app chrome; this page is only ever hit when there's
+// nothing to redirect to.
 function offlinePage(): string {
+  const b = getBrand();
+  const [first, ...rest] = [b.locales.default, ...b.locales.available.filter((l) => l !== b.locales.default)];
+  const title = `${esc(b.name)} — ${[first, ...rest].map((l) => esc(translate(l, "staff_offline_title"))).join(" / ")}`;
+  const hints = [first, ...rest].map((l) => esc(translate(l, "staff_offline_hint"))).join("<br>");
   return `<!doctype html>
-<html lang="fr"><head>
+<html lang="${first}"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Copper Lantern — Personnel / Staff</title>
+<title>${title}</title>
+<link rel="icon" href="${brandAssetUrl(b.assets.icon)}">
 <style>
-  *{box-sizing:border-box;margin:0;font-family:'Noto Sans',system-ui,sans-serif}
-  body{background:#fafafa;color:#121212;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  *{box-sizing:border-box;margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+  body{background:${b.palette.background};color:${b.palette.text};min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
   .card{max-width:420px;text-align:center}
   .icon{font-size:44px;margin-bottom:16px}
-  .fr{font-size:20px;font-weight:700;line-height:1.5}
-  .en{font-size:15px;color:#8a8a8a;margin-top:10px;line-height:1.5}
-  .hint{font-size:13px;color:#8a8a8a;margin-top:20px;line-height:1.6}
-  code{background:#eee;border-radius:6px;padding:2px 6px;font-size:13px}
+  .main{font-size:20px;font-weight:700;line-height:1.5}
+  .alt{font-size:15px;color:${b.palette.textMuted};margin-top:10px;line-height:1.5}
+  .hint{font-size:13px;color:${b.palette.textMuted};margin-top:20px;line-height:1.6}
+  code{background:${b.palette.surfaceAlt};border-radius:6px;padding:2px 6px;font-size:13px}
 </style></head><body>
   <div class="card">
     <div class="icon">📶</div>
-    <div class="fr">Impossible de joindre l’établissement pour l’instant.<br>Connectez-vous au Wi-Fi de l’établissement, puis réessayez.</div>
-    <div class="en">Can't reach the store right now.<br>Connect to the store Wi-Fi and try again.</div>
-    <div class="hint">Ou ouvrez l’appli du personnel directement sur le réseau de l’établissement&nbsp;:<br>Or open it directly on the store network:<br><code>http://&lt;store-ip&gt;:8080/staff-app</code></div>
+    <div class="main" lang="${first}">${esc(translate(first, "staff_offline_body"))}</div>
+${rest.map((l) => `    <div class="alt" lang="${l}">${esc(translate(l, "staff_offline_body"))}</div>`).join("\n")}
+    <div class="hint">${hints}<br><code>http://&lt;store-ip&gt;:8080/staff-app</code></div>
   </div>
 </body></html>`;
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
