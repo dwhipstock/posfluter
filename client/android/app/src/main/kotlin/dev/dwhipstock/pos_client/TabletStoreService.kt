@@ -36,7 +36,8 @@ class TabletStoreService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         val notification = Notification.Builder(this, channel.id)
             .setSmallIcon(android.R.drawable.ic_menu_manage)
-            .setContentTitle("Copper Lantern POS")
+            // per build (POS_BRAND): each brand's app shows its own notification
+            .setContentTitle(BuildConfig.SERVICE_TITLE)
             .setContentText("Local ordering is available")
             .setOngoing(true)
             .build()
@@ -84,18 +85,22 @@ class TabletStoreService : Service() {
             val receiptPrintMode = readReceiptPrintMode()
             val stripeConfig = readStripeConfig()
             val storeProps = readStoreProperties()
-            // which store this tablet is (store.venue=sage-poppy for the US bottle
-            // shop); unset → Vieux-Port, as always
+            // which store this tablet is: store.venue in store.properties wins;
+            // unset → this build's own store (POS_BRAND: Copper Lantern → none
+            // = Vieux-Port, as always; Sage & Poppy → sage-poppy)
             val venueId = storeProps?.getProperty("store.venue")?.trim()?.takeIf { it.isNotEmpty() }
+                ?: BuildConfig.DEFAULT_VENUE.takeIf { it.isNotEmpty() }
             val legalAge = storeProps?.getProperty("legal.age")?.trim()?.toIntOrNull()
             // cash.rounding=nickel|off; unset → nickel
             val cashRounding = CashRounding.resolve(storeProps?.getProperty(CashRounding.KEY), "store.properties")
             cashRounding.warning?.let { Log.w("TabletStore", "Cash rounding config ignored: $it") }
-            if (venueId != null) Log.i("TabletStore", "Store: $venueId (store.properties)")
+            if (venueId != null) Log.i("TabletStore", "Store: $venueId (port ${BuildConfig.STORE_PORT})")
             val staffAppMfa = readStaffAppMfa(storeProps)
-            embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = 8080) {
+            embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = BuildConfig.STORE_PORT) {
                 module(
                     dbPath = dbFile.absolutePath,
+                    // table QRs / staff-app links carry this app's own port
+                    lanPort = BuildConfig.STORE_PORT,
                     receiptsDir = File(storeDir, "receipts").absolutePath,
                     billsDir = File(storeDir, "bills").absolutePath,
                     photosDir = File(storeDir, "photos").absolutePath,

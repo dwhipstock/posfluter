@@ -26,7 +26,10 @@ class Api {
   /// stock app (a phone) never runs a store: it finds the store on the Wi-Fi.
   static bool get usesEmbeddedStore =>
       !kIsWeb && Platform.isAndroid && !AppMode.isStock;
-  static const embeddedStoreUrl = 'http://127.0.0.1:8080';
+  /// This app's own embedded store (the port differs per brand app, so two
+  /// brands can run side by side on one tablet; see [AppMode.brand]).
+  static String get embeddedStoreUrl =>
+      'http://127.0.0.1:${AppMode.embeddedStorePort}';
 
   /// The POS itself uses loopback, but a QR scanned by another phone must not.
   /// The embedded store reports its current LAN origin through /cloud/info.
@@ -99,6 +102,12 @@ class Api {
 
   /// The manual override (null = auto-detect). For the settings/startup UI.
   static String? get serverUrlOverride => _override;
+  /// The store address this device last used (typed or discovered), if any.
+  /// LAN discovery looks on its port first, so a phone stays with the same
+  /// store when two run on one tablet (8080 and 8082).
+  static String? get savedServerUrl => hasServerOverride
+      ? _override
+      : ((_discovered?.isNotEmpty ?? false) ? _discovered : null);
   static bool get hasServerOverride =>
       _override != null && _override!.isNotEmpty;
 

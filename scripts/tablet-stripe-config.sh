@@ -4,6 +4,10 @@
 #   scripts/tablet-stripe-config.sh          # push STRIPE_KEY from the repo-root .env
 #   scripts/tablet-stripe-config.sh --off    # remove the key (Stripe disabled)
 #
+# --app copperlantern|sagepoppy picks which POS app on the tablet (default
+# copperlantern; see scripts/lib/tablet-app.sh). Stripe is CAD-only, so the
+# Sage & Poppy (USD) store keeps it off even with a key.
+#
 # Reads STRIPE_KEY (and optional STRIPE_LOCATION_ID) from the gitignored .env at
 # the repo root (one line: STRIPE_KEY=sk_test_...). Only sk_test_ keys are
 # accepted, here and again by the store. Merges stripe.secretKey=... (and
@@ -15,13 +19,13 @@
 #
 # Needs: adb with the tablet connected (USB debugging), the POS app installed.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tablet-app.sh"
+tablet_app_parse "$@"; set -- "${TABLET_ARGS[@]+"${TABLET_ARGS[@]}"}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PACKAGE="${POS_PACKAGE:-dev.dwhipstock.pos_client}"
-DIR="/sdcard/Android/data/$PACKAGE/files"
 OFF=false
 [[ "${1:-}" == "--off" ]] && OFF=true
-[[ -z "${1:-}" || "$OFF" == true ]] || { echo "usage: $0 [--off]" >&2; exit 2; }
+[[ -z "${1:-}" || "$OFF" == true ]] || { echo "usage: $0 [--off] [--app copperlantern|sagepoppy]" >&2; exit 2; }
 
 # value of KEY in .env (last one wins), without quotes / CR
 env_value() {
@@ -40,30 +44,22 @@ if [[ "$OFF" == false ]]; then
     echo "ERROR: STRIPE_KEY is not a test key (must start with sk_test_). Live keys are not supported yet." >&2
     exit 1
   fi
+  [[ "$TABLET_APP" == sagepoppy ]] && echo "NOTE: Stripe is CAD-only; the Sage & Poppy (USD) store keeps Card (Stripe) off." >&2
 fi
 
-command -v adb >/dev/null 2>&1 || { echo "ERROR: adb not found (brew install --cask android-platform-tools)." >&2; exit 1; }
-adb get-state >/dev/null 2>&1 || { echo "ERROR: no tablet on adb (USB debugging on? adb devices)." >&2; exit 1; }
-
-TMP="$(mktemp -d)"
-chmod 700 "$TMP"
-trap 'rm -rf "$TMP"' EXIT
+tablet_require_adb
 # keep any other settings already in the file; replace only the stripe.* lines
-adb shell cat "$DIR/store.properties" 2>/dev/null | tr -d '\r' \
-  | grep -v '^[[:space:]]*stripe\.\(secretKey\|locationId\)[[:space:]]*[=:]' > "$TMP/store.properties" || true
+LINES=()
 if [[ "$OFF" == false ]]; then
-  printf 'stripe.secretKey=%s\n' "$KEY" >> "$TMP/store.properties"
-  [[ -n "$LOCATION" ]] && printf 'stripe.locationId=%s\n' "$LOCATION" >> "$TMP/store.properties"
+  LINES+=("stripe.secretKey=$KEY")
+  [[ -n "$LOCATION" ]] && LINES+=("stripe.locationId=$LOCATION")
 fi
-
-adb shell mkdir -p "$DIR"
-adb push "$TMP/store.properties" "$DIR/store.properties" >/dev/null
+tablet_props_set 'stripe\.secretKey\|stripe\.locationId' "${LINES[@]+"${LINES[@]}"}"
 if [[ "$OFF" == true ]]; then
-  echo "Removed the Stripe key from the tablet (Card (Stripe) disabled)."
+  echo "Removed the Stripe key from $TABLET_APP_NAME (Card (Stripe) disabled)."
 else
-  echo "Set stripe.secretKey (a test key) on the tablet${LOCATION:+ (location $LOCATION)}."
+  echo "Set stripe.secretKey (a test key) for $TABLET_APP_NAME${LOCATION:+ (location $LOCATION)}."
 fi
 
-adb shell am force-stop "$PACKAGE"
-adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-echo "Restarted the POS. Confirm with: adb logcat -s TabletStore | grep 'Stripe:'"
+tablet_restart_app
+echo "Restarted $TABLET_APP_NAME. Confirm with: adb logcat -s TabletStore | grep 'Stripe:'"

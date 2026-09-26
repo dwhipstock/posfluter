@@ -100,7 +100,8 @@ Secrets and runtime data are never source artifacts. Local databases, environmen
 
 ## First-tablet operation
 
-The POS talks to `127.0.0.1:8080` inside its Android device; it does not need
+The POS talks to `127.0.0.1:8080` inside its Android device (the Sage & Poppy
+app, a separate Android app on the same tablet, uses `:8082`); it does not need
 the Mac or Internet to start, sign in, or record sales. A foreground Android
 service keeps the local store reachable to staff and customer phones while
 the POS UI is backgrounded. Those phones need the same Wi-Fi and use the

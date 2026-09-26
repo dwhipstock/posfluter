@@ -12,8 +12,14 @@ money.
 | --- | --- | --- |
 | **Copper Lantern — Vieux-Port** (pub) | the Android tablet | PIN `1234` manager, `9999` server |
 | **Copper Lantern — Plateau** (pub) | this Mac, `:8080` | same PINs |
-| **Sage & Poppy Bottle Shop** (US shop) | this Mac, `:8082`, counter screen in Chrome | `1234` manager, `9999` cashier, `5555` Spanish-speaking cashier |
+| **Sage & Poppy Bottle Shop** (US shop) | this Mac, `:8082`, counter screen in Chrome (or the Sage & Poppy app on the same tablet, see below) | `1234` manager, `9999` cashier, `5555` Spanish-speaking cashier |
 | **Owner portal** | the hosted portal (all stores, CAD + USD) | your portal login + authenticator code |
+
+The bottle shop can also run on the tablet itself, as a second app next to
+the pub ("Sage & Poppy POS", its store on `:8082`; swap apps from the
+recent-apps button). Local-only, its tablet sales don't reach the portal; to
+move the portal's Sage & Poppy store onto the tablet, see
+[Two apps on one tablet](demo-runbook.md#two-apps-on-one-tablet).
 
 ---
 
