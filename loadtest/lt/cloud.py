@@ -38,8 +38,9 @@ class Cloud:
     # ------------------------------------------------------------ Postgres
 
     def start_pg(self) -> None:
+        docker("rm", "-f", PG_NAME, check=False)  # a previous run's container (and its port)
+        time.sleep(1)
         check_port(PORTS["pg"])
-        docker("rm", "-f", PG_NAME, check=False)
         log(f"cloud: Postgres in Docker ({self.cpus} CPUs, {self.memory}) on :{PORTS['pg']}")
         docker("run", "-d", "--name", PG_NAME, "--cpus", self.cpus, "--memory", self.memory,
                "-p", f"127.0.0.1:{PORTS['pg']}:5432", "-e", f"POSTGRES_PASSWORD={self.password}",
