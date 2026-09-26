@@ -13,7 +13,7 @@ import { STORE_SERIES } from "./theme";
 export const STORE_PARAM = "store";
 
 /** API routes whose data is store-scoped; they get `venue=<id>` when a store is picked. */
-const SCOPED_API = ["/v1/reports", "/v1/menu", "/v1/staff", "/v1/devices"];
+const SCOPED_API = ["/v1/reports", "/v1/menu", "/v1/staff", "/v1/devices", "/v1/stock"];
 
 export function useStoreId(): string | null {
   const sp = useSearchParams();

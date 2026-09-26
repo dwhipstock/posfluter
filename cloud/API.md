@@ -203,3 +203,27 @@ Documented in CONTRACT.md: `GET /v1/store/capabilities` (handshake), `POST /v1/i
 ## Misc
 
 `GET /health` → `{ "status": "ok" }` (no auth — compose healthcheck).
+
+## Stock (retail stores; session-authed, store-scoped)
+
+Stock lives in the cloud (migration 018): a retail store sells regardless of
+stock — offline too, and it may go negative — and never tracks it. Per
+product, **on hand = received − sold + adjustments**, where sold is the qty of
+every CLOSED sale synced from that store (voided sales never close; refunds do
+not restock — count a returned bottle back in with an adjustment). Only
+stores whose `kind` is `retail` have stock; restaurants are left out.
+
+- `GET /v1/stock` (`?venue=` or all retail stores) →
+  `{ rows: [{ venueId, itemId, name, categoryId, barcode, active, received, sold,
+  adjusted, onHand, reorderLevel, low }], byVenue: [{ venueId, venueName,
+  products, onHand, lowCount }], totalOnHand, lowCount, retail }`. `low` =
+  on hand at or below the reorder level (no level = never low). The same
+  product id in two stores is two rows, never one count.
+- `POST /v1/stock/movements?venue=<retail store>` `{ itemId, kind, qty, note }`
+  — `RECEIVED` (a delivery, qty > 0) or `ADJUSTMENT` (a count, breakage; qty ≠ 0).
+  → the product's updated row. 400 `venue_required` / `not_retail` / `bad_qty`
+  / `bad_kind`, 404 `unknown_item`.
+- `PUT /v1/stock/reorder?venue=<retail store>` `{ itemId, reorderLevel }` (null
+  clears) → the updated row.
+- `GET /v1/stock/movements?venue=<retail store>&itemId=` → the latest 100
+  movements `{ id, venueId, itemId, kind, qty, note, createdBy, createdAt }`.

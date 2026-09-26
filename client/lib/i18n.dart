@@ -188,7 +188,7 @@ class L {
   String get retry => _t('Essayer à nouveau', 'Retry');
   String get cancel => _t('Annuler', 'Cancel');
   String get ok => _t('accepter', 'OK');
-  String get done => _t('finition', 'Done');
+  String get done => _t('finition', 'Done', 'Listo');
   String get close => _t('éteindre', 'Close');
   String get cannotReachServer => _t(
     'Restaurant temporairement indisponible',

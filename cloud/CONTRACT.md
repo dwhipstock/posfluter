@@ -195,6 +195,9 @@ Its lines may also carry `taxable: false` (a tax-exempt food item),
 deposit, not restricted). The deposits total as one fee, `code: "crv"`, never
 taxed. Item snapshots (below) may carry `barcode`, `ageRestricted`,
 `taxable: false`, `crvSize` (`SMALL` | `LARGE`) and `packUnits`.
+The cloud keeps the store's **stock** from these sales (API.md, Stock): on
+hand = received − sold ± adjustments, with deliveries and adjustments
+recorded in the portal and never sent down (sync stays one-way).
 
 ### `age.checked`
 The outcome of one ID check before age-restricted items were paid for, and

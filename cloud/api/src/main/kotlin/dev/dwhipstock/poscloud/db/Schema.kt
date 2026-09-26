@@ -298,6 +298,8 @@ object CatalogItems : Table("catalog_items") {
     val active = bool("active")
     val deleted = bool("deleted")
     val photoVersion = long("photo_version").nullable()
+    // the store's UPC for display (018); NULL = none sent
+    val barcode = text("barcode").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, id)
 }
 
@@ -403,4 +405,28 @@ object Devices : Table("devices") {
     val revokeRequestedAt = timestampWithTimeZone("revoke_requested_at").nullable()
     val updatedAt = timestampWithTimeZone("updated_at")
     override val primaryKey = PrimaryKey(tenantId, venueId, deviceId)
+}
+
+/** Cloud-owned stock movements of a retail store (018): deliveries (+) and adjustments (±). */
+object StockMovements : Table("stock_movements") {
+    val id = long("id").autoIncrement()
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val itemId = text("item_id")
+    val kind = text("kind") // RECEIVED | ADJUSTMENT
+    val qty = integer("qty")
+    val note = text("note")
+    val createdBy = text("created_by")
+    val createdAt = timestampWithTimeZone("created_at")
+    override val primaryKey = PrimaryKey(id)
+}
+
+/** A product's reorder level (018): low at or below it. */
+object StockLevels : Table("stock_levels") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val itemId = text("item_id")
+    val reorderLevel = integer("reorder_level")
+    val updatedAt = timestampWithTimeZone("updated_at")
+    override val primaryKey = PrimaryKey(tenantId, venueId, itemId)
 }

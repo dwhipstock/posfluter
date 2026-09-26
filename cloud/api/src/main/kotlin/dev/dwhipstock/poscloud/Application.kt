@@ -7,6 +7,7 @@ import dev.dwhipstock.poscloud.db.Migrations
 import dev.dwhipstock.poscloud.menu.menuRoutes
 import dev.dwhipstock.poscloud.reports.reportRoutes
 import dev.dwhipstock.poscloud.staff.staffRoutes
+import dev.dwhipstock.poscloud.stock.stockRoutes
 import dev.dwhipstock.poscloud.store.staffEndpointRoute
 import dev.dwhipstock.poscloud.store.storeRoutes
 import dev.dwhipstock.poscloud.venues.venueRoutes
@@ -93,6 +94,7 @@ fun Application.module(config: CloudConfig = CloudConfig()) {
             storeRoutes(config)
             staffEndpointRoute() // public: portal /staff-app redirect reads this
             reportRoutes(config.fxRates)
+            stockRoutes()
             menuRoutes()
             staffRoutes()
             venueRoutes(config)

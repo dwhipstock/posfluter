@@ -4,10 +4,11 @@ import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { BarChart3, BookOpen, CircleUser, LayoutGrid, TabletSmartphone, Users } from "lucide-react";
+import { BarChart3, BookOpen, CircleUser, LayoutGrid, Package, TabletSmartphone, Users } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/hooks";
-import { useStoreHref } from "@/lib/store";
+import { useStoreHref, useStores } from "@/lib/store";
+import { isRetail } from "@/components/money-scope";
 import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { LangToggle } from "@/components/lang-toggle";
@@ -20,13 +21,16 @@ const NAV: { href: string; labelKey: MsgKey; icon: typeof LayoutGrid }[] = [
   { href: "/", labelKey: "nav_dashboard", icon: LayoutGrid },
   { href: "/reports", labelKey: "nav_reports", icon: BarChart3 },
   { href: "/menu", labelKey: "nav_menu", icon: BookOpen },
+  // retail stores only (see NavLinks): restaurants don't track stock
+  { href: "/stock", labelKey: "nav_stock", icon: Package },
   { href: "/staff", labelKey: "nav_staff", icon: Users },
   { href: "/devices", labelKey: "nav_devices", icon: TabletSmartphone },
   { href: "/account", labelKey: "nav_account", icon: CircleUser },
 ];
 
-// The bottom bar is a fixed 5-column grid — Devices lives under Account there.
-const MOBILE_NAV = NAV.filter(({ href }) => href !== "/devices");
+// The bottom bar is a fixed 5-column grid — Devices lives under Account there,
+// and Stock stays a desktop page.
+const MOBILE_NAV = NAV.filter(({ href }) => href !== "/devices" && href !== "/stock");
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -37,7 +41,9 @@ function NavLinks({ variant }: { variant: "side" | "bottom" }) {
   const pathname = usePathname();
   const t = useT();
   const storeHref = useStoreHref();
-  const items = variant === "side" ? NAV : MOBILE_NAV;
+  const { venues } = useStores();
+  const hasRetail = venues.some((v) => isRetail(v));
+  const items = (variant === "side" ? NAV : MOBILE_NAV).filter(({ href }) => href !== "/stock" || hasRetail);
   return (
     <>
       {items.map(({ href, labelKey, icon: Icon }) => {
