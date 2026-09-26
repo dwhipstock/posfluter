@@ -139,6 +139,9 @@ fun Application.module(
     // its data is never touched here again.
     if (seedMode != "none") {
         if (sagePoppy) SagePoppySeed.seedIfEmpty() else CopperLanternSeed.seedIfEmpty(venue)
+        // a store seeded with an older shelf adds the rest of the current
+        // catalog, once, without touching anything already there
+        if (sagePoppy) dev.dwhipstock.pos.customers.sagepoppy.SagePoppyCatalogUpgrade.upgradeIfNeeded()
     } else {
         wipeMigrationSeedResidueIfNeverSynced()
         // nobody could ever sign in to an empty store (staff no longer arrive

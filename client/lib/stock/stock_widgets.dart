@@ -16,7 +16,7 @@ import 'stock_queue.dart';
 Future<void> refreshStockReference([StockQueue? queue]) async {
   final q = queue ?? StockQueue.instance;
   try {
-    final items = await Api.items();
+    final items = await Api.catalog();
     await q.cacheReference(
       catalog: [
         for (final i in items)
@@ -26,6 +26,11 @@ Future<void> refreshStockReference([StockQueue? queue]) async {
             category: i.category,
             barcode: i.barcode,
             active: i.active,
+            brand: i.brand,
+            subcategory: i.subcategory,
+            size: i.size,
+            packUnits: i.packUnits,
+            popularity: i.salesWeight,
           ),
       ],
     );

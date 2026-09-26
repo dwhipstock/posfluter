@@ -16,6 +16,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.batchUpsert
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.TransactionManager
@@ -44,46 +45,70 @@ fun JsonObject.instant(key: String, zone: java.time.ZoneId): java.time.OffsetDat
 object Catalog {
 
     /** Apply an item snapshot (incl. soft-deleted variants). No-op without an id. */
-    fun applyItemSnapshot(scope: Scope, item: JsonObject) {
-        val itemId = item.str("id") ?: return
+    fun applyItemSnapshot(scope: Scope, item: JsonObject) = applyItemSnapshots(scope, listOf(item))
+
+    /**
+     * Apply many item snapshots at once (a `catalog.snapshot` chunk of a few
+     * hundred products): one read of the stored photo versions, one batched
+     * upsert of the items and one of their variants — not three statements
+     * per product. Additive: products absent from [items] are left as they are
+     * (a snapshot is one chunk of the catalog, never "the whole menu").
+     * A product listed twice keeps its last snapshot.
+     */
+    fun applyItemSnapshots(scope: Scope, items: List<JsonObject>) {
+        val byId = LinkedHashMap<String, JsonObject>()
+        for (item in items) item.str("id")?.let { byId[it] = item }
+        if (byId.isEmpty()) return
         // photoVersion is an optional hint most POS snapshots omit — the upsert
         // covers every column, so an absent key must not wipe the stored version
         // (portal thumbnails would vanish on any POS edit of the item)
-        val photoVer = item.long("photoVersion")
-            ?: CatalogItems.selectAll().where {
-                (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and
-                    (CatalogItems.id eq itemId)
-            }.firstOrNull()?.get(CatalogItems.photoVersion)
-        CatalogItems.upsert {
-            it[tenantId] = scope.tenantId
-            it[venueId] = scope.venueId
-            it[id] = itemId
-            it[nameFr] = item.str("nameFr") ?: ""
-            it[nameEn] = item.str("nameEn") ?: ""
-            it[descriptionFr] = item.str("descriptionFr") ?: ""
-            it[descriptionEn] = item.str("descriptionEn") ?: ""
-            it[categoryId] = item.str("categoryId") ?: ""
-            it[abbrev] = item.str("abbrev")
-            it[isAlcohol] = item.bool("isAlcohol") ?: false
-            it[active] = item.bool("active") ?: true
-            it[deleted] = item.bool("deleted") ?: false
-            it[photoVersion] = photoVer
-            it[barcode] = item.str("barcode")
+        val missingPhoto = byId.filterValues { it.long("photoVersion") == null }.keys
+        val storedPhoto = if (missingPhoto.isEmpty()) emptyMap() else
+            missingPhoto.chunked(1000).flatMap { ids ->
+                CatalogItems.select(CatalogItems.id, CatalogItems.photoVersion).where {
+                    (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and
+                        (CatalogItems.id inList ids) and CatalogItems.photoVersion.isNotNull()
+                }.map { it[CatalogItems.id] to it[CatalogItems.photoVersion] }
+            }.toMap()
+        CatalogItems.batchUpsert(byId.entries, shouldReturnGeneratedValues = false) { (itemId, item) ->
+            this[CatalogItems.tenantId] = scope.tenantId
+            this[CatalogItems.venueId] = scope.venueId
+            this[CatalogItems.id] = itemId
+            this[CatalogItems.nameFr] = item.str("nameFr") ?: ""
+            this[CatalogItems.nameEn] = item.str("nameEn") ?: ""
+            this[CatalogItems.descriptionFr] = item.str("descriptionFr") ?: ""
+            this[CatalogItems.descriptionEn] = item.str("descriptionEn") ?: ""
+            this[CatalogItems.categoryId] = item.str("categoryId") ?: ""
+            this[CatalogItems.abbrev] = item.str("abbrev")
+            this[CatalogItems.isAlcohol] = item.bool("isAlcohol") ?: false
+            this[CatalogItems.active] = item.bool("active") ?: true
+            this[CatalogItems.deleted] = item.bool("deleted") ?: false
+            this[CatalogItems.photoVersion] = item.long("photoVersion") ?: storedPhoto[itemId]
+            this[CatalogItems.barcode] = item.str("barcode")
+            this[CatalogItems.brand] = item.str("brand")?.trim()?.takeIf { it.isNotEmpty() }
+            this[CatalogItems.subcategory] = item.str("subcategory")?.trim()?.takeIf { it.isNotEmpty() }
+            this[CatalogItems.sizeLabel] = item.str("size")?.trim()?.takeIf { it.isNotEmpty() }
         }
-        item.arr("variants")?.forEach { element ->
-            val variant = element as? JsonObject ?: return@forEach
-            val variantId = variant.str("id") ?: return@forEach
-            CatalogVariants.upsert {
-                it[tenantId] = scope.tenantId
-                it[venueId] = scope.venueId
-                it[id] = variantId
-                it[CatalogVariants.itemId] = itemId
-                it[labelFr] = variant.str("labelFr") ?: ""
-                it[labelEn] = variant.str("labelEn") ?: ""
-                it[priceCents] = variant.long("priceCents") ?: 0
-                it[sortOrder] = variant.int("sortOrder") ?: 0
-                it[deleted] = variant.bool("deleted") ?: false
+        val variants = LinkedHashMap<String, Pair<String, JsonObject>>()
+        for ((itemId, item) in byId) {
+            item.arr("variants")?.forEach { element ->
+                val variant = element as? JsonObject ?: return@forEach
+                val variantId = variant.str("id") ?: return@forEach
+                variants[variantId] = itemId to variant
             }
+        }
+        if (variants.isEmpty()) return
+        CatalogVariants.batchUpsert(variants.entries, shouldReturnGeneratedValues = false) { (variantId, pair) ->
+            val (itemId, variant) = pair
+            this[CatalogVariants.tenantId] = scope.tenantId
+            this[CatalogVariants.venueId] = scope.venueId
+            this[CatalogVariants.id] = variantId
+            this[CatalogVariants.itemId] = itemId
+            this[CatalogVariants.labelFr] = variant.str("labelFr") ?: ""
+            this[CatalogVariants.labelEn] = variant.str("labelEn") ?: ""
+            this[CatalogVariants.priceCents] = variant.long("priceCents") ?: 0
+            this[CatalogVariants.sortOrder] = variant.int("sortOrder") ?: 0
+            this[CatalogVariants.deleted] = variant.bool("deleted") ?: false
         }
     }
 

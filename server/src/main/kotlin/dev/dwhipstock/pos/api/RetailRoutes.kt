@@ -17,7 +17,43 @@ import io.ktor.server.routing.*
  * like every POS route; payment, receipts and refunds use the ordinary
  * /checks routes on the sale these return.
  */
-fun Route.retailRoutes(retail: RetailService, auth: AuthService) {
+fun Route.retailRoutes(
+    retail: RetailService,
+    auth: AuthService,
+    quickKeys: dev.dwhipstock.pos.retail.QuickKeys = dev.dwhipstock.pos.retail.QuickKeys(),
+) {
+
+    /**
+     * The counter's quick keys: pins, the products with no barcode, then this
+     * store's fastest sellers of the last 28 days (computed here, offline).
+     */
+    get("/retail/quick-keys") {
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: dev.dwhipstock.pos.retail.QuickKeys.DEFAULT_KEYS
+        call.respond(quickKeys.quickKeys(limit))
+    }
+
+    /** Pin a product to the quick keys (it stays through every refresh) — the edit-menu grant or a manager's PIN. */
+    post("/retail/quick-keys/pins") {
+        val req = call.receive<dev.dwhipstock.pos.retail.PinRequest>()
+        val by = requireGrant(auth, call, Permissions.EDIT_MENU, req.managerPin)
+        call.respond(quickKeys.pin(req.itemId.trim(), by))
+    }
+
+    /** Unpin: the tile goes back to being auto-filled (or drops off). */
+    post("/retail/quick-keys/unpin") {
+        val req = call.receive<dev.dwhipstock.pos.retail.PinRequest>()
+        requireGrant(auth, call, Permissions.EDIT_MENU, req.managerPin)
+        call.respond(quickKeys.unpin(req.itemId.trim()))
+    }
+
+    /** The ranked top 20% of the catalog by the last 28 days' units (then popularity). */
+    get("/retail/top-sellers") {
+        val p = call.request.queryParameters
+        call.respond(quickKeys.topSellers(
+            days = p["days"]?.toIntOrNull() ?: dev.dwhipstock.pos.retail.QuickKeys.WINDOW_DAYS,
+            percent = p["percent"]?.toIntOrNull() ?: dev.dwhipstock.pos.retail.QuickKeys.TOP_PERCENT,
+        ))
+    }
 
     /** The sale in progress on the register, or a new one (idempotent). */
     post("/retail/sales") {

@@ -60,6 +60,27 @@ BASKETS = [
 ]
 
 
+def weighted_basket(items, rng, n):
+    """n distinct scannable products drawn by the catalog's sales weight (a
+    1/rank long tail: about 20% of the ~5,000 products make about 80% of the
+    sales). Stores without weights (an older build) fall back to uniform.
+    Reused by scripts/demo-reset-helper.py."""
+    pool = [i for i in items.values() if i.get("barcode") and i.get("active", True)]
+    if not pool:
+        return []
+    weights = [max(int(i.get("salesWeight") or 0), 0) for i in pool]
+    if not any(weights):
+        weights = [1] * len(pool)
+    picked = []
+    for _ in range(n * 4):
+        if len(picked) == min(n, len(pool)):
+            break
+        pid = rng.choices(pool, weights=weights, k=1)[0]["id"]
+        if pid not in picked:
+            picked.append(pid)
+    return picked
+
+
 def ring_sale(items, basket, pay, dob=None):
     """Ring up one counter sale: scan each product id's barcode, check an ID when
     the basket needs it, take cash (next $20 up) or card, finalize. Returns

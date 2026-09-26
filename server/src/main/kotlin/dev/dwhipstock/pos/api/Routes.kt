@@ -50,6 +50,12 @@ data class ItemDto(
     val crvSize: String = "NONE",
     val packUnits: Int = 1,
     val depositCents: Long = 0,
+    /** Catalog facets (041): producer, style / varietal / type, size or pack label. */
+    val brand: String? = null,
+    val subcategory: String? = null,
+    val size: String? = null,
+    /** Demo popularity (seeded stores); the quick keys' cold start. */
+    val salesWeight: Int = 0,
 )
 
 /** An item row as the API shows it (menu and retail screens). */
@@ -66,6 +72,10 @@ internal fun itemDtoOf(
     crvSize = row[Items.crvSize],
     packUnits = row[Items.packUnits],
     depositCents = dev.dwhipstock.pos.sdk.Crv.perUnit(dev.dwhipstock.pos.sdk.Crv.size(row[Items.crvSize]), row[Items.packUnits]).cents,
+    brand = row[Items.brand],
+    subcategory = row[Items.subcategory],
+    size = row[Items.sizeLabel],
+    salesWeight = row[Items.salesWeight],
 )
 
 @Serializable
@@ -460,25 +470,32 @@ fun Route.posRoutes(
     }
 
     get("/items") {
-        // ?all=true includes 86'ed items (menu-management view)
-        val includeInactive = call.request.queryParameters["all"] == "true"
-        val items = transaction {
+        // ?all=true includes 86'ed items (menu-management view). Paging and
+        // filters are optional (a 5,000-product shelf): ?limit=&offset= pages
+        // the list (X-Total-Count says how many match), ?q= searches name,
+        // brand and barcode digits, ?category= / ?subcategory= / ?size= filter.
+        // With none of them the whole list comes back, as it always did.
+        val query = CatalogQuery.from(call.request.queryParameters)
+        val (items, total) = transaction {
+            val matched = CatalogQuery.select(query)
+            val page = query.page(matched)
+            val ids = if (query.paged) page.map { it[Items.id] }.toSet() else null
             val variantsByItem = ItemVariants.selectAll()
                 .where { ItemVariants.deletedAt.isNull() }
                 .orderBy(ItemVariants.sortOrder)
+                .toList()
+                .let { rows -> if (ids == null) rows else rows.filter { it[ItemVariants.itemId] in ids } }
                 .groupBy({ it[ItemVariants.itemId] }) {
                     VariantDto(it[ItemVariants.id], it[ItemVariants.labelFr], it[ItemVariants.labelEn], it[ItemVariants.priceCents])
                 }
-            // deleted items never list; ?all=true additionally shows 86'ed ones
-            val query = if (includeInactive) Items.selectAll().where { Items.deletedAt.isNull() }
-            else Items.selectAll().where { (Items.active eq true) and (Items.deletedAt.isNull()) }
-            query.map {
+            page.map {
                 itemDtoOf(
                     it, variantsByItem[it[Items.id]] ?: emptyList(),
                     photoVersion = it[Items.photoPath]?.let { _ -> photos.version(it[Items.id]) },
                 )
-            }
+            } to matched.size
         }
+        call.response.header("X-Total-Count", total.toString())
         call.respond(items)
     }
 

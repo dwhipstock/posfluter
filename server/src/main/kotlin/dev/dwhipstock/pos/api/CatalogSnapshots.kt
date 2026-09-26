@@ -21,11 +21,14 @@ import org.jetbrains.exposed.sql.selectAll
 internal fun itemSnapshotJson(itemId: String, photoVersion: Long? = null): JsonObject =
     itemRowSnapshot(Items.selectAll().where { Items.id eq itemId }.first(), photoVersion)
 
-private fun itemRowSnapshot(row: ResultRow, photoVersion: Long?): JsonObject {
+private fun itemRowSnapshot(
+    row: ResultRow, photoVersion: Long?,
+    variantRows: List<ResultRow> = ItemVariants.selectAll()
+        .where { ItemVariants.itemId eq row[Items.id] }
+        .orderBy(ItemVariants.sortOrder).toList(),
+): JsonObject {
     val itemId = row[Items.id]
-    val variants = ItemVariants.selectAll()
-        .where { ItemVariants.itemId eq itemId }
-        .orderBy(ItemVariants.sortOrder)
+    val variants = variantRows
         .map { v ->
             buildJsonObject {
                 put("id", v[ItemVariants.id])
@@ -57,6 +60,10 @@ private fun itemRowSnapshot(row: ResultRow, photoVersion: Long?): JsonObject {
             put("crvSize", row[Items.crvSize])
             put("packUnits", row[Items.packUnits])
         }
+        // catalog facets (041), when set
+        row[Items.brand]?.let { put("brand", it) }
+        row[Items.subcategory]?.let { put("subcategory", it) }
+        row[Items.sizeLabel]?.let { put("size", it) }
         put("variants", JsonArray(variants))
     }
 }
@@ -80,7 +87,41 @@ internal fun allCategoriesJson(): JsonArray = JsonArray(
 )
 
 /** Live items only — the first-run catalog.snapshot bootstrap payload. */
-internal fun allLiveItemsJson(): JsonArray = JsonArray(
-    Items.selectAll().where { Items.deletedAt.isNull() }
-        .map { itemRowSnapshot(it, photoVersion = null) }
-)
+internal fun allLiveItemsJson(): JsonArray = JsonArray(liveItemSnapshots(null))
+
+/**
+ * Snapshots of the live items (all, or just [ids]) in two queries — not one
+ * variants query per item, which at 5,000 products is the slow part.
+ */
+internal fun liveItemSnapshots(ids: Collection<String>?): List<JsonObject> {
+    val wanted = ids?.toSet()
+    val variantsByItem = ItemVariants.selectAll().orderBy(ItemVariants.sortOrder).toList()
+        .let { rows -> if (wanted == null) rows else rows.filter { it[ItemVariants.itemId] in wanted } }
+        .groupBy { it[ItemVariants.itemId] }
+    return Items.selectAll().where { Items.deletedAt.isNull() }.orderBy(Items.id).toList()
+        .let { rows -> if (wanted == null) rows else rows.filter { it[Items.id] in wanted } }
+        .map { itemRowSnapshot(it, photoVersion = null, variantRows = variantsByItem[it[Items.id]] ?: emptyList()) }
+}
+
+/** Items per `catalog.snapshot` event: a 5,000-product shelf goes up in ~20 small events, not one huge one. */
+const val SNAPSHOT_CHUNK_ITEMS = 250
+
+/**
+ * Write `catalog.snapshot` events for the live items (all, or [ids]), in
+ * chunks of [SNAPSHOT_CHUNK_ITEMS]. The categories ride in the first chunk.
+ * The cloud applies each one additively (an upsert per item), so an older
+ * cloud takes chunks as it took the single snapshot. Inside a transaction.
+ */
+internal fun writeChunkedCatalogSnapshot(ids: Collection<String>? = null, reason: String = "bootstrap") {
+    val items = liveItemSnapshots(ids)
+    val chunks = items.chunked(SNAPSHOT_CHUNK_ITEMS).ifEmpty { listOf(emptyList()) }
+    chunks.forEachIndexed { i, chunk ->
+        dev.dwhipstock.pos.sdk.Outbox.write("catalog.snapshot", "catalog", "snapshot", buildJsonObject {
+            if (i == 0) put("categories", allCategoriesJson())
+            put("items", JsonArray(chunk))
+            put("chunk", i + 1)
+            put("chunks", chunks.size)
+            put("reason", reason)
+        })
+    }
+}

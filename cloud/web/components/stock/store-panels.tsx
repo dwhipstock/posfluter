@@ -4,7 +4,7 @@
 // export), counts submitted at the store (who, when, variances), and
 // deliveries received at the store. Quantities only — no currency.
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, ClipboardList, PackageCheck } from "lucide-react";
 import { useApi } from "@/lib/hooks";
 import { useFmt, useT } from "@/lib/i18n/context";
@@ -22,6 +22,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { get } from "@/lib/api";
+import { scopeApiPath, useStoreId } from "@/lib/store";
+import { CatalogFilterBar, Pager, useCatalogFilters, useCategoryNames } from "@/components/catalog-filters";
+
+const REORDER_PAGE = 50;
 
 const DAYS_KEY = "stock.reorder.days";
 const COVER_KEY = "stock.reorder.cover";
@@ -51,7 +56,15 @@ export function ReorderPanel() {
   const [days, setDays] = useState(28);
   const [cover, setCover] = useState(14);
   const [coverText, setCoverText] = useState("14");
-  const [onlyToOrder, setOnlyToOrder] = useState(true);
+  const [onlyToOrder, setOnlyToOrderRaw] = useState(true);
+  const filters = useCatalogFilters(REORDER_PAGE);
+  const categoryName = useCategoryNames();
+  const storeId = useStoreId();
+  const setOnlyToOrder = (v: boolean) => {
+    setOnlyToOrderRaw(v);
+    filters.setOffset(0);
+  };
+  const base = `/v1/stock/reorder-suggestions?days=${days}&cover=${cover}${onlyToOrder ? "&only=to-order" : ""}`;
   useEffect(() => {
     const d = remembered(DAYS_KEY, 28, 14, 28);
     const c = remembered(COVER_KEY, 14, 1, 120);
@@ -59,16 +72,16 @@ export function ReorderPanel() {
     setCover(c);
     setCoverText(String(c));
   }, []);
-  const { data, error, isLoading, mutate } = useApi<ReorderResponse>(
-    `/v1/stock/reorder-suggestions?days=${days}&cover=${cover}`
-  );
-  const rows = useMemo(
-    () => (data?.rows ?? []).filter((r) => !onlyToOrder || r.suggested > 0),
-    [data, onlyToOrder]
-  );
+  const { data, error, isLoading, mutate } = useApi<ReorderResponse>(`${base}&${filters.pageQuery}`);
+  const rows = data?.rows ?? [];
 
-  const buildDoc = (): ExportDoc | null => {
+  const buildDoc = async (): Promise<ExportDoc | null> => {
     if (!data) return null;
+    // every matching row, not just the page on screen
+    const all = await get<ReorderResponse>(
+      scopeApiPath(`${base}&limit=10000${filters.filterQuery ? `&${filters.filterQuery}` : ""}`, storeId)
+    );
+    const rows = all.rows;
     return {
       ...meta("reorder"),
       rangeLabel: t("reorder_as_of", { days: data.days, cover: data.coverDays }),
@@ -173,6 +186,12 @@ export function ReorderPanel() {
             <Kpi label={t("reorder_kpi_units")} value={String(data.units)} />
           </div>
           <Card>
+            <CatalogFilterBar
+              filters={filters}
+              facets={data.facets}
+              categoryName={categoryName}
+              searchLabel={t("stock_search")}
+            />
             {rows.length === 0 ? (
               <EmptyState title={t("reorder_none")} hint={t("reorder_none_hint")} />
             ) : (
@@ -213,6 +232,7 @@ export function ReorderPanel() {
                 </Table>
               </div>
             )}
+            <Pager total={data.total ?? rows.length} offset={filters.offset} pageSize={REORDER_PAGE} onOffset={filters.setOffset} />
           </Card>
         </>
       ) : null}

@@ -192,7 +192,22 @@ displays what the stores pushed up; there are no menu write endpoints.
                                  "sortOrder" } ] } ] }
   ```
   (live rows only; `photoVersion` null when no photo — photo URL is
-  `/v1/menu/items/{id}/photo?venue={venueId}&v={photoVersion}`.)
+  `/v1/menu/items/{id}/photo?venue={venueId}&v={photoVersion}`.) Items also
+  carry `barcode`, `brand`, `subcategory`, `size` (null for the pubs), and the
+  response carries `total` (products: one per item id across the stores).
+
+  **Paged / filtered** (a retail store has ~5,000 products): any of
+  `limit` (1–10000), `offset`, `q`, `category`, `subcategory`, `size` →
+  the same shape with `items` = every store's copy of ONE PAGE of matching
+  products (sorted by category order, then name), `total` = matching
+  products, `offset`, `limit`, and `facets: { categories, subcategories,
+  sizes }` — each a list of `{ value, count }` under the OTHER filters
+  (subcategories within the picked category, sizes within the picked
+  category + subcategory). `q`: every word must start a word of the name
+  (either language), brand, subcategory or size; an all-digits word also
+  matches inside the barcode (`hazy ipa 6-pack`, `750 ml`, `48723`). No
+  parameter = the whole menu, as before. 400 `bad_param` for a bad number.
+  The portal's export uses `limit=10000` with the page's filters.
 - `GET /v1/menu/items/{id}/photo` — binary, ETag = photoVersion
 
 ## Staff (session-authed; READ-ONLY mirror of each store's staff)
@@ -239,7 +254,13 @@ Quantities only — no money, so no currency mixing.
   lowCount, retail }`. `received`/`sold`/`adjusted`/`returned` are since the
   last count (`countedQty` at `countedAt`), all time when never counted.
   `low` = on hand at or below the reorder level (no level = never low). The
-  same product id in two stores is two rows, never one count.
+  same product id in two stores is two rows, never one count. Rows also carry
+  `brand`, `subcategory`, `size`.
+  Paged / filtered: the menu's parameters (`limit`, `offset`, `q`, `category`,
+  `subcategory`, `size`) plus `low=true` → `rows` = one page, `total`,
+  `offset`, `limit`, `facets`; the KPIs (`byVenue`, `totalOnHand`,
+  `lowCount`) stay the whole scope's. No parameter = every row (`total` =
+  rows).
 - `GET /v1/stock/low-count` → `{ lowCount, retail }` (the nav badge).
 - `GET /v1/stock/counts` → `{ counts: [{ venueId, venueName, countId, name,
   submittedBy, approvedBy?, startedAt?, submittedAt, products, units,
@@ -256,7 +277,9 @@ Quantities only — no money, so no currency mixing.
   toOrder, units, retail }`. avg daily = units sold in the last `days`
   (14–28) ÷ `days`; target = ⌈avg daily × `cover`⌉ (lead time + days of cover,
   1–120); suggested = target − on hand, never below 0. Sorted by suggested.
-  400 `bad_param` outside the ranges.
+  400 `bad_param` outside the ranges. The same paging / filter parameters as
+  `/v1/stock`, plus `only=to-order` (products with something to order);
+  `toOrder` and `units` stay the whole scope's.
 - `POST /v1/stock/movements?venue=<retail store>` `{ itemId, kind, qty, note }`
   — `RECEIVED` (a delivery, qty > 0) or `ADJUSTMENT` (breakage, a correction;
   qty ≠ 0). → the product's updated row. 400 `venue_required` / `not_retail` /

@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { History, PackagePlus, Search, SlidersHorizontal, Target } from "lucide-react";
-import { post, put } from "@/lib/api";
+import { useState } from "react";
+import { History, PackagePlus, SlidersHorizontal, Target } from "lucide-react";
+import { get, post, put } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { useFmt, useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
-import { useStores } from "@/lib/store";
+import { scopeApiPath, useStores } from "@/lib/store";
+import { CatalogFilterBar, Pager, useCatalogFilters, useCategoryNames } from "@/components/catalog-filters";
 import { toast, toastError } from "@/lib/toast";
 import type { StockMovementsResponse, StockResponse, StockRow } from "@/lib/types";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
@@ -39,38 +40,49 @@ type Action = { kind: "RECEIVED" | "ADJUSTMENT" | "REORDER"; row: StockRow };
  * flow down to the store. With one retail store picked, each row can be
  * received, adjusted and given a reorder level; "All stores" lists every
  * retail store's products. Tabs: on hand, reorder suggestions, the store's
- * counts, and its deliveries.
+ * counts, and its deliveries. A store can carry ~5,000 products: the list is
+ * paged by the API with a search and the 2-way category → subcategory filter
+ * plus size; the KPIs stay the whole scope's and the export fetches every
+ * matching row.
  */
+const PAGE_SIZE = 50;
+
 export default function StockPage() {
   const t = useT();
   const fmt = useFmt();
   const meta = useExportMeta();
   const storeExport = useStoreExport();
-  const { store, combined } = useStores();
-  const { data, error, isLoading, mutate } = useApi<StockResponse>("/v1/stock");
-  const [q, setQ] = useState("");
-  const [lowOnly, setLowOnly] = useState(false);
+  const { store, combined, storeId } = useStores();
+  const filters = useCatalogFilters(PAGE_SIZE);
+  const [lowOnly, setLowOnlyRaw] = useState(false);
+  const setLowOnly = (v: boolean) => {
+    setLowOnlyRaw(v);
+    filters.setOffset(0);
+  };
+  const lowParam = lowOnly ? "&low=true" : "";
+  const { data, error, isLoading, mutate } = useApi<StockResponse>(`/v1/stock?${filters.pageQuery}${lowParam}`);
   const [action, setAction] = useState<Action | null>(null);
   const [tab, setTab] = useState("on-hand");
   const canRecord = !!store && isRetail(store);
 
-  const rows = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return (data?.rows ?? []).filter(
-      (r) =>
-        (!lowOnly || r.low) &&
-        (!needle || r.name.toLowerCase().includes(needle) || (r.barcode ?? "").includes(needle))
-    );
-  }, [data, q, lowOnly]);
+  const rows = data?.rows ?? [];
+  const products = data ? data.byVenue.reduce((n, v) => n + v.products, 0) : 0;
+  const total = data?.total ?? rows.length;
+  const categoryName = useCategoryNames();
 
-  const buildDoc = (): ExportDoc | null => {
+  const buildDoc = async (): Promise<ExportDoc | null> => {
     if (!data) return null;
+    // every matching row, not just the page on screen
+    const all = await get<StockResponse>(
+      scopeApiPath(`/v1/stock?limit=10000${filters.filterQuery ? `&${filters.filterQuery}` : ""}${lowParam}`, storeId)
+    );
+    const rows = all.rows;
     return {
       ...meta("stock"),
       rangeLabel: t("stock_as_of"),
       reportTitle: t("stock_title"),
       kpis: [
-        { label: t("stock_kpi_products"), value: String(data.rows.length) },
+        { label: t("stock_kpi_products"), value: String(products) },
         { label: t("stock_kpi_on_hand"), value: String(data.totalOnHand) },
         { label: t("stock_kpi_low"), value: String(data.lowCount) },
       ],
@@ -80,6 +92,8 @@ export default function StockPage() {
           columns: storeExport.withStore<StockRow>([
             col.text(t("stock_col_product"), (r) => r.name, { width: 36 }),
             col.text(t("stock_col_barcode"), (r) => r.barcode ?? "", { width: 16 }),
+            col.text(t("catalog_subcategory"), (r) => r.subcategory ?? "", { width: 16 }),
+            col.text(t("catalog_size"), (r) => r.size ?? "", { width: 12 }),
             col.int(t("stock_col_received"), (r) => r.received),
             col.int(t("stock_col_sold"), (r) => r.sold),
             col.int(t("stock_col_adjusted"), (r) => r.adjusted),
@@ -93,6 +107,8 @@ export default function StockPage() {
           total: [
             T(t("col_total")),
             ...(storeExport.combined ? [T("")] : []),
+            T(""),
+            T(""),
             T(""),
             Int(rows.reduce((n, r) => n + r.received, 0)),
             Int(rows.reduce((n, r) => n + r.sold, 0)),
@@ -147,7 +163,7 @@ export default function StockPage() {
           </TabsContent>
           <TabsContent value="on-hand" className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
-            <Kpi label={t("stock_kpi_products")} value={String(data.rows.length)} />
+            <Kpi label={t("stock_kpi_products")} value={String(products)} />
             <Kpi label={t("stock_kpi_on_hand")} value={String(data.totalOnHand)} accent />
             <Kpi label={t("stock_kpi_low")} value={String(data.lowCount)} className={data.lowCount > 0 ? "border-amber-300" : ""} />
           </div>
@@ -159,24 +175,19 @@ export default function StockPage() {
           )}
 
           <Card>
-            <div className="flex flex-wrap items-center gap-3 border-b border-neutral-200/70 px-4 py-3">
-              <div className="relative min-w-56 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder={t("stock_search")}
-                  className="pl-9"
-                  aria-label={t("stock_search")}
-                />
-              </div>
+            <CatalogFilterBar
+              filters={filters}
+              facets={data.facets}
+              categoryName={categoryName}
+              searchLabel={t("stock_search")}
+            >
               <label className="flex items-center gap-2 text-sm text-neutral-600">
                 <Switch checked={lowOnly} onCheckedChange={setLowOnly} aria-label={t("stock_low_only")} />
                 {t("stock_low_only")}
               </label>
-            </div>
+            </CatalogFilterBar>
             {rows.length === 0 ? (
-              <EmptyState title={t("stock_empty")} hint={data.rows.length === 0 ? t("stock_empty_hint") : undefined} />
+              <EmptyState title={t("stock_empty")} hint={products === 0 ? t("stock_empty_hint") : undefined} />
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -200,6 +211,9 @@ export default function StockPage() {
                             <span className="font-medium">{r.name}</span>
                             <StoreTag venueId={r.venueId} />
                           </div>
+                          {(r.subcategory || r.size) && (
+                            <div className="text-xs text-neutral-500">{[r.subcategory, r.size].filter(Boolean).join(" · ")}</div>
+                          )}
                           {r.countedAt && (
                             <div className="text-xs text-neutral-500">
                               {t("stock_counted_on", { qty: r.countedQty ?? 0, when: fmt.dateTime(r.countedAt) })}
@@ -261,8 +275,9 @@ export default function StockPage() {
                 </Table>
               </div>
             )}
+            <Pager total={total} offset={filters.offset} pageSize={PAGE_SIZE} onOffset={filters.setOffset} />
           </Card>
-          {data.rows.some((r) => r.onHand < 0) && <p className="text-xs text-neutral-500">{t("stock_negative_note")}</p>}
+          {rows.some((r) => r.onHand < 0) && <p className="text-xs text-neutral-500">{t("stock_negative_note")}</p>}
           </TabsContent>
         </Tabs>
       ) : null}
