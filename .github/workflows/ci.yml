@@ -1,7 +1,8 @@
 # CI — runs on every PR and on pushes to main. One job per tier, in
 # parallel: the store server, the cloud API (against a real Postgres service
 # container), the Flutter client, the Next.js portal (with its brand tests), the
-# scripts' Python unit tests, and the client provisioning script. This is the gate rec 6
+# scripts' Python unit tests, the client provisioning script, and the forecourt
+# (fuel pump) simulator's Node tests. This is the gate rec 6
 # (S5c) exists to add: a commit that breaks any tier fails here instead of
 # shipping silently to the box.
 #
@@ -147,3 +148,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: new-client.sh tests
         run: bash cloud/infra/tests/new-client-test.sh
+
+  forecourt:
+    name: forecourt simulator (node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: node --test (model, HTTP API, SSE; no dependencies)
+        working-directory: forecourt/simulator
+        run: npm test

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forecourt Simulator</title>
+  <meta name="description" content="Pronghorn Fuel &amp; Market forecourt simulator: pumps, nozzles and the FDC for POS demos.">
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">P</span>
+      <div>
+        <div class="brand-name">Pronghorn Fuel &amp; Market</div>
+        <div class="brand-sub">forecourt simulator</div>
+      </div>
+    </div>
+    <div class="controls">
+      <span class="conn" id="conn" title="Connection to the simulator"><span class="dot"></span><span id="conn-label">connecting</span></span>
+      <div class="seg" role="group" aria-label="Flow speed">
+        <span class="seg-cap">Speed</span>
+        <button type="button" data-speed="1">1×</button>
+        <button type="button" data-speed="5">5×</button>
+        <button type="button" data-speed="10">10×</button>
+      </div>
+      <button type="button" class="btn-ghost" id="reset-all">Reset all</button>
+      <button type="button" class="btn-estop" id="estop-all">EMERGENCY STOP ALL</button>
+    </div>
+  </header>
+
+  <main class="grid" id="grid" aria-live="polite"></main>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <template id="pump-tpl">
+    <article class="pump" data-state="IDLE">
+      <div class="head">
+        <div class="num"></div>
+        <div class="status"><span class="light"></span><span class="label">Idle</span></div>
+        <details class="menu">
+          <summary aria-label="Pump menu">•••</summary>
+          <div class="menu-list">
+            <div class="menu-cap">Simulate</div>
+            <button type="button" data-act="offline">Go offline</button>
+            <button type="button" data-act="error">Raise error</button>
+            <button type="button" data-act="reset">Reset pump</button>
+            <button type="button" data-act="estop">Emergency stop</button>
+            <div class="menu-cap">POS test</div>
+            <button type="button" data-act="postpay">Authorise postpay</button>
+            <button type="button" data-act="prepay">Prepay $20.00</button>
+            <button type="button" data-act="stop">Stop / free</button>
+            <button type="button" data-act="resume">Resume</button>
+          </div>
+        </details>
+      </div>
+      <div class="face">
+        <div class="row sale"><span class="cap">TOTAL SALE $</span><span class="dig" data-f="amount">0.00</span></div>
+        <div class="row"><span class="cap">GALLONS</span><span class="dig" data-f="volume">0.000</span></div>
+        <div class="row"><span class="cap">PRICE/GAL</span><span class="dig" data-f="price">0.000</span></div>
+      </div>
+      <div class="auth" data-f="auth">Not authorised</div>
+      <div class="grades"></div>
+      <div class="actions">
+        <button type="button" class="hold" data-act="hold">HOLD TO PUMP</button>
+        <button type="button" class="latch" data-act="latch" aria-pressed="false" title="Hold-open clip">LATCH</button>
+        <button type="button" class="hang" data-act="hangup">HANG UP</button>
+      </div>
+      <div class="unpaid"><span class="unpaid-cap">Unpaid</span><span class="unpaid-list" data-f="unpaid">none</span></div>
+    </article>
+  </template>
+
+  <script src="panel.js"></script>
+</body>
+</html>

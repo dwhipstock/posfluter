@@ -1,0 +1,14 @@
+{
+  "name": "forecourt-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Forecourt (FDC + pumps) simulator for the Pronghorn Fuel & Market demo",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  }
+}
