@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 520" width="1400" height="520" role="img" aria-label="Pronghorn Fuel &amp; Market">
+  <!-- Pronghorn Fuel & Market wordmark: the mark, then the name in Barlow
+       ExtraBold caps with FUEL & MARKET on a signal-yellow band. -->
+  <rect width="1400" height="520" fill="#0E1013"/>
+  <g transform="translate(40 40) scale(0.859)">
+    <rect x="16" y="16" width="480" height="480" rx="112" fill="#0E1013"/>
+    <rect x="23" y="23" width="466" height="466" rx="106" fill="none" stroke="#FFC400" stroke-width="14"/>
+    <g fill="none" stroke="#FFC400" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M232 262 C 196 230, 168 180, 172 124 C 174 100, 190 86, 212 92" stroke-width="36"/>
+      <path d="M280 262 C 316 230, 344 180, 340 124 C 338 100, 322 86, 300 92" stroke-width="36"/>
+      <path d="M186 196 L 138 184" stroke-width="30"/>
+      <path d="M326 196 L 374 184" stroke-width="30"/>
+    </g>
+    <path d="M256 238 C 256 238, 188 326, 188 372 C 188 412, 218 440, 256 440 C 294 440, 324 412, 324 372 C 324 326, 256 238, 256 238 Z" fill="#FFFFFF"/>
+    <path d="M226 378 C 226 402, 240 416, 262 418" fill="none" stroke="#0E1013" stroke-width="14" stroke-linecap="round"/>
+  </g>
+  <text x="526" y="270" font-family="Barlow" font-weight="800" font-size="152" textLength="816" lengthAdjust="spacingAndGlyphs" fill="#FFFFFF">PRONGHORN</text>
+  <rect x="524" y="312" width="820" height="112" rx="14" fill="#FFC400"/>
+  <text x="934" y="397" text-anchor="middle" font-family="Barlow Condensed" font-weight="800" font-size="92" letter-spacing="14" fill="#0E1013">FUEL &amp; MARKET</text>
+</svg>
