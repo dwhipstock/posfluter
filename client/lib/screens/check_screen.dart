@@ -537,8 +537,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       children: [
                         Text(
                           item.variants.length == 1
-                              ? cad(item.variants.first.priceCents)
-                              : '${cad(item.variants.first.priceCents)}+',
+                              ? money(item.variants.first.priceCents)
+                              : '${money(item.variants.first.priceCents)}+',
                           style: T.price(size: 18, weight: FontWeight.w700),
                         ),
                         if (inactive) const Pill('86', color: T.destructive),
@@ -664,7 +664,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                 style: T.small(),
                               ),
                               Text(
-                                cad(fee.amountCents),
+                                money(fee.amountCents),
                                 style: T.price(size: 16, color: T.textMuted),
                               ),
                             ],
@@ -694,7 +694,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       style: T.text(size: 20, weight: FontWeight.w600),
                     ),
                     Text(
-                      cad(check.grandTotalCents),
+                      money(check.grandTotalCents),
                       style: T.price(
                         size: T.priceBigSize,
                         weight: FontWeight.w700,
@@ -833,7 +833,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               ],
             ),
           ),
-          Text(cad(line.lineTotalCents), style: T.price(size: 15)),
+          Text(money(line.lineTotalCents), style: T.price(size: 15)),
           IconButton(
             icon: const Icon(
               LucideIcons.checkCircle2,
@@ -896,7 +896,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: Text(
-                  cad(line.lineTotalCents),
+                  money(line.lineTotalCents),
                   textAlign: TextAlign.right,
                   style: T.price(size: 17, weight: FontWeight.w700),
                 ),
@@ -908,7 +908,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               Expanded(
                 child: Text(
                   detail.isEmpty
-                      ? '${cad(line.unitPriceCents)} ${l.each}'
+                      ? '${money(line.unitPriceCents)} ${l.each}'
                       : detail,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -1152,7 +1152,7 @@ class _VariantSheetState extends State<_VariantSheet> {
                 for (final v in widget.item.variants)
                   _CategoryChip(
                     label:
-                        '${l.name(v.labelFr, v.labelEn)} ${cad(v.priceCents)}',
+                        '${l.name(v.labelFr, v.labelEn)} ${money(v.priceCents)}',
                     selected: v.id == _variant.id,
                     onTap: () => setState(() => _variant = v),
                   ),
@@ -1198,7 +1198,7 @@ class _VariantSheetState extends State<_VariantSheet> {
                 _qty,
                 _note.text.isEmpty ? null : _note.text,
               )),
-              child: Text(l.addToBill(cad(_variant.priceCents * _qty))),
+              child: Text(l.addToBill(money(_variant.priceCents * _qty))),
             ),
           ),
         ],

@@ -34,6 +34,25 @@ data class CloudConfig(
     // Base domain for cloud-hosted venue stores (<subdomain>.<this>); unset = no
     // public store URLs are minted or accepted (pure on-prem deployment).
     val publicBaseDomain: String? = env("PUBLIC_BASE_DOMAIN"),
+    // Per-store profile (017), "<venueId>=<value>,…". A store not listed keeps the
+    // defaults: VENUE_TZ, CAD, CA, restaurant. The zone is applied when the store
+    // is first created only (it decides history's business days); currency,
+    // country and kind follow env on every boot for the stores listed.
+    val storeZones: Map<String, String> = parsePairs(env("STORE_ZONES")),
+    val storeCurrencies: Map<String, String> = parsePairs(env("STORE_CURRENCIES"))
+        .mapValues { it.value.uppercase() },
+    val storeCountries: Map<String, String> = parsePairs(env("STORE_COUNTRIES"))
+        .mapValues { it.value.uppercase() },
+    // Retail stores (stock page, counter sales): RETAIL_STORES="sage-poppy,…"
+    val retailStores: Set<String> = (env("RETAIL_STORES") ?: "").split(',')
+        .map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
+    // The currency "All stores" shows its approximate converted total in; a
+    // tenant setting seeded from env (default CAD).
+    val reportingCurrency: String = (env("REPORTING_CURRENCY") ?: "CAD").uppercase(),
+    // Fixed conversion rates, FX_<FROM>_<TO>=<rate> (e.g. FX_USD_CAD=1.37). No
+    // live rates: the portal labels the converted figure approximate and shows
+    // the rate it used.
+    val fxRates: Fx.Rates = Fx.Rates.fromEnv(System.getenv()),
 )
 
 /** One store (venue) the boot seed provisions for the tenant. */

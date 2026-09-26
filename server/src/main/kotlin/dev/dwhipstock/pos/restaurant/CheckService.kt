@@ -28,6 +28,7 @@ import dev.dwhipstock.pos.sdk.TenderInstructions
 import dev.dwhipstock.pos.sdk.TenderType
 import dev.dwhipstock.pos.sdk.Totals
 import dev.dwhipstock.pos.sdk.TransactionPipeline
+import dev.dwhipstock.pos.sdk.putMoneyContext
 import dev.dwhipstock.pos.sdk.Align
 import dev.dwhipstock.pos.sdk.PrintLine
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
@@ -967,6 +968,7 @@ class CheckService(private val config: CustomerConfig) {
         }
         val tz = tableZoneRow(check[Checks.tableId])
         Outbox.write("check.voided", "check", checkId.toString(), buildJsonObject {
+            putMoneyContext(config.profile)
             put("checkId", checkId)
             put("reason", reason)
             put("authorizedBy", managerId)
@@ -1181,6 +1183,7 @@ class CheckService(private val config: CustomerConfig) {
             put("zoneNameFr", tz?.get(Zones.nameFr))
             put("zoneNameEn", tz?.get(Zones.nameEn))
             put("createdAt", VenueClock.iso(now))
+            putMoneyContext(config.profile)
             linesJson?.let { put("lines", it) }
             stripeRefundId?.let { r ->
                 put("processor", "stripe")
@@ -1557,6 +1560,7 @@ class CheckService(private val config: CustomerConfig) {
             }
         }
         return buildJsonObject {
+            putMoneyContext(config.profile)
             put("checkId", checkId)
             put("tableId", check[Checks.tableId])
             put("tableLabel", tz?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] })

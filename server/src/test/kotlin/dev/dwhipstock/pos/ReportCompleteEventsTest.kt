@@ -88,6 +88,9 @@ class ReportCompleteEventsTest {
 
         val closed = lastPayload("check.closed")
         assertEquals(checkId, closed["checkId"]!!.jsonPrimitive.int)
+        // every money event names its currency and country (the pubs: CAD, CA)
+        assertEquals("CAD", closed["currency"]!!.jsonPrimitive.content)
+        assertEquals("CA", closed["country"]!!.jsonPrimitive.content)
         assertEquals("t5", closed["tableId"]!!.jsonPrimitive.content)
         assertEquals("U-1", closed["tableLabel"]!!.jsonPrimitive.content)
         assertEquals("upper", closed["zoneId"]!!.jsonPrimitive.content)
@@ -173,6 +176,7 @@ class ReportCompleteEventsTest {
         assertEquals(1829L, voided["amountCents"]!!.jsonPrimitive.long)
         assertEquals(239L, voided["taxIncludedCents"]!!.jsonPrimitive.long)
         assertEquals(listOf(80L, 159L), voided["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long })
+        assertEquals("CAD", voided["currency"]!!.jsonPrimitive.content)
 
         // --- shift.closed: the Z-report echo ---
         // expected cash = opening float + settled cash sale.
@@ -184,6 +188,7 @@ class ReportCompleteEventsTest {
         val shiftClosed = lastPayload("shift.closed")
         assertEquals(1, shiftClosed["shiftId"]!!.jsonPrimitive.int)
         assertEquals("manager", shiftClosed["closedBy"]!!.jsonPrimitive.content)
+        assertEquals("CAD", shiftClosed["currency"]!!.jsonPrimitive.content)
         assertEquals(41012L, shiftClosed["revenueCents"]!!.jsonPrimitive.long)
         assertEquals(141010L, shiftClosed["expectedCashCents"]!!.jsonPrimitive.long)
         assertEquals(141010L, shiftClosed["closingCountCents"]!!.jsonPrimitive.long)

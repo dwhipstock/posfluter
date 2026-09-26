@@ -123,6 +123,7 @@ additive.
 ### `check.closed` (the sales fact — one per settled check)
 ```json
 {
+  "currency": "CAD", "country": "CA", // every cent below is in this currency (see Currency)
   "checkId": 42,
   "tableId": "l13", "tableLabel": "L-8",
   "zoneId": "lower", "zoneNameFr": "Zone inférieure", "zoneNameEn": "Lower",
@@ -175,6 +176,15 @@ additive.
 - **Older stores** (before store migration 036) send neither `subtotalCents`
   nor `taxes`. The cloud stores their per-tax amounts as NULL and reports show
   0 for them — it never estimates a tax that was not sent.
+- **Currency.** Every money event (`check.closed`, `check.voided`,
+  `refund.created`, `cash.movement`, `shift.closed`) carries
+  `"currency": "CAD" | "USD"` (ISO 4217, the store's own currency) and
+  `"country": "CA" | "US"` (ISO 3166). All cents in the payload are minor
+  units of that currency; a store never mixes currencies. The cloud stores
+  the currency on the row (`checks.currency`, `refunds.currency`, …). An older
+  store that sends no `currency` is read as its venue's currency
+  (`venues.currency`, which is `CAD` for every store that predates this).
+  Reports never add two currencies together (§6).
 
 ### `check.voided`
 Existing `checkId`/`reason`/`authorizedBy` plus:
@@ -186,7 +196,7 @@ started, else the same pipeline math it shows on screen); `taxes` has the
 
 ### `refund.created`
 `refundId, checkId, shiftId?, grossCents, netCents, taxIncludedCents,
-taxes, tenderType, reason, refundedBy, tableId, tableLabel, zoneId,
+taxes, currency, country, tenderType, reason, refundedBy, tableId, tableLabel, zoneId,
 zoneNameFr, zoneNameEn, createdAt, lines?` (+ `processor`,
 `stripePaymentIntentId`, `stripeRefundId` for a card refund through Stripe).
 `grossCents` is the money returned, `taxIncludedCents` every tax inside it,
@@ -380,6 +390,28 @@ key keeps working unchanged.
 Portal reads take an optional `?venue=<id>`: with it, exactly that store;
 without it, all of the tenant's stores combined (each over its own business
 days), with a per-store `byVenue` breakdown on the sales reports.
+
+**Stores in other countries** (cloud migration 017). Each store has a
+currency, a country and a kind, set from env on boot for the stores listed:
+`STORE_CURRENCIES="sage-poppy=USD"`, `STORE_COUNTRIES="sage-poppy=US"`,
+`RETAIL_STORES="sage-poppy"`, and `STORE_ZONES="sage-poppy=America/Los_Angeles"`
+(the zone, like `VENUE_TZ`, on insert only). Unlisted stores keep CAD / CA /
+restaurant. The tenant's reporting currency is `REPORTING_CURRENCY` (default
+`CAD`); fixed conversion rates are `FX_<FROM>_<TO>` (e.g. `FX_USD_CAD=1.37`;
+the reverse is derived). There are no live rates.
+
+Every report response carries `money`:
+`{ currency, approximate, reportingCurrency, currencies, rates, convertible }`.
+With one currency in scope (any single store, or a group in one country) the
+figures are exact in `currency`. With several ("All stores" across
+countries) per-store rows stay exact in their own `currency`, `byCurrency`
+gives exact totals per currency, and the combined figures are each
+currency's exact sum converted into the reporting currency at `rates` and
+then added — `approximate: true`. Without a configured rate
+(`convertible: false`) that currency contributes 0 to the combined figure and
+only its `byCurrency` row is meaningful. `GET /v1/venues` lists each store's
+`currency`, `country` and `kind` with the tenant's `reportingCurrency` and
+`rates`.
 
 ## 8. Heartbeat (store → cloud, every sync tick)
 

@@ -15,13 +15,22 @@ export interface Cell {
   kind: CellKind;
   /** money → cents (int); int → the number; text → the string. */
   value: string | number | null;
+  /** money only: the ISO currency the cents are in (default CAD). */
+  currency?: string;
+  /** money only: a converted, approximate figure ("≈" in the PDF). */
+  approximate?: boolean;
 }
 
 export const T = (v: string | number | null | undefined): Cell => ({
   kind: "text",
   value: v == null ? "" : String(v),
 });
-export const Money = (cents: number): Cell => ({ kind: "money", value: Math.round(cents) });
+export const Money = (cents: number, currency?: string, approximate?: boolean): Cell => ({
+  kind: "money",
+  value: Math.round(cents),
+  ...(currency ? { currency } : {}),
+  ...(approximate ? { approximate } : {}),
+});
 export const Int = (n: number): Cell => ({ kind: "int", value: n });
 
 // A column bound to a row type R: header + how to pull the cell out of a row.
@@ -80,6 +89,10 @@ export interface Section<R = any> {
   rows: R[];
   /** Optional totals row; one cell per column (usually T(label) then Money/Int). */
   total?: Cell[];
+  /** The currency of a row; default: `row.currency`, else its store's, else the scope's. */
+  rowCurrency?: (row: R) => string | undefined;
+  /** The totals row's currency label (e.g. "≈ CAD" when converted); default: the scope's. */
+  totalCurrency?: string;
 }
 
 export interface Kpi {
@@ -105,6 +118,65 @@ export interface ExportDoc {
   notes?: string[];
   kpis?: Kpi[];
   sections: Section[];
+  /** The tenant has stores in several currencies: dollars print as CA$ / US$. */
+  multiCurrency?: boolean;
+}
+
+/**
+ * Give every section that carries money a Currency column (right after the
+ * first column) and stamp each money cell with its row's currency, so a
+ * spreadsheet never mixes CAD and USD figures silently. Applied once, by the
+ * export menu, to whatever doc a page built.
+ */
+export function withCurrencyColumns(
+  doc: ExportDoc,
+  opts: {
+    header: string;
+    currencyOf: (venueId: string) => string;
+    /** The scope's currency (the picked store's, or the reporting one). */
+    fallback: string;
+    /** Totals are converted (All stores across currencies). */
+    approximateTotals: boolean;
+    multiCurrency: boolean;
+  }
+): ExportDoc {
+  const rowCur = <R>(s: Section<R>, row: R): string => {
+    const own = s.rowCurrency?.(row);
+    if (own) return own;
+    const r = row as unknown as { currency?: string; venueId?: string };
+    if (r && typeof r.currency === "string" && r.currency) return r.currency;
+    if (r && typeof r.venueId === "string" && r.venueId) return opts.currencyOf(r.venueId);
+    return opts.fallback;
+  };
+  const sections = doc.sections.map((s) => {
+    if (s.columns.length === 0 || s.columns.some((c) => c.header === opts.header)) return s;
+    const hasMoney = s.rows.some((row) => s.columns.some((c) => c.get(row).kind === "money")) ||
+      (s.total ?? []).some((c) => c.kind === "money");
+    if (!hasMoney) return s;
+    const currencyCol: Col<unknown> = {
+      header: opts.header,
+      align: "left",
+      width: 8,
+      get: (row) => T(rowCur(s, row)),
+    };
+    const columns = s.columns.map((c) => ({
+      ...c,
+      get: (row: unknown) => {
+        const cell = c.get(row);
+        return cell.kind === "money" && !cell.currency ? { ...cell, currency: rowCur(s, row) } : cell;
+      },
+    }));
+    const totalCur = s.totalCurrency ?? (opts.approximateTotals ? `≈ ${opts.fallback}` : opts.fallback);
+    const total = s.total?.map((c) =>
+      c.kind === "money" && !c.currency ? { ...c, currency: opts.fallback, approximate: opts.approximateTotals } : c
+    );
+    return {
+      ...s,
+      columns: [columns[0], currencyCol, ...columns.slice(1)],
+      total: total ? [total[0], T(totalCur), ...total.slice(1)] : undefined,
+    };
+  });
+  return { ...doc, sections, multiCurrency: opts.multiCurrency };
 }
 
 // Helper: a Section is worth emitting only if it has rows. Reports skip empty

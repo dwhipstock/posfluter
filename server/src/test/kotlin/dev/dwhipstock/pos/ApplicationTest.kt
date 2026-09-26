@@ -29,9 +29,12 @@ class ApplicationTest {
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)
         // pairingRequired (M8) tells terminals whether to show the pairing screen
-        // venue names the store on the sign-in screen
+        // venue names the store on the sign-in screen; the profile tells the
+        // terminal its screens, brand, languages and currency before sign-in
         assertEquals(
-            """{"status":"ok","pairingRequired":false,"venue":"Copper Lantern — Vieux-Port"}""",
+            """{"status":"ok","pairingRequired":false,"venue":"Copper Lantern — Vieux-Port",""" +
+                """"venueId":"vieux-port","brand":"copper-lantern","kind":"restaurant","country":"CA",""" +
+                """"currency":"CAD","locales":["fr","en"],"legalAge":18}""",
             response.bodyAsText(),
         )
     }

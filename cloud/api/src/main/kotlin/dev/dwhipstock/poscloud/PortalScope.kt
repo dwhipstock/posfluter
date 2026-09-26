@@ -23,10 +23,19 @@ import java.time.ZoneId
  * Call OUTSIDE a transaction (they open their own, like requirePortal).
  */
 
-/** One in-scope store with its display name and IANA zone. */
-data class VenueScope(val scope: Scope, val name: String, val zone: ZoneId) {
+/** One in-scope store with its display name, IANA zone, currency and kind. */
+data class VenueScope(
+    val scope: Scope, val name: String, val zone: ZoneId,
+    val currency: String = "CAD", val kind: String = "restaurant",
+) {
     val venueId: String get() = scope.venueId
+    val retail: Boolean get() = kind == "retail"
 }
+
+/** The tenant's reporting currency (call inside a transaction). */
+fun reportingCurrencyOf(tenantId: String): String =
+    dev.dwhipstock.poscloud.db.Tenants.selectAll().where { dev.dwhipstock.poscloud.db.Tenants.id eq tenantId }
+        .firstOrNull()?.get(dev.dwhipstock.poscloud.db.Tenants.reportingCurrency) ?: "CAD"
 
 /** The stores this request covers: the one asked for, else all of the tenant's (ordered by id). */
 fun portalScopes(call: ApplicationCall): Pair<Principal, List<VenueScope>> {
@@ -37,7 +46,10 @@ fun portalScopes(call: ApplicationCall): Pair<Principal, List<VenueScope>> {
             if (requested != null) (Venues.tenantId eq principal.tenantId) and (Venues.id eq requested)
             else Venues.tenantId eq principal.tenantId
         }.orderBy(Venues.id).map {
-            VenueScope(Scope(principal.tenantId, it[Venues.id]), it[Venues.name], CloudTime.zone(it[Venues.timezone]))
+            VenueScope(
+                Scope(principal.tenantId, it[Venues.id]), it[Venues.name], CloudTime.zone(it[Venues.timezone]),
+                it[Venues.currency], it[Venues.kind],
+            )
         }
     }
     if (venues.isEmpty()) {

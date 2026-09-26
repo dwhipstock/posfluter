@@ -507,7 +507,7 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
                                 style: T.small(),
                               ),
                               Text(
-                                cad(fee.amountCents),
+                                money(fee.amountCents),
                                 style: T.price(size: 15, color: T.textMuted),
                               ),
                             ],
@@ -534,7 +534,7 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
                   children: [
                     Text(l.total, style: T.small(weight: FontWeight.w600)),
                     Text(
-                      cad(group.grandTotalCents),
+                      money(group.grandTotalCents),
                       style: T.price(size: 24, weight: FontWeight.w600),
                     ),
                   ],
@@ -637,7 +637,7 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
               ),
             ),
             Text(
-              cad(line.unitPriceCents * slice.qty),
+              money(line.unitPriceCents * slice.qty),
               style: T.price(size: dense ? 15 : 16),
             ),
             if (slice.qty > 1 && enabled) ...[

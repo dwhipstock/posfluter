@@ -6,6 +6,7 @@ import { STORE_PARAM, shortStoreName, useStores } from "@/lib/store";
 import { useT } from "@/lib/i18n/context";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { RetailBadge } from "@/components/money-scope";
 
 const ALL = "__all__";
 
@@ -65,6 +66,7 @@ export function StorePicker({ tone = "light", className }: { tone?: "light" | "d
             <span className="flex items-center gap-2">
               {dot(v.id)}
               {shortStoreName(v.name)}
+              <RetailBadge venueId={v.id} />
             </span>
           </SelectItem>
         ))}

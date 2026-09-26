@@ -176,6 +176,9 @@ fun Route.storeRoutes(config: CloudConfig) {
         transaction {
             requireKnownInstall(scope, req.installId)
             val zone = dev.dwhipstock.poscloud.CloudTime.venueZone(scope.tenantId, scope.venueId)
+            val venueCurrency = Venues.selectAll()
+                .where { (Venues.tenantId eq scope.tenantId) and (Venues.id eq scope.venueId) }
+                .firstOrNull()?.get(Venues.currency) ?: "CAD"
             for (event in req.events.sortedBy { it.seq }) {
                 val inserted = Events.insertIgnore {
                     it[tenantId] = scope.tenantId
@@ -193,7 +196,7 @@ fun Route.storeRoutes(config: CloudConfig) {
                     duplicates++
                 } else {
                     accepted++
-                    Projections.apply(scope, event, zone)
+                    Projections.apply(scope, event, zone, venueCurrency)
                 }
             }
         }

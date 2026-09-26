@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Wine } from "lucide-react";
 import { useApi } from "@/lib/hooks";
-import { CAD } from "@/lib/format";
+import { useMoney, type MoneyApi } from "@/lib/money";
 import { useI18n, useT } from "@/lib/i18n/context";
 import type { MenuItem, MenuResponse } from "@/lib/types";
 import { useStores } from "@/lib/store";
@@ -97,12 +97,21 @@ function mergeAcrossStores(items: MenuItem[]): MergedItem[] {
   return [...byId.values()];
 }
 
-function priceRange(items: MenuItem[]): string {
-  const prices = items.flatMap((i) => i.variants.map((v) => v.priceCents));
-  if (prices.length === 0) return "—";
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  return min === max ? CAD(min) : `${CAD(min)}–${CAD(max)}`;
+/** Min–max price, in each store's own currency (one range per currency, never mixed). */
+function priceRange(items: MenuItem[], m: MoneyApi): string {
+  const byCurrency = new Map<string, number[]>();
+  for (const i of items) {
+    const c = m.currencyOf(i.venueId);
+    byCurrency.set(c, [...(byCurrency.get(c) ?? []), ...i.variants.map((v) => v.priceCents)]);
+  }
+  const ranges = [...byCurrency.entries()]
+    .filter(([, prices]) => prices.length > 0)
+    .map(([c, prices]) => {
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      return min === max ? m.fmtIn(c, min) : `${m.fmtIn(c, min)}–${m.fmtIn(c, max)}`;
+    });
+  return ranges.length ? ranges.join(" · ") : "—";
 }
 
 function ItemRow({ row }: { row: MergedItem }) {
@@ -110,6 +119,7 @@ function ItemRow({ row }: { row: MergedItem }) {
   const { name, nameAlt } = useI18n();
   const { combined, venues, nameOf, colorOf } = useStores();
   const { item, copies } = row;
+  const m = useMoney();
   // an item on every store's menu needs no tag; a store-specific one names its store(s)
   const storeSpecific = combined && copies.length < venues.length;
   return (
@@ -131,12 +141,12 @@ function ItemRow({ row }: { row: MergedItem }) {
             <span key={c.venueId} className="inline-flex items-center gap-1.5 text-xs tabular-nums text-neutral-600">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: colorOf(c.venueId) }} />
               {nameOf(c.venueId)}
-              <span className={c.active ? "font-medium text-ink" : "text-neutral-500 line-through"}>{priceRange([c])}</span>
+              <span className={c.active ? "font-medium text-ink" : "text-neutral-500 line-through"}>{priceRange([c], m)}</span>
             </span>
           ))}
         </span>
       ) : (
-        <span className="shrink-0 text-sm font-medium tabular-nums">{priceRange(copies)}</span>
+        <span className="shrink-0 text-sm font-medium tabular-nums">{priceRange(copies, m)}</span>
       )}
     </div>
   );

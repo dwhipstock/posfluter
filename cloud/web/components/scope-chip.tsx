@@ -5,6 +5,7 @@ import { Layers, X } from "lucide-react";
 import { STORE_PARAM, shortStoreName, useStores } from "@/lib/store";
 import { useT } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
+import { RetailBadge } from "@/components/money-scope";
 
 /**
  * Which stores the page is showing, impossible to miss: one store (its colour
@@ -38,6 +39,7 @@ export function ScopeChip({ className }: { className?: string }) {
       >
         <span className="h-2.5 w-2.5 rounded-full ring-2 ring-surface" style={{ backgroundColor: colorOf(storeId) }} />
         {t("scope_single", { store: store ? shortStoreName(store.name) : storeId })}
+        <RetailBadge venueId={storeId} />
         <button
           type="button"
           onClick={clear}

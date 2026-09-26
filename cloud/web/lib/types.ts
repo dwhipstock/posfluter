@@ -9,6 +9,60 @@ export interface Me {
   tenantName: string;
 }
 
+/** ISO 4217 code: "CAD", "USD". An older API omits it on rows → CAD. */
+export type Currency = string;
+
+/** One fixed conversion rate from config: 1 [from] = [rate] [to]. */
+export interface FxRate {
+  from: Currency;
+  to: Currency;
+  /** Decimal string, e.g. "1.37". */
+  rate: string;
+}
+
+/**
+ * How a report's money reads. One currency in scope → `currency` is it and
+ * every figure is exact. Several (All stores across countries) → combined
+ * figures are converted into `reportingCurrency` at the fixed `rates` and
+ * `approximate` is true; per-store rows stay exact in their own currency.
+ * `convertible` false = a rate is missing, so combined figures are not real.
+ */
+export interface MoneyScope {
+  currency: Currency;
+  approximate: boolean;
+  reportingCurrency: Currency;
+  currencies: Currency[];
+  rates: FxRate[];
+  convertible: boolean;
+}
+
+/** One tax code's net amount in one currency (sales less refunds). */
+export interface TaxCodeRow {
+  code: string;
+  labelFr: string;
+  labelEn: string;
+  ratePercent: string;
+  currency: Currency;
+  amountCents: number;
+}
+
+/** Exact headline figures of the stores selling in one currency. */
+export interface CurrencySummaryRow {
+  currency: Currency;
+  venueIds: string[];
+  grossCents: number;
+  netCents: number;
+  taxCents: number;
+  checkCount: number;
+  avgCheckCents: number;
+  voidCount: number;
+  voidAmountCents: number;
+  refundCount: number;
+  refundAmountCents: number;
+  /** grossCents in the reporting currency at the fixed rate; null = no rate. */
+  grossReportingCents?: number | null;
+}
+
 /** One store's headline figures (the per-store comparison in "All stores"). */
 export interface VenueSummaryRow {
   venueId: string;
@@ -23,12 +77,17 @@ export interface VenueSummaryRow {
   /** GST / QST inside taxCents, as charged (0 for sales without a breakdown). */
   gstCents: number;
   qstCents: number;
+  currency?: Currency;
+  /** Every tax code the store charged (sales less refunds). */
+  taxes?: TaxCodeRow[];
 }
 
 export interface ByVenueReport {
   venues: VenueSummaryRow[];
   grossCents: number;
   checkCount: number;
+  byCurrency?: CurrencySummaryRow[];
+  money?: MoneyScope;
 }
 
 export type LoginResponse =
@@ -50,6 +109,7 @@ export interface VenueDayRow {
   checkCount: number;
   gstCents: number;
   qstCents: number;
+  currency?: Currency;
 }
 
 export interface DayRow {
@@ -71,6 +131,7 @@ export interface VenueTotalRow {
   grossCents: number;
   checkCount: number;
   qty: number;
+  currency?: Currency;
 }
 
 /** One store's share of an item or category (stores that sold none are left out). */
@@ -78,6 +139,7 @@ export interface VenueQtyRow {
   venueId: string;
   qty: number;
   revenueCents: number;
+  currency?: Currency;
 }
 
 export interface Summary {
@@ -95,6 +157,9 @@ export interface Summary {
   byDay: DayRow[];
   /** One row per in-scope store. */
   byVenue: VenueSummaryRow[];
+  /** Exact totals per currency (one row unless the scope spans countries). */
+  byCurrency?: CurrencySummaryRow[];
+  money?: MoneyScope;
 }
 
 /** One tax the in-range sales were charged, as the store labelled it. */
@@ -104,6 +169,7 @@ export interface TaxRate {
   labelEn: string;
   /** Decimal string, e.g. "9.975". */
   ratePercent: string;
+  currency?: Currency;
 }
 
 export interface TaxReport {
@@ -118,6 +184,9 @@ export interface TaxReport {
     checkCount: number;
   };
   byVenue: VenueSummaryRow[];
+  byTax?: TaxCodeRow[];
+  byCurrency?: CurrencySummaryRow[];
+  money?: MoneyScope;
 }
 
 export type TenderType = "CASH" | "CARD" | "BANK_TRANSFER" | "STRIPE";
@@ -131,7 +200,10 @@ export interface PaymentRow {
 export interface PaymentsReport {
   rows: PaymentRow[];
   totalCents: number;
-  byVenue: { venueId: string; venueName: string; totalCents: number; rows: PaymentRow[] }[];
+  byVenue: { venueId: string; venueName: string; totalCents: number; rows: PaymentRow[]; currency?: Currency }[];
+  /** The payment mix per currency, exact. */
+  byCurrency?: { currency: Currency; totalCents: number; rows: PaymentRow[] }[];
+  money?: MoneyScope;
 }
 
 export interface ItemReportRow {
@@ -144,23 +216,27 @@ export interface ItemReportRow {
   qty: number;
   revenueCents: number;
   byVenue: VenueQtyRow[];
+  /** An item is one row per currency. */
+  currency?: Currency;
 }
 
 export interface ItemsReport {
   rows: ItemReportRow[];
   byVenue: VenueTotalRow[];
+  money?: MoneyScope;
 }
 
 export interface HourlyRow {
   hour: number;
   grossCents: number;
   checkCount: number;
-  byVenue: { venueId: string; grossCents: number; checkCount: number }[];
+  byVenue: { venueId: string; grossCents: number; checkCount: number; currency?: Currency }[];
 }
 
 export interface HourlyReport {
   rows: HourlyRow[];
   byVenue: VenueTotalRow[];
+  money?: MoneyScope;
 }
 
 export interface ZoneRow {
@@ -170,6 +246,7 @@ export interface ZoneRow {
   grossCents: number;
   checkCount: number;
   venueId: string;
+  currency?: Currency;
 }
 
 export interface ZoneTableRow {
@@ -180,12 +257,14 @@ export interface ZoneTableRow {
   grossCents: number;
   checkCount: number;
   venueId: string;
+  currency?: Currency;
 }
 
 export interface TablesReport {
   byZone: ZoneRow[];
   byTable: ZoneTableRow[];
   byVenue: VenueTotalRow[];
+  money?: MoneyScope;
 }
 
 export interface VoidRow {
@@ -196,6 +275,7 @@ export interface VoidRow {
   reason: string;
   voidedBy: string;
   venueId: string;
+  currency?: Currency;
 }
 
 export interface ExceptionsReport {
@@ -203,7 +283,15 @@ export interface ExceptionsReport {
   voidCount: number;
   voidAmountCents: number;
   corkageCents: number;
-  byVenue: { venueId: string; venueName: string; voidCount: number; voidAmountCents: number; corkageCents: number }[];
+  byVenue: {
+    venueId: string;
+    venueName: string;
+    voidCount: number;
+    voidAmountCents: number;
+    corkageCents: number;
+    currency?: Currency;
+  }[];
+  money?: MoneyScope;
 }
 
 export interface RefundReasonRow {
@@ -225,6 +313,7 @@ export interface RefundListRow {
   netCents: number;
   taxCents: number;
   venueId: string;
+  currency?: Currency;
 }
 
 export interface RefundsReport {
@@ -242,7 +331,9 @@ export interface RefundsReport {
     grossCents: number;
     netCents: number;
     taxCents: number;
+    currency?: Currency;
   }[];
+  money?: MoneyScope;
 }
 
 export interface CashMovementRow {
@@ -253,6 +344,7 @@ export interface CashMovementRow {
   reason: string | null;
   user: string | null;
   venueId: string;
+  currency?: Currency;
 }
 
 export interface CashMovementsReport {
@@ -270,7 +362,9 @@ export interface CashMovementsReport {
     netCents: number;
     inCount: number;
     outCount: number;
+    currency?: Currency;
   }[];
+  money?: MoneyScope;
 }
 
 export interface TenderBreakdownRow {
@@ -296,6 +390,7 @@ export interface Shift {
   closingCountCents: number | null;
   overShortCents: number | null;
   venueId: string;
+  currency?: Currency;
 }
 
 export interface ShiftsReport {
@@ -308,7 +403,9 @@ export interface ShiftsReport {
     revenueCents: number;
     transactionCount: number;
     overShortCents: number;
+    currency?: Currency;
   }[];
+  money?: MoneyScope;
 }
 
 export interface JournalLine {
@@ -330,13 +427,22 @@ export interface JournalRow {
   tenderTypes: TenderType[];
   lines: JournalLine[];
   venueId: string;
+  currency?: Currency;
 }
 
 export interface JournalReport {
   total: number;
   rows: JournalRow[];
   /** Per store over the whole filtered range (not just the page). */
-  byVenue: { venueId: string; venueName: string; closedCount: number; voidCount: number; closedCents: number }[];
+  byVenue: {
+    venueId: string;
+    venueName: string;
+    closedCount: number;
+    voidCount: number;
+    closedCents: number;
+    currency?: Currency;
+  }[];
+  money?: MoneyScope;
 }
 
 export interface MenuVariant {
@@ -408,10 +514,18 @@ export interface Venue {
   storeUrl: string | null;
   storeOnline: boolean;
   storeSeenAt: string | null;
+  /** ISO codes and the store kind; an older API omits them → CAD / CA / restaurant. */
+  currency?: Currency;
+  country?: string;
+  kind?: "restaurant" | "retail" | string;
 }
 
 export interface VenuesResponse {
   venues: Venue[];
+  /** The currency "All stores" converts into, approximately. */
+  reportingCurrency?: Currency;
+  /** Fixed rates into the reporting currency (only those configured). */
+  rates?: FxRate[];
 }
 
 // POST /v1/venues/{id}/pairing-codes — single-use, 15-minute TTL, shown once.

@@ -1,10 +1,10 @@
 package dev.dwhipstock.pos.sdk
 
 /**
- * All money in the engine is integer cents (1/100 CAD).
- * TODO: currency symbol/code is a per-locale concern — when it lands it belongs
- * in the sdk.i18n message catalog (e.g. a `money.currency` key), not here; for
- * now the engine is currency-agnostic minor units.
+ * All money in the engine is integer cents: minor units of the store's own
+ * currency ([StoreProfile.currency], CAD or USD). The engine never mixes
+ * currencies — one store, one currency — and stays symbol-free; people-facing
+ * text with a symbol goes through [MoneyFormat].
  */
 @JvmInline
 value class Money(val cents: Long) : Comparable<Money> {
@@ -15,7 +15,7 @@ value class Money(val cents: Long) : Comparable<Money> {
 
     val isZero get() = cents == 0L
 
-    /** Whole-CAD display: "1,010", "-0.50", "215.50". Currency symbol is the caller's call. */
+    /** Receipt figures: "1,010", "-0.50", "215.50". Currency symbol is the caller's call. */
     fun format(): String {
         val sign = if (cents < 0) "-" else ""
         val abs = kotlin.math.abs(cents)

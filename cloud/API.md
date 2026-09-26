@@ -73,6 +73,26 @@ picked; rows from a specific store carry `venueId`):
 | shifts | `{ venueId, venueName, shiftCount, openCount, revenueCents, transactionCount, overShortCents }` |
 | journal | `{ venueId, venueName, closedCount, voidCount, closedCents }` over the whole filtered range, not the page |
 
+**Currency (every report).** Every per-store row (`byVenue` entries, list rows
+such as journal / refunds / voids / cash movements / shifts / zones / tables)
+carries `currency` and is exact in it. Item and category rows are one row per
+(id, currency): the same item sold in CAD and USD is two rows. Every response
+carries `money: { currency, approximate, reportingCurrency, currencies,
+rates: [{ from, to, rate }], convertible }` describing its combined figures
+(headline totals, day / hour / tender / reason rows): exact in `currency` when
+one currency is in scope, else converted into the reporting currency at the
+fixed `rates` (`approximate: true`; `convertible: false` = a rate is missing
+and that currency adds 0). Summary, by-venue and tax add
+`byCurrency: [{ currency, venueIds, grossCents, netCents, taxCents, checkCount,
+avgCheckCents, voidCount, voidAmountCents, refundCount, refundAmountCents,
+grossReportingCents }]` (exact); payments adds
+`byCurrency: [{ currency, totalCents, rows }]`; tax adds
+`byTax: [{ code, labelFr, labelEn, ratePercent, currency, amountCents }]`
+(every tax code, sales less refunds) and each `byVenue` entry lists its
+`taxes` the same way. `GET /v1/venues` returns each venue's `currency`,
+`country` and `kind` (restaurant | retail) plus the tenant's
+`reportingCurrency` and `rates`.
+
 - `GET /v1/reports/summary`
   ```json
   { "grossCents": 0, "netCents": 0, "taxCents": 0,

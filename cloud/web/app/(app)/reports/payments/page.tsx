@@ -2,7 +2,8 @@
 
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD, CADShort } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { FxNote, RetailBadge } from "@/components/money-scope";
 import { useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { ExportMenu } from "@/components/export-menu";
@@ -40,6 +41,9 @@ function PaymentsPage() {
   const series = useStoreSeries(t("col_amount"));
   const { data, error, isLoading, mutate } = useApi<PaymentsReport>(reportKey("/v1/reports/payments", range));
   const tender = (type: string) => t(`tender_${type}` as MsgKey);
+  const m = useMoney();
+  const fmtC = (n: number) => m.fmtScope(data?.money, n);
+  const axisC = (n: number) => m.shortScope(data?.money, n);
   const share = (cents: number) =>
     data && data.totalCents > 0 ? `${Math.round((cents / data.totalCents) * 100)}%` : "—";
 
@@ -51,7 +55,10 @@ function PaymentsPage() {
       ...meta("payments"),
       reportTitle: t("payments_title"),
       kpis: [
-        { label: t("col_amount"), value: CAD(data.totalCents) },
+        { label: t("col_amount"), value: fmtC(data.totalCents) },
+        ...(data.money?.approximate
+          ? (data.byCurrency ?? []).map((c) => ({ label: `${t("col_amount")} · ${c.currency}`, value: m.fmtIn(c.currency, c.totalCents) }))
+          : []),
         { label: t("col_payments"), value: String(data.rows.reduce((n, r) => n + r.count, 0)) },
       ],
       sections: [
@@ -93,6 +100,7 @@ function PaymentsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
+      <FxNote money={data?.money} />
       {data && data.rows.length > 0 && <PaymentsByStore report={data} />}
 
       {isLoading ? (
@@ -108,7 +116,13 @@ function PaymentsPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t("dash_payment_mix")}</CardTitle>
-              {combined && <CardDescription>{t("chart_per_store_stacked")}</CardDescription>}
+              {combined && (
+                <CardDescription>
+                  {t("chart_per_store_stacked")}
+                  {data.money?.approximate &&
+                    ` · ${t("fx_chart_converted", { cur: data.money.reportingCurrency, rates: m.rateText(data.money) })}`}
+                </CardDescription>
+              )}
             </CardHeader>
             <CardContent>
               {combined ? (
@@ -116,20 +130,23 @@ function PaymentsPage() {
                   data={data.rows.map((r) => ({
                     label: tender(r.type),
                     values: Object.fromEntries(
-                      data.byVenue.map((v) => [v.venueId, v.rows.find((x) => x.type === r.type)?.amountCents ?? 0])
+                      data.byVenue.map((v) => [
+                        v.venueId,
+                        m.chartValue(v.venueId, v.rows.find((x) => x.type === r.type)?.amountCents ?? 0),
+                      ])
                     ),
                   }))}
                   series={series}
-                  format={CAD}
-                  axisFormat={CADShort}
+                  format={fmtC}
+                  axisFormat={axisC}
                   ariaLabel={t("dash_payment_mix")}
                 />
               ) : (
                 <div className="flex justify-center">
                   <Donut
                     items={data.rows.map((r, i) => ({ key: r.type, label: tender(r.type), value: r.amountCents, color: SERIES[i % SERIES.length] }))}
-                    format={CAD}
-                    center={CAD(data.totalCents)}
+                    format={fmtC}
+                    center={fmtC(data.totalCents)}
                     size={208}
                     ariaLabel={t("dash_payment_mix")}
                   />
@@ -159,7 +176,7 @@ function PaymentsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{r.count}</TableCell>
-                    <TableCell className="text-right tabular-nums">{CAD(r.amountCents)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtC(r.amountCents)}</TableCell>
                     <TableCell className="text-right tabular-nums text-neutral-500">{share(r.amountCents)}</TableCell>
                   </TableRow>
                 ))}
@@ -168,7 +185,7 @@ function PaymentsPage() {
                 <TableRow>
                   <TableCell>{t("col_total_short")}</TableCell>
                   <TableCell className="text-right tabular-nums">{data.rows.reduce((n, r) => n + r.count, 0)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{CAD(data.totalCents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtC(data.totalCents)}</TableCell>
                   <TableCell />
                 </TableRow>
               </TableFooter>
@@ -188,8 +205,14 @@ function PaymentsPage() {
 function PaymentsByStore({ report }: { report: PaymentsReport }) {
   const t = useT();
   const { combined, nameOf, colorOf } = useStores();
+  const m = useMoney();
   if (!combined) return null;
   const types = report.rows.map((r) => r.type);
+  // footer: one exact total per currency when the stores sell in several
+  const foot = (value: (v: PaymentsReport["byVenue"][number]) => number, combinedCents: number) =>
+    m.mixedScope
+      ? m.joinAmounts(m.perCurrency(report.byVenue, (v) => v.currency ?? m.currencyOf(v.venueId), value))
+      : m.fmtIn(m.scopeCurrency, combinedCents);
   return (
     <Card>
       <CardHeader>
@@ -216,14 +239,15 @@ function PaymentsByStore({ report }: { report: PaymentsReport }) {
                   <span className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorOf(v.venueId) }} />
                     {nameOf(v.venueId)}
+                    <RetailBadge venueId={v.venueId} />
                   </span>
                 </TableCell>
                 {types.map((type) => (
                   <TableCell key={type} className="text-right tabular-nums">
-                    {CAD(v.rows.find((r) => r.type === type)?.amountCents ?? 0)}
+                    {m.fmtVenue(v.venueId, v.rows.find((r) => r.type === type)?.amountCents ?? 0)}
                   </TableCell>
                 ))}
-                <TableCell className="text-right font-semibold tabular-nums">{CAD(v.totalCents)}</TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">{m.fmtVenue(v.venueId, v.totalCents)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -232,10 +256,10 @@ function PaymentsByStore({ report }: { report: PaymentsReport }) {
               <TableCell>{t("col_total")}</TableCell>
               {report.rows.map((r) => (
                 <TableCell key={r.type} className="text-right tabular-nums">
-                  {CAD(r.amountCents)}
+                  {foot((v) => v.rows.find((x) => x.type === r.type)?.amountCents ?? 0, r.amountCents)}
                 </TableCell>
               ))}
-              <TableCell className="text-right tabular-nums">{CAD(report.totalCents)}</TableCell>
+              <TableCell className="text-right tabular-nums">{foot((v) => v.totalCents, report.totalCents)}</TableCell>
             </TableRow>
           </TableFooter>
         </Table>

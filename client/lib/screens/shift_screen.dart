@@ -228,8 +228,8 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
       SnackBar(
         content: Text(
           dir == 'IN'
-              ? l.cashInDone(cad(amountCents))
-              : l.cashOutDone(cad(amountCents)),
+              ? l.cashInDone(money(amountCents))
+              : l.cashOutDone(money(amountCents)),
         ),
       ),
     );
@@ -470,7 +470,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
               l.shiftOpenedLine(
                 Prefs.instance.fmtDateTime(_shift!.openedAt),
                 _shift!.openedBy,
-                cad(_shift!.openingFloatCents),
+                money(_shift!.openingFloatCents),
               ),
               style: T.small(),
             ),
@@ -589,7 +589,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
                   children: [
                     Text(l.revenue, style: T.small()),
                     Text(
-                      cad(r.revenueCents),
+                      money(r.revenueCents),
                       style: T.price(size: 40, weight: FontWeight.w700),
                     ),
                   ],
@@ -603,12 +603,12 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
                     style: T.small(),
                   ),
                   Text(
-                    '${l.avgPerBill}  ${cad(r.avgCheckCents)}',
+                    '${l.avgPerBill}  ${money(r.avgCheckCents)}',
                     style: T.small(),
                   ),
                   if (r.corkageCents > 0)
                     Text(
-                      '${l.corkage}  ${cad(r.corkageCents)}',
+                      '${l.corkage}  ${money(r.corkageCents)}',
                       style: T.small(),
                     ),
                 ],
@@ -640,14 +640,14 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
           for (final t in r.tenderBreakdown)
             kv(
               '●  ${tenderLabels[t.type] ?? t.type} (${t.count})',
-              cad(t.amountCents),
+              money(t.amountCents),
               color: tenderColors[t.type],
             ),
         ] else
           Text('—', style: T.small()),
         SectionLabel(l.topItems),
         for (final i in r.itemMix)
-          kv('${l.name(i.nameFr, i.nameEn)} ×${i.qty}', cad(i.revenueCents)),
+          kv('${l.name(i.nameFr, i.nameEn)} ×${i.qty}', money(i.revenueCents)),
         if (r.voids.isNotEmpty) ...[
           SectionLabel(l.voidedBills),
           for (final v in r.voids)
@@ -663,13 +663,13 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
             r.refundTotalCents > 0) ...[
           SectionLabel(l.paidInOut),
           if (r.cashPaidInCents > 0)
-            kv('▲ ${l.cashIn}', cad(r.cashPaidInCents), color: T.primary),
+            kv('▲ ${l.cashIn}', money(r.cashPaidInCents), color: T.primary),
           if (r.cashPaidOutCents > 0)
-            kv('▼ ${l.cashOut}', cad(r.cashPaidOutCents), color: T.destructive),
+            kv('▼ ${l.cashOut}', money(r.cashPaidOutCents), color: T.destructive),
           if (r.refundTotalCents > 0)
-            kv(l.refunds, cad(r.refundTotalCents), color: T.destructive),
+            kv(l.refunds, money(r.refundTotalCents), color: T.destructive),
           if (r.cashRefundCents > 0)
-            kv(l.cashRefunds, cad(r.cashRefundCents), color: T.destructive),
+            kv(l.cashRefunds, money(r.cashRefundCents), color: T.destructive),
         ],
         if (r.expectedCashCents != null) ...[
           const SizedBox(height: 12),
@@ -677,11 +677,11 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                kv(l.expectedCash, cad(r.expectedCashCents!)),
-                kv(l.countedActual, cad(r.closingCountCents!)),
+                kv(l.expectedCash, money(r.expectedCashCents!)),
+                kv(l.countedActual, money(r.closingCountCents!)),
                 kv(
                   l.overShort,
-                  cad(r.overShortCents!),
+                  money(r.overShortCents!),
                   bold: true,
                   color: r.overShortCents! < 0 ? T.destructive : T.primary,
                 ),

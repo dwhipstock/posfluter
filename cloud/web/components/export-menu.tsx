@@ -11,7 +11,8 @@ import { useT } from "@/lib/i18n/context";
 import { toastError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { ExportDoc } from "@/lib/export/doc";
+import { withCurrencyColumns, type ExportDoc } from "@/lib/export/doc";
+import { useMoney } from "@/lib/money";
 
 type Kind = "pdf" | "xlsx" | "csv";
 
@@ -27,6 +28,7 @@ export function ExportMenu({
   disabled?: boolean;
 }) {
   const t = useT();
+  const m = useMoney();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<Kind | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -49,8 +51,16 @@ export function ExportMenu({
     if (busy) return;
     setBusy(kind);
     try {
-      const doc = await build();
-      if (!doc) return;
+      const built = await build();
+      if (!built) return;
+      // every money section names its currency (never CAD and USD in one silent column)
+      const doc = withCurrencyColumns(built, {
+        header: t("col_currency"),
+        currencyOf: m.currencyOf,
+        fallback: m.scopeCurrency,
+        approximateTotals: m.mixedScope,
+        multiCurrency: m.multi,
+      });
       if (kind === "pdf") {
         const { downloadPdf } = await import("@/lib/export/pdf");
         await downloadPdf(doc);

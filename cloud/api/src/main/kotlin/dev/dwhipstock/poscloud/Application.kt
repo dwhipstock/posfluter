@@ -92,7 +92,7 @@ fun Application.module(config: CloudConfig = CloudConfig()) {
             authRoutes(config)
             storeRoutes(config)
             staffEndpointRoute() // public: portal /staff-app redirect reads this
-            reportRoutes()
+            reportRoutes(config.fxRates)
             menuRoutes()
             staffRoutes()
             venueRoutes(config)

@@ -3,7 +3,8 @@
 import { Suspense } from "react";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD, CADSigned } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { FxNote, useScopedKpi } from "@/components/money-scope";
 import { useT, useFmt } from "@/lib/i18n/context";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
@@ -34,6 +35,15 @@ function CashMovementsPage() {
   const { data, error, isLoading, mutate } = useApi<CashMovementsReport>(
     reportKey("/v1/reports/cash-movements", range)
   );
+  const m = useMoney();
+  const kpi = useScopedKpi();
+  type V = CashMovementsReport["byVenue"][number];
+  const cur = (r: V) => r.currency ?? m.currencyOf(r.venueId);
+  const scoped = (cents: number, f: (r: V) => number) => kpi(data?.money, cents, m.perCurrency(data?.byVenue ?? [], cur, f));
+  const paidIn = data ? scoped(data.paidInCents, (r) => r.paidInCents) : undefined;
+  const paidOut = data ? scoped(data.paidOutCents, (r) => r.paidOutCents) : undefined;
+  const net = data ? scoped(data.netCents, (r) => r.netCents) : undefined;
+  const both = (k?: { value: string; sub?: string }) => [k?.value, k?.sub].filter(Boolean).join(" — ");
 
   const buildDoc = (): ExportDoc | null => {
     if (!data) return null;
@@ -42,9 +52,9 @@ function CashMovementsPage() {
       reportTitle: t("cash_title"),
       notes: [t("cash_note")],
       kpis: [
-        { label: t("cash_paid_in"), value: CAD(data.paidInCents) },
-        { label: t("cash_paid_out"), value: CAD(data.paidOutCents) },
-        { label: t("cash_net"), value: CAD(data.netCents) },
+        { label: t("cash_paid_in"), value: both(paidIn) },
+        { label: t("cash_paid_out"), value: both(paidOut) },
+        { label: t("cash_net"), value: both(net) },
       ],
       sections: [
         ...storeExport.byStore<CashMovementsReport["byVenue"][number]>(
@@ -55,7 +65,13 @@ function CashMovementsPage() {
             col.int(t("cash_movements_n"), (r) => r.inCount + r.outCount),
           ],
           data.byVenue,
-          [T(t("col_total")), Money(data.paidInCents), Money(data.paidOutCents), Money(data.netCents), Int(data.inCount + data.outCount)]
+          [
+            T(t("col_total")),
+            m.totalCell(data.byVenue, cur, (r) => r.paidInCents),
+            m.totalCell(data.byVenue, cur, (r) => r.paidOutCents),
+            m.totalCell(data.byVenue, cur, (r) => r.netCents),
+            Int(data.inCount + data.outCount),
+          ]
         ),
         {
           title: t("cash_title"),
@@ -85,23 +101,24 @@ function CashMovementsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
+      <FxNote money={data?.money} />
       {data && (
         <StoreSplit
           rows={data.byVenue}
           title={t("cash_by_store")}
           cols={[
-            { key: "in", label: t("cash_paid_in"), value: (r) => r.paidInCents, format: CAD },
-            { key: "out", label: t("cash_paid_out"), value: (r) => r.paidOutCents, format: CAD },
-            { key: "net", label: t("cash_net"), value: (r) => r.netCents, format: CADSigned, strong: true },
+            { key: "in", label: t("cash_paid_in"), value: (r) => r.paidInCents, money: true },
+            { key: "out", label: t("cash_paid_out"), value: (r) => r.paidOutCents, money: true },
+            { key: "net", label: t("cash_net"), value: (r) => r.netCents, money: true, signed: true, strong: true },
             { key: "n", label: t("cash_movements_n"), value: (r) => r.inCount + r.outCount, format: String, hide: "sm" },
           ]}
         />
       )}
 
       <div className="grid grid-cols-3 gap-3">
-        <Kpi label={t("cash_paid_in")} value={data && CAD(data.paidInCents)} loading={isLoading} />
-        <Kpi label={t("cash_paid_out")} value={data && CAD(data.paidOutCents)} loading={isLoading} />
-        <Kpi label={t("cash_net")} value={data && CAD(data.netCents)} loading={isLoading} accent />
+        <Kpi label={t("cash_paid_in")} value={paidIn?.value} sub={paidIn?.sub} loading={isLoading} />
+        <Kpi label={t("cash_paid_out")} value={paidOut?.value} sub={paidOut?.sub} loading={isLoading} />
+        <Kpi label={t("cash_net")} value={net?.value} sub={net?.sub} loading={isLoading} accent />
       </div>
 
       <p className="px-1 text-xs text-neutral-500">{t("cash_note")}</p>
@@ -157,7 +174,7 @@ function CashMovementsPage() {
                       }`}
                     >
                       {isIn ? "+" : "−"}
-                      {CAD(r.amountCents)}
+                      {m.fmtIn(r.currency ?? m.currencyOf(r.venueId), r.amountCents)}
                     </TableCell>
                   </TableRow>
                 );

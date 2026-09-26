@@ -97,8 +97,8 @@ class _SalesScreenState extends State<SalesScreen> {
           style: T.text(size: 16, weight: FontWeight.w600),
         ),
         subtitle: Text(
-          '${Prefs.instance.fmtDateTime(c.closedAt)}  ·  ${cad(c.grandTotalCents)}'
-          '${c.refundedCents > 0 ? '  ·  ${l.refundedLabel} ${cad(c.refundedCents)}' : ''}',
+          '${Prefs.instance.fmtDateTime(c.closedAt)}  ·  ${money(c.grandTotalCents)}'
+          '${c.refundedCents > 0 ? '  ·  ${l.refundedLabel} ${money(c.refundedCents)}' : ''}',
           style: T.small(),
         ),
         trailing: fullyRefunded
@@ -265,7 +265,7 @@ class _RefundScreenState extends State<RefundScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.refundDone(cad(result.refund.grossCents)))),
+        SnackBar(content: Text(l.refundDone(money(result.refund.grossCents)))),
       );
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -312,7 +312,7 @@ class _RefundScreenState extends State<RefundScreen> {
                 padding: const EdgeInsets.all(16),
                 child: FilledButton.icon(
                   icon: const Icon(LucideIcons.undo2),
-                  label: Text('${l.confirmRefund}  ·  ${cad(_selectedGross)}'),
+                  label: Text('${l.confirmRefund}  ·  ${money(_selectedGross)}'),
                   onPressed: _canRefund ? _confirm : null,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(T.minTouch),
@@ -332,16 +332,16 @@ class _RefundScreenState extends State<RefundScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _kv(l.bill, cad(info.grandTotalCents)),
+              _kv(l.bill, money(info.grandTotalCents)),
               if (info.refundedCents > 0)
                 _kv(
                   l.refundedLabel,
-                  cad(info.refundedCents),
+                  money(info.refundedCents),
                   color: T.textMuted,
                 ),
               _kv(
                 l.refundableLabel,
-                cad(info.refundableCents),
+                money(info.refundableCents),
                 bold: true,
                 color: T.primary,
               ),
@@ -409,7 +409,7 @@ class _RefundScreenState extends State<RefundScreen> {
           for (final r in info.refunds)
             _kv(
               '${_tenderLabel(l, r.tenderType)} · ${r.reason}',
-              cad(r.grossCents),
+              money(r.grossCents),
               color: T.textMuted,
             ),
         ],
@@ -430,7 +430,7 @@ class _RefundScreenState extends State<RefundScreen> {
               style: T.text(size: 15),
             ),
           ),
-          Text(cad(ln.unitPriceCents), style: T.small()),
+          Text(money(ln.unitPriceCents), style: T.small()),
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(LucideIcons.minus, size: 18),

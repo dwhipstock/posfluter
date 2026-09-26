@@ -25,6 +25,7 @@ import dev.dwhipstock.pos.sdk.i18n.MessageKey.SLIP_REASON
 import dev.dwhipstock.pos.sdk.i18n.MessageKey.SLIP_TIME
 import dev.dwhipstock.pos.sdk.i18n.Messages
 import dev.dwhipstock.pos.sdk.ReceiptPolicy
+import dev.dwhipstock.pos.sdk.putMoneyContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.addJsonObject
@@ -112,6 +113,7 @@ class ShiftService(private val config: CustomerConfig) {
             put("reason", reason)
             put("user", managerId)
             put("createdAt", VenueClock.iso(now))
+            putMoneyContext(config.profile)
         })
         CashMovementResult(
             movement = CashMovementView(id, shift, dir, amountCents, reason, managerId, VenueClock.iso(now)),
@@ -191,6 +193,7 @@ class ShiftService(private val config: CustomerConfig) {
         Outbox.write("shift.closed", "shift", shift[Shifts.id].value.toString(), buildJsonObject {
             put("shiftId", shift[Shifts.id].value)
             put("closedBy", userId)
+            putMoneyContext(config.profile)
             put("revenueCents", report.revenueCents)
             put("expectedCashCents", report.expectedCashCents)
             put("closingCountCents", closingCountCents)

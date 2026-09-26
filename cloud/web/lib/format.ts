@@ -37,6 +37,48 @@ export function CADPlain(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+/** The symbol a currency is shown with. Dollars name their country when [unambiguous]. */
+export function currencySymbol(currency: string = "CAD", unambiguous = false): string {
+  switch ((currency || "CAD").toUpperCase()) {
+    case "CAD":
+      return unambiguous ? "CA$" : "$";
+    case "USD":
+      return unambiguous ? "US$" : "$";
+    case "EUR":
+      return "€";
+    default:
+      return `${currency.toUpperCase()} `;
+  }
+}
+
+/**
+ * Currency-aware house style: symbol prefix, comma grouping, cents only when
+ * nonzero ("$1,234", "US$12.99"). For a CAD-only tenant `money(c)` is exactly
+ * `cad(c)`. [unambiguous] is set by callers when the tenant has several
+ * currencies, so a dollar always says whose. [short] is the chart-axis form.
+ */
+export function money(
+  cents: number,
+  currency: string = "CAD",
+  opts?: { unambiguous?: boolean; short?: boolean }
+): string {
+  const sym = currencySymbol(currency, opts?.unambiguous);
+  if (opts?.short) {
+    const b = cents / 100;
+    const abs = Math.abs(b);
+    const sign = b < 0 ? "-" : "";
+    if (abs >= 1_000_000) return `${sign}${sym}${(abs / 1_000_000).toFixed(1)}M`;
+    if (abs >= 10_000) return `${sign}${sym}${Math.round(abs / 1000)}k`;
+    if (abs >= 1_000) return `${sign}${sym}${(abs / 1000).toFixed(1)}k`;
+    return `${sign}${sym}${Math.round(abs)}`;
+  }
+  const neg = cents < 0;
+  const abs = Math.abs(cents);
+  const whole = Math.floor(abs / 100).toLocaleString("en-US");
+  const frac = abs % 100;
+  return `${neg ? "-" : ""}${sym}${whole}${frac ? "." + String(frac).padStart(2, "0") : ""}`;
+}
+
 export function centsToInput(s: number): string {
   return s % 100 === 0 ? String(s / 100) : (s / 100).toFixed(2);
 }

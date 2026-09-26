@@ -2,7 +2,8 @@
 
 import { Suspense, useState } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD, CADSigned } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { FxNote } from "@/components/money-scope";
 import { useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { ExportMenu } from "@/components/export-menu";
@@ -35,6 +36,10 @@ function ShiftsPage() {
   const storeExport = useStoreExport();
   const { data, error, isLoading, mutate } = useApi<ShiftsReport>(reportKey("/v1/reports/shifts", range));
   const [selected, setSelected] = useState<Shift | null>(null);
+  const m = useMoney();
+  const sc = (x: Shift) => x.currency ?? m.currencyOf(x.venueId);
+  type V = ShiftsReport["byVenue"][number];
+  const vc = (r: V) => r.currency ?? m.currencyOf(r.venueId);
 
   const buildDoc = (): ExportDoc | null => {
     if (!data) return null;
@@ -53,9 +58,9 @@ function ShiftsPage() {
           [
             T(t("col_total")),
             Int(data.byVenue.reduce((n, r) => n + r.shiftCount, 0)),
-            Money(data.byVenue.reduce((n, r) => n + r.revenueCents, 0)),
+            m.totalCell(data.byVenue, vc, (r) => r.revenueCents),
             Int(data.byVenue.reduce((n, r) => n + r.transactionCount, 0)),
-            Money(data.byVenue.reduce((n, r) => n + r.overShortCents, 0)),
+            m.totalCell(data.byVenue, vc, (r) => r.overShortCents),
           ]
         ),
         {
@@ -68,7 +73,7 @@ function ShiftsPage() {
             col.money<Shift>(t("shift_revenue"), (s) => s.revenueCents),
             col.int<Shift>(t("shift_checks"), (s) => s.transactionCount),
             col.money<Shift>(t("shift_avg_check"), (s) => s.avgCheckCents),
-            col.text<Shift>(t("shift_over_short"), (s) => (s.overShortCents == null ? "—" : CADSigned(s.overShortCents)), {
+            col.text<Shift>(t("shift_over_short"), (s) => (s.overShortCents == null ? "—" : m.signedIn(sc(s), s.overShortCents)), {
               align: "right",
               width: 12,
             }),
@@ -88,6 +93,7 @@ function ShiftsPage() {
         action={<ExportMenu build={buildDoc} disabled={!data || data.rows.length === 0} />}
       />
       <DateRangePicker />
+      <FxNote money={data?.money} />
       {data && (
         <StoreSplit
           rows={data.byVenue}
@@ -95,8 +101,8 @@ function ShiftsPage() {
           cols={[
             { key: "n", label: t("shifts_n"), value: (r) => r.shiftCount, format: String },
             { key: "open", label: t("badge_live"), value: (r) => r.openCount, format: String, hide: "sm" },
-            { key: "rev", label: t("shift_revenue"), value: (r) => r.revenueCents, format: CAD, strong: true },
-            { key: "os", label: t("shift_over_short"), value: (r) => r.overShortCents, format: CADSigned, hide: "sm" },
+            { key: "rev", label: t("shift_revenue"), value: (r) => r.revenueCents, money: true, strong: true },
+            { key: "os", label: t("shift_over_short"), value: (r) => r.overShortCents, money: true, signed: true, hide: "sm" },
           ]}
         />
       )}
@@ -130,12 +136,12 @@ function ShiftsPage() {
                   </span>
                 </div>
                 <div className="mt-3 grid grid-cols-4 gap-2">
-                  <MiniStat label={t("shift_revenue")} value={CAD(s.revenueCents)} strong />
+                  <MiniStat label={t("shift_revenue")} value={m.fmtIn(sc(s), s.revenueCents)} strong />
                   <MiniStat label={t("shift_checks")} value={s.transactionCount == null ? "—" : String(s.transactionCount)} />
-                  <MiniStat label={t("shift_avg")} value={CAD(s.avgCheckCents)} />
+                  <MiniStat label={t("shift_avg")} value={m.fmtIn(sc(s), s.avgCheckCents)} />
                   <MiniStat
                     label={t("shift_over_short")}
-                    value={s.overShortCents === null ? "—" : CADSigned(s.overShortCents)}
+                    value={s.overShortCents === null ? "—" : m.signedIn(sc(s), s.overShortCents)}
                     tone={
                       s.overShortCents === null || s.overShortCents === 0
                         ? undefined
@@ -188,6 +194,10 @@ function MiniStat({
 function ShiftSheet({ shift, onClose }: { shift: Shift | null; onClose: () => void }) {
   const t = useT();
   const fmt = useFmt();
+  const m = useMoney();
+  const cur = shift ? shift.currency ?? m.currencyOf(shift.venueId) : undefined;
+  const CAD = (cents: number) => m.fmtIn(cur, cents);
+  const CADSigned = (cents: number) => m.signedIn(cur, cents);
   return (
     <Sheet open={shift !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent>

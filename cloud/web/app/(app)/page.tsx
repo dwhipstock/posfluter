@@ -4,7 +4,9 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ChevronRight, Wifi, WifiOff } from "lucide-react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
-import { CAD, CADShort, hourLabel } from "@/lib/format";
+import { hourLabel } from "@/lib/format";
+import { useMoney } from "@/lib/money";
+import { ByCurrencyCard, FxNote, RetailBadge, useScopedKpi } from "@/components/money-scope";
 import { useI18n, useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import type {
@@ -51,6 +53,8 @@ function Dashboard() {
   const storeExport = useStoreExport();
   const storeHref = useStoreHref();
   const { combined, nameOf, colorOf } = useStores();
+  const m = useMoney();
+  const kpi = useScopedKpi();
   const multiDay = range.from !== range.to;
   const today = todayISO();
   const isToday = range.from === today && range.to === today;
@@ -60,6 +64,21 @@ function Dashboard() {
   const items = useApi<ItemsReport>(reportKey("/v1/reports/items", range));
 
   const s = summary.data;
+  const money = s?.money;
+  // a combined figure + (mixed currencies) its exact amounts per currency
+  const exact = (pick: (r: NonNullable<Summary["byCurrency"]>[number]) => number) =>
+    (s?.byCurrency ?? []).map((r) => ({ currency: r.currency, cents: pick(r) }));
+  const k = {
+    gross: s ? kpi(money, s.grossCents, exact((r) => r.grossCents)) : undefined,
+    net: s ? kpi(money, s.netCents, exact((r) => r.netCents)) : undefined,
+    tax: s ? kpi(money, s.taxCents, exact((r) => r.taxCents)) : undefined,
+    avg: s ? kpi(money, s.avgCheckCents, exact((r) => r.avgCheckCents)) : undefined,
+  };
+  const fmtC = (n: number) => m.fmtScope(money, n);
+  const axisC = (n: number) => m.shortScope(money, n);
+  const chartNote = money?.approximate
+    ? ` · ${t("fx_chart_converted", { cur: money.reportingCurrency, rates: m.rateText(money) })}`
+    : "";
   const sGross = t("series_gross");
   const storeSeries = useStoreSeries(sGross);
 
@@ -73,17 +92,24 @@ function Dashboard() {
       ...meta("summary"),
       reportTitle: t("dash_title"),
       kpis: [
-        { label: t("kpi_gross"), value: CAD(s.grossCents) },
-        { label: t("kpi_net"), value: CAD(s.netCents) },
-        { label: t("kpi_tax"), value: CAD(s.taxCents) },
+        { label: t("kpi_gross"), value: fmtC(s.grossCents) },
+        { label: t("kpi_net"), value: fmtC(s.netCents) },
+        { label: t("kpi_tax"), value: fmtC(s.taxCents) },
         { label: t("kpi_checks"), value: String(s.checkCount) },
-        { label: t("kpi_avg_check"), value: CAD(s.avgCheckCents) },
+        { label: t("kpi_avg_check"), value: fmtC(s.avgCheckCents) },
         { label: t("exc_voids"), value: String(s.voidCount) },
-        { label: t("exc_void_amount"), value: CAD(s.voidAmountCents) },
+        { label: t("exc_void_amount"), value: fmtC(s.voidAmountCents) },
         { label: t("ref_count"), value: String(s.refundCount) },
-        { label: t("ref_amount"), value: CAD(s.refundAmountCents) },
-        { label: t("exc_corkage"), value: CAD(s.corkageCents) },
-        { label: t("svc_charge"), value: CAD(s.serviceChargeCents) },
+        { label: t("ref_amount"), value: fmtC(s.refundAmountCents) },
+        { label: t("exc_corkage"), value: fmtC(s.corkageCents) },
+        { label: t("svc_charge"), value: fmtC(s.serviceChargeCents) },
+        // exact, one per currency, when the stores sell in several
+        ...(money?.approximate
+          ? (s.byCurrency ?? []).map((r) => ({
+              label: `${t("kpi_gross")} · ${r.currency}`,
+              value: m.fmtIn(r.currency, r.grossCents),
+            }))
+          : []),
       ],
       sections: [
         ...storeExport.byStore<VenueSummaryRow>(
@@ -130,6 +156,7 @@ function Dashboard() {
         action={<ExportMenu build={buildDoc} disabled={!s} />}
       />
       <DateRangePicker />
+      <FxNote money={money} />
 
       {combined && <StoreCompare />}
 
@@ -145,17 +172,23 @@ function Dashboard() {
             </h2>
           )}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-            <Kpi label={t("kpi_gross")} value={s && CAD(s.grossCents)} accent loading={summary.isLoading} />
-            <Kpi label={t("kpi_net")} value={s && CAD(s.netCents)} loading={summary.isLoading} />
-            <Kpi label={t("kpi_tax")} value={s && CAD(s.taxCents)} loading={summary.isLoading} />
+            <Kpi label={t("kpi_gross")} value={k.gross?.value} sub={k.gross?.sub} accent loading={summary.isLoading} />
+            <Kpi label={t("kpi_net")} value={k.net?.value} sub={k.net?.sub} loading={summary.isLoading} />
+            <Kpi label={t("kpi_tax")} value={k.tax?.value} sub={k.tax?.sub} loading={summary.isLoading} />
             <Kpi label={t("kpi_checks")} value={s && String(s.checkCount)} loading={summary.isLoading} />
             <Kpi
               label={t("kpi_avg_check")}
-              value={s && CAD(s.avgCheckCents)}
+              value={k.avg?.value}
+              sub={k.avg?.sub}
               loading={summary.isLoading}
               className="col-span-2 md:col-span-1"
             />
           </div>
+          {s && (
+            <div className="mt-3">
+              <ByCurrencyCard rows={s.byCurrency} money={money} />
+            </div>
+          )}
         </div>
       )}
 
@@ -165,7 +198,7 @@ function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>{t("dash_daily_trend")}</CardTitle>
-            {combined && <CardDescription>{t("chart_per_store_gross")}</CardDescription>}
+            {combined && <CardDescription>{t("chart_per_store_gross")}{chartNote}</CardDescription>}
           </CardHeader>
           <CardContent>
             {summary.isLoading ? (
@@ -175,7 +208,7 @@ function Dashboard() {
                 data={s.byDay.map((d) => ({
                   label: fmt.day(d.date),
                   values: combined
-                    ? Object.fromEntries(d.byVenue.map((v) => [v.venueId, v.grossCents]))
+                    ? Object.fromEntries(d.byVenue.map((v) => [v.venueId, m.chartValue(v.venueId, v.grossCents)]))
                     : { value: d.grossCents, net: d.netCents },
                 }))}
                 series={
@@ -183,8 +216,8 @@ function Dashboard() {
                     ? storeSeries
                     : [...storeSeries, { key: "net", label: t("series_net"), color: storeSeries[0].color === SERIES[1] ? SERIES[0] : SERIES[1] }]
                 }
-                format={CAD}
-                axisFormat={CADShort}
+                format={fmtC}
+                axisFormat={axisC}
                 ariaLabel={t("dash_daily_trend")}
               />
             ) : (
@@ -198,7 +231,7 @@ function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>{t("dash_payment_mix")}</CardTitle>
-            {combined && <CardDescription>{t("chart_per_store_stacked")}</CardDescription>}
+            {combined && <CardDescription>{t("chart_per_store_stacked")}{chartNote}</CardDescription>}
           </CardHeader>
           <CardContent>
             {payments.isLoading ? (
@@ -211,12 +244,15 @@ function Dashboard() {
                   data={payments.data.rows.map((r) => ({
                     label: t(`tender_${r.type}` as MsgKey),
                     values: Object.fromEntries(
-                      payments.data!.byVenue.map((v) => [v.venueId, v.rows.find((x) => x.type === r.type)?.amountCents ?? 0])
+                      payments.data!.byVenue.map((v) => [
+                        v.venueId,
+                        m.chartValue(v.venueId, v.rows.find((x) => x.type === r.type)?.amountCents ?? 0),
+                      ])
                     ),
                   }))}
                   series={storeSeries}
-                  format={CAD}
-                  axisFormat={CADShort}
+                  format={fmtC}
+                  axisFormat={axisC}
                   ariaLabel={t("dash_payment_mix")}
                 />
               ) : (
@@ -231,7 +267,7 @@ function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>{t("dash_sales_by_hour")}</CardTitle>
-            {combined && <CardDescription>{t("chart_per_store_stacked")}</CardDescription>}
+            {combined && <CardDescription>{t("chart_per_store_stacked")}{chartNote}</CardDescription>}
           </CardHeader>
           <CardContent>
             {hourly.isLoading ? (
@@ -243,12 +279,12 @@ function Dashboard() {
                 data={hourly.data.rows.map((r) => ({
                   label: hourLabel(r.hour),
                   values: combined
-                    ? Object.fromEntries(r.byVenue.map((v) => [v.venueId, v.grossCents]))
+                    ? Object.fromEntries(r.byVenue.map((v) => [v.venueId, m.chartValue(v.venueId, v.grossCents)]))
                     : { value: r.grossCents },
                 }))}
                 series={storeSeries}
-                format={CAD}
-                axisFormat={CADShort}
+                format={fmtC}
+                axisFormat={axisC}
                 ariaLabel={t("dash_sales_by_hour")}
               />
             ) : (
@@ -280,7 +316,7 @@ function Dashboard() {
           ) : items.data && items.data.rows.length > 0 ? (
             <div className="divide-y divide-neutral-200/70">
               {items.data.rows.slice(0, 5).map((r, i) => (
-                <div key={r.itemId ?? `open-${i}`} className="flex items-center gap-3 py-2.5">
+                <div key={`${r.itemId ?? `open-${i}`}-${r.currency ?? ""}`} className="flex items-center gap-3 py-2.5">
                   <span className="w-5 text-center text-xs font-semibold text-neutral-500">{i + 1}</span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{name(r.nameFr, r.nameEn)}</div>
@@ -289,7 +325,7 @@ function Dashboard() {
                         {r.byVenue.map((v) => (
                           <span key={v.venueId} className="inline-flex items-center gap-1">
                             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: colorOf(v.venueId) }} />
-                            {nameOf(v.venueId)} <span className="tabular-nums text-neutral-600">{CAD(v.revenueCents)}</span>
+                            {nameOf(v.venueId)} <span className="tabular-nums text-neutral-600">{m.fmtVenue(v.venueId, v.revenueCents)}</span>
                           </span>
                         ))}
                       </div>
@@ -300,7 +336,7 @@ function Dashboard() {
                     )}
                   </div>
                   <span className="text-xs text-neutral-500">×{r.qty}</span>
-                  <span className="w-20 text-right text-sm font-semibold tabular-nums">{CAD(r.revenueCents)}</span>
+                  <span className="w-24 text-right text-sm font-semibold tabular-nums">{m.fmtIn(r.currency, r.revenueCents)}</span>
                 </div>
               ))}
             </div>
@@ -316,6 +352,8 @@ function Dashboard() {
 /** The single-store tender mix: a ring plus a labelled legend (never colour alone). */
 function TenderDonut({ report }: { report: PaymentsReport }) {
   const t = useT();
+  const m = useMoney();
+  const fmtC = (n: number) => m.fmtScope(report.money, n);
   const items = report.rows.map((r, i) => ({
     key: r.type,
     label: t(`tender_${r.type}` as MsgKey),
@@ -324,13 +362,13 @@ function TenderDonut({ report }: { report: PaymentsReport }) {
   }));
   return (
     <div className="flex flex-col items-center gap-5 sm:flex-row">
-      <Donut items={items} format={CAD} center={CAD(report.totalCents)} ariaLabel={t("dash_payment_mix")} />
+      <Donut items={items} format={fmtC} center={fmtC(report.totalCents)} ariaLabel={t("dash_payment_mix")} />
       <div className="w-full space-y-2">
         {items.map((r) => (
           <div key={r.key} className="flex items-center gap-2 text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: r.color }} />
             <span className="text-neutral-600">{r.label}</span>
-            <span className="ml-auto font-medium tabular-nums">{CAD(r.value)}</span>
+            <span className="ml-auto font-medium tabular-nums">{fmtC(r.value)}</span>
           </div>
         ))}
       </div>
@@ -352,6 +390,8 @@ const STATUS_KEY: Record<StoreLinkStatus, MsgKey> = {
 function StoreCompare() {
   const t = useT();
   const { venues, nameOf, colorOf } = useStores();
+  const m = useMoney();
+  const kpi = useScopedKpi();
   const today = todayISO();
   const todayRange = { from: today, to: today };
   const byVenue = useApi<ByVenueReport>(reportKey("/v1/reports/by-venue", todayRange), { refreshInterval: 60_000 });
@@ -359,8 +399,11 @@ function StoreCompare() {
   const statusOf = (id: string) => pos.data?.stores.find((s) => s.venueId === id)?.status;
   const rows = byVenue.data?.venues ?? [];
   const checks = rows.reduce((n, r) => n + r.checkCount, 0);
-  const gross = rows.reduce((n, r) => n + r.grossCents, 0);
-  const avg = checks ? Math.round(rows.reduce((n, r) => n + r.avgCheckCents * r.checkCount, 0) / checks) : 0;
+  // combined across currencies: the API's converted figure (≈), exact per currency below it
+  const money = byVenue.data?.money;
+  const gross = byVenue.data?.grossCents ?? 0;
+  const combinedGross = kpi(money, gross, m.perCurrency(rows, (r) => r.currency, (r) => r.grossCents));
+  const avg = checks ? Math.round(money?.approximate ? gross / checks : rows.reduce((n, r) => n + r.avgCheckCents * r.checkCount, 0) / checks) : 0;
   const online = venues.filter((v) => statusOf(v.id) === "online").length;
 
   return (
@@ -377,15 +420,16 @@ function StoreCompare() {
               <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: colorOf(v.id) }} aria-hidden />
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold text-navy">{nameOf(v.id)}</span>
+                <RetailBadge venueId={v.id} />
                 {status && <StatusPill status={status} label={t(STATUS_KEY[status])} />}
               </div>
               {byVenue.isLoading && !r ? (
                 <Skeleton className="mt-3 h-12 w-full" />
               ) : (
                 <div className="mt-3 grid grid-cols-3 gap-2">
-                  <Mini label={t("kpi_gross")} value={CAD(r?.grossCents ?? 0)} strong />
+                  <Mini label={t("kpi_gross")} value={m.fmtVenue(v.id, r?.grossCents ?? 0)} strong />
                   <Mini label={t("kpi_checks")} value={String(r?.checkCount ?? 0)} />
-                  <Mini label={t("kpi_avg_check")} value={CAD(r?.avgCheckCents ?? 0)} />
+                  <Mini label={t("kpi_avg_check")} value={m.fmtVenue(v.id, r?.avgCheckCents ?? 0)} />
                 </div>
               )}
             </Card>
@@ -401,10 +445,15 @@ function StoreCompare() {
             )}
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            <Mini label={t("kpi_gross")} value={CAD(gross)} strong dark />
+            <Mini label={t("kpi_gross")} value={combinedGross.value} strong dark />
             <Mini label={t("kpi_checks")} value={String(checks)} dark />
-            <Mini label={t("kpi_avg_check")} value={CAD(avg)} dark />
+            <Mini label={t("kpi_avg_check")} value={m.fmtScope(money, avg)} dark />
           </div>
+          {combinedGross.sub && (
+            <div className="mt-2 truncate text-[11px] tabular-nums text-navy-muted" data-testid="combined-by-currency">
+              {combinedGross.sub}
+            </div>
+          )}
         </Card>
       </div>
     </section>

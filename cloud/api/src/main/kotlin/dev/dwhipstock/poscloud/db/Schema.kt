@@ -51,6 +51,8 @@ object Tenants : Table("tenants") {
     val id = text("id")
     val name = text("name")
     val createdAt = timestampWithTimeZone("created_at")
+    // the currency "All stores" converts into, approximately (017)
+    val reportingCurrency = text("reporting_currency").default("CAD")
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -70,6 +72,10 @@ object Venues : Table("venues") {
     val storeContractVersion = integer("store_contract_version").nullable()
     // hostname label of the venue's cloud-hosted store container (008); NULL = on-prem
     val subdomain = text("subdomain").nullable()
+    // where the store is and what it sells (017): ISO codes + restaurant | retail
+    val currency = text("currency").default("CAD")
+    val country = text("country").default("CA")
+    val kind = text("kind").default("restaurant")
     override val primaryKey = PrimaryKey(tenantId, id)
 }
 
@@ -166,6 +172,8 @@ object Checks : Table("checks") {
     val gstCents = long("gst_cents").nullable()
     val qstCents = long("qst_cents").nullable()
     val taxes = jsonb("taxes").nullable()
+    // the currency the store sent (017); NULL = older store → the venue's
+    val currency = text("currency").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, checkId)
 }
 
@@ -221,6 +229,7 @@ object Shifts : Table("shifts") {
     val expectedCashCents = long("expected_cash_cents").nullable()
     val closingCountCents = long("closing_count_cents").nullable()
     val overShortCents = long("over_short_cents").nullable()
+    val currency = text("currency").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, shiftId)
 }
 
@@ -244,6 +253,9 @@ object Refunds : Table("refunds") {
     // the added taxes this refund reversed (016); NULL = no breakdown sent
     val gstCents = long("gst_cents").nullable()
     val qstCents = long("qst_cents").nullable()
+    // the whole reversed-tax breakdown and the refund's currency (017)
+    val taxes = jsonb("taxes").nullable()
+    val currency = text("currency").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, refundId)
 }
 
@@ -257,6 +269,7 @@ object CashMovements : Table("cash_movements") {
     val reason = text("reason").nullable()
     val createdBy = text("created_by").nullable()
     val createdAt = timestampWithTimeZone("created_at").nullable()
+    val currency = text("currency").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, movementId)
 }
 
