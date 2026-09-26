@@ -191,7 +191,9 @@ class Api {
         venueName = venue.trim();
       }
       // ...and describes itself: screens, brand, languages, currency
-      if (base == baseUrl) Prefs.instance.useStore(StoreProfile.fromHealth(body));
+      if (base == baseUrl) {
+        Prefs.instance.useStore(StoreProfile.fromHealth(body));
+      }
       return body;
     } catch (_) {
       return null;
@@ -1068,6 +1070,83 @@ class Api {
     );
   }
 
+  // --- retail counter (a store whose profile kind is retail) ---------------
+
+  /// The sale in progress on the register, or a new one (idempotent).
+  static Future<Check> openSale() async =>
+      Check.fromJson(await _post('/retail/sales'));
+
+  /// The sale in progress, or null when the register is free.
+  static Future<Check?> currentSale() async {
+    final res = await _send(
+      () => http.get(
+        Uri.parse('$baseUrl/retail/sales/current'),
+        headers: _headers,
+      ),
+    );
+    if (res.statusCode == 204) return null;
+    _throwOnError(res);
+    return Check.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// A barcode → one more of that product. ApiException code
+  /// `unknown_barcode` → offer to add it.
+  static Future<Check> scanBarcode(int saleId, String barcode) async =>
+      Check.fromJson(
+        await _post('/retail/sales/$saleId/scan', {'barcode': barcode}),
+      );
+
+  /// ID check: [scan] (the text a 2D scanner typed from a licence) or a
+  /// typed [dateOfBirth] (YYYY-MM-DD) with [cashierSawId]. Sent once; the
+  /// store keeps only the outcome.
+  static Future<AgeCheckResult> ageCheck(
+    int saleId, {
+    String? scan,
+    String? dateOfBirth,
+    bool cashierSawId = false,
+  }) async => AgeCheckResult.fromJson(
+    await _post('/retail/sales/$saleId/age-check', {
+      'method': scan != null ? 'SCAN' : 'MANUAL',
+      'scan': ?scan,
+      'dateOfBirth': ?dateOfBirth,
+      'cashierSawId': cashierSawId,
+    }),
+  );
+
+  /// An online name suggestion for an unknown barcode (null offline / no match).
+  static Future<String?> lookupBarcode(String barcode) async {
+    try {
+      final json = await _get('/retail/lookup/${Uri.encodeComponent(barcode)}');
+      final name = json is Map ? json['name'] : null;
+      return name is String && name.trim().isNotEmpty ? name.trim() : null;
+    } catch (_) {
+      return null; // never in the way: the manager types the name
+    }
+  }
+
+  /// A manager adds the product behind an unknown barcode.
+  static Future<void> addRetailProduct({
+    required String barcode,
+    required String name,
+    required int priceCents,
+    required String categoryId,
+    required bool ageRestricted,
+    required String crvSize,
+    required int packUnits,
+    required bool taxable,
+    String? managerPin,
+  }) async => _post('/retail/products', {
+    'barcode': barcode,
+    'name': name,
+    'priceCents': priceCents,
+    'categoryId': categoryId,
+    'ageRestricted': ageRestricted,
+    'crvSize': crvSize,
+    'packUnits': packUnits,
+    'taxable': taxable,
+    'managerPin': ?managerPin,
+  });
+
   static Future<Check> finalizeCheck(int checkId) async =>
       Check.fromJson(await _post('/checks/$checkId/finalize'));
 
@@ -1319,8 +1398,7 @@ class ApiException implements Exception {
   @override
   String toString() => code == 'stripe_declined'
       ? L.current.stripeDeclineMessage(declineCode)
-      : L.current.apiError(code) ??
-            L.current.apiError('internal')!;
+      : L.current.apiError(code) ?? L.current.apiError('internal')!;
 }
 
 /// 401 — session missing/expired; UI should return to the login screen.
@@ -1341,8 +1419,7 @@ class PairingRequiredException extends SessionExpiredException {
   PairingRequiredException([this.code = 'device_required']);
   @override
   String toString() =>
-      L.current.apiError(code) ??
-      L.current.apiError('internal')!;
+      L.current.apiError(code) ?? L.current.apiError('internal')!;
 }
 
 class AuthUser {
@@ -1759,6 +1836,12 @@ class Item {
 
   /// Cache-busting photo version; null = no photo (tile shows the badge).
   final int? photoVersion;
+
+  /// Retail shelf facts: UPC barcode, ID check before payment, taxed or
+  /// not, and the bottle deposit (CRV) per unit sold. Pub items: defaults.
+  final String? barcode;
+  final bool ageRestricted, taxable;
+  final int depositCents;
   Item(
     this.id,
     this.nameFr,
@@ -1770,8 +1853,12 @@ class Item {
     this.isAlcohol,
     this.active,
     this.variants,
-    this.photoVersion,
-  );
+    this.photoVersion, {
+    this.barcode,
+    this.ageRestricted = false,
+    this.taxable = true,
+    this.depositCents = 0,
+  });
   factory Item.fromJson(Map<String, dynamic> j) => Item(
     j['id'],
     j['nameFr'],
@@ -1784,6 +1871,10 @@ class Item {
     j['active'] ?? true,
     (j['variants'] as List).map((v) => Variant.fromJson(v)).toList(),
     j['photoVersion'],
+    barcode: j['barcode'],
+    ageRestricted: j['ageRestricted'] ?? false,
+    taxable: j['taxable'] ?? true,
+    depositCents: j['depositCents'] ?? 0,
   );
 
   /// Photo URL, version-busted (?v=) so a replaced photo bypasses every cache
@@ -1804,6 +1895,10 @@ class CheckLine {
   /// Set only when the item has >1 variant (bottle/pitcher/tower).
   final String? variantLabelFr, variantLabelEn;
   final String? note;
+
+  /// Retail: needs an ID check; bottle deposit (CRV) per unit; taxed or not.
+  final bool ageRestricted, taxable;
+  final int depositCents;
   CheckLine(
     this.id,
     this.itemId,
@@ -1815,8 +1910,11 @@ class CheckLine {
     this.qty,
     this.unitPriceCents,
     this.lineTotalCents,
-    this.note,
-  );
+    this.note, {
+    this.ageRestricted = false,
+    this.taxable = true,
+    this.depositCents = 0,
+  });
   factory CheckLine.fromJson(Map<String, dynamic> j) => CheckLine(
     j['id'],
     j['itemId'],
@@ -1829,6 +1927,9 @@ class CheckLine {
     j['unitPriceCents'],
     j['lineTotalCents'],
     j['note'],
+    ageRestricted: j['ageRestricted'] ?? false,
+    taxable: j['taxable'] ?? true,
+    depositCents: j['depositCents'] ?? 0,
   );
 }
 
@@ -1989,6 +2090,11 @@ class Check {
 
   /// Taxes added on top of the subtotal (GST, QST), server-computed.
   final List<TaxLine> taxes;
+
+  /// Retail: an age-restricted item is on the sale → payment needs an ID
+  /// check. [ageCleared]: none needed or one passed. [ageCheckFailed]: the
+  /// last check failed and none passed (remove the restricted items).
+  final bool ageCheckRequired, ageCleared, ageCheckFailed;
   Check(
     this.id,
     this.tableId,
@@ -2005,6 +2111,9 @@ class Check {
     this.split, {
     int? subtotalCents,
     this.taxes = const [],
+    this.ageCheckRequired = false,
+    this.ageCleared = true,
+    this.ageCheckFailed = false,
   }) : subtotalCents = subtotalCents ?? grandTotalCents;
   factory Check.fromJson(Map<String, dynamic> j) => Check(
     j['id'],
@@ -2024,6 +2133,34 @@ class Check {
     j['split'] == null ? null : SplitInfo.fromJson(j['split']),
     subtotalCents: j['subtotalCents'],
     taxes: TaxLine.listFrom(j['taxes']),
+    ageCheckRequired: j['ageCheckRequired'] ?? false,
+    ageCleared: j['ageCleared'] ?? true,
+    ageCheckFailed: j['ageCheckFailed'] ?? false,
+  );
+}
+
+/// The outcome of one ID check (the store keeps only this).
+class AgeCheckResult {
+  final bool passed;
+  final int? ageYears;
+  final int legalAge;
+
+  /// under_age | expired | unreadable | not_confirmed; null when passed.
+  final String? reason;
+  final Check check;
+  AgeCheckResult(
+    this.passed,
+    this.ageYears,
+    this.legalAge,
+    this.reason,
+    this.check,
+  );
+  factory AgeCheckResult.fromJson(Map<String, dynamic> j) => AgeCheckResult(
+    j['passed'] ?? false,
+    j['ageYears'],
+    j['legalAge'] ?? 21,
+    j['reason'],
+    Check.fromJson(j['check']),
   );
 }
 

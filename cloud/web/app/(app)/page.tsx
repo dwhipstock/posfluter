@@ -444,7 +444,8 @@ function StoreCompare() {
               </span>
             )}
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          {/* the converted gross ("≈ CA$1,234.56") needs the wider first column */}
+          <div className="mt-3 grid grid-cols-[1.6fr_1fr_1.2fr] gap-2">
             <Mini label={t("kpi_gross")} value={combinedGross.value} strong dark />
             <Mini label={t("kpi_checks")} value={String(checks)} dark />
             <Mini label={t("kpi_avg_check")} value={m.fmtScope(money, avg)} dark />

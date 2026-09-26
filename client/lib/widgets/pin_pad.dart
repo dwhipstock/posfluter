@@ -43,6 +43,11 @@ class PinPadState extends State<PinPad> {
   @override
   Widget build(BuildContext context) {
     final big = widget.keySize.height >= 72;
+    // the pubs: navy on cream, as always; a store with its own brand wears its theme
+    final branded = StoreProfile.current.isSagePoppy;
+    final scheme = Theme.of(context).colorScheme;
+    final ink = branded ? scheme.primary : T.navy;
+    final keyBg = branded ? scheme.surface : T.surface;
     final gap = big ? 12.0 : 8.0;
     Widget key(String label, {Widget? child, VoidCallback? onTap}) => SizedBox(
       width: widget.keySize.width,
@@ -57,8 +62,8 @@ class PinPadState extends State<PinPad> {
               child: OutlinedButton(
                 onPressed: onTap ?? () => _tap(label),
                 style: OutlinedButton.styleFrom(
-                  backgroundColor: T.surface,
-                  foregroundColor: T.navy,
+                  backgroundColor: keyBg,
+                  foregroundColor: ink,
                   padding: EdgeInsets.zero,
                 ),
                 child:
@@ -68,7 +73,7 @@ class PinPadState extends State<PinPad> {
                       style: T.price(
                         size: big ? 30 : 24,
                         weight: FontWeight.w600,
-                        color: T.navy,
+                        color: ink,
                       ),
                     ),
               ),
@@ -90,9 +95,9 @@ class PinPadState extends State<PinPad> {
                 margin: EdgeInsets.all(big ? 8 : 6),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: i < _pin.length ? T.navy : T.surface,
+                  color: i < _pin.length ? ink : keyBg,
                   border: Border.all(
-                    color: i < _pin.length ? T.navy : T.textMuted,
+                    color: i < _pin.length ? ink : T.textMuted,
                     width: 1.5,
                   ),
                 ),

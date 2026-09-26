@@ -9,10 +9,11 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'api.dart';
 import 'connection_monitor.dart';
 import 'design/tokens.dart';
+import 'home.dart';
 import 'i18n.dart';
+import 'retail/sp_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/pairing_screen.dart';
-import 'screens/zones_screen.dart';
 import 'server_discovery.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -151,14 +152,26 @@ class PosApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // prefsScope above MaterialApp: the language toggle rebuilds
-    // every live route instantly, dialogs included.
+    // every live route instantly, dialogs included. The theme follows the
+    // store's brand once it has described itself (GET /health): the pubs'
+    // navy and copper, or Sage & Poppy's sage and poppy with a dark mode.
     return prefsScope(
-      child: MaterialApp(
-        navigatorObservers: [_RouteBarrierLogger()],
-        title: 'Copper Lantern POS',
-        navigatorKey: rootNavigatorKey,
-        theme: buildPosTheme(),
-        home: const StartupGate(),
+      child: ListenableBuilder(
+        listenable: Prefs.instance,
+        builder: (context, _) {
+          final sagePoppy = StoreProfile.current.isSagePoppy;
+          return MaterialApp(
+            navigatorObservers: [_RouteBarrierLogger()],
+            title: sagePoppy ? 'Sage & Poppy POS' : 'Copper Lantern POS',
+            navigatorKey: rootNavigatorKey,
+            theme: sagePoppy
+                ? buildSagePoppyTheme(Brightness.light)
+                : buildPosTheme(),
+            darkTheme: sagePoppy ? buildSagePoppyTheme(Brightness.dark) : null,
+            themeMode: sagePoppy ? ThemeMode.system : ThemeMode.light,
+            home: const StartupGate(),
+          );
+        },
       ),
     );
   }
@@ -227,8 +240,7 @@ class _StartupGateState extends State<StartupGate> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) =>
-              user != null ? const ZonesScreen() : const LoginScreen(),
+          builder: (_) => user != null ? homeScreen() : const LoginScreen(),
         ),
       );
     } on _EmbeddedStoreStartupException catch (e) {

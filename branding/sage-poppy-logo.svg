@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1400 520" width="1400" height="520" role="img" aria-label="Sage &amp; Poppy Bottle Shop">
+  <!-- Sage & Poppy Bottle Shop — original logo lockup: the bottle-and-poppy
+       mark (branding/sage-poppy-mark.svg) with the wordmark. Fictional store. -->
+  <rect width="1400" height="520" fill="#FBF7EF"/>
+  <g transform="translate(40 30) scale(0.9)">
+    <circle cx="256" cy="256" r="244" fill="#FBF7EF"/>
+    <circle cx="256" cy="256" r="232" fill="none" stroke="#5E7F5A" stroke-width="16"/>
+    <clipPath id="disc"><circle cx="256" cy="256" r="232"/></clipPath>
+    <g clip-path="url(#disc)">
+      <path d="M24 392 C 120 350, 190 372, 256 384 S 400 350, 488 380 L 488 512 L 24 512 Z" fill="#DDE6D6"/>
+      <path d="M24 430 C 130 400, 220 426, 300 420 S 430 398, 488 414 L 488 512 L 24 512 Z" fill="#C9D8C1"/>
+    </g>
+    <path d="M232 70 h48 v18 h-4 v58 c0 14 8 22 22 36 c22 22 32 42 32 74 v140 c0 18 -12 28 -30 28 h-88 c-18 0 -30 -10 -30 -28 v-140 c0 -32 10 -52 32 -74 c14 -14 22 -22 22 -36 v-58 h-4 z" fill="#4E6B4A"/>
+    <rect x="236" y="62" width="40" height="12" rx="4" fill="#3E5A3B"/>
+    <rect x="210" y="268" width="92" height="82" rx="10" fill="#FBF7EF"/>
+    <path d="M226 318 c10 -18 22 -26 30 -26 s20 8 30 26" fill="none" stroke="#5E7F5A" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="256" cy="296" r="7" fill="#E8702A"/>
+    <path d="M168 468 C 170 420, 160 380, 150 340" fill="none" stroke="#5E7F5A" stroke-width="9" stroke-linecap="round"/>
+    <path d="M164 420 C 136 404, 118 408, 104 424 C 124 438, 146 436, 164 420 Z" fill="#6F9068"/>
+    <g transform="translate(150 316)">
+      <ellipse cx="-30" cy="-6" rx="40" ry="34" fill="#E8702A" transform="rotate(-18)"/>
+      <ellipse cx="30" cy="-6" rx="40" ry="34" fill="#E8702A" transform="rotate(18)"/>
+      <ellipse cx="0" cy="-34" rx="38" ry="32" fill="#F08A40"/>
+      <ellipse cx="0" cy="14" rx="42" ry="30" fill="#D9601F"/>
+      <circle cx="0" cy="-8" r="13" fill="#3B2A1C"/>
+      <g fill="#F6C453">
+        <circle cx="-9" cy="-19" r="3"/><circle cx="9" cy="-19" r="3"/>
+        <circle cx="-15" cy="-6" r="3"/><circle cx="15" cy="-6" r="3"/>
+        <circle cx="0" cy="5" r="3"/>
+      </g>
+    </g>
+  </g>
+  <!-- wordmark -->
+  <text x="560" y="250" font-family="Georgia, 'Times New Roman', serif" font-size="108" font-weight="700" fill="#3E5A3B">Sage <tspan fill="#E8702A">&amp;</tspan> Poppy</text>
+  <rect x="566" y="292" width="742" height="6" rx="3" fill="#E8702A"/>
+  <text x="566" y="368" font-family="Helvetica, Arial, sans-serif" font-size="46" font-weight="700" letter-spacing="14" fill="#5E7F5A">BOTTLE SHOP</text>
+  <text x="566" y="424" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" letter-spacing="6" fill="#6B7266">BEER · WINE · SPIRITS · LOS ANGELES</text>
+</svg>

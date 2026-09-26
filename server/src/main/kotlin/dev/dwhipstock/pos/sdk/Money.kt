@@ -24,6 +24,14 @@ value class Money(val cents: Long) : Comparable<Money> {
         return if (frac == 0L) "$sign$whole" else "$sign$whole.%02d".format(frac)
     }
 
+    /** Always two decimals: "1,010.00", "-0.50" (US shelf and receipt style). */
+    fun formatCents(): String {
+        val sign = if (cents < 0) "-" else ""
+        val abs = kotlin.math.abs(cents)
+        val whole = (abs / 100).toString().reversed().chunked(3).joinToString(",").reversed()
+        return "$sign$whole.%02d".format(abs % 100)
+    }
+
     companion object {
         val ZERO = Money(0)
         /** Whole-CAD helper for seed data / tests. */

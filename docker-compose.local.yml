@@ -48,10 +48,19 @@ services:
       MIGRATIONS_DIR: /app/migrations
       ADMIN_EMAIL: "${ADMIN_EMAIL:?set ADMIN_EMAIL in .env.local}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env.local}"
-      # one key per store: STORE_API_KEY → vieux-port (tablet), the second → plateau (Mac)
+      # one key per store: STORE_API_KEY → vieux-port (tablet), then plateau and
+      # sage-poppy (both desktop stores on this Mac)
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env.local}"
-      STORE_API_KEYS: "plateau=${STORE_API_KEY_PLATEAU:-}"
-      STORES: "vieux-port=Copper Lantern — Vieux-Port,plateau=Copper Lantern — Plateau"
+      STORE_API_KEYS: "plateau=${STORE_API_KEY_PLATEAU:-},sage-poppy=${STORE_API_KEY_SAGE_POPPY:-}"
+      STORES: "vieux-port=Copper Lantern — Vieux-Port,plateau=Copper Lantern — Plateau,sage-poppy=Sage & Poppy Bottle Shop"
+      # the US bottle shop: its own zone, currency, country and kind (cloud migration 017)
+      STORE_ZONES: "sage-poppy=America/Los_Angeles"
+      STORE_CURRENCIES: "sage-poppy=USD"
+      STORE_COUNTRIES: "sage-poppy=US"
+      RETAIL_STORES: "sage-poppy"
+      # "All stores" shows an approximate total in CAD at this fixed rate
+      REPORTING_CURRENCY: "${REPORTING_CURRENCY:-CAD}"
+      FX_USD_CAD: "${FX_USD_CAD:-1.37}"
       COOKIE_SECURE: "false"
       # portal sign-out: idle minutes (background polls don't count) + absolute cap in hours
       PORTAL_SESSION_IDLE_MINUTES: "${PORTAL_SESSION_IDLE_MINUTES:-60}"

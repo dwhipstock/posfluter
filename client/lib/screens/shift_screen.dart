@@ -665,7 +665,11 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
           if (r.cashPaidInCents > 0)
             kv('▲ ${l.cashIn}', money(r.cashPaidInCents), color: T.primary),
           if (r.cashPaidOutCents > 0)
-            kv('▼ ${l.cashOut}', money(r.cashPaidOutCents), color: T.destructive),
+            kv(
+              '▼ ${l.cashOut}',
+              money(r.cashPaidOutCents),
+              color: T.destructive,
+            ),
           if (r.refundTotalCents > 0)
             kv(l.refunds, money(r.refundTotalCents), color: T.destructive),
           if (r.cashRefundCents > 0)

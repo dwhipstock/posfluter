@@ -197,6 +197,9 @@ class RetailStoreTest {
         assertTrue("Table" !in receipt && "GST" !in receipt, receipt)
         // US cash is to the cent: 10.00 − 9.71 = 0.29 change, no rounding line
         assertTrue("Change" in receipt && "0.29" in receipt && "Rounding" !in receipt, receipt)
+        // US receipt style: cents always, month-first dates on a 12-hour clock
+        assertTrue("10.00" in receipt, receipt)
+        assertTrue(Regex("""\d{2}/\d{2}/\d{4} \d{1,2}:\d{2} (AM|PM)""").containsMatchIn(receipt), receipt)
         // the sale synced in dollars, with its deposit and currency
         val closed = transaction {
             SyncOutbox.selectAll().where { SyncOutbox.eventType eq "check.closed" }.first()[SyncOutbox.payload]

@@ -151,7 +151,10 @@ class _TenderScreenState extends State<TenderScreen> {
         _toast(
           L
               .of(context)
-              .receivedToast(money(result.tender.amountAppliedCents), money(_due)),
+              .receivedToast(
+                money(result.tender.amountAppliedCents),
+                money(_due),
+              ),
         );
       }
     }
@@ -190,7 +193,10 @@ class _TenderScreenState extends State<TenderScreen> {
         _toast(
           L
               .of(context)
-              .receivedToast(money(result.tender.amountAppliedCents), money(_due)),
+              .receivedToast(
+                money(result.tender.amountAppliedCents),
+                money(_due),
+              ),
         );
       }
     }
@@ -238,7 +244,10 @@ class _TenderScreenState extends State<TenderScreen> {
         _toast(
           L
               .of(context)
-              .receivedToast(money(result.tender.amountAppliedCents), money(_due)),
+              .receivedToast(
+                money(result.tender.amountAppliedCents),
+                money(_due),
+              ),
         );
       }
     });
@@ -377,7 +386,9 @@ class _TenderScreenState extends State<TenderScreen> {
                     child: Text(
                       l.paidOf(
                         money(_group?.paidCents ?? _check.paidCents),
-                        money(_group?.grandTotalCents ?? _check.grandTotalCents),
+                        money(
+                          _group?.grandTotalCents ?? _check.grandTotalCents,
+                        ),
                       ),
                       style: T.small(),
                     ),

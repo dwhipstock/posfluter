@@ -88,7 +88,9 @@ String formatMoney(int cents, String currency, {String lang = 'en'}) {
   switch (currency.toUpperCase()) {
     case 'CAD':
       if (lang == 'fr-CA') return '$sign${grouped(' ')},$cc \$';
-      return frac == 0 ? '$sign\$${grouped(',')}' : '$sign\$${grouped(',')}.$cc';
+      return frac == 0
+          ? '$sign\$${grouped(',')}'
+          : '$sign\$${grouped(',')}.$cc';
     case 'USD':
       return '$sign\$${grouped(',')}.$cc';
     default:

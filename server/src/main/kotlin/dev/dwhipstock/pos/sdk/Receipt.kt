@@ -104,6 +104,12 @@ sealed interface ReceiptPolicy {
     /** A retail counter: "Register 1 · Sale #12" instead of "Table · Bill". */
     val retail: Boolean get() = false
 
+    /** Always print the cents ("40.00"), US shelf style; the pubs print "40". */
+    val alwaysCents: Boolean get() = false
+
+    /** Money on the receipt, in this policy's style. */
+    fun money(m: Money): String = if (alwaysCents) m.formatCents() else m.format()
+
     /** Same venue identity, different print locale — the check owner's preference wins at close time. */
     fun withLocale(locale: LocaleCode): ReceiptPolicy
 
@@ -114,8 +120,18 @@ sealed interface ReceiptPolicy {
         override val showTax: Boolean,
         override val locale: LocaleCode = LocaleCode.EN,
         override val retail: Boolean = false,
+        override val alwaysCents: Boolean = false,
+        /** US receipts: "09/25/2026 5:57 PM" (month first, 12-hour clock). */
+        val usDates: Boolean = false,
     ) : ReceiptPolicy {
         override fun withLocale(locale: LocaleCode) = copy(locale = locale)
+
+        override fun formatDate(dt: LocalDateTime): String {
+            if (!usDates) return super.formatDate(dt)
+            val h = dt.hour % 12
+            val ampm = if (dt.hour < 12) "AM" else "PM"
+            return "%02d/%02d/%04d %d:%02d %s".format(dt.monthValue, dt.dayOfMonth, dt.year, if (h == 0) 12 else h, dt.minute, ampm)
+        }
     }
 }
 
@@ -155,27 +171,27 @@ object ReceiptRenderer {
         for (item in receipt.items) {
             val name = locale.dataText(item.nameFr, item.nameEn)
             val variant = locale.dataTextOrNull(item.variantLabelFr, item.variantLabelEn)?.let { " ($it)" } ?: ""
-            add(PrintLine.KeyValue("$name$variant ×${item.qty}", item.lineTotal.format()))
-            if (item.qty > 1) add(PrintLine.Text("  @${item.unitPrice.format()}"))
+            add(PrintLine.KeyValue("$name$variant ×${item.qty}", item.lineTotal.let(policy::money)))
+            if (item.qty > 1) add(PrintLine.Text("  @${item.unitPrice.let(policy::money)}"))
             item.note?.let { add(PrintLine.Text("  • $it")) }
         }
         for (fee in receipt.fees) {
             val label = Messages.dataLabel("fee.${fee.code}", locale) ?: locale.dataText(fee.labelFr, fee.labelEn)
-            add(PrintLine.KeyValue(label, fee.amount.format()))
+            add(PrintLine.KeyValue(label, fee.amount.let(policy::money)))
         }
         add(PrintLine.Divider)
 
         // taxes added on top always print (they change the total): subtotal,
         // one line per tax with its rate, then the total
         if (receipt.taxes.isNotEmpty()) {
-            add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), receipt.subtotal.format()))
-            receipt.taxes.forEach { add(PrintLine.KeyValue(taxLineLabel(it.component, locale), it.amount.format())) }
+            add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), receipt.subtotal.let(policy::money)))
+            receipt.taxes.forEach { add(PrintLine.KeyValue(taxLineLabel(it.component, locale), it.amount.let(policy::money))) }
         }
-        add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.format(), emphasized = true))
+        add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.let(policy::money), emphasized = true))
         if (policy.showTax && receipt.taxRatePercent != null) {
             add(PrintLine.KeyValue(
                 msg(RECEIPT_TAX_INCLUDED, receipt.taxRatePercent),
-                receipt.taxIncluded.format(),
+                receipt.taxIncluded.let(policy::money),
             ))
         }
         receipt.taxes.filter { it.component.registrationNumber.isNotBlank() }
@@ -191,12 +207,12 @@ object ReceiptRenderer {
 
         for (tender in receipt.tenders) {
             val label = Messages.dataLabel("tender.${tender.type}", locale) ?: locale.dataText(tender.labelFr, tender.labelEn)
-            add(PrintLine.KeyValue(label, tender.amountTendered.format()))
+            add(PrintLine.KeyValue(label, tender.amountTendered.let(policy::money)))
             if (!tender.roundingAdjustment.isZero) {
-                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), tender.roundingAdjustment.format()))
+                add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), tender.roundingAdjustment.let(policy::money)))
             }
             if (!tender.change.isZero) {
-                add(PrintLine.KeyValue(msg(RECEIPT_CHANGE), tender.change.format()))
+                add(PrintLine.KeyValue(msg(RECEIPT_CHANGE), tender.change.let(policy::money)))
             }
         }
 
