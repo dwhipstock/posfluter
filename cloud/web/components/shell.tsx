@@ -6,7 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { BarChart3, BookOpen, CircleUser, LayoutGrid, Package, TabletSmartphone, Users } from "lucide-react";
 import { ApiError } from "@/lib/api";
-import { useMe } from "@/lib/hooks";
+import { useApi, useMe } from "@/lib/hooks";
+import type { LowCountResponse } from "@/lib/types";
 import { useStoreHref, useStores } from "@/lib/store";
 import { isRetail } from "@/components/money-scope";
 import { useT } from "@/lib/i18n/context";
@@ -44,6 +45,11 @@ function NavLinks({ variant }: { variant: "side" | "bottom" }) {
   const { venues } = useStores();
   const hasRetail = venues.some((v) => isRetail(v));
   const items = (variant === "side" ? NAV : MOBILE_NAV).filter(({ href }) => href !== "/stock" || hasRetail);
+  // products at or below their reorder level, in the picked scope (retail only)
+  const low = useApi<LowCountResponse>(hasRetail && variant === "side" ? "/v1/stock/low-count" : null, {
+    refreshInterval: 5 * 60_000,
+  });
+  const lowCount = low.data?.retail ? low.data.lowCount : 0;
   return (
     <>
       {items.map(({ href, labelKey, icon: Icon }) => {
@@ -62,6 +68,15 @@ function NavLinks({ variant }: { variant: "side" | "bottom" }) {
             {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-copper" aria-hidden />}
             <Icon className="h-[18px] w-[18px]" />
             {t(labelKey)}
+            {href === "/stock" && lowCount > 0 && (
+              <span
+                className="ml-auto rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-navy-deep tabular-nums"
+                title={t("stock_nav_low", { n: lowCount })}
+                aria-label={t("stock_nav_low", { n: lowCount })}
+              >
+                {lowCount}
+              </span>
+            )}
           </Link>
         ) : (
           <Link

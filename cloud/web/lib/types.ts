@@ -617,9 +617,15 @@ export interface StockRow {
   categoryId: string;
   barcode?: string | null;
   active: boolean;
+  /** Since the last count (all time when never counted). */
   received: number;
   sold: number;
   adjusted: number;
+  /** Units back from by-line refunds. */
+  returned?: number;
+  /** The last count at the store, if any. */
+  countedQty?: number | null;
+  countedAt?: string | null;
   onHand: number;
   reorderLevel?: number | null;
   low: boolean;
@@ -646,13 +652,95 @@ export interface StockMovement {
   id: number;
   venueId: string;
   itemId: string;
-  kind: "RECEIVED" | "ADJUSTMENT" | string;
+  kind: "RECEIVED" | "ADJUSTMENT" | "COUNT" | string;
   qty: number;
   note: string;
   createdBy: string;
   createdAt: string;
+  /** portal | store */
+  source?: string;
 }
 
 export interface StockMovementsResponse {
   movements: StockMovement[];
+}
+
+// counts and deliveries recorded at the store (GET /v1/stock/counts, /receipts)
+export interface StockCountLine {
+  itemId: string;
+  name: string;
+  counted: number;
+  /** The cloud's figure at the count time; null = no history. */
+  expected?: number | null;
+  variance?: number | null;
+  countedAt: string;
+}
+
+export interface StockCount {
+  venueId: string;
+  venueName: string;
+  countId: string;
+  name: string;
+  submittedBy?: string | null;
+  approvedBy?: string | null;
+  startedAt?: string | null;
+  submittedAt: string;
+  products: number;
+  units: number;
+  varianceLines: number;
+  varianceUnits: number;
+  lines: StockCountLine[];
+}
+
+export interface StockCountsResponse {
+  counts: StockCount[];
+  retail: boolean;
+}
+
+export interface StockReceipt {
+  venueId: string;
+  venueName: string;
+  receiptId: string;
+  supplier: string;
+  reference: string;
+  receivedBy?: string | null;
+  receivedAt: string;
+  units: number;
+  lines: { itemId: string; name: string; qty: number }[];
+}
+
+export interface StockReceiptsResponse {
+  receipts: StockReceipt[];
+  retail: boolean;
+}
+
+// GET /v1/stock/reorder-suggestions
+export interface ReorderRow {
+  venueId: string;
+  venueName: string;
+  itemId: string;
+  name: string;
+  categoryId: string;
+  barcode?: string | null;
+  onHand: number;
+  soldInWindow: number;
+  avgDaily: number;
+  target: number;
+  suggested: number;
+  reorderLevel?: number | null;
+  low: boolean;
+}
+
+export interface ReorderResponse {
+  rows: ReorderRow[];
+  days: number;
+  coverDays: number;
+  toOrder: number;
+  units: number;
+  retail: boolean;
+}
+
+export interface LowCountResponse {
+  lowCount: number;
+  retail: boolean;
 }
