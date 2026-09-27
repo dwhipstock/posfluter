@@ -354,9 +354,14 @@ class _TerminalPaymentScreenState extends State<TerminalPaymentScreen> {
               'enter_pin' => l.terminalEnterPin,
               'choose_tip' => l.terminalChooseTip,
               'processing' => l.terminalProcessing,
+              'waiting_for_phone' => l.terminalWaitingForPhone,
+              _ when widget.status.phoneReader => l.terminalTapOnPhone,
               _ => l.terminalPresentCard,
             }),
-            if (!_embedded) line(l.followTerminal(widget.status.address)),
+            if (widget.status.phoneReader)
+              line(l.followPhone)
+            else if (!_embedded)
+              line(l.followTerminal(widget.status.address)),
             if (p.readerOffline)
               line(
                 l.terminalOfflineNow,

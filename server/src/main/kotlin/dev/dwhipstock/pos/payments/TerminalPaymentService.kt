@@ -66,6 +66,10 @@ data class TerminalStatusView(
     val tipOnReader: Boolean = false,
     val timeoutSeconds: Int = PaymentTerminalConfig.DEFAULT_TIMEOUT_SECONDS,
     val currency: String,
+    /** tap_to_pay: the code the phone enters to pair with this store. */
+    val phonePairingCode: String? = null,
+    /** tap_to_pay: Stripe's simulated Tap to Pay reader (test cards picked on the phone). */
+    val simulated: Boolean = false,
 )
 
 @Serializable
@@ -119,6 +123,8 @@ class TerminalPaymentService(
     private val stripe: StripeService? = null,
     /** Simulator stores: which simulator (built-in or the paired LAN one). */
     val simulators: SimulatorHub? = null,
+    /** Tap to Pay stores: the paired phone and its queue. */
+    val phoneReader: dev.dwhipstock.pos.payments.taptopay.PhoneReaderHub? = null,
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(TerminalPaymentService::class.java)
@@ -154,20 +160,26 @@ class TerminalPaymentService(
                     readerState = r.state.wire, readerName = r.name, address = r.address ?: simulators?.remoteAddress(),
                     embedded = r.embedded, pairingRequired = r.state == ReaderState.NOT_PAIRED,
                     tipOnReader = kind == TerminalKind.SIMULATOR || kind == TerminalKind.JPMORGAN,
+                    // the phone pairs with the store (not the store with it): no pairing screen on the POS
+                    phonePairingCode = phoneReader?.pairingCode,
+                    simulated = kind == TerminalKind.TAP_TO_PAY && config.tapToPaySimulated,
                     // a busy reader can still resume this store's own pending payment
                 ).let { if (r.state == ReaderState.BUSY) it.copy(available = true, reason = null) else it }
+                    .let { if (phoneReader != null) it.copy(pairingRequired = false) else it }
             }
         }
     }
 
     /** Pair with a LAN terminal ([host] = "ip[:port]") using the code on its screen; "" host = back to the built-in one. */
     fun pair(host: String?, code: String?): TerminalStatusView {
+        if (phoneReader != null) throw ConflictException("pair the phone from the phone: enter the code shown here", "terminal_pairing_unsupported")
         val hub = simulators ?: throw ConflictException("this store's terminal (${kind.wire}) doesn't pair from the POS", "terminal_pairing_unsupported")
         hub.pair(host, code)
         return status()
     }
 
     fun unpair(): TerminalStatusView {
+        phoneReader?.let { it.unpair(); return status() }
         simulators?.unpair() ?: throw ConflictException("nothing to unpair", "terminal_pairing_unsupported")
         return status()
     }

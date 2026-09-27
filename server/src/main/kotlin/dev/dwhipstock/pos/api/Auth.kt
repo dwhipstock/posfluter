@@ -186,7 +186,10 @@ private fun isOpenRoute(path: String, method: HttpMethod): Boolean =
         // customer side of a pretend reader, played from any browser on the LAN.
         // Mounted only when payment.terminal=simulator; it moves no real money and
         // the POS side (starting, recording, refunding a payment) stays gated.
-        path == "/terminal" || path.startsWith("/terminal/ui/")
+        path == "/terminal" || path.startsWith("/terminal/ui/") ||
+        // the phone card reader's API (payment.terminal=tap_to_pay): the phone's own
+        // bearer token from pairing is checked by each route, not a staff session
+        path.startsWith("/reader/")
 
 fun Route.authRoutes(auth: AuthService) {
     /** Open: the login screen shows staff tiles ("who's clocking in?"). Names only, no PINs. */

@@ -2973,6 +2973,12 @@ class TerminalStatus {
   final bool integrated, available, embedded, pairingRequired, tipOnReader;
   final String? reason, readerState, readerName, address, currency;
   final int timeoutSeconds;
+
+  /// tap_to_pay: the code the phone enters to pair with this store.
+  final String? phonePairingCode;
+
+  /// tap_to_pay: Stripe's simulated Tap to Pay reader (test cards on the phone).
+  final bool simulated;
   const TerminalStatus({
     required this.kind,
     this.integrated = false,
@@ -2986,6 +2992,8 @@ class TerminalStatus {
     this.address,
     this.currency,
     this.timeoutSeconds = 90,
+    this.phonePairingCode,
+    this.simulated = false,
   });
 
   /// No integrated terminal (older store, or payment.terminal=external/off).
@@ -2993,8 +3001,13 @@ class TerminalStatus {
   factory TerminalStatus.unavailable(String? reason) =>
       TerminalStatus(kind: 'unknown', reason: reason ?? 'terminal_unavailable');
 
-  /// The store drives the reader (the simulator or J.P. Morgan): our own flow.
-  bool get storeDriven => kind == 'simulator' || kind == 'jpmorgan';
+  /// The store drives the reader (the simulator, J.P. Morgan, or the phone
+  /// with Tap to Pay): our own flow.
+  bool get storeDriven =>
+      kind == 'simulator' || kind == 'jpmorgan' || kind == 'tap_to_pay';
+
+  /// The card reader is a phone paired with the store (Stripe Tap to Pay).
+  bool get phoneReader => kind == 'tap_to_pay';
 
   factory TerminalStatus.fromJson(Map<String, dynamic> j) => TerminalStatus(
     kind: j['kind'] ?? 'external',
@@ -3009,6 +3022,8 @@ class TerminalStatus {
     address: j['address'],
     currency: j['currency'],
     timeoutSeconds: j['timeoutSeconds'] ?? 90,
+    phonePairingCode: j['phonePairingCode'],
+    simulated: j['simulated'] == true,
   );
 }
 

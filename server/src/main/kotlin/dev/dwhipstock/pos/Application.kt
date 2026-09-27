@@ -50,6 +50,7 @@ import dev.dwhipstock.pos.payments.StripeHttp
 import dev.dwhipstock.pos.payments.StripeService
 import dev.dwhipstock.pos.api.stripeRoutes
 import dev.dwhipstock.pos.api.terminalRoutes
+import dev.dwhipstock.pos.payments.taptopay.tapToPayRoutes
 import dev.dwhipstock.pos.payments.simulator.simulatorRoutes
 import dev.dwhipstock.pos.api.printerRoutes
 import dev.dwhipstock.pos.api.kitchenRoutes
@@ -135,7 +136,8 @@ fun Application.module(
     // Optional Stripe card tender, TEST MODE only (STRIPE_KEY / stripe.secretKey;
     // the tablet passes its store.properties). No key or a non-sk_test_ key →
     // disabled. Never contacted at startup on the request path.
-    stripeConfig: StripeConfig.Resolved = StripeConfig.fromEnv(),
+    // null = from the env for this store's currency (STRIPE_KEY_US for a USD store, else STRIPE_KEY)
+    stripeConfig: StripeConfig.Resolved? = null,
     // test seam: a fake Stripe HTTP layer
     stripeHttp: StripeHttp? = null,
     // AI menu photos (paid add-on): image.generation=on|off + image.provider=
@@ -164,6 +166,8 @@ fun Application.module(
     simulatorLinkFactory: ((String, Int, () -> String?) -> dev.dwhipstock.pos.payments.simulator.SimulatorLink)? = null,
     jpmConnector: dev.dwhipstock.pos.payments.jpm.JpmConnector? = null,
     jpmOnline: dev.dwhipstock.pos.payments.jpm.JpmOnlineApi? = null,
+    // test seam: the Tap to Pay phone reader's hub (a fake clock, an in-memory token)
+    phoneReader: dev.dwhipstock.pos.payments.taptopay.PhoneReaderHub? = null,
 ) {
     // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
     // Angeles for the US store); an existing store keeps its settings row's
@@ -264,15 +268,10 @@ fun Application.module(
         publicUrlProvider = publicUrlProvider,
         cashRounding = cashRounding.rounding,
     )
-    // Which card terminal (payment.terminal). Stripe is Canada-only (a CAD
-    // account) for now; a store elsewhere asking for it gets the external terminal.
+    // Which card terminal (payment.terminal). Stripe works in any store whose
+    // Stripe account is in the store's currency (checked by StripeService).
     paymentTerminal.warnings.forEach { log.warn("Card terminal config ignored: $it") }
-    val terminalKind = paymentTerminal.resolveFor(baseConfig.defaultPaymentTerminal).let { k ->
-        if (k == dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE && baseConfig.profile.currency != "CAD") {
-            log.info("Card terminal: stripe is CAD-only; ${baseConfig.displayName} uses its external card terminal")
-            dev.dwhipstock.pos.payments.terminal.TerminalKind.EXTERNAL
-        } else k
-    }
+    val terminalKind = paymentTerminal.resolveFor(baseConfig.defaultPaymentTerminal)
     log.info(paymentTerminal.describe(terminalKind))
     // payment.terminal=off: no card tender at all, not even the hand-keyed one
     val config: dev.dwhipstock.pos.sdk.CustomerConfig =
@@ -326,29 +325,28 @@ fun Application.module(
         }
     }
     log.info(if (kitchenService != null) kitchenPrinting.describe() else "Kitchen tickets: off (${kitchenPrinting.source})")
-    // background account lookup only; a missing key or no internet changes nothing else
-    // Stripe is Canada-only (a CAD account) for now: a store in another country
-    // takes cash and its own external card terminal, and never contacts Stripe
+    // background account lookup only; a missing key or no internet changes nothing else.
+    // The Stripe account's currency must be the store's (Copper Lantern: CAD,
+    // the US stores: USD); StripeService refuses any other, never converts.
+    val stripeCfg = stripeConfig ?: StripeConfig.fromEnv(currency = config.profile.currency)
     val storeStripe = when {
-        config.profile.currency != "CAD" -> {
-            if (stripeConfig.enabled) log.info("Stripe: off for this store (${config.profile.currency}); the Stripe integration is CAD-only")
-            StripeConfig.OFF
-        }
         terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE &&
+            terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.TAP_TO_PAY &&
             !(terminalKind == dev.dwhipstock.pos.payments.terminal.TerminalKind.SIMULATOR &&
                 paymentTerminal.simProcessor == dev.dwhipstock.pos.sdk.PaymentTerminalConfig.SimProcessor.STRIPE) -> {
-            if (stripeConfig.enabled) log.info("Stripe: off for this store (payment.terminal=${terminalKind.wire})")
+            if (stripeCfg.enabled) log.info("Stripe: off for this store (payment.terminal=${terminalKind.wire})")
             StripeConfig.OFF
         }
-        else -> stripeConfig
+        else -> stripeCfg
     }
-    val stripeService = StripeService(storeStripe, checkService, config.venueId, config.displayName, stripeHttp)
+    val stripeService = StripeService(storeStripe, checkService, config.venueId, config.displayName, stripeHttp,
+        storeCurrency = config.profile.currency, storeCountry = config.profile.country)
         .also { it.start() }
     ageCheckMode.let { if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Age check: ${it.wire}") }
     val terminals = dev.dwhipstock.pos.payments.PaymentTerminals.build(
         kind = terminalKind, config = paymentTerminal, checks = checkService, customer = config,
         stripe = stripeService, device = terminalDevice, simulatorLinkFactory = simulatorLinkFactory,
-        jpmConnector = jpmConnector, jpmOnline = jpmOnline,
+        jpmConnector = jpmConnector, jpmOnline = jpmOnline, phoneReader = phoneReader,
     )
     // fuel pre-authorisation: a card on a pump prepay is a hold, charged for what was pumped
     forecourt?.let { fc ->
@@ -520,6 +518,10 @@ fun Application.module(
         stockRoutes(stockService, authService)
         stripeRoutes(stripeService)
         terminalRoutes(terminals)
+        // the phone card reader (payment.terminal=tap_to_pay): its own bearer token
+        terminals.phoneReader?.let { hub ->
+            tapToPayRoutes(hub, stripeService, config.displayName, config.profile.currency, paymentTerminal.tapToPaySimulated)
+        }
         // the built-in simulator's reader page (/terminal): any browser on the
         // store LAN, or the tablet's own reader sheet, plays the card reader
         terminals.simulators?.let { hub ->

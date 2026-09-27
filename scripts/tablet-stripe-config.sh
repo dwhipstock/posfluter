@@ -5,8 +5,9 @@
 #   scripts/tablet-stripe-config.sh --off    # remove the key (Stripe disabled)
 #
 # --app copperlantern|sagepoppy picks which POS app on the tablet (default
-# copperlantern; see scripts/lib/tablet-app.sh). Stripe is CAD-only, so the
-# Sage & Poppy (USD) store keeps it off even with a key.
+# copperlantern; see scripts/lib/tablet-app.sh). The Stripe account's currency
+# must be the store's: this is the CAD key; the US stores take STRIPE_KEY_US
+# (scripts/phone-reader.sh).
 #
 # Reads STRIPE_KEY (and optional STRIPE_LOCATION_ID) from the gitignored .env at
 # the repo root (one line: STRIPE_KEY=sk_test_...). Only sk_test_ keys are
@@ -44,7 +45,7 @@ if [[ "$OFF" == false ]]; then
     echo "ERROR: STRIPE_KEY is not a test key (must start with sk_test_). Live keys are not supported yet." >&2
     exit 1
   fi
-  [[ "$TABLET_APP" == sagepoppy ]] && echo "NOTE: Stripe is CAD-only; the Sage & Poppy (USD) store keeps Card (Stripe) off." >&2
+  [[ "$TABLET_APP" != copperlantern ]] && echo "NOTE: STRIPE_KEY is the CAD account; a US store refuses it (use scripts/phone-reader.sh, STRIPE_KEY_US)." >&2
 fi
 
 tablet_require_adb

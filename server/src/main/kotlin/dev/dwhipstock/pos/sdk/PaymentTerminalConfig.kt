@@ -6,7 +6,7 @@ import java.util.Properties
 
 /**
  * Which card terminal this store uses (store config, no UI):
- * `payment.terminal=stripe|simulator|jpmorgan|external|off`.
+ * `payment.terminal=stripe|simulator|jpmorgan|tap_to_pay|external|off`.
  *
  * - `stripe`: Stripe Terminal, test mode (also needs `stripe.secretKey`). Copper
  *   Lantern's default.
@@ -16,6 +16,9 @@ import java.util.Properties
  *   terminal on another machine on the LAN (scripts/demo-terminal.sh).
  * - `jpmorgan`: J.P. Morgan Payment Terminal Application on the LAN. A sketch
  *   until the owner has credentials and a test terminal; never a default.
+ * - `tap_to_pay`: a phone is the card reader (Stripe Tap to Pay on Android,
+ *   the `POS_APP=reader` app), paired with the store over the LAN. Needs a
+ *   Stripe test key whose account currency is the store's.
  * - `external`: a card on the counter's own terminal, keyed by hand (no integration).
  * - `off`: no card tender at all.
  *
@@ -50,6 +53,8 @@ object PaymentTerminalConfig {
     const val KEY_JPM_BASE_URL = "payment.jpmorgan.baseUrl"
     /** simulator only: who approves the card — `local` (the page decides) or `stripe` (Stripe's simulated reader). */
     const val KEY_SIM_PROCESSOR = "payment.simulator.processor"
+    /** tap_to_pay only: Stripe's simulated Tap to Pay reader (test cards picked on the phone), default true; false = real cards. */
+    const val KEY_TTP_SIMULATED = "payment.taptopay.simulated"
     const val ENV = "POS_PAYMENT_TERMINAL"
     const val ENV_HOST = "POS_PAYMENT_TERMINAL_HOST"
     const val ENV_TIMEOUT = "POS_PAYMENT_TERMINAL_TIMEOUT"
@@ -65,6 +70,7 @@ object PaymentTerminalConfig {
         KEY_JPM_TOKEN_URL to "JPM_TOKEN_URL", KEY_JPM_SCOPE to "JPM_SCOPE",
         KEY_JPM_MERCHANT_ID to "JPM_MERCHANT_ID", KEY_JPM_BASE_URL to "JPM_BASE_URL",
         KEY_SIM_PROCESSOR to "POS_PAYMENT_SIMULATOR_PROCESSOR",
+        KEY_TTP_SIMULATED to "POS_TAPTOPAY_SIMULATED",
     )
 
     /** J.P. Morgan: a simulated reader in front of the Online Payments sandbox, or a real in-store terminal. */
@@ -104,6 +110,8 @@ object PaymentTerminalConfig {
         val jpmMode: JpmMode = JpmMode.ONLINE,
         val jpm: JpmCredentials = JpmCredentials(null, null, null, null, null, null),
         val simProcessor: SimProcessor = SimProcessor.LOCAL,
+        /** tap_to_pay: the phone uses Stripe's simulated Tap to Pay reader (no physical card). */
+        val tapToPaySimulated: Boolean = true,
     ) {
         fun jpmTruststorePassword() = jpmTruststorePassword
         fun jpmKeystorePassword() = jpmKeystorePassword
@@ -128,7 +136,7 @@ object PaymentTerminalConfig {
         val rawKind = get(KEY)?.trim()?.takeIf { it.isNotEmpty() }
         val kind = rawKind?.let { raw ->
             TerminalKind.parse(raw) ?: null.also {
-                warnings += "$source: invalid $KEY='$raw' (expected stripe|simulator|jpmorgan|external|off)"
+                warnings += "$source: invalid $KEY='$raw' (expected stripe|simulator|jpmorgan|tap_to_pay|external|off)"
             }
         }
         val (host, port) = parseHost(get(KEY_HOST)) { warnings += "$source: invalid $KEY_HOST='$it' (expected host[:port])" }
@@ -155,6 +163,11 @@ object PaymentTerminalConfig {
                 null, "local", "none" -> SimProcessor.LOCAL
                 "stripe" -> SimProcessor.STRIPE
                 else -> SimProcessor.LOCAL.also { warnings += "$source: invalid $KEY_SIM_PROCESSOR (expected local|stripe)" }
+            },
+            tapToPaySimulated = when (opt(KEY_TTP_SIMULATED)?.lowercase()) {
+                null, "true", "on", "yes", "1" -> true
+                "false", "off", "no", "0", "real" -> false
+                else -> true.also { warnings += "$source: invalid $KEY_TTP_SIMULATED (expected true|false)" }
             },
         )
     }

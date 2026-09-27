@@ -2225,6 +2225,41 @@ class L {
   );
   String get terminalProcessing =>
       _t('Traitement de la carte…', 'Processing the card…', 'Procesando…');
+  String get terminalWaitingForPhone => _t(
+    'En attente du téléphone… touchez la carte sur le téléphone',
+    'Waiting for the phone… tap on the phone',
+    'Esperando el teléfono… acerca la tarjeta al teléfono',
+  );
+  String get terminalTapOnPhone => _t(
+    'Le client touche sa carte sur le téléphone',
+    'Customer taps their card on the phone',
+    'El cliente acerca su tarjeta al teléfono',
+  );
+  String get followPhone => _t(
+    'Suivez les étapes sur le téléphone',
+    'Follow the steps on the phone',
+    'Sigue los pasos en el teléfono',
+  );
+  String phonePairingCode(String code) => _t(
+    'Code d’association du téléphone : $code',
+    'Phone pairing code: $code',
+    'Código para vincular el teléfono: $code',
+  );
+  String get phonePairingHint => _t(
+    'Ouvrez l’app « Card Reader » sur le téléphone et entrez ce code.',
+    'Open the Card Reader app on the phone and enter this code.',
+    'Abre la app Card Reader en el teléfono y escribe este código.',
+  );
+  String get unpairPhone => _t(
+    'Dissocier le téléphone',
+    'Unpair the phone',
+    'Desvincular el teléfono',
+  );
+  String get phoneSimulatedNote => _t(
+    'Lecteur Tap to Pay simulé par Stripe (cartes de test choisies sur le téléphone)',
+    'Stripe’s simulated Tap to Pay reader (test cards picked on the phone)',
+    'Lector Tap to Pay simulado de Stripe (tarjetas de prueba en el teléfono)',
+  );
   String get terminalOfflineNow => _t(
     'Le terminal ne répond pas — vérifiez qu’il est allumé et sur le Wi-Fi',
     'The terminal isn’t answering — check it’s on and on the Wi-Fi',
@@ -2287,6 +2322,16 @@ class L {
 
   /// Why "Card (terminal)" is greyed out.
   String terminalUnavailableHint(String? reason) => switch (reason) {
+    'phone_reader_offline' => _t(
+      'Le téléphone lecteur ne répond pas — ouvrez l’app Card Reader sur le Wi-Fi du magasin',
+      'The phone reader isn’t answering — open the Card Reader app on the store Wi-Fi',
+      'El teléfono lector no responde: abre la app Card Reader en el Wi-Fi de la tienda',
+    ),
+    'phone_reader_error' => _t(
+      'Le téléphone lecteur signale une erreur — regardez l’écran du téléphone',
+      'The phone reader reports a problem — check the phone’s screen',
+      'El teléfono lector tiene un problema: revisa su pantalla',
+    ),
     'terminal_not_paired' => _t(
       'Terminal non associé — associez-le dans Réglages',
       'Terminal not paired — pair it in Settings',
@@ -2379,6 +2424,11 @@ class L {
       'J.P. Morgan (entorno de pruebas)',
     ),
     'stripe' => cardStripe,
+    'tap_to_pay' => _t(
+      'Téléphone (Tap to Pay)',
+      'Phone (Tap to Pay)',
+      'Teléfono (Tap to Pay)',
+    ),
     'off' => _t('Aucun', 'None', 'Ninguno'),
     _ => _t('Terminal externe', 'External terminal', 'Terminal externa'),
   };
