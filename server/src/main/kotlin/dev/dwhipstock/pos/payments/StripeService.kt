@@ -235,6 +235,33 @@ class StripeService(
         return id
     }
 
+    /** The Stripe API client for adapters built on this store's Stripe setup (null = Stripe off). */
+    internal val apiClient: StripeClient? get() = client
+
+    /** The account's currency (enforces the store's currency, like every Stripe call). */
+    fun accountCurrency(): String = ensureAccount().currency
+
+    /**
+     * Stripe's simulated WisePOS E (test mode, server-driven), registered once
+     * to this store's Terminal Location and remembered in sync_state.
+     */
+    fun simulatedReaderId(): String {
+        val c = requireClient()
+        val acct = ensureAccount()
+        val loc = ensureLocation(acct)
+        val stateKey = "stripe_sim_reader:${acct.id}:$loc"
+        transaction { SyncState.get(stateKey) }?.let { return it }
+        val existing = remember { c.listReaders(listOf("location" to loc, "device_type" to "simulated_wisepos_e", "limit" to "10")) }["data"]
+            ?.jsonArray.orEmpty().map { it.jsonObject }.firstOrNull()?.str("id")
+        val id = existing ?: remember {
+            c.createReader(listOf("registration_code" to "simulated-wpe", "location" to loc,
+                "label" to "$storeName (Stripe simulated reader)"), "pos-sim-reader-$storeKey-${acct.id}")
+        }.str("id") ?: throw StripeException(502, StripeException.ERROR, "Stripe returned no reader id")
+        transaction { SyncState.set(stateKey, id) }
+        log.info("Stripe simulated reader: $id (${if (existing != null) "reused" else "registered"})")
+        return id
+    }
+
     fun connectionToken(): String {
         val c = requireClient()
         val loc = ensureLocation(ensureAccount())

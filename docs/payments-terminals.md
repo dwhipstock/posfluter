@@ -337,6 +337,27 @@ hosts are refused in code.
    - The integration test script, to complete before production.
 3. Nothing is needed from J.P. Morgan for the **built-in simulator** demo.
 
+## Stripe's simulated reader behind the simulator page
+
+`payment.terminal=simulator` plus `payment.simulator.processor=stripe`
+(`POS_PAYMENT_SIMULATOR_PROCESSOR=stripe`) keeps the plain simulator page as
+the card people tap, but the payment itself runs through **Stripe's own
+simulated reader** (a test-mode WisePOS E, server-driven):
+
+1. On first use the store registers a simulated reader (`registration_code=simulated-wpe`)
+   to its Terminal Location and remembers it.
+2. When a card is presented it creates a `card_present` PaymentIntent (manual capture),
+   sends it to that reader (`process_payment_intent`), and Stripe's test helper
+   `present_payment_method` "reads" the Stripe test card for the chosen card and outcome
+   (4242… approve, 4000…9995 insufficient funds, 4000…0002 generic decline; Interac 4506…).
+3. Approvals, declines and their messages, the authorisation code, capture and refunds are
+   Stripe's real test-mode answers. The PaymentIntent id prints on the receipt.
+
+Honest framing: this is Stripe's supported test tooling, not ours; only the
+plastic card is pretend. Timeout and "customer cancels" stay on the page (no
+card reaches Stripe). It needs `STRIPE_KEY` (sk_test_ only) and, like all Stripe
+use here, a CAD account, so it is for Copper Lantern.
+
 ## Stripe (unchanged)
 
 The flow is the same as before: `/stripe/...` routes, a manual-capture
