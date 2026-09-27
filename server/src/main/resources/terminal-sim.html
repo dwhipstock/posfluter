@@ -35,6 +35,21 @@
   .foot { display: flex; justify-content: space-between; margin-top: 6px; }
   h2 { font-size: 14px; margin: 0 0 4px; }
   body.kiosk { margin: 4px; }
+  body { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+  .standin { flex-basis: 100%; }
+  .device { flex: 0 0 360px; }
+  .panel { flex: 1 1 520px; max-width: 760px; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid #888; margin-bottom: 6px; }
+  .tab { border: 1px solid #aaa; border-bottom: none; background: #ddd; padding: 3px 10px; margin-right: 2px; }
+  .tab.sel { background: #fff; font-weight: bold; }
+  fieldset.pane { border: 1px solid #aaa; margin: 0 0 6px; padding: 6px; }
+  fieldset.pane[hidden] { display: none; }
+  legend { font-weight: bold; }
+  .frow { display: flex; gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; }
+  .frow > label:first-child { width: 110px; }
+  .rb { margin-right: 8px; }
+  input[type=number] { width: 80px; }
+  .log { background: #fff; border: 1px solid #999; height: 260px; overflow: auto; margin: 0 0 4px; padding: 4px; font-size: 12px; white-space: pre-wrap; }
   .sel { background: #9f9; font-weight: bold; }
 </style>
 </head>
@@ -56,16 +71,58 @@
     <div class="slot" title="chip slot"></div>
   </div>
 
-  <div class="wallet">
-    <h2>Customer's card</h2>
-    <p class="hint">Pick a test card and what the bank will say, then tap, insert or swipe it.</p>
-    <div class="row cards" id="cards"></div>
-    <div class="row seg" id="outcomes"></div>
-    <div class="actions">
-      <button class="primary" id="b-tap" onclick="present('tap')">Tap</button>
-      <button id="b-insert" onclick="present('insert')">Insert (PIN)</button>
-      <button id="b-swipe" onclick="present('swipe')">Swipe</button>
+  <div class="wallet panel">
+    <div class="tabs" role="tablist">
+      <button class="tab sel" data-tab="general">General</button>
+      <button class="tab" data-tab="prompts">Prompts</button>
+      <button class="tab" data-tab="monitor">Transaction monitor</button>
+      <button class="tab" data-tab="prefs">Preferences</button>
     </div>
+
+    <fieldset class="pane" id="pane-general">
+      <legend>Payment</legend>
+      <div class="frow"><label>Test card:</label><div class="row cards" id="cards"></div></div>
+      <div class="frow"><label>Bank answer:</label><div class="row seg" id="outcomes"></div></div>
+      <div class="frow"><label>Response delay:</label><input type="number" id="s-delay" min="0" max="60000" step="250" value="0"> ms</div>
+      <div class="frow"><label>Simulate:</label>
+        <label class="rb"><input type="radio" name="s-err" value="none" checked> normal</label>
+        <label class="rb"><input type="radio" name="s-err" value="total_error"> total error</label>
+        <label class="rb"><input type="radio" name="s-err" value="processor_unreachable"> processor unreachable</label>
+      </div>
+      <div class="frow"><label>Customer:</label>
+        <div class="actions">
+          <button class="primary" id="b-tap" onclick="present('tap')">Tap</button>
+          <button id="b-insert" onclick="present('insert')">Insert (PIN)</button>
+          <button id="b-swipe" onclick="present('swipe')">Swipe</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="pane" id="pane-prompts" hidden>
+      <legend>Prompts</legend>
+      <div class="frow"><label>Tip prompt:</label>
+        <select id="s-tip">
+          <option value="">ask the customer</option>
+          <option value="0">auto-answer: no tip</option>
+          <option value="10">auto-answer: 10%</option>
+          <option value="15">auto-answer: 15%</option>
+          <option value="20">auto-answer: 20%</option>
+        </select>
+      </div>
+      <p class="hint">Only asked when the POS sends the tip to the terminal.</p>
+    </fieldset>
+
+    <fieldset class="pane" id="pane-monitor" hidden>
+      <legend>Transaction monitor</legend>
+      <pre class="log mono" id="log"></pre>
+      <button onclick="document.getElementById('log').textContent=''">clear view</button>
+    </fieldset>
+
+    <fieldset class="pane" id="pane-prefs" hidden>
+      <legend>User interface</legend>
+      <div class="frow"><label>Font size:</label><input type="number" id="p-font" min="10" max="24" value="13"> px</div>
+    </fieldset>
+
     <div class="err" id="err"></div>
     <div class="foot">
       <span id="tid">Test cards only. No real card data.</span>
@@ -81,7 +138,8 @@ const CARDS = [
 ];
 const OUTCOMES = [
   ["approve", "Approve"], ["insufficient_funds", "Decline: insufficient funds"],
-  ["do_not_honour", "Decline: do not honour"], ["timeout", "Time out"], ["cancel", "Customer cancels"],
+  ["do_not_honour", "Decline: do not honour"], ["expired_card", "Decline: expired"], ["lost_card", "Decline: lost card"],
+  ["timeout", "Time out"], ["cancel", "Customer cancels"],
 ];
 let card = "visa", outcome = "approve", pin = "", last = null, busy = false;
 if (new URLSearchParams(location.search).has("kiosk")) document.body.classList.add("kiosk");
@@ -197,6 +255,54 @@ function render(s) {
   }
   if (s.secondsLeft != null && ["present", "pin", "tip"].includes(s.screen)) add(el("div", { class: "countdown" }, s.secondsLeft + " s"));
 }
+
+// ---- operator panel: tabs, settings, transaction monitor, preferences ----
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("sel", x === b));
+  document.querySelectorAll(".pane").forEach(p => p.hidden = p.id !== "pane-" + b.dataset.tab);
+});
+async function loadSettings() {
+  try {
+    const s = await (await fetch(BASE + "/ui/settings", { cache: "no-store" })).json();
+    document.getElementById("s-delay").value = s.responseDelayMs;
+    document.querySelectorAll("input[name=s-err]").forEach(r => r.checked = r.value === s.forceError);
+    document.getElementById("s-tip").value = s.autoTipPercent == null ? "" : String(s.autoTipPercent);
+  } catch (e) {}
+}
+async function saveSettings() {
+  const tipV = document.getElementById("s-tip").value;
+  const body = {
+    responseDelayMs: Math.max(0, Math.min(60000, Number(document.getElementById("s-delay").value) || 0)),
+    forceError: (document.querySelector("input[name=s-err]:checked") || {}).value || "none",
+    autoTipPercent: tipV === "" ? null : Number(tipV),
+  };
+  try {
+    const r = await fetch(BASE + "/ui/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) document.getElementById("err").textContent = "settings: HTTP " + r.status;
+  } catch (e) { document.getElementById("err").textContent = "Can't reach the terminal service."; }
+}
+["s-delay", "s-tip"].forEach(id => document.getElementById(id).onchange = saveSettings);
+document.querySelectorAll("input[name=s-err]").forEach(r => r.onchange = saveSettings);
+let logSeq = 0;
+async function pollLog() {
+  try {
+    const lines = await (await fetch(BASE + "/ui/log?since=" + logSeq, { cache: "no-store" })).json();
+    if (lines.length) {
+      const pre = document.getElementById("log");
+      for (const l of lines) {
+        const d = new Date(l.at), p = n => String(n).padStart(2, "0");
+        pre.textContent += `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}  ${l.text}\n`;
+        logSeq = l.seq;
+      }
+      pre.scrollTop = pre.scrollHeight;
+    }
+  } catch (e) {}
+}
+function applyFont(px) { document.body.style.fontSize = px + "px"; }
+try { const f = localStorage.getItem("termsim.font"); if (f) { document.getElementById("p-font").value = f; applyFont(f); } } catch (e) {}
+document.getElementById("p-font").onchange = e => { applyFont(e.target.value); try { localStorage.setItem("termsim.font", e.target.value); } catch (x) {} };
+loadSettings(); pollLog(); setInterval(pollLog, 1000);
+{ const t = document.querySelector('.tab[data-tab="' + location.hash.slice(1) + '"]'); if (t) t.click(); }
 
 async function poll() {
   if (!busy) {

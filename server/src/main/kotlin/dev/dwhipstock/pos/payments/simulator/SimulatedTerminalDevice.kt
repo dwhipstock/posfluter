@@ -46,6 +46,47 @@ class SimulatedTerminalDevice(
         companion object { val INSTANT = Delays(0, 0, 0, 0, 0) }
     }
 
+    /**
+     * The operator's knobs (the test panel on the reader page): extra response
+     * delay, a forced error, and an automatic answer to the tip prompt.
+     */
+    @Serializable
+    data class Settings(
+        /** Added to every "Processing…" step, in ms. */
+        val responseDelayMs: Long = 0,
+        /** none | total_error (the terminal fails) | processor_unreachable (no host) */
+        val forceError: String = "none",
+        /** null = the customer chooses; else a tip percent (0 = no tip) answered automatically. */
+        val autoTipPercent: Int? = null,
+    )
+
+    @Volatile var settings: Settings = Settings()
+        private set
+
+    fun updateSettings(next: Settings): Settings {
+        require(next.responseDelayMs in 0..60_000) { "response delay must be 0..60000 ms" }
+        require(next.forceError in setOf("none", "total_error", "processor_unreachable")) { "forceError must be none, total_error or processor_unreachable" }
+        require(next.autoTipPercent == null || next.autoTipPercent in 0..50) { "auto tip must be 0..50 %" }
+        settings = next
+        log("SETTINGS delay=${next.responseDelayMs}ms error=${next.forceError} tip=${next.autoTipPercent?.let { "$it%" } ?: "ask"}")
+        return next
+    }
+
+    /** One line of the transaction monitor. */
+    @Serializable
+    data class LogLine(val seq: Long, val at: Long, val text: String)
+
+    private val logLines = ArrayDeque<LogLine>()
+    private var logSeq = 0L
+
+    private fun log(text: String) = synchronized(logLines) {
+        logLines.addLast(LogLine(++logSeq, now(), text))
+        while (logLines.size > 500) logLines.removeFirst()
+    }
+
+    /** The transaction monitor: lines after [since]. */
+    fun logSince(since: Long): List<LogLine> = synchronized(logLines) { logLines.filter { it.seq > since } }
+
     enum class State { TIP, PRESENT_CARD, ENTER_PIN, PROCESSING, APPROVED, DECLINED, CANCELLED, TIMEOUT }
 
     /** What the customer's card will do (the reader page's outcome buttons). */
@@ -53,6 +94,8 @@ class SimulatedTerminalDevice(
         APPROVE("approve"),
         INSUFFICIENT_FUNDS("insufficient_funds"),
         DO_NOT_HONOUR("do_not_honour"),
+        EXPIRED_CARD("expired_card"),
+        LOST_CARD("lost_card"),
         TIMEOUT("timeout"),
         CANCEL("cancel");
 
@@ -106,6 +149,7 @@ class SimulatedTerminalDevice(
         var hostAuth = false
         var processingSince = 0L
         var hostDecision: HostDecision? = null
+        var forcedError: String? = null
         val total: Long get() = amountCents + tipCents
         val awaitingHost: Boolean get() = state == State.PROCESSING && hostAuth && hostDecision == null
     }
@@ -146,6 +190,7 @@ class SimulatedTerminalDevice(
         val token = UUID.randomUUID().toString().replace("-", "")
         tokens += token
         pairingCode = newPairingCode()
+        log("PAIR a POS paired with this terminal")
         token
     }
 
@@ -176,6 +221,12 @@ class SimulatedTerminalDevice(
             waitingSince = now(), label = label,
         )
         t.hostAuth = hostAuthorization
+        log("START ${t.id} ref=$reference amount=${fmt(amountCents)} $currency" + if (hostAuthorization) " (host authorization)" else "")
+        settings.autoTipPercent?.takeIf { tipOnReader }?.let { pct ->
+            t.tipCents = amountCents * pct / 100
+            t.state = State.PRESENT_CARD
+            log("PROMPT tip auto-answered: $pct% = ${fmt(t.tipCents)}")
+        }
         txns[t.id] = t
         currentId = t.id
         trim()
@@ -193,11 +244,12 @@ class SimulatedTerminalDevice(
     fun cancel(id: String): SimTxnView = synchronized(lock) {
         val t = advance(txn(id))
         when (t.state) {
-            State.TIP, State.PRESENT_CARD, State.ENTER_PIN -> finish(t, State.CANCELLED, message = "Cancelled by the POS")
+            State.TIP, State.PRESENT_CARD, State.ENTER_PIN -> { log("CANCEL ${t.id} by the POS"); finish(t, State.CANCELLED, message = "Cancelled by the POS") }
             State.APPROVED -> {
                 if (t.captured) throw TerminalException(409, "terminal_already_captured", "payment already captured; refund it instead")
                 t.voided = true
                 t.message = "Voided"
+                log("VOID ${t.id}")
             }
             State.PROCESSING -> throw TerminalException(409, "terminal_cancel_unavailable", "the card is being processed; it can't be cancelled now")
             else -> {}
@@ -213,6 +265,8 @@ class SimulatedTerminalDevice(
         val t = advance(txn(id))
         if (t.hostAuth && t.hostDecision == null && t.state == State.PROCESSING) {
             t.hostDecision = decision
+            log("HOST ${t.id} ${decision.processor ?: "processor"}: ${if (decision.approved) "approved" else "declined ${decision.declineCode ?: ""}"}" +
+                (decision.processorRef?.let { " ref=$it" } ?: ""))
             advance(t)
         }
         view(t)
@@ -223,6 +277,7 @@ class SimulatedTerminalDevice(
         if (t.state != State.APPROVED || t.voided)
             throw TerminalException(409, "terminal_not_approved", "payment is ${t.state.name.lowercase()}; nothing to capture")
         t.captured = true
+        log("CAPTURE ${t.id} ${fmt(t.total)}")
         view(t)
     }
 
@@ -239,6 +294,7 @@ class SimulatedTerminalDevice(
         val r = Refund("simre_" + UUID.randomUUID().toString().replace("-", "").take(16), t.id, key, amount, authCode())
         refunds += r
         t.refundedCents += amount
+        log("REFUND ${t.id} ${fmt(amount)} -> ${r.id}")
         SimRefundView(r.id, t.id, amount, true, r.authCode)
     }
 
@@ -277,6 +333,7 @@ class SimulatedTerminalDevice(
         val t = requireCurrent(State.TIP)
         require(tipCents in 0..t.amountCents * 2) { "tip out of range" }
         t.tipCents = tipCents
+        log("PROMPT tip chosen by the customer: ${fmt(tipCents)}")
         t.state = State.PRESENT_CARD
         t.waitingSince = now()
         screen()
@@ -293,6 +350,7 @@ class SimulatedTerminalDevice(
         t.entry = entry
         t.card = card
         t.scenario = scenario
+        log("CARD ${card.brand} ****${card.last4} ${entry.wire} (answer: ${scenario.wire})")
         when (scenario) {
             Scenario.TIMEOUT -> finish(t, State.TIMEOUT, message = "Timed out")
             Scenario.CANCEL -> finish(t, State.CANCELLED, message = "Cancelled on the terminal")
@@ -307,6 +365,7 @@ class SimulatedTerminalDevice(
     fun enterPin(pin: String): SimScreenView = synchronized(lock) {
         val t = requireCurrent(State.ENTER_PIN)
         if (!pin.matches(Regex("\\d{4,6}"))) throw TerminalException(400, "terminal_pin_invalid", "PIN must be 4 to 6 digits")
+        log("PIN entered")
         process(t)
         screen()
     }
@@ -327,7 +386,11 @@ class SimulatedTerminalDevice(
         }
         t.state = State.PROCESSING
         t.processingSince = now()
-        t.processingUntil = now() + base + if (delays.jitterMs > 0) random.nextLong(delays.jitterMs) else 0
+        t.processingUntil = now() + base + settings.responseDelayMs + if (delays.jitterMs > 0) random.nextLong(delays.jitterMs) else 0
+        // a forced error never reaches the processor
+        t.forcedError = settings.forceError.takeIf { it != "none" }
+        if (t.forcedError != null) t.hostAuth = false
+        log("PROCESSING ${t.id}" + if (settings.responseDelayMs > 0) " (+${settings.responseDelayMs} ms delay)" else "")
         advance(t)
     }
 
@@ -345,8 +408,15 @@ class SimulatedTerminalDevice(
             }
             return t
         }
+        if (t.state == State.PROCESSING && now >= t.processingUntil && t.forcedError != null) {
+            if (t.forcedError == "processor_unreachable") finish(t, State.DECLINED, "processor_unavailable", "Card processor unreachable")
+            else finish(t, State.DECLINED, "terminal_error", "Terminal error — please try again")
+            return t
+        }
         if (t.state == State.PROCESSING && now >= t.processingUntil) {
             when (t.scenario) {
+                Scenario.EXPIRED_CARD -> finish(t, State.DECLINED, "expired_card", "Declined — expired card")
+                Scenario.LOST_CARD -> finish(t, State.DECLINED, "lost_card", "Declined — lost card, keep the card")
                 Scenario.INSUFFICIENT_FUNDS -> finish(t, State.DECLINED, "insufficient_funds", "Declined — insufficient funds")
                 Scenario.DO_NOT_HONOUR -> finish(t, State.DECLINED, "do_not_honor", "Declined — do not honour")
                 else -> { t.authCode = authCode(); finish(t, State.APPROVED, message = "Approved") }
@@ -361,7 +431,10 @@ class SimulatedTerminalDevice(
         t.message = message
         t.finishedAt = now()
         if (currentId == t.id) currentId = null
+        log("RESULT ${t.id} ${state.name}" + (declineCode?.let { " $it" } ?: "") + (t.authCode?.takeIf { state == State.APPROVED }?.let { " auth=$it" } ?: ""))
     }
+
+    private fun fmt(cents: Long) = "%d.%02d".format(cents / 100, cents % 100)
 
     private fun authCode() = (0 until 6).map { random.nextInt(10) }.joinToString("")
 

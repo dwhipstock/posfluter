@@ -79,6 +79,16 @@ fun Route.simulatorRoutes(device: SimulatedTerminalDevice, base: String, api: Bo
     post("$base/ui/pin") { val req = call.receive<SimPinRequest>(); call.guard { device.enterPin(req.pin) } }
     post("$base/ui/tip") { val req = call.receive<SimTipRequest>(); call.guard { device.chooseTip(req.tipCents) } }
     post("$base/ui/cancel") { call.guard { device.customerCancel() } }
+    // the operator's test panel: settings and the transaction monitor
+    get("$base/ui/settings") { call.guard { device.settings } }
+    post("$base/ui/settings") {
+        val req = call.receive<SimulatedTerminalDevice.Settings>()
+        call.guard { device.updateSettings(req) }
+    }
+    get("$base/ui/log") {
+        val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
+        call.guard { device.logSince(since) }
+    }
 
     if (!api) return
     get("$base/api/status") { call.guard { device.status() } }
