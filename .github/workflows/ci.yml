@@ -35,6 +35,9 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      # includes AndroidCompatTest: the tablet's APK compiles these same sources,
+      # and CI builds no APK, so it fails on any JVM-only API (java.net.http…)
+      # in a source the Android build embeds
       - name: gradle test
         working-directory: server
         run: |

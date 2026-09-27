@@ -101,3 +101,7 @@ cloud/infra/clients/
 
 # Whole-menu AI photo runs (scripts/ai-menu-photos.py): chosen images, state + contact sheet
 .ai-menu-photos/
+
+# Load tests (scripts/load-test.sh): data, results, venv
+.loadtest/
+__pycache__/

@@ -540,8 +540,14 @@ class ForecourtService(
     /** Controller-side leftovers: empty postpay sales, locks for sales that dropped the fuel, settled prepays. */
     private fun sweepController() {
         val snap = last ?: return
+        val onController = snap.transactions.map { it.trxId }.distinct()
+        if (onController.isEmpty()) return
+        // only the controller's current transactions: this runs every poll
+        // (300 ms), and reading every fuelling the store ever sold made the
+        // whole store slower with each day of history (load test, a year: 68,000)
         val known = transaction {
-            FuelSales.selectAll().where { FuelSales.fdcTrxId.isNotNull() }
+            FuelSales.selectAll().where { FuelSales.fdcTrxId inList onController }
+                .orderBy(FuelSales.id)
                 .associate { it[FuelSales.fdcTrxId]!! to it[FuelSales.status] }
         }
         for (t in snap.transactions) {

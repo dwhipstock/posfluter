@@ -433,8 +433,7 @@ class KitchenService(
     /** The check's ACTIVE lines as the kitchen sees them (empty once voided or cancelled). */
     private fun currentLines(checkId: Int, status: String): List<Cur> {
         if (status !in liveStatuses) return emptyList()
-        val variantCounts = ItemVariants.selectAll().where { ItemVariants.deletedAt.isNull() }
-            .groupBy { it[ItemVariants.itemId] }.mapValues { it.value.size }
+        val variantCounts = variantCountsOnCheck(checkId, liveOnly = true)
         return CheckLines
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
             .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
