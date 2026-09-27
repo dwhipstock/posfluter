@@ -334,7 +334,9 @@ fun Application.module(
             if (stripeConfig.enabled) log.info("Stripe: off for this store (${config.profile.currency}); the Stripe integration is CAD-only")
             StripeConfig.OFF
         }
-        terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE -> {
+        terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE &&
+            !(terminalKind == dev.dwhipstock.pos.payments.terminal.TerminalKind.SIMULATOR &&
+                paymentTerminal.simProcessor == dev.dwhipstock.pos.sdk.PaymentTerminalConfig.SimProcessor.STRIPE) -> {
             if (stripeConfig.enabled) log.info("Stripe: off for this store (payment.terminal=${terminalKind.wire})")
             StripeConfig.OFF
         }

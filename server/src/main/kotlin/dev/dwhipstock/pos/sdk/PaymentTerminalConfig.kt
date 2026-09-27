@@ -48,6 +48,8 @@ object PaymentTerminalConfig {
     const val KEY_JPM_SCOPE = "payment.jpmorgan.scope"
     const val KEY_JPM_MERCHANT_ID = "payment.jpmorgan.merchantId"
     const val KEY_JPM_BASE_URL = "payment.jpmorgan.baseUrl"
+    /** simulator only: who approves the card — `local` (the page decides) or `stripe` (Stripe's simulated reader). */
+    const val KEY_SIM_PROCESSOR = "payment.simulator.processor"
     const val ENV = "POS_PAYMENT_TERMINAL"
     const val ENV_HOST = "POS_PAYMENT_TERMINAL_HOST"
     const val ENV_TIMEOUT = "POS_PAYMENT_TERMINAL_TIMEOUT"
@@ -62,10 +64,14 @@ object PaymentTerminalConfig {
         KEY_JPM_CLIENT_ID to "JPM_CLIENT_ID", KEY_JPM_CLIENT_SECRET to "JPM_CLIENT_SECRET",
         KEY_JPM_TOKEN_URL to "JPM_TOKEN_URL", KEY_JPM_SCOPE to "JPM_SCOPE",
         KEY_JPM_MERCHANT_ID to "JPM_MERCHANT_ID", KEY_JPM_BASE_URL to "JPM_BASE_URL",
+        KEY_SIM_PROCESSOR to "POS_PAYMENT_SIMULATOR_PROCESSOR",
     )
 
     /** J.P. Morgan: a simulated reader in front of the Online Payments sandbox, or a real in-store terminal. */
     enum class JpmMode { ONLINE, INSTORE }
+
+    /** Behind the simulated reader: the page's own answer, or Stripe's simulated reader (test mode). */
+    enum class SimProcessor { LOCAL, STRIPE }
 
     /** J.P. Morgan API credentials. The secret is never printed ([toString] masks it). */
     class JpmCredentials(
@@ -97,6 +103,7 @@ object PaymentTerminalConfig {
         val warnings: List<String> = emptyList(),
         val jpmMode: JpmMode = JpmMode.ONLINE,
         val jpm: JpmCredentials = JpmCredentials(null, null, null, null, null, null),
+        val simProcessor: SimProcessor = SimProcessor.LOCAL,
     ) {
         fun jpmTruststorePassword() = jpmTruststorePassword
         fun jpmKeystorePassword() = jpmKeystorePassword
@@ -144,6 +151,11 @@ object PaymentTerminalConfig {
             },
             jpm = JpmCredentials(opt(KEY_JPM_CLIENT_ID), opt(KEY_JPM_CLIENT_SECRET), opt(KEY_JPM_TOKEN_URL),
                 opt(KEY_JPM_SCOPE), opt(KEY_JPM_MERCHANT_ID), opt(KEY_JPM_BASE_URL)),
+            simProcessor = when (opt(KEY_SIM_PROCESSOR)?.lowercase()) {
+                null, "local", "none" -> SimProcessor.LOCAL
+                "stripe" -> SimProcessor.STRIPE
+                else -> SimProcessor.LOCAL.also { warnings += "$source: invalid $KEY_SIM_PROCESSOR (expected local|stripe)" }
+            },
         )
     }
 

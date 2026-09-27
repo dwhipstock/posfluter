@@ -38,7 +38,12 @@ object PaymentTerminals {
         fun service(terminal: dev.dwhipstock.pos.payments.terminal.PaymentTerminal?, hub: SimulatorHub? = null) =
             TerminalPaymentService(kind, terminal, checks, currency, customer.displayName, config, stripe, hub)
         return when (kind) {
-            TerminalKind.SIMULATOR -> {
+            TerminalKind.SIMULATOR -> if (config.simProcessor == PaymentTerminalConfig.SimProcessor.STRIPE) {
+                val hub = hub()
+                log.info("Card terminal: simulator page in front of Stripe's simulated reader (test mode)" +
+                    (if (!stripe.enabled) " — STRIPE NOT CONFIGURED (STRIPE_KEY)" else ""))
+                service(StripeSimReaderAdapter(hub::link, stripe, config.timeoutSeconds), hub)
+            } else {
                 val hub = hub()
                 log.info("Card terminal: simulator — " + (hub.remoteAddress()?.let { "the LAN terminal at $it" }
                     ?: "built in (reader page at /terminal, or the reader sheet on the tablet)"))

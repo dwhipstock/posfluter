@@ -135,4 +135,17 @@ class StripeClient(private val http: StripeHttp) {
         call("POST", "/v1/payment_intents/$id/cancel", emptyList(), idempotencyKey)
     fun createRefund(params: List<Pair<String, String>>, idempotencyKey: String) =
         call("POST", "/v1/refunds", params, idempotencyKey)
+    // server-driven readers (Stripe's simulated WisePOS E in test mode)
+    fun listReaders(params: List<Pair<String, String>>) = call("GET", "/v1/terminal/readers", params)
+    fun createReader(params: List<Pair<String, String>>, idempotencyKey: String) =
+        call("POST", "/v1/terminal/readers", params, idempotencyKey)
+    fun processPaymentIntent(readerId: String, paymentIntentId: String, idempotencyKey: String) =
+        call("POST", "/v1/terminal/readers/$readerId/process_payment_intent",
+            listOf("payment_intent" to paymentIntentId), idempotencyKey)
+    fun cancelReaderAction(readerId: String) = call("POST", "/v1/terminal/readers/$readerId/cancel_action")
+    /** Test mode only: the simulated reader "reads" a Stripe test card. */
+    fun presentPaymentMethod(readerId: String, params: List<Pair<String, String>>) =
+        call("POST", "/v1/test_helpers/terminal/readers/$readerId/present_payment_method", params)
+    fun retrievePaymentIntent(id: String, params: List<Pair<String, String>>) =
+        call("GET", "/v1/payment_intents/$id", params)
 }
