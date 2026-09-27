@@ -3,30 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Forecourt Simulator</title>
-  <meta name="description" content="Pronghorn Fuel &amp; Market forecourt simulator: pumps, nozzles and the FDC for POS demos.">
+  <title>fdc-sim (test stand-in)</title>
+  <meta name="description" content="Forecourt test stand-in: simulated pumps and FDC for POS testing. Replaced by the vendor controller on a real site.">
   <link rel="stylesheet" href="panel.css">
 </head>
 <body>
+  <div class="standin">
+    <b>TEST STAND-IN &mdash; NOT PART OF THE PRODUCT.</b>
+    This page plays the pumps and the forecourt controller so the POS can be shown without a fuel site.
+    On a real site it is replaced by the pump vendor's own controller (e.g. Gilbarco/DOMS PSS&nbsp;5000, Wayne, Technotrade PTS-2);
+    the POS talks to it through a swappable forecourt adapter, the same way it talks to this one.
+  </div>
   <header class="bar">
-    <div class="brand">
-      <span class="mark" aria-hidden="true">P</span>
-      <div>
-        <div class="brand-name">Pronghorn Fuel &amp; Market</div>
-        <div class="brand-sub">forecourt simulator</div>
-      </div>
-    </div>
-    <div class="controls">
-      <span class="conn" id="conn" title="Connection to the simulator"><span class="dot"></span><span id="conn-label">connecting</span></span>
-      <div class="seg" role="group" aria-label="Flow speed">
-        <span class="seg-cap">Speed</span>
-        <button type="button" data-speed="1">1×</button>
-        <button type="button" data-speed="5">5×</button>
-        <button type="button" data-speed="10">10×</button>
-      </div>
-      <button type="button" class="btn-ghost" id="reset-all">Reset all</button>
-      <button type="button" class="btn-estop" id="estop-all">EMERGENCY STOP ALL</button>
-    </div>
+    <b>fdc-sim</b> v0.1 &nbsp;|&nbsp; FDC API: <code>/fdc/v1</code> &nbsp;|&nbsp;
+    <span class="conn" id="conn" title="Connection to the simulator"><span class="dot"></span><span id="conn-label">connecting</span></span>
+    &nbsp;|&nbsp;
+    <span class="seg" role="group" aria-label="Flow speed">speed:
+      <button type="button" data-speed="1">1x</button><button type="button" data-speed="5">5x</button><button type="button" data-speed="10">10x</button>
+    </span>
+    &nbsp;|&nbsp;
+    <button type="button" id="reset-all">reset all</button>
+    <button type="button" id="estop-all">E-STOP ALL</button>
   </header>
 
   <main class="grid" id="grid" aria-live="polite"></main>
@@ -62,9 +59,9 @@
       <div class="auth" data-f="auth">Not authorised</div>
       <div class="grades"></div>
       <div class="actions">
-        <button type="button" class="hold" data-act="hold">HOLD TO PUMP</button>
-        <button type="button" class="latch" data-act="latch" aria-pressed="false" title="Hold-open clip">LATCH</button>
-        <button type="button" class="hang" data-act="hangup">HANG UP</button>
+        <button type="button" class="hold" data-act="hold">hold to pump</button>
+        <button type="button" class="latch" data-act="latch" aria-pressed="false" title="Hold-open clip">latch</button>
+        <button type="button" class="hang" data-act="hangup">hang up</button>
       </div>
       <div class="unpaid"><span class="unpaid-cap">Unpaid</span><span class="unpaid-list" data-f="unpaid">none</span></div>
     </article>

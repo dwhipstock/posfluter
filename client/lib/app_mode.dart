@@ -35,12 +35,16 @@ class AppMode {
 
   static const _brandDefine = String.fromEnvironment('POS_BRAND');
 
-  /// This build's brand: `copperlantern` (default) or `sagepoppy`.
+  /// This build's brand: `copperlantern` (default), `sagepoppy` or `pronghorn`.
   static const brand = _brandDefine == '' ? 'copperlantern' : _brandDefine;
 
   /// The port a counter-tablet build's embedded store listens on. Must match
   /// the brand table in android/app/build.gradle.kts.
-  static int storePortFor(String brand) => brand == 'sagepoppy' ? 8082 : 8080;
+  static int storePortFor(String brand) => switch (brand) {
+        'sagepoppy' => 8082,
+        'pronghorn' => 8084,
+        _ => 8080,
+      };
 
   static final int embeddedStorePort = storePortFor(brand);
 
@@ -48,5 +52,5 @@ class AppMode {
   /// Sage & Poppy 8082. Both can run on one tablet; the stock app (count and
   /// receive is mostly a retail job) looks for Sage & Poppy first.
   static List<int> discoveryPorts({bool? stock}) =>
-      (stock ?? isStock) ? const [8082, 8080] : const [8080, 8082];
+      (stock ?? isStock) ? const [8082, 8080, 8084] : const [8080, 8082, 8084];
 }
