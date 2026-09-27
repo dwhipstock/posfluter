@@ -7,7 +7,6 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
-    branches: [feat/windows-pos]  # TEMP: remove before merge
 
 permissions:
   contents: read
