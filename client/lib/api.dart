@@ -9,6 +9,7 @@ import 'package:http_parser/http_parser.dart' as http_parser;
 
 import 'app_mode.dart';
 import 'connection_monitor.dart';
+import 'desktop_store.dart';
 import 'i18n.dart';
 import 'stock/stock_models.dart';
 import 'store_profile.dart';
@@ -24,11 +25,14 @@ part 'forecourt/forecourt_api.dart';
 class Api {
   Api._();
 
-  /// Android hosts its own store. Desktop/web builds retain LAN discovery for
+  /// Android hosts its own store; so does the packaged Windows app (a child
+  /// process, see [DesktopStore]). Desktop/web builds retain LAN discovery for
   /// development; an Android tablet never silently falls back to a Mac. The
   /// stock app (a phone) never runs a store: it finds the store on the Wi-Fi.
   static bool get usesEmbeddedStore =>
-      !kIsWeb && Platform.isAndroid && !AppMode.isStock;
+      !kIsWeb &&
+      (Platform.isAndroid || DesktopStore.enabled) &&
+      !AppMode.isStock;
 
   /// This app's own embedded store (the port differs per brand app, so two
   /// brands can run side by side on one tablet; see [AppMode.brand]).

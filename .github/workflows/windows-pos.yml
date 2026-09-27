@@ -1,0 +1,115 @@
+# The counter POS for a Windows tablet: a portable zip per brand, each with its
+# own embedded store (pos-server-all.jar on a jlink'd Java 17, no system Java).
+# On demand and on version tags only (Windows runner minutes are costly).
+name: windows-pos
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    branches: [feat/windows-pos]  # TEMP: remove before merge
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: build store jar
+        working-directory: server
+        run: ./gradlew --no-daemon buildFatJar
+
+      # Modules from `jdeps --print-module-deps` on the fat jar, plus TLS
+      # (card processors), charsets and locale data.
+      - name: jlink the Java runtime
+        run: |
+          jlink --add-modules java.base,java.desktop,java.instrument,java.management,java.naming,java.sql,jdk.unsupported,jdk.crypto.ec,jdk.charsets,jdk.localedata,java.net.http,jdk.zipfs \
+            --strip-debug --no-header-files --no-man-pages --compress=2 \
+            --output store-runtime
+          store-runtime/bin/java -version
+
+      - name: flutter pub get
+        working-directory: client
+        run: flutter pub get
+
+      - name: build + package each brand
+        run: |
+          set -e
+          mkdir -p dist
+          for spec in "copperlantern:CopperLanternPOS" "sagepoppy:SageAndPoppyPOS" "pronghorn:PronghornPOS"; do
+            brand="${spec%%:*}"; exe="${spec##*:}"
+            (cd client && POS_BRAND="$brand" flutter build windows --release --dart-define=POS_BRAND="$brand")
+            out="dist/$exe"
+            rm -rf "$out"; mkdir -p "$out/store"
+            cp -r client/build/windows/x64/runner/Release/. "$out/"
+            mv "$out/pos_client.exe" "$out/$exe.exe"
+            cp server/build/libs/pos-server-all.jar "$out/store/"
+            cp -r store-runtime "$out/store/runtime"
+            sed "s/{{EXE}}/$exe.exe/g; s/{{BRAND}}/$brand/g" client/windows/packaging/README.txt > "$out/README.txt"
+          done
+          ls dist
+
+      # 1) the packaged store alone: bundled Java, /health, stop.
+      # 2) the packaged app: it must start its own store, and stop it on exit.
+      - name: smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Wait-Health($port, $secs) {
+            for ($i = 0; $i -lt $secs; $i++) {
+              try { $r = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:$port/health" -TimeoutSec 2; if ($r.StatusCode -eq 200) { return $r.Content } } catch {}
+              Start-Sleep 1
+            }
+            throw "no /health on $port after $secs s"
+          }
+          $d = "$env:RUNNER_TEMP\smoke"; New-Item -ItemType Directory -Force $d | Out-Null
+          $env:POS_PORT = '8090'; $env:POS_DB = "$d\pos.db"
+          $env:POS_RECEIPTS_DIR = "$d\r"; $env:POS_BILLS_DIR = "$d\b"; $env:POS_PHOTOS_DIR = "$d\p"
+          $env:POS_VENUE = 'sage-poppy'
+          $java = Start-Process -PassThru -NoNewWindow -WorkingDirectory $d `
+            -FilePath dist\SageAndPoppyPOS\store\runtime\bin\java.exe `
+            -ArgumentList '-jar', "$PWD\dist\SageAndPoppyPOS\store\pos-server-all.jar"
+          Write-Host "store: $(Wait-Health 8090 120)"
+          Stop-Process -Id $java.Id -Force
+          Remove-Item Env:POS_PORT, Env:POS_DB, Env:POS_RECEIPTS_DIR, Env:POS_BILLS_DIR, Env:POS_PHOTOS_DIR, Env:POS_VENUE
+
+          $app = Start-Process -PassThru -FilePath dist\CopperLanternPOS\CopperLanternPOS.exe
+          Write-Host "app's store: $(Wait-Health 8080 120)"
+          if (-not (Test-Path "$env:LOCALAPPDATA\copperlantern\store.properties")) { throw 'store.properties not created' }
+          Stop-Process -Id $app.Id -Force
+          Start-Sleep 5
+          $left = Get-Process javaw -ErrorAction SilentlyContinue
+          if ($left) { throw "store still running after the app exited" }
+          Write-Host 'store stopped with the app'
+
+      - name: zip
+        shell: pwsh
+        run: |
+          foreach ($n in 'CopperLanternPOS','SageAndPoppyPOS','PronghornPOS') {
+            Compress-Archive -Path "dist\$n" -DestinationPath "dist\$n-windows.zip"
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-pos
+          path: dist/*-windows.zip
+          compression-level: 0
+          retention-days: 30
