@@ -12,6 +12,7 @@ import 'connection_monitor.dart';
 import 'design/tokens.dart';
 import 'home.dart';
 import 'i18n.dart';
+import 'reader/reader_app.dart';
 import 'retail/sp_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/pairing_screen.dart';
@@ -39,6 +40,16 @@ Future<void> main() async {
       ], await rootBundle.loadString('assets/fonts/$file'));
     }
   });
+  if (AppMode.isReader) {
+    // The card reader phone: portrait, awake while the app is open (the
+    // customer taps on it), its own small app (lib/reader/).
+    await SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+    ]);
+    await WakelockPlus.enable();
+    runApp(const ReaderApp());
+    return;
+  }
   if (AppMode.isStock) {
     // The stock app is an ordinary phone app: portrait, system bars shown,
     // the phone sleeps as usual (counts are saved on every change).

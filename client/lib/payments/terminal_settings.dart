@@ -10,7 +10,8 @@ import 'terminal.dart';
 /// Settings → Card terminal (manager): which terminal the store uses, its
 /// state and address, pairing a LAN terminal with the code on its screen,
 /// and going back to the built-in one. Only for store-driven terminals
-/// (simulator / J.P. Morgan); anything else shows nothing.
+/// (simulator / J.P. Morgan / a Tap to Pay phone: its pairing code); anything
+/// else shows nothing.
 class CardTerminalSettings extends StatefulWidget {
   final TerminalClient client;
   const CardTerminalSettings({super.key, this.client = const TerminalClient()});
@@ -97,28 +98,52 @@ class _CardTerminalSettingsState extends State<CardTerminalSettings> {
           Text(l.terminalUnavailableHint(st.reason), style: T.small()),
         ],
         const SizedBox(height: 8),
-        SizedBox(
-          height: T.minTouch,
-          child: OutlinedButton.icon(
-            key: const ValueKey('card-terminal-pair'),
-            icon: const Icon(LucideIcons.link),
-            label: Text(l.pairTerminal),
-            onPressed: _busy ? null : _pair,
-          ),
-        ),
-        if (!st.embedded) ...[
+        if (st.phoneReader) ...[
+          // the phone pairs with the store: show the code it asks for
+          if (st.phonePairingCode != null)
+            Text(
+              l.phonePairingCode(st.phonePairingCode!),
+              key: const ValueKey('card-terminal-phone-code'),
+              style: T.text(size: 20, weight: FontWeight.w700),
+            ),
+          Text(l.phonePairingHint, style: T.small()),
+          if (st.simulated) Text(l.phoneSimulatedNote, style: T.small()),
           const SizedBox(height: 8),
+          if (st.readerState != 'not_paired')
+            SizedBox(
+              height: T.minTouch,
+              child: OutlinedButton.icon(
+                key: const ValueKey('card-terminal-unpair-phone'),
+                icon: const Icon(LucideIcons.unlink2),
+                label: Text(l.unpairPhone),
+                onPressed: _busy ? null : _unpair,
+              ),
+            ),
+          const SizedBox(height: 8),
+        ] else ...[
           SizedBox(
             height: T.minTouch,
             child: OutlinedButton.icon(
-              key: const ValueKey('card-terminal-unpair'),
-              icon: const Icon(LucideIcons.monitorSmartphone),
-              label: Text(l.useBuiltInTerminal),
-              onPressed: _busy ? null : _unpair,
+              key: const ValueKey('card-terminal-pair'),
+              icon: const Icon(LucideIcons.link),
+              label: Text(l.pairTerminal),
+              onPressed: _busy ? null : _pair,
             ),
           ),
+          if (!st.embedded) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: T.minTouch,
+              child: OutlinedButton.icon(
+                key: const ValueKey('card-terminal-unpair'),
+                icon: const Icon(LucideIcons.monitorSmartphone),
+                label: Text(l.useBuiltInTerminal),
+                onPressed: _busy ? null : _unpair,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
         ],
-        const SizedBox(height: 8),
       ],
     );
   }

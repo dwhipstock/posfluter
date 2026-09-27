@@ -28,6 +28,7 @@ object PaymentTerminals {
         simulatorLinkFactory: ((String, Int, () -> String?) -> SimulatorLink)? = null,
         jpmConnector: JpmConnector? = null,
         jpmOnline: JpmOnlineApi? = null,
+        phoneReader: dev.dwhipstock.pos.payments.taptopay.PhoneReaderHub? = null,
     ): TerminalPaymentService {
         val currency = customer.profile.currency
         fun hub() = SimulatorHub(
@@ -36,7 +37,8 @@ object PaymentTerminals {
             linkFactory = simulatorLinkFactory ?: { h, p, tok -> dev.dwhipstock.pos.payments.simulator.HttpSimulatorLink(h, p, tok) },
         )
         fun service(terminal: dev.dwhipstock.pos.payments.terminal.PaymentTerminal?, hub: SimulatorHub? = null) =
-            TerminalPaymentService(kind, terminal, checks, currency, customer.displayName, config, stripe, hub)
+            TerminalPaymentService(kind, terminal, checks, currency, customer.displayName, config, stripe, hub,
+                (terminal as? dev.dwhipstock.pos.payments.taptopay.TapToPayAdapter)?.hub)
         return when (kind) {
             TerminalKind.SIMULATOR -> if (config.simProcessor == PaymentTerminalConfig.SimProcessor.STRIPE) {
                 val hub = hub()
@@ -68,6 +70,15 @@ object PaymentTerminals {
                 }
             }
             TerminalKind.STRIPE -> service(stripe.adapter)
+            TerminalKind.TAP_TO_PAY -> {
+                val hub = phoneReader ?: dev.dwhipstock.pos.payments.taptopay.PhoneReaderHub()
+                log.info("Card terminal: a phone is the reader (Stripe Tap to Pay, " +
+                    (if (config.tapToPaySimulated) "Stripe's SIMULATED reader" else "real cards") + ")" +
+                    (if (!stripe.enabled) " — STRIPE NOT CONFIGURED (the store's Stripe test key)" else "") +
+                    "; phone pairing code ${hub.pairingCode} (also in Settings → Card terminal)")
+                service(dev.dwhipstock.pos.payments.taptopay.TapToPayAdapter(
+                    hub, { stripe.apiClient }, stripe::accountCurrency, config.timeoutSeconds))
+            }
             TerminalKind.EXTERNAL, TerminalKind.OFF -> service(null)
         }
     }

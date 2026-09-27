@@ -7,6 +7,9 @@ import dev.dwhipstock.pos.StoreAssets
 class PosApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Stripe Tap to Pay runs its secure payment screen in its own process:
+        // nothing of ours belongs there (Stripe's Android setup guide).
+        if (android.os.Build.VERSION.SDK_INT >= 28 && getProcessName()?.endsWith(":stripetaptopay") == true) return
         val assetManager = assets
         StoreAssets.install(object : StoreAssets.Source {
             override fun open(path: String) = assetManager.open(path)

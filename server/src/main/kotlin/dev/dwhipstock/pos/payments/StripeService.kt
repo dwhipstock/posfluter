@@ -102,8 +102,15 @@ class StripeService(
     private val storeKey: String,
     private val storeName: String,
     http: StripeHttp? = null,
+    /** The store's currency: the Stripe account must be in the same one (never a converted charge). */
+    storeCurrency: String = VENUE_CURRENCY,
+    /** The store's country (ISO 3166): picks the demo address of an auto-created Terminal Location. */
+    private val storeCountry: String = "CA",
 ) {
+    private val venueCurrency = storeCurrency.lowercase()
+
     companion object {
+        /** Copper Lantern's (and the default) store currency. */
         const val VENUE_CURRENCY = "cad"
         private val log = LoggerFactory.getLogger(StripeService::class.java)
         private const val ACCOUNT_TTL_MS = 10 * 60_000L
@@ -112,6 +119,14 @@ class StripeService(
         /** Fictional Montréal address for an auto-created Terminal Location. */
         val DEMO_ADDRESS = listOf("line1" to "100 Rue de la Commune Ouest", "city" to "Montréal",
             "state" to "QC", "postal_code" to "H2Y 2C6", "country" to "CA")
+
+        /** Fictional US address (the US stores' USD account). */
+        val DEMO_ADDRESS_US = listOf("line1" to "100 Demo Street", "city" to "Sacramento",
+            "state" to "CA", "postal_code" to "95814", "country" to "US")
+
+        /** The demo Terminal Location address for a store in [country]. */
+        fun demoAddress(country: String?): List<Pair<String, String>> =
+            if (country.equals("US", ignoreCase = true)) DEMO_ADDRESS_US else DEMO_ADDRESS
     }
 
     private val client: StripeClient? =
@@ -152,13 +167,14 @@ class StripeService(
     fun status(): StripeStatus {
         if (client == null) return StripeStatus(
             configured = config.disabled != StripeConfig.Disabled.NOT_CONFIGURED,
-            available = false, reason = config.disabled?.code ?: "stripe_not_configured")
+            available = false, reason = config.disabled?.code ?: "stripe_not_configured",
+            venueCurrency = venueCurrency.uppercase())
         return try {
             val acct = ensureAccount()
             val loc = ensureLocation(acct)
-            StripeStatus(true, true, null, acct.currency.uppercase(), locationId = loc)
+            StripeStatus(true, true, null, acct.currency.uppercase(), venueCurrency.uppercase(), locationId = loc)
         } catch (e: StripeException) {
-            StripeStatus(true, false, e.code, account?.currency?.uppercase(), locationId = locationId)
+            StripeStatus(true, false, e.code, account?.currency?.uppercase(), venueCurrency.uppercase(), locationId = locationId)
         }
     }
 
@@ -185,26 +201,27 @@ class StripeService(
             throw cached
         }
         val a = remember { c.account() }
-        val currency = a.str("default_currency")?.lowercase() ?: VENUE_CURRENCY
+        val currency = a.str("default_currency")?.lowercase() ?: venueCurrency
         val acct = Account(a.str("id") ?: "acct", a.str("country"), currency, System.currentTimeMillis())
         account = acct
         return acct.also(::requireVenueCurrency)
     }
 
     /**
-     * The store sells in CAD: an account in any other currency disables Stripe
-     * (logged once, reported by /stripe/status), never a converted charge.
+     * The Stripe account's currency must be the store's (Copper Lantern: CAD,
+     * the US stores: USD). Any other disables Stripe (logged once, reported by
+     * /stripe/status), never a converted charge.
      */
     private fun requireVenueCurrency(acct: Account) {
-        if (acct.currency == VENUE_CURRENCY) return
+        if (acct.currency == venueCurrency) return
         if (!warnedCurrency) {
             warnedCurrency = true
             log.warn("Stripe: DISABLED — the Stripe account's currency is ${acct.currency.uppercase()} " +
-                "(country ${acct.country}), but the store sells in ${VENUE_CURRENCY.uppercase()}. " +
-                "Use a Canadian (CAD) Stripe account.")
+                "(country ${acct.country}), but the store sells in ${venueCurrency.uppercase()}. " +
+                "Use a Stripe account in ${venueCurrency.uppercase()}.")
         }
         throw StripeException(409, "stripe_currency_mismatch",
-            "Stripe account currency ${acct.currency.uppercase()} is not ${VENUE_CURRENCY.uppercase()}")
+            "Stripe account currency ${acct.currency.uppercase()} is not ${venueCurrency.uppercase()}")
     }
 
     /**
@@ -223,7 +240,7 @@ class StripeService(
             .firstOrNull { it["metadata"]?.jsonObject?.str("pos_store") == storeKey }
             ?.str("id")
         val id = existing ?: run {
-            val address = DEMO_ADDRESS
+            val address = demoAddress(acct.country ?: storeCountry)
             val params = listOf("display_name" to "$storeName (POS test)", "metadata[pos_store]" to storeKey) +
                 address.map { (k, v) -> "address[$k]" to v }
             remember { c.createLocation(params, "pos-location-$storeKey-${acct.id}") }.str("id")

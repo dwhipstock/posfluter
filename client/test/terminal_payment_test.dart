@@ -539,4 +539,46 @@ void main() {
     }, () => store);
     expect(find.text('Card (terminal)'), findsOneWidget);
   });
+
+  testWidgets('a Tap to Pay phone: "Waiting for the phone… tap on the phone"', (
+    tester,
+  ) async {
+    bigScreen(tester);
+    final st = TerminalStatus.fromJson({
+      'kind': 'tap_to_pay',
+      'integrated': true,
+      'available': true,
+      'readerState': 'idle',
+      'phonePairingCode': '123456',
+      'simulated': true,
+    });
+    expect(st.storeDriven, isTrue);
+    expect(st.phoneReader, isTrue);
+    expect(st.phonePairingCode, '123456');
+    final client = _FakeTerminal([_pending('waiting_for_phone')]);
+    await tester.pumpWidget(
+      prefsScope(
+        child: MaterialApp(
+          theme: buildPosTheme(),
+          home: TerminalPaymentScreen(
+            checkId: 1,
+            status: st,
+            client: client,
+            pollInterval: const Duration(milliseconds: 10),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    // before the phone picks it up, then once it has
+    expect(find.text('Customer taps their card on the phone'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    expect(
+      find.text('Waiting for the phone… tap on the phone'),
+      findsOneWidget,
+    );
+    expect(find.text('Follow the steps on the phone'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

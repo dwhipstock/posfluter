@@ -10,6 +10,11 @@ import 'package:flutter/foundation.dart';
 ///   lands on Count / Receive. Portrait, phone-sized, keeps its work on the
 ///   phone until the store has it.
 ///
+/// - the **card reader** (`--dart-define=POS_APP=reader`): a phone that is
+///   the store's card reader (Stripe Tap to Pay on Android). It never runs a
+///   store; it finds the store on the Wi-Fi, pairs with the code the POS
+///   shows, and takes the payments the POS sends it (lib/reader/).
+///
 /// The counter-tablet build also picks its **brand**
 /// (`--dart-define=POS_BRAND=copperlantern|sagepoppy`, default copperlantern).
 /// Each brand is its own Android app, so both can run on one tablet at once;
@@ -26,6 +31,9 @@ class AppMode {
 
   static const _define = String.fromEnvironment('POS_APP');
 
+  /// True in the card reader app (the phone for Tap to Pay).
+  static bool isReader = _define == 'reader';
+
   /// True in the stock app. Settable for tests.
   static bool isStock =
       _define == 'stock' ||
@@ -41,10 +49,10 @@ class AppMode {
   /// The port a counter-tablet build's embedded store listens on. Must match
   /// the brand table in android/app/build.gradle.kts.
   static int storePortFor(String brand) => switch (brand) {
-        'sagepoppy' => 8082,
-        'pronghorn' => 8084,
-        _ => 8080,
-      };
+    'sagepoppy' => 8082,
+    'pronghorn' => 8084,
+    _ => 8080,
+  };
 
   static final int embeddedStorePort = storePortFor(brand);
 

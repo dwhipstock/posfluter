@@ -13,10 +13,11 @@ check can still be paid in cash or with the hand-keyed "Card" tender.
 
 | value | what it is | default for |
 |---|---|---|
-| `stripe` | Stripe Terminal, test mode. The tablet's Terminal SDK (mek_stripe_terminal) connects the reader. Also needs `stripe.secretKey`. Only works for CAD accounts. | Copper Lantern |
+| `stripe` | Stripe Terminal, test mode. The tablet's Terminal SDK (mek_stripe_terminal) connects the reader. Also needs `stripe.secretKey`. The Stripe account's currency must be the store's. | Copper Lantern |
 | `simulator` | The built-in card terminal simulator (see below). | Sage & Poppy, the gas station, and any new store |
 | `jpmorgan` | J.P. Morgan. `payment.jpmorgan.mode=online` (the default) puts the simulated reader in front of J.P. Morgan's Online Payments **sandbox**. `instore` uses their Payment Terminal Application on a real J.P. Morgan terminal. It is never a default. | none |
-| `external` | A card on the counter's own terminal, keyed in by hand. There is no integration: staff press "Card" after the terminal approves. | a non-CAD store that asks for `stripe` |
+| `tap_to_pay` | A phone is the card reader: Stripe Tap to Pay on Android, the Card Reader app (`POS_APP=reader`), paired with the store over the LAN. See below. | none |
+| `external` | A card on the counter's own terminal, keyed in by hand. There is no integration: staff press "Card" after the terminal approves. | none |
 | `off` | No card tender at all, not even the hand-keyed one. | none |
 
 You can set it in the tablet's `store.properties` (`payment.terminal=…`) or
@@ -29,6 +30,7 @@ to its default; it never fails to start. Other keys:
 |---|---|---|
 | `payment.terminal.host` | `POS_PAYMENT_TERMINAL_HOST` | `ip[:port]` of a terminal on the LAN, such as the Mac simulator (port 8090) or a J.P. Morgan terminal (port 8442). This can also be set by pairing from the POS. |
 | `payment.terminal.timeoutSeconds` | `POS_PAYMENT_TERMINAL_TIMEOUT` | How long a payment waits for a card. Default 90, allowed range 15 to 600. |
+| `payment.taptopay.simulated` | `POS_TAPTOPAY_SIMULATED` | `tap_to_pay` only. `true` (default): Stripe's simulated Tap to Pay reader, test card picked on the phone. `false`: a real card tap. |
 | `payment.jpmorgan.mode` | `JPM_MODE` | `online` (default) or `instore`. |
 | `payment.jpmorgan.clientId` / `.clientSecret` / `.tokenUrl` / `.scope` | `JPM_CLIENT_ID` / `JPM_CLIENT_SECRET` / `JPM_TOKEN_URL` / `JPM_SCOPE` | OAuth client credentials from the J.P. Morgan developer portal. The secret is never logged. |
 | `payment.jpmorgan.merchantId` | `JPM_MERCHANT_ID` | The 12-digit `merchant-id` header. On the mock host any value works. |
@@ -356,7 +358,83 @@ simulated reader** (a test-mode WisePOS E, server-driven):
 Honest framing: this is Stripe's supported test tooling, not ours; only the
 plastic card is pretend. Timeout and "customer cancels" stay on the page (no
 card reaches Stripe). It needs `STRIPE_KEY` (sk_test_ only) and, like all Stripe
-use here, a CAD account, so it is for Copper Lantern.
+use here, an account in the store's currency.
+
+## A phone as the card reader: `payment.terminal=tap_to_pay`
+
+For the US stores (Sage & Poppy, Pronghorn): the owner's phone (Samsung
+Galaxy S26 Ultra, on Stripe's supported list) takes the card with Stripe Tap
+to Pay on Android. The tablet rings up the sale and presses "Card (terminal)"
+as for any integrated terminal; it shows "Waiting for the phone… tap on the
+phone" until the phone picks the payment up.
+
+**Currency rule.** Stripe works in any store whose Stripe account is in the
+store's currency. Copper Lantern keeps its CAD account (`STRIPE_KEY`); the US
+stores use the USD test account: `STRIPE_KEY_US` on a desktop store,
+`stripe.secretKey` in the tablet's `store.properties`. A mismatched account
+is refused (`stripe_currency_mismatch`), never converted. The auto-created
+Terminal Location gets a fictional US address for a US account.
+
+**Store side** (`payments/taptopay/`): `TapToPayAdapter` creates a
+card_present PaymentIntent (manual capture) and queues it for the paired
+phone (`PhoneReaderHub`). The result is the PaymentIntent's state at Stripe.
+Capture, partial capture (the fuel pre-authorisation charges what was
+pumped), cancel and refund are Stripe API calls. The client secret goes only
+to the phone. The queue is in memory; after a store restart an unpaid
+PaymentIntent is looked up at Stripe and queued again.
+
+**Pairing.** The store shows a 6-digit code (Settings → Card terminal, and
+the store log: `phone pairing code NNNNNN`). The phone sends it to
+`POST /reader/pair` and gets a bearer token (only its hash is stored). One
+phone at a time. Five wrong codes replace the code. Every phone call is a
+heartbeat; no heartbeat for 15 s means the reader shows OFFLINE, and a new
+payment is a clean 503 (cash still works).
+
+**Phone API** (the phone's token, not a staff session): `GET /reader/config`
+(currency, Terminal Location, simulated or not), `POST /reader/heartbeat`,
+`POST /reader/connection-token` (same Stripe call as `/stripe/connection-token`),
+`GET /reader/payment` (200 with the payment, or 204), `GET /reader/payments/{pi}`
+(so the phone stops if the POS cancelled), `POST /reader/payments/{pi}/result`
+(collecting, processing, collected, failed, canceled), and `GET /reader/log`
+(the transaction monitor).
+
+**The phone app** (`flutter build apk --release --dart-define=POS_APP=reader`,
+application id `dev.dwhipstock.pos_reader`): it finds the store on the Wi-Fi,
+pairs with the code, connects the Tap to Pay reader to the store's Location,
+polls for payments, collects and confirms them, and reports back. It must be
+the release build: Stripe refuses a debuggable app with a real reader
+(`TAP_TO_PAY_DEBUG_NOT_SUPPORTED`). `scripts/phone-reader.sh` installs it and
+sets up the store.
+
+**Simulated reader (the default demo path).** The owner can't buy a Stripe
+physical test card (the Dashboard shop needs business verification), so
+`payment.taptopay.simulated=true` is the default. The phone connects Stripe's
+simulated Tap to Pay reader; when a payment arrives it shows the amount and a
+list of Stripe test cards (approve Visa or Mastercard, generic decline,
+insufficient funds, expired). "Tap card (simulated)" runs the payment through
+Stripe's test mode with that card. Approvals, declines, capture and refunds
+are Stripe's real sandbox answers; only the tap is pretend.
+`payment.taptopay.simulated=false` is the switch for a real tap later.
+
+**Device rules (Stripe).** Android 13 or later, NFC, a locked bootloader,
+Google Play services, a security update from the last 12 months, and
+**Developer options disabled**. Stripe enforces "the same device requirements
+… in the simulated and production reader"
+([Tap to Pay, supported devices](https://docs.stripe.com/terminal/payments/setup-reader/tap-to-pay?platform=android#supported-devices)).
+So the owner turns Developer options on only to install the app, then off
+before taking payments. The phone shows "turn Developer options off" for a
+`TAP_TO_PAY_INSECURE_ENVIRONMENT` error, and the store keeps that reason on
+the failed payment.
+
+**Physical test card vs real cards in a sandbox.** Stripe's physical test
+card "only works with Stripe's pre-certified readers, and only against the
+Stripe API in a sandbox", and amounts ending in .01, .05, .55… decline
+([Testing, physical test cards](https://docs.stripe.com/terminal/references/testing#physical-test-cards)).
+Mobile wallets (Apple Pay, Google Pay) can't be used in test mode (same
+page). Stripe does not document a real, live card working against a
+sandbox. Assume it doesn't: taking real cards means live mode, which this
+project doesn't support (only `sk_test_` keys are accepted). For the demo:
+the simulated reader, or a physical test card once one can be bought.
 
 ## Stripe (unchanged)
 

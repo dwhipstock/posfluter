@@ -219,8 +219,10 @@ else
   echo "Starting Sage & Poppy Bottle Shop on :${SAGE_POPPY_PORT}…"
   (
     cd "$SAGE_POPPY_DIR"
-    # no STRIPE_KEY: Stripe is Canada-only (CAD) for now; the store takes cash
-    # and its own external card terminal
+    # STRIPE_KEY_US (the USD test account, from .env, never printed): used only
+    # when payment.terminal needs Stripe (e.g. POS_PAYMENT_TERMINAL=tap_to_pay);
+    # the Stripe account's currency must be the store's
+    STRIPE_KEY_US="${STRIPE_KEY_US:-$(sed -n 's/^STRIPE_KEY_US=//p' "$REPO_ROOT/.env" 2>/dev/null | tail -1 | tr -d '"'"'"'\r')}" \
     POS_VENUE=sage-poppy \
     POS_PORT="$SAGE_POPPY_PORT" \
     POS_DB="$SAGE_POPPY_DIR/pos.db" \

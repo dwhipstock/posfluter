@@ -59,18 +59,22 @@ interface PaymentTerminal {
 
 @Serializable
 enum class TerminalKind {
-    STRIPE, SIMULATOR, JPMORGAN, EXTERNAL, OFF;
+    STRIPE, SIMULATOR, JPMORGAN,
+    /** A phone is the reader (Stripe Tap to Pay on Android), paired with the store over the LAN. */
+    TAP_TO_PAY,
+    EXTERNAL, OFF;
 
     val wire: String get() = name.lowercase()
 
     /** The POS drives this terminal itself (a payment shows its progress and records on approval). */
-    val integrated: Boolean get() = this == STRIPE || this == SIMULATOR || this == JPMORGAN
+    val integrated: Boolean get() = this == STRIPE || this == SIMULATOR || this == JPMORGAN || this == TAP_TO_PAY
 
     companion object {
         fun parse(raw: String?): TerminalKind? = when (raw?.trim()?.lowercase()) {
             "stripe" -> STRIPE
             "simulator", "sim" -> SIMULATOR
             "jpmorgan", "jpm", "j.p.morgan" -> JPMORGAN
+            "tap_to_pay", "taptopay", "tap-to-pay", "phone" -> TAP_TO_PAY
             "external" -> EXTERNAL
             "off", "none" -> OFF
             else -> null

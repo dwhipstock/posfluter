@@ -7,7 +7,8 @@ import java.util.Properties
  * Stripe card payments (store config file, no UI). TEST MODE ONLY for now.
  *
  * - `stripe.secretKey` in the tablet's store.properties, or `STRIPE_KEY` on the
- *   desktop / docker store. Only `sk_test_…` keys are accepted: anything else
+ *   desktop / docker store (a US store, in USD, takes `STRIPE_KEY_US` first:
+ *   the account's currency must be the store's). Only `sk_test_…` keys are accepted: anything else
  *   (a live key, a restricted key, garbage) is refused and Stripe stays off.
  * - `stripe.locationId` / `STRIPE_LOCATION_ID` (optional): the Terminal
  *   Location readers register to. Unset → the store creates or reuses one.
@@ -21,6 +22,8 @@ object StripeConfig {
     const val KEY_LOCATION = "stripe.locationId"
     const val ENV_SECRET = "STRIPE_KEY"
     const val ENV_LOCATION = "STRIPE_LOCATION_ID"
+    /** Desktop: the key for a store in this currency (the account's currency must be the store's). */
+    val ENV_SECRET_BY_CURRENCY = mapOf("USD" to "STRIPE_KEY_US")
     const val TEST_PREFIX = "sk_test_"
 
     /** Why Stripe is off. The code goes to the client; never includes the key. */
@@ -73,8 +76,15 @@ object StripeConfig {
         return of(props.getProperty(KEY_SECRET), props.getProperty(KEY_LOCATION), file.path)
     }
 
-    /** Desktop / docker: [ENV_SECRET] wins, else the POS_CONFIG_FILE properties file. */
-    fun fromEnv(env: (String) -> String? = System::getenv): Resolved {
+    /**
+     * Desktop / docker: the store currency's own key ([ENV_SECRET_BY_CURRENCY],
+     * e.g. STRIPE_KEY_US for a USD store) wins, then [ENV_SECRET], else the
+     * POS_CONFIG_FILE properties file.
+     */
+    fun fromEnv(currency: String? = null, env: (String) -> String? = System::getenv): Resolved {
+        ENV_SECRET_BY_CURRENCY[currency?.uppercase()]?.let { name ->
+            env(name)?.takeIf { it.isNotBlank() }?.let { return of(it, env("${ENV_LOCATION}_US"), name) }
+        }
         env(ENV_SECRET)?.takeIf { it.isNotBlank() }?.let { return of(it, env(ENV_LOCATION), ENV_SECRET) }
         val fromFile = fromFile(env(ReceiptPrintMode.ENV_CONFIG_FILE)?.takeIf { it.isNotBlank() }?.let(::File))
         val envLocation = env(ENV_LOCATION)?.takeIf { it.isNotBlank() }

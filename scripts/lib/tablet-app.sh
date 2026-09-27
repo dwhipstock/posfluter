@@ -5,6 +5,7 @@
 #
 #   --app copperlantern   dev.dwhipstock.pos_client     store :8080  (default; Vieux-Port)
 #   --app sagepoppy       dev.dwhipstock.pos_sagepoppy  store :8082  (Sage & Poppy)
+#   --app pronghorn       dev.dwhipstock.pos_pronghorn  store :8084  (Pronghorn)
 #
 # Must match the brand table in client/android/app/build.gradle.kts.
 # POS_PACKAGE=<id> still overrides the package (e.g. a debug build).
@@ -22,7 +23,10 @@ tablet_app_set() {
     sagepoppy)
       TABLET_APP=sagepoppy; TABLET_PACKAGE_DEFAULT=dev.dwhipstock.pos_sagepoppy
       TABLET_STORE_PORT=8082; TABLET_VENUE=sage-poppy; TABLET_APP_NAME="Sage & Poppy POS";;
-    *) echo "ERROR: --app must be copperlantern or sagepoppy (got '$1')." >&2; exit 2;;
+    pronghorn)
+      TABLET_APP=pronghorn; TABLET_PACKAGE_DEFAULT=dev.dwhipstock.pos_pronghorn
+      TABLET_STORE_PORT=8084; TABLET_VENUE=pronghorn; TABLET_APP_NAME="Pronghorn POS";;
+    *) echo "ERROR: --app must be copperlantern, sagepoppy or pronghorn (got '$1')." >&2; exit 2;;
   esac
   PACKAGE="${POS_PACKAGE:-$TABLET_PACKAGE_DEFAULT}"
   TABLET_FILES="/sdcard/Android/data/$PACKAGE/files"

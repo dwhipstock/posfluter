@@ -33,6 +33,10 @@ val dartDefines: Map<String, String> = (project.findProperty("dart-defines") as 
     ?.mapNotNull { pair -> pair.split("=", limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
     ?.toMap() ?: emptyMap()
 val stockApp = dartDefines["POS_APP"] == "stock"
+// The card reader (a phone that takes cards with Stripe Tap to Pay for the
+// store, --dart-define=POS_APP=reader): like the stock app, a LAN client.
+val readerApp = dartDefines["POS_APP"] == "reader"
+val phoneApp = stockApp || readerApp
 
 // Which store brand this counter-tablet build is (--dart-define=POS_BRAND=…,
 // read in Dart by lib/app_mode.dart). Each brand is its own Android app so both
@@ -93,14 +97,18 @@ android {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         // The stock app installs next to the POS, never over it.
         // (the stock app is one LAN client for either brand; POS_BRAND is ignored)
-        applicationId = if (stockApp) "dev.dwhipstock.pos_stock" else brand.applicationId
-        // The counter tablet hosts the store; the stock app is a LAN client.
-        buildConfigField("boolean", "EMBEDDED_STORE", (!stockApp).toString())
+        applicationId = when {
+            readerApp -> "dev.dwhipstock.pos_reader"
+            stockApp -> "dev.dwhipstock.pos_stock"
+            else -> brand.applicationId
+        }
+        // The counter tablet hosts the store; the stock app and the card reader are LAN clients.
+        buildConfigField("boolean", "EMBEDDED_STORE", (!phoneApp).toString())
         buildConfigField("int", "STORE_PORT", brand.storePort.toString())
         buildConfigField("String", "DEFAULT_VENUE", "\"${brand.defaultVenue}\"")
         buildConfigField("String", "SERVICE_TITLE", "\"${brand.label}\"")
-        manifestPlaceholders["appIcon"] = if (stockApp) "@mipmap/ic_launcher" else brand.icon
-        manifestPlaceholders["screenOrientation"] = if (stockApp) "portrait" else "sensorLandscape"
+        manifestPlaceholders["appIcon"] = if (phoneApp) "@mipmap/ic_launcher" else brand.icon
+        manifestPlaceholders["screenOrientation"] = if (phoneApp) "portrait" else "sensorLandscape"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Stripe Terminal SDK (Card (Stripe) tender) needs Android 8.0 / API 26+
@@ -113,8 +121,12 @@ android {
     buildTypes {
         debug {
             // Side-by-side verification must never overwrite the working POS.
-            applicationIdSuffix = if (stockApp) ".debug" else ".embeddedtest"
-            manifestPlaceholders["appLabel"] = if (stockApp) "Stock Test" else brand.label.replace(" POS", " Test")
+            applicationIdSuffix = if (phoneApp) ".debug" else ".embeddedtest"
+            manifestPlaceholders["appLabel"] = when {
+                readerApp -> "Card Reader Test"
+                stockApp -> "Stock Test"
+                else -> brand.label.replace(" POS", " Test")
+            }
         }
         release {
             // TODO: Add your own signing config for the release build.
@@ -125,7 +137,12 @@ android {
             // Android-specific R8 rules are covered by device tests.
             isMinifyEnabled = false
             isShrinkResources = false
-            manifestPlaceholders["appLabel"] = if (stockApp) "Stock" else brand.label
+            // Tap to Pay refuses a debuggable app with a real reader: the phone gets this build
+            manifestPlaceholders["appLabel"] = when {
+                readerApp -> "Card Reader"
+                stockApp -> "Stock"
+                else -> brand.label
+            }
         }
     }
 
