@@ -29,6 +29,13 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
+# Brand for the window title: set POS_BRAND in the environment of
+# `flutter build windows` (CI does), matching --dart-define=POS_BRAND.
+if("$ENV{POS_BRAND}" STREQUAL "sagepoppy")
+  target_compile_definitions(${BINARY_NAME} PRIVATE "POS_BRAND_SAGEPOPPY")
+elseif("$ENV{POS_BRAND}" STREQUAL "pronghorn")
+  target_compile_definitions(${BINARY_NAME} PRIVATE "POS_BRAND_PRONGHORN")
+endif()
 
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.

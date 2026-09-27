@@ -428,6 +428,39 @@ Memory and battery, both apps open with their stores running (Galaxy Tab A9+,
 adds no work while nobody uses it, so battery use is about the same as one
 app with the screen on.
 
+## Windows tablet (Surface Pro)
+
+The same counter POS as the Android tablet, with its own store inside (the
+store jar on a bundled Java 17; no Java to install).
+
+1. **Get it:** GitHub → Actions → **windows-pos** → *Run workflow* (or push a
+   `v*` tag). When it finishes, download the **windows-pos** artifact. It holds
+   one zip per brand: `CopperLanternPOS-windows.zip`,
+   `SageAndPoppyPOS-windows.zip`, `PronghornPOS-windows.zip`.
+2. **Install:** unzip anywhere (e.g. the Desktop); keep the folder together.
+3. **Run:** double-click `SageAndPoppyPOS.exe` (etc.). It opens full-screen,
+   starts its store (10-20 s the first time) and shows sign-in.
+   - **SmartScreen** ("Windows protected your PC", first run): *More info* →
+     *Run anyway*. The build is not code-signed.
+   - **Firewall** prompt for Java: allow on **Private networks**, so phones
+     (staff app, card reader phone, table QR) can reach the store.
+4. **Settings:** `%LOCALAPPDATA%\<brand>\store.properties` (brand =
+   `copperlantern`, `sagepoppy` or `pronghorn`), created on first run with
+   `print.receipts=digital` and commented examples. Same keys as the tablet:
+   `forecourt.url=http://<Mac IP>:8086` (pump simulator),
+   `payment.terminal=simulator` + `payment.terminal.host=<Mac IP>` (card
+   terminal simulator), `store.venue`, `cash.rounding`, `staff.app.mfa`.
+   Edit in Notepad, then close and reopen the POS. The database (`pos.db`)
+   and `store.log` sit in the same folder.
+
+Ports are the tablet's (8080 / 8082 / 8084), so brands can run side by side.
+Closing the window stops the store, even after a crash.
+
+Not on Windows (hidden, no crash): camera barcode scanning (a USB/Bluetooth
+keyboard-wedge scanner works), the Stripe Bluetooth reader, Bluetooth paper
+receipts (receipts are digital). Card terminal simulator, LAN terminal,
+J.P. Morgan and the card reader phone work: they are store-side.
+
 ## Receipt printing: paper or digital
 
 A config-file switch (no UI) decides whether sale receipts go to the thermal

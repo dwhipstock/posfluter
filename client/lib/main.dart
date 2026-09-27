@@ -10,6 +10,7 @@ import 'api.dart';
 import 'app_mode.dart';
 import 'connection_monitor.dart';
 import 'design/tokens.dart';
+import 'desktop_store.dart';
 import 'home.dart';
 import 'i18n.dart';
 import 'reader/reader_app.dart';
@@ -72,6 +73,9 @@ Future<void> main() async {
     await WakelockPlus.enable();
     WidgetsBinding.instance.addObserver(_WakelockObserver());
   }
+  // Windows: start this app's own store (a child process) before the UI
+  // waits on it; the Android app's store service starts itself.
+  await DesktopStore.start();
   await Prefs.instance.load(); // device-level fallback until login hydrates
   await Api.loadServerConfig(); // manual override + last-discovered store URL
   // A saved address is a hint, not a lock. If it disappears while the app is
@@ -325,9 +329,9 @@ class _StartupGateState extends State<StartupGate> {
             )) {
               return;
             }
-            final failure = await _storeChannel.invokeMethod<String>(
-              'startupFailure',
-            );
+            final failure = DesktopStore.enabled
+                ? DesktopStore.startupFailure
+                : await _storeChannel.invokeMethod<String>('startupFailure');
             if (failure != null) throw _EmbeddedStoreStartupException(failure);
             await Future<void>.delayed(_probeGap);
             continue;
@@ -418,7 +422,11 @@ class _StartupGateState extends State<StartupGate> {
               Text(_startupError!, style: T.small()),
               TextButton(
                 onPressed: () async {
-                  await _storeChannel.invokeMethod<void>('restart');
+                  if (DesktopStore.enabled) {
+                    await DesktopStore.restart();
+                  } else {
+                    await _storeChannel.invokeMethod<void>('restart');
+                  }
                   _check();
                 },
                 child: Text(l.retry),
