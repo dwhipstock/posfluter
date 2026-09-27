@@ -49,6 +49,8 @@ val brands = mapOf(
         8080, ""),
     "sagepoppy" to Brand("dev.dwhipstock.pos_sagepoppy", "Sage & Poppy POS", "@mipmap/ic_launcher_sagepoppy",
         8082, "sage-poppy"),
+    "pronghorn" to Brand("dev.dwhipstock.pos_pronghorn", "Pronghorn POS", "@mipmap/ic_launcher_pronghorn",
+        8084, "pronghorn"),
 )
 val brandName = dartDefines["POS_BRAND"]?.trim()?.takeIf { it.isNotEmpty() } ?: "copperlantern"
 val brand = brands[brandName]

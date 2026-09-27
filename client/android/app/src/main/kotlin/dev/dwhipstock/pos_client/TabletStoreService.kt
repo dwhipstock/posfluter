@@ -94,6 +94,9 @@ class TabletStoreService : Service() {
             val venueId = storeProps?.getProperty("store.venue")?.trim()?.takeIf { it.isNotEmpty() }
                 ?: BuildConfig.DEFAULT_VENUE.takeIf { it.isNotEmpty() }
             val legalAge = storeProps?.getProperty("legal.age")?.trim()?.toIntOrNull()
+            // the gas station's forecourt controller (the pump simulator on the
+            // Mac in the demo): forecourt.url=http://<mac LAN IP>:8086
+            val forecourtUrl = storeProps?.getProperty("forecourt.url")?.trim()?.takeIf { it.isNotEmpty() }
             // cash.rounding=nickel|off; unset → nickel
             val cashRounding = CashRounding.resolve(storeProps?.getProperty(CashRounding.KEY), "store.properties")
             cashRounding.warning?.let { Log.w("TabletStore", "Cash rounding config ignored: $it") }
@@ -139,6 +142,7 @@ class TabletStoreService : Service() {
                     imageGenConfig = imageGenConfig,
                     kitchenPrinting = kitchenPrinting,
                     paymentTerminal = paymentTerminal,
+                    forecourtUrl = forecourtUrl,
                 )
             }.start(wait = true)
         } catch (error: Throwable) {
