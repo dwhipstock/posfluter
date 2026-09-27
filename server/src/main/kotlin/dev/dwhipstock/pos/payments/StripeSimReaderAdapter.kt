@@ -53,6 +53,8 @@ class StripeSimReaderAdapter(
             when (scenario) {
                 "insufficient_funds" -> return "card_present" to "4000000000009995"
                 "do_not_honour" -> return "card_present" to "4000000000000002"
+                "expired_card" -> return "card_present" to "4000000000000069"
+                "lost_card" -> return "card_present" to "4000000000009987"
             }
             return when (cardKey?.lowercase()) {
                 "mastercard" -> "card_present" to "5555555555554444"

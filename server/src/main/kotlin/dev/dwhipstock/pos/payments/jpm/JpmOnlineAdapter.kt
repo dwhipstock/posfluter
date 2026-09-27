@@ -136,7 +136,8 @@ class JpmOnlineAdapter(
     /** The reader read a card: ask J.P. Morgan. Never throws: a failure is a decline the reader shows. */
     private fun authorize(t: SimTxnView): SimHostRequest {
         val a = api ?: return SimHostRequest(false, declineCode = "jpm_not_configured", message = "Card processor not set up")
-        val scenario = t.scenario ?: "approve"
+        // J.P. Morgan has no expired/lost test trigger we use: play them as its generic decline
+        val scenario = (t.scenario ?: "approve").let { if (it == "expired_card" || it == "lost_card") "do_not_honour" else it }
         if (scenario != "approve" && !a.canDecline) {
             // the mock host approves everything; say so rather than pretend it declined
             return SimHostRequest(false, declineCode = if (scenario == "insufficient_funds") "insufficient_funds" else "do_not_honor",
