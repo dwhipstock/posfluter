@@ -239,6 +239,53 @@ class GasStationTest {
     // ---- prepay ----
 
     @Test
+    fun aCardPrepayIsAPreAuthorisationChargedForWhatWasPumped() = testApplication {
+        val fake = FakeForecourt()
+        val device = dev.dwhipstock.pos.payments.simulator.SimulatedTerminalDevice(
+            delays = dev.dwhipstock.pos.payments.simulator.SimulatedTerminalDevice.Delays.INSTANT)
+        application {
+            module(
+                dbPath = tempDb(), receiptsDir = Files.createTempDirectory("rc").toString(),
+                billsDir = Files.createTempDirectory("bl").toString(),
+                venueId = Pronghorn.VENUE_ID, physicalPrinterEnabled = false,
+                forecourtAdapter = fake, forecourtPoll = false, onForecourt = { fc = it }, terminalDevice = device,
+            )
+        }
+        val c = loginClient()
+        fc.tick()
+        c.openShift()
+        val sale = c.sale()
+        val view = obj(c.postJson("/retail/sales/$sale/prepay", """{"pump":5,"amountCents":4000}""").bodyAsText())
+        val id = view["lines"]!!.jsonArray.single().jsonObject["fuel"]!!.jsonObject["fuelSaleId"]!!.jsonPrimitive.int
+        val pid = obj(c.postJson("/checks/$sale/terminal/payments").also {
+            assertTrue(it.status.isSuccess(), it.bodyAsText())
+        }.bodyAsText())["paymentId"]!!.jsonPrimitive.content
+        runCatching { device.chooseTip(0) }
+        device.present(dev.dwhipstock.pos.payments.terminal.EntryMode.TAP,
+            dev.dwhipstock.pos.payments.simulator.SimulatedTerminalDevice.TestCard.VISA,
+            dev.dwhipstock.pos.payments.simulator.SimulatedTerminalDevice.Scenario.APPROVE)
+        assertEquals("RECORDED", obj(c.get("/terminal/payments/$pid").bodyAsText())["status"]!!.jsonPrimitive.content)
+        c.post("/checks/$sale/finalize").also { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
+        fc.tick()
+        assertTrue(fake.calls.contains("authorise 5 PREPAY 4000 prepay-$id"), fake.calls.toString())
+        // approved but only held: nothing charged yet
+        val txnId = device.logSince(0).first { it.text.startsWith("START") }.text.split(" ")[1]
+        assertFalse(device.get(txnId).captured)
+
+        fake.fillUp(5, "REG", 11_000, postpayAuthorised = false) // $31.89
+        fc.tick()
+        val t = device.get(txnId)
+        assertTrue(t.captured)
+        assertEquals(3_189, t.capturedCents, "charged what was pumped, not the $40 hold")
+        assertTrue(device.logSince(0).any { "pre-auth" in it.text })
+        val refund = transaction { Refunds.selectAll().single() }
+        assertEquals(811, refund[Refunds.grossCents])
+        assertEquals("Prepay: card hold released", refund[Refunds.reason])
+        // no cash to hand back for a card hold
+        assertTrue(c.forecourt().pump(5)["change"] == null || c.forecourt().pump(5)["change"] is kotlinx.serialization.json.JsonNull)
+    }
+
+    @Test
     fun anUnusedPrepayIsRefundedWhenThePumpFinishes() = testApplication {
         val fake = FakeForecourt()
         station(fake)

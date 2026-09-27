@@ -32,6 +32,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class SimPresentRequest(val entry: String, val card: String? = null, val outcome: String? = null)
 @Serializable data class SimPinRequest(val pin: String)
 @Serializable data class SimTipRequest(val tipCents: Long)
+@Serializable data class SimCaptureRequest(val amountCents: Long? = null)
 
 /**
  * The simulator's two faces.
@@ -111,7 +112,11 @@ fun Route.simulatorRoutes(device: SimulatedTerminalDevice, base: String, api: Bo
     }
     get("$base/api/transactions/{id}") { call.requireToken(device); call.guard { device.get(call.parameters["id"]!!) } }
     post("$base/api/transactions/{id}/cancel") { call.requireToken(device); call.guard { device.cancel(call.parameters["id"]!!) } }
-    post("$base/api/transactions/{id}/capture") { call.requireToken(device); call.guard { device.capture(call.parameters["id"]!!) } }
+    post("$base/api/transactions/{id}/capture") {
+        call.requireToken(device)
+        val amount = runCatching { call.receive<SimCaptureRequest>().amountCents }.getOrNull()
+        call.guard { device.capture(call.parameters["id"]!!, amount) }
+    }
     post("$base/api/transactions/{id}/refunds") {
         call.requireToken(device)
         val req = call.receive<SimRefundRequest>()

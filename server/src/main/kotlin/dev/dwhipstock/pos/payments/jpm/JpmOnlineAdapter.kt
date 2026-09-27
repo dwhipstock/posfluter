@@ -178,17 +178,22 @@ class JpmOnlineAdapter(
         )
     }
 
-    override fun capture(terminalRef: String, idempotencyKey: String): PaymentResult {
+    override fun capture(terminalRef: String, idempotencyKey: String): PaymentResult = captureHeld(terminalRef, idempotencyKey, null)
+
+    override fun captureAmount(terminalRef: String, idempotencyKey: String, amountCents: Long): PaymentResult =
+        captureHeld(terminalRef, idempotencyKey, amountCents)
+
+    private fun captureHeld(terminalRef: String, idempotencyKey: String, amountCents: Long?): PaymentResult {
         val a = api ?: throw TerminalException(409, "jpm_not_configured", "J.P. Morgan isn't set up")
         val l = link()
         val t = l.get(terminalRef)
         val h = held[terminalRef] ?: t.card?.processorRef?.let { Held(it, t.totalCents).also { n -> held[terminalRef] = n } }
             ?: throw TerminalException(409, "terminal_not_approved", "no J.P. Morgan authorization for this payment")
         if (!h.captured) {
-            val p = a.capture(h.transactionId, h.amountCents, idempotencyKey)
+            val p = a.capture(h.transactionId, amountCents ?: h.amountCents, idempotencyKey)
             if (!p.approved) throw TerminalException(502, "jpm_capture_failed", "J.P. Morgan capture ${p.state}: ${p.message ?: p.responseCode}")
             h.captured = true
-            runCatching { l.capture(terminalRef) }
+            runCatching { l.capture(terminalRef, amountCents) }
             log.info("J.P. Morgan sandbox capture ${h.transactionId}: ${p.state}")
         }
         return toResult(l.get(terminalRef))

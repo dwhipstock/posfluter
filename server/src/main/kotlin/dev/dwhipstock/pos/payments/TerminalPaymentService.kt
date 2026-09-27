@@ -1,5 +1,6 @@
 package dev.dwhipstock.pos.payments
 
+import dev.dwhipstock.pos.base.Tenders
 import dev.dwhipstock.pos.db.SyncState
 import dev.dwhipstock.pos.payments.simulator.HttpSimulatorLink
 import dev.dwhipstock.pos.payments.simulator.InProcessSimulatorLink
@@ -245,6 +246,45 @@ class TerminalPaymentService(
         }
     }
 
+    /**
+     * Set by the forecourt: true while [checkId] holds a fuel prepay still to be
+     * pumped. A card approval on such a check is kept as a hold (not captured);
+     * [captureHeld] charges what was actually pumped once the pump finishes.
+     */
+    @Volatile var holdCaptureFor: ((Int) -> Boolean)? = null
+
+    /**
+     * A fuel prepay on [checkId] finished: charge each held card payment on it,
+     * less [releaseCents] (the fuel not pumped), and let the rest of the hold
+     * drop. Returns the cents released back to the card(s) (0 = nothing held).
+     */
+    fun captureHeld(checkId: Int, releaseCents: Long, key: String): Long = moneyLock.withLock {
+        val t = terminal ?: return 0L
+        val refs = transaction {
+            Tenders.selectAll().where { (Tenders.transactionId eq checkId) and (Tenders.type eq TenderType.TERMINAL.name) }
+                .mapNotNull { it[Tenders.terminalPaymentRef] }
+        }
+        var left = releaseCents.coerceAtLeast(0)
+        var released = 0L
+        for (ref in refs) {
+            val r = runCatching { t.result(ref) }.getOrNull() ?: continue
+            if (r.captured || r.outcome != Outcome.APPROVED) continue
+            val held = r.amountCents ?: continue
+            val release = minOf(left, held)
+            try {
+                if (release >= held) t.cancel(ref, "$key-void-$ref")
+                else t.captureAmount(ref, "$key-cap-$ref", held - release)
+                log.info("Card terminal $ref: fuel pre-auth settled — charged ${held - release} of the $held hold on check #$checkId")
+                left -= release
+                released += release
+            } catch (e: TerminalException) {
+                log.warn("Card terminal $ref: fuel pre-auth capture failed (${e.code}); capturing in full so the sale is paid")
+                runCatching { t.capture(ref, "$key-full-$ref") }
+            }
+        }
+        released
+    }
+
     private fun finalize(row: Row, res: PaymentResult, t: PaymentTerminal): TerminalPaymentView {
         val paymentId = row.publicId
         val ref = row.terminalRef!!
@@ -267,7 +307,9 @@ class TerminalPaymentService(
             return end(paymentId, "CANCELED", errorCode = "terminal_amount_exceeds_due",
                 error = "the check no longer owes this amount; the card was not charged")
         }
-        val captured = if (res.captured) res else try {
+        val hold = !res.captured && runCatching { holdCaptureFor?.invoke(row.checkId) == true }.getOrDefault(false)
+        if (hold) log.info("Card terminal $ref: fuel prepay on check #${row.checkId}: kept as a pre-authorisation hold")
+        val captured = if (res.captured || hold) res else try {
             t.capture(ref, "pos-capture-$paymentId")
         } catch (e: TerminalException) {
             if (e.unreachable) return view(row(paymentId), readerOffline = true) // approved; capture on the next poll

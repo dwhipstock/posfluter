@@ -166,18 +166,26 @@ class StripeSimReaderAdapter(
         )
     }
 
-    override fun capture(terminalRef: String, idempotencyKey: String): PaymentResult {
+    override fun capture(terminalRef: String, idempotencyKey: String): PaymentResult = captureHeld(terminalRef, idempotencyKey, null)
+
+    override fun captureAmount(terminalRef: String, idempotencyKey: String, amountCents: Long): PaymentResult =
+        captureHeld(terminalRef, idempotencyKey, amountCents)
+
+    private fun captureHeld(terminalRef: String, idempotencyKey: String, amountCents: Long?): PaymentResult {
         val c = stripe.apiClient ?: throw TerminalException(409, "stripe_not_configured", "Stripe isn't set up")
         val l = link()
         val t = l.get(terminalRef)
         val h = held[terminalRef] ?: t.card?.processorRef?.let { Held(it, t.totalCents).also { n -> held[terminalRef] = n } }
             ?: throw TerminalException(409, "terminal_not_approved", "no Stripe authorization for this payment")
         if (!h.captured) {
-            val pi = try { c.capturePaymentIntent(h.paymentIntentId, idempotencyKey) } catch (e: StripeException) {
+            val pi = try {
+                c.capturePaymentIntent(h.paymentIntentId, idempotencyKey,
+                    amountCents?.let { listOf("amount_to_capture" to it.toString()) } ?: emptyList())
+            } catch (e: StripeException) {
                 throw TerminalException(502, "stripe_capture_failed", "Stripe capture failed: ${e.message}")
             }
             h.captured = true
-            runCatching { l.capture(terminalRef) }
+            runCatching { l.capture(terminalRef, amountCents) }
             log.info("Stripe simulated reader: captured ${h.paymentIntentId} (${pi.str("status")})")
         }
         return toResult(l.get(terminalRef))
