@@ -374,7 +374,7 @@ class TerminalPaymentsTest {
         override fun start(req: dev.dwhipstock.pos.payments.simulator.SimStartRequest) = check().let { inner.start(req) }
         override fun get(id: String) = check().let { inner.get(id) }
         override fun cancel(id: String) = check().let { inner.cancel(id) }
-        override fun capture(id: String) = check().let { inner.capture(id) }
+        override fun capture(id: String, amountCents: Long?) = check().let { inner.capture(id, amountCents) }
     }
 
     @Test

@@ -30,7 +30,7 @@ interface SimulatorLink {
     fun start(req: SimStartRequest): SimTxnView
     fun get(id: String): SimTxnView
     fun cancel(id: String): SimTxnView
-    fun capture(id: String): SimTxnView
+    fun capture(id: String, amountCents: Long? = null): SimTxnView
     fun refund(id: String, req: SimRefundRequest): SimRefundView
     fun host(id: String, req: SimHostRequest): SimTxnView
 }
@@ -46,7 +46,7 @@ class InProcessSimulatorLink(val device: SimulatedTerminalDevice) : SimulatorLin
     override fun host(id: String, req: SimHostRequest) = device.hostResponse(id, req.toDecision())
     override fun get(id: String) = device.get(id)
     override fun cancel(id: String) = device.cancel(id)
-    override fun capture(id: String) = device.capture(id)
+    override fun capture(id: String, amountCents: Long?) = device.capture(id, amountCents)
     override fun refund(id: String, req: SimRefundRequest) = device.refund(id, req.amountCents, req.key)
 }
 
@@ -74,7 +74,8 @@ class HttpSimulatorLink(
         json.encodeToString(SimStartRequest.serializer(), req), SimTxnView.serializer())
     override fun get(id: String) = call("GET", "/api/transactions/$id", null, SimTxnView.serializer())
     override fun cancel(id: String) = call("POST", "/api/transactions/$id/cancel", "{}", SimTxnView.serializer())
-    override fun capture(id: String) = call("POST", "/api/transactions/$id/capture", "{}", SimTxnView.serializer())
+    override fun capture(id: String, amountCents: Long?) = call("POST", "/api/transactions/$id/capture",
+        amountCents?.let { """{"amountCents":$it}""" } ?: "{}", SimTxnView.serializer())
     override fun refund(id: String, req: SimRefundRequest) = call("POST", "/api/transactions/$id/refunds",
         json.encodeToString(SimRefundRequest.serializer(), req), SimRefundView.serializer())
     override fun host(id: String, req: SimHostRequest) = call("POST", "/api/transactions/$id/host",
@@ -162,6 +163,12 @@ class SimulatorTerminal(
         val l = requireLink()
         val cur = l.get(terminalRef)
         return toResult(if (cur.captured) cur else l.capture(terminalRef))
+    }
+
+    override fun captureAmount(terminalRef: String, idempotencyKey: String, amountCents: Long): PaymentResult {
+        val l = requireLink()
+        val cur = l.get(terminalRef)
+        return toResult(if (cur.captured) cur else l.capture(terminalRef, amountCents))
     }
 
     override fun cancel(terminalRef: String, idempotencyKey: String) = toResult(requireLink().cancel(terminalRef))

@@ -40,6 +40,18 @@ interface PaymentTerminal {
 
     fun capture(terminalRef: String, idempotencyKey: String): PaymentResult
 
+    /**
+     * Capture only [amountCents] of an approval (a fuel pre-authorisation: the
+     * hold was the prepay, the charge is what was pumped). Providers that can't
+     * capture partially fall back to a full capture plus a refund of the rest.
+     */
+    fun captureAmount(terminalRef: String, idempotencyKey: String, amountCents: Long): PaymentResult {
+        val r = capture(terminalRef, idempotencyKey)
+        val over = (r.amountCents ?: amountCents) - amountCents
+        if (over > 0) refund(TerminalRefundRequest(terminalRef, over, "$idempotencyKey-rest", processorRef = r.card?.processorRef))
+        return r
+    }
+
     fun cancel(terminalRef: String, idempotencyKey: String): PaymentResult
 
     fun refund(request: TerminalRefundRequest): TerminalRefundResult

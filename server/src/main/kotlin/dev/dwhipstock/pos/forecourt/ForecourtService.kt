@@ -313,6 +313,20 @@ class ForecourtService(
         return checks.getCheck(checkId)
     }
 
+    /**
+     * The card side of a fuel pre-authorisation (the store's terminal payments):
+     * charge the held card on a check, less the cents not pumped; returns the
+     * cents released back to the card (0 = the sale wasn't a held card).
+     */
+    @Volatile var cardHolds: ((checkId: Int, releaseCents: Long, key: String) -> Long)? = null
+
+    /** A prepay on [checkId] still waiting to be pumped (so a card on it is only a hold). */
+    fun hasOpenPrepay(checkId: Int): Boolean = transaction {
+        FuelSales.selectAll().where { FuelSales.checkId eq checkId }.any {
+            it[FuelSales.mode] == FuelMode.PREPAY.name && it[FuelSales.status] != FuelStatus.SETTLED && it[FuelSales.status] != FuelStatus.CANCELLED
+        }
+    }
+
     /** Take back a paid prepay before any fuel flows: the pump is freed and the whole amount refunded. */
     fun cancelPrepay(fuelSaleId: Int): ForecourtView = synchronized(lock) {
         val row = transaction { FuelSales.selectAll().where { FuelSales.id eq fuelSaleId }.firstOrNull() }
@@ -327,9 +341,11 @@ class ForecourtService(
             try { adapter.free(pump) } catch (e: Exception) { throw translate(e) }
         }
         val prepaid = row[FuelSales.prepaidCents] ?: 0
+        val released = runCatching { cardHolds?.invoke(row[FuelSales.checkId]!!, prepaid, "fuel-$fuelSaleId") ?: 0L }.getOrDefault(0L)
         transaction {
-            val refundId = refund(row[FuelSales.checkId]!!, prepaid, "Prepay cancelled", fuelSaleId)
+            val refundId = refund(row[FuelSales.checkId]!!, prepaid, if (released > 0) "Prepay cancelled (card hold released)" else "Prepay cancelled", fuelSaleId)
             FuelSales.update({ FuelSales.id eq fuelSaleId }) {
+                if (released > 0) it[changeGiven] = true
                 it[status] = FuelStatus.CANCELLED
                 it[amountCents] = 0
                 it[volumeMilli] = 0
@@ -475,9 +491,13 @@ class ForecourtService(
         val prepaid = row[FuelSales.prepaidCents] ?: 0
         val dispensed = t.amountCents.coerceIn(0, prepaid)
         val change = prepaid - dispensed
+        // a card pre-authorisation: charge only what was pumped (nothing to hand back)
+        val released = runCatching { cardHolds?.invoke(row[FuelSales.checkId]!!, change, "fuel-$id") ?: 0L }.getOrDefault(0L)
         transaction {
-            val refundId = if (change > 0) refund(row[FuelSales.checkId]!!, change, "Prepay change", id) else null
+            val refundId = if (change > 0) refund(row[FuelSales.checkId]!!, change,
+                if (released > 0) "Prepay: card hold released" else "Prepay change", id) else null
             FuelSales.update({ FuelSales.id eq id }) {
+                if (released > 0) it[changeGiven] = true
                 it[status] = FuelStatus.SETTLED
                 it[fdcTrxId] = t.trxId
                 it[nozzle] = t.nozzle

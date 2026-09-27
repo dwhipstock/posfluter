@@ -55,6 +55,10 @@ class StripeTerminalAdapter(private val client: StripeClient) : PaymentTerminal 
         // the charge comes back expanded so the receipt can show the card (brand, last 4, EMV)
         toResult(client.capturePaymentIntent(terminalRef, idempotencyKey, listOf("expand[]" to "latest_charge")))
 
+    override fun captureAmount(terminalRef: String, idempotencyKey: String, amountCents: Long): PaymentResult =
+        toResult(client.capturePaymentIntent(terminalRef, idempotencyKey,
+            listOf("amount_to_capture" to amountCents.toString(), "expand[]" to "latest_charge")))
+
     override fun cancel(terminalRef: String, idempotencyKey: String): PaymentResult =
         toResult(client.cancelPaymentIntent(terminalRef, idempotencyKey))
 

@@ -143,6 +143,8 @@ class SimulatedTerminalDevice(
         var declineCode: String? = null
         var message: String? = null
         var captured = false
+        /** What was actually charged: the whole approval, or less (a fuel pre-authorisation). */
+        var capturedCents = 0L
         var voided = false
         var refundedCents = 0L
         /** A real processor decides (J.P. Morgan sandbox): the store posts [hostDecision]. */
@@ -272,12 +274,18 @@ class SimulatedTerminalDevice(
         view(t)
     }
 
-    fun capture(id: String): SimTxnView = synchronized(lock) {
+    fun capture(id: String, amountCents: Long? = null): SimTxnView = synchronized(lock) {
         val t = advance(txn(id))
         if (t.state != State.APPROVED || t.voided)
             throw TerminalException(409, "terminal_not_approved", "payment is ${t.state.name.lowercase()}; nothing to capture")
+        if (t.captured) return view(t)
+        val amount = amountCents ?: t.total
+        if (amount <= 0 || amount > t.total)
+            throw TerminalException(409, "terminal_capture_exceeds_hold", "capture must be 1..${t.total} cents")
         t.captured = true
-        log("CAPTURE ${t.id} ${fmt(t.total)}")
+        t.capturedCents = amount
+        log(if (amount < t.total) "CAPTURE ${t.id} ${fmt(amount)} of the ${fmt(t.total)} hold (pre-auth; ${fmt(t.total - amount)} released)"
+            else "CAPTURE ${t.id} ${fmt(amount)}")
         view(t)
     }
 
@@ -287,7 +295,7 @@ class SimulatedTerminalDevice(
         val t = advance(txn(id))
         if (t.state != State.APPROVED || !t.captured || t.voided)
             throw TerminalException(409, "terminal_not_refundable", "only a captured payment can be refunded")
-        val left = t.total - t.refundedCents
+        val left = t.capturedCents - t.refundedCents
         val amount = amountCents ?: left
         if (amount <= 0 || amount > left)
             throw TerminalException(409, "terminal_refund_exceeds_payment", "refund exceeds what is left on this payment ($left cents)")
@@ -461,6 +469,7 @@ class SimulatedTerminalDevice(
         amountCents = t.amountCents, tipCents = t.tipCents, totalCents = t.total, currency = t.currency,
         card = t.card?.takeIf { t.state in setOf(State.APPROVED, State.DECLINED) || t.awaitingHost }?.let { card -> cardDetails(t, card) },
         declineCode = t.declineCode, message = t.message, captured = t.captured, refundedCents = t.refundedCents,
+        capturedCents = t.capturedCents,
         awaitingHost = t.awaitingHost,
         scenario = t.scenario.wire.takeIf { t.awaitingHost },
         cardKey = t.card?.wire.takeIf { t.awaitingHost },
@@ -519,6 +528,7 @@ data class SimTxnView(
     val message: String? = null,
     val captured: Boolean = false,
     val refundedCents: Long = 0,
+    val capturedCents: Long = 0,
     /** Host-authorized: the card is read and the reader waits for the processor's answer. */
     val awaitingHost: Boolean = false,
     /** While [awaitingHost]: the outcome button pressed (approve, insufficient_funds, do_not_honour) and the test card. */

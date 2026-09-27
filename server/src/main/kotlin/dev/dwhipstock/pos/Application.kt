@@ -350,6 +350,11 @@ fun Application.module(
         stripe = stripeService, device = terminalDevice, simulatorLinkFactory = simulatorLinkFactory,
         jpmConnector = jpmConnector, jpmOnline = jpmOnline,
     )
+    // fuel pre-authorisation: a card on a pump prepay is a hold, charged for what was pumped
+    forecourt?.let { fc ->
+        terminals.holdCaptureFor = fc::hasOpenPrepay
+        fc.cardHolds = { checkId, release, key -> terminals.captureHeld(checkId, release, key) }
+    }
     val retailService = dev.dwhipstock.pos.retail.RetailService(
         config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup(), ageCheckMode)
     if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
