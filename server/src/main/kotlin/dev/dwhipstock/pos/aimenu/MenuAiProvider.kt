@@ -60,7 +60,7 @@ private fun b64(bytes: ByteArray) = Base64.getEncoder().encodeToString(bytes)
 /**
  * Gemini Interactions API (`POST /v1beta/interactions`): new keys get a 404 on
  * the old `generateContent` endpoint. JSON output via `response_format`.
- * A 503 ("high demand") is retried once after a short pause, then tried once on
+ * A 503 ("high demand") is retried once after a short pause; a 503 or 429 (daily quota) is then tried once on
  * [FALLBACK_MODEL] before the usual error is thrown.
  */
 class GeminiMenuProvider(
@@ -104,7 +104,8 @@ class GeminiMenuProvider(
         }
         var res = post(model)
         if (res.status == 503) { pause(RETRY_PAUSE_MS); res = post(model) }
-        if (res.status == 503 && model != FALLBACK_MODEL) res = post(FALLBACK_MODEL)
+        // busy, or this model's daily free quota used up: the fallback model has its own quota
+        if ((res.status == 503 || res.status == 429) && model != FALLBACK_MODEL) res = post(FALLBACK_MODEL)
         val json = parseJsonObject(res.text)
         if (res.status !in 200..299) throw failure("Gemini", res, json)
         val status = json?.get("status").str()
