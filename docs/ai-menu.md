@@ -176,3 +176,45 @@ the store offline the item is disabled with a note; hand-made custom objects
 always work. `POST /floor-objects/ai-suggest` (multipart photo + managerPin).
 Floor objects are not mirrored to the portal. Tested with the fake provider in
 `FloorObjectKindsTest` and `client/test/room_objects_test.dart`.
+
+## Floor plan: "Set up from picture"
+
+In the floor-plan editor (manager PIN), the sparkle menu has "Set up from
+picture…": take or pick (file pick on Windows) 1 to 4 pictures of one room: a
+photo of the real room, a hand sketch on paper, or a printed or exported floor
+plan. The same provider and key as AI menu setup read them and return a strict
+JSON layout: tables (round, square, rect, booth, seats, position and size on
+the room's 0–1000 plan, the number when one is written) and floor objects of
+the existing types, plus CUSTOM with a name and icon for anything else (a
+jukebox), and a short note of what it was not sure about.
+
+The store checks everything before the tablet sees it (`RoomLayoutRules`):
+known shapes and types only, everything clamped into the room, seats 1–20, at
+most 80 tables and 40 objects, no table on top of another (nudged to the
+nearest free spot, else dropped), and table numbers that never collide with a
+live table anywhere in the store (the picture's own number when free, else the
+lowest free one, with the room's label prefix). Writing in the pictures is
+data; off-topic pictures, an injection attempt or an unreadable reply get the
+fixed reply, never the model's words. The pictures are sent once and kept
+nowhere; each call is in the AI request log (kind `room_layout`).
+
+The tablet draws the layout as a ghost over the room with a list (N tables,
+M seats, objects, what was skipped). The manager drags or removes ghost items;
+when the room already has tables they choose **Replace** (clear the room
+first) or **Add to room**. Tables with an open bill are never removed or
+moved: a replace keeps them and the new tables avoid them. Apply is checked
+again, all or nothing, and saved as a `room` change set: the snackbar offers
+Revert, and "Rooms set up by AI" in the same menu lists them with Revert
+(tables it removed are restored, the ones it added are removed; a table that
+has an open bill by then blocks the revert). With AI menu off or the store
+offline the item is disabled with a note.
+
+```
+POST /zones/{zoneId}/ai-layout         multipart 1–4 pictures + managerPin → layout to preview
+POST /zones/{zoneId}/ai-layout/apply   {managerPin, proposalId, mode replace|merge, tables, objects} → change set
+GET  /menu-ai/history?source=room      the floor-plan change sets (revert via /menu-ai/history/{setId}/revert)
+```
+
+Tested with a fake provider in `RoomFromPhotoTest` (a good layout, overlaps,
+out of bounds, unknown types, huge counts, number collisions, an open bill
+protected, revert) and `client/test/room_layout_test.dart` (the preview).

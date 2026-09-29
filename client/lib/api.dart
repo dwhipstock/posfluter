@@ -776,6 +776,84 @@ class Api {
     );
   }
 
+  /// "Set up from picture": 1–4 pictures of one room (a photo, a sketch, a
+  /// printed plan) → a proposed layout to preview. Nothing changes; the store
+  /// drops the pictures after the call. Uses the AI menu add-on.
+  static Future<RoomLayoutProposal> roomLayoutFromPhotos(
+    String zoneId,
+    List<({List<int> bytes, String contentType})> photos,
+    String managerPin,
+  ) async {
+    final req =
+        http.MultipartRequest(
+            'POST',
+            Uri.parse('$baseUrl/zones/$zoneId/ai-layout'),
+          )
+          ..headers['Authorization'] = 'Bearer $_token'
+          ..fields['managerPin'] = managerPin;
+    for (final (i, p) in photos.indexed) {
+      req.files.add(
+        http.MultipartFile.fromBytes(
+          'photo',
+          p.bytes,
+          filename: 'room-$i',
+          contentType: http_parser.MediaType.parse(p.contentType),
+        ),
+      );
+    }
+    if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
+    final res = await http.Response.fromStream(
+      await req.send(),
+    ).timeout(_aiTimeout);
+    _throwOnError(res);
+    return RoomLayoutProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// Apply the layout as the manager left it in the preview. [mode]: replace
+  /// (clear the room first; tables with an open bill stay) | merge.
+  static Future<RoomLayoutApplyResult> roomLayoutApply(
+    String zoneId,
+    String proposalId,
+    String mode,
+    List<TableInfo> tables,
+    List<FloorObject> objects,
+    String managerPin,
+  ) async {
+    final res = await _send(
+      () => http.post(
+        Uri.parse('$baseUrl/zones/$zoneId/ai-layout/apply'),
+        headers: _headers,
+        body: jsonEncode({
+          'managerPin': managerPin,
+          'proposalId': proposalId,
+          'mode': mode,
+          'tables': [for (final t in tables) roomTableJson(t)],
+          'objects': [for (final o in objects) roomObjectJson(o)],
+        }),
+      ),
+      operation: 'POST ai-layout/apply',
+    );
+    _throwOnError(res);
+    return RoomLayoutApplyResult.fromJson(
+      jsonDecode(utf8.decode(res.bodyBytes)),
+    );
+  }
+
+  /// The floor-plan "set up from picture" updates, newest first (revert with
+  /// [menuAiRevert]).
+  static Future<List<MenuChangeSet>> roomLayoutHistory() async {
+    final res = await http
+        .get(
+          Uri.parse('$baseUrl/menu-ai/history?source=room'),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 10));
+    _throwOnError(res);
+    return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
+        .map((j) => MenuChangeSet.fromJson(j))
+        .toList();
+  }
+
   /// Hard delete — nothing references a floor object.
   static Future<void> deleteObject(String objectId, String managerPin) async =>
       _post('/objects/$objectId/delete', {'managerPin': managerPin});
@@ -2310,6 +2388,106 @@ class RoomObjectSuggestion {
         height: (j['height'] as num?)?.toInt() ?? 100,
       );
 }
+
+/// A proposed room layout ("set up from picture"), already checked by the
+/// store: tables and objects drawn with the usual widgets as a ghost.
+class RoomLayoutProposal {
+  final String proposalId, zoneId;
+  final List<TableInfo> tables;
+  final List<FloorObject> objects;
+
+  /// What the AI was not sure about; what the store dropped or fixed.
+  final String notes;
+  final List<String> rejected;
+
+  /// Live tables in the room now; those with an open bill (never touched).
+  final int existingTables;
+  final List<String> protectedTables;
+
+  /// off_topic | no_change: show [message] (a fixed reply), no layout.
+  final String? refusal, message;
+  const RoomLayoutProposal({
+    required this.proposalId,
+    required this.zoneId,
+    required this.tables,
+    required this.objects,
+    this.notes = '',
+    this.rejected = const [],
+    this.existingTables = 0,
+    this.protectedTables = const [],
+    this.refusal,
+    this.message,
+  });
+  factory RoomLayoutProposal.fromJson(Map<String, dynamic> j) =>
+      RoomLayoutProposal(
+        proposalId: j['proposalId'] as String? ?? '',
+        zoneId: j['zoneId'] as String? ?? '',
+        tables: ((j['tables'] as List?) ?? const [])
+            .map((t) => TableInfo.fromJson(t))
+            .toList(),
+        objects: ((j['objects'] as List?) ?? const [])
+            .map((o) => FloorObject.fromJson(o))
+            .toList(),
+        notes: j['notes'] as String? ?? '',
+        rejected: ((j['rejected'] as List?) ?? const []).cast<String>(),
+        existingTables: (j['existingTables'] as num?)?.toInt() ?? 0,
+        protectedTables: ((j['protectedTables'] as List?) ?? const [])
+            .cast<String>(),
+        refusal: j['refusal'] as String?,
+        message: j['message'] as String?,
+      );
+}
+
+class RoomLayoutApplyResult {
+  final String changeSetId;
+  final int added, removed;
+  final List<TableInfo> tables;
+  final List<FloorObject> objects;
+  const RoomLayoutApplyResult(
+    this.changeSetId,
+    this.added,
+    this.removed,
+    this.tables,
+    this.objects,
+  );
+  factory RoomLayoutApplyResult.fromJson(Map<String, dynamic> j) =>
+      RoomLayoutApplyResult(
+        j['changeSetId'] as String? ?? '',
+        (j['added'] as num?)?.toInt() ?? 0,
+        (j['removed'] as num?)?.toInt() ?? 0,
+        ((j['tables'] as List?) ?? const [])
+            .map((t) => TableInfo.fromJson(t))
+            .toList(),
+        ((j['objects'] as List?) ?? const [])
+            .map((o) => FloorObject.fromJson(o))
+            .toList(),
+      );
+}
+
+/// A previewed table as the apply call wants it (its number from the label).
+Map<String, dynamic> roomTableJson(TableInfo t) => {
+  'x': t.x,
+  'y': t.y,
+  'width': t.width,
+  'height': t.height,
+  'rotation': t.rotation,
+  'shape': t.shape,
+  'seats': t.seats,
+  'number': int.tryParse(RegExp(r'(\d+)$').firstMatch(t.label)?[1] ?? ''),
+};
+
+Map<String, dynamic> roomObjectJson(FloorObject o) => {
+  'type': o.type,
+  'x': o.x,
+  'y': o.y,
+  'width': o.width,
+  'height': o.height,
+  'rotation': o.rotation,
+  'labelFr': o.labelFr,
+  'labelEn': o.labelEn,
+  'icon': o.icon,
+  'shape': o.shape,
+};
 
 class TableInfo {
   final String id, label;
