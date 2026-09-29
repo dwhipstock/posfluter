@@ -71,6 +71,17 @@ class MenuAiProvidersTest {
     }
 
     @Test
+    fun geminiQuotaUsedUpFallsBackWithoutPausing() {
+        val quota = 429 to """{"error":{"message":"Quota exceeded for metric generate_content_free_tier_requests"}}"""
+        val pauses = mutableListOf<Long>()
+        val http = Script(quota, 200 to geminiOk)
+        assertEquals("""{"ops":[]}""", GeminiMenuProvider(key, http, pause = { pauses += it }).complete("s", "u", emptyList()))
+        assertEquals(listOf(GeminiMenuProvider.DEFAULT_MODEL, GeminiMenuProvider.FALLBACK_MODEL),
+            http.requests.map { Regex("\"model\":\"([^\"]+)\"").find(it.bodyText)!!.groupValues[1] })
+        assertEquals(0, pauses.size)
+    }
+
+    @Test
     fun openAiSendsJsonObjectModeAndReadsTheMessage() {
         val http = Recorder(200, """{"choices":[{"message":{"content":"{\"ops\":[]}"}}]}""")
         assertEquals("""{"ops":[]}""", OpenAiMenuProvider(key, http).complete("sys", "user", photo))
