@@ -162,41 +162,23 @@ internal object RoomLayoutRules {
     fun validate(
         tables: List<RoomTableDto>, objects: List<RoomObjectDto>,
         fixed: List<Box>, usedNumbers: Set<Int>, prefix: String,
+        /** A fresh AI proposal: stretch it to fill the room and push overlapping items apart ([spread]). */
+        spread: Boolean = false,
     ): Result {
         val rejected = mutableListOf<String>()
         if (tables.size > MAX_TABLES) rejected += "${tables.size - MAX_TABLES} table(s) over the $MAX_TABLES limit dropped"
         if (objects.size > MAX_OBJECTS) rejected += "${objects.size - MAX_OBJECTS} object(s) over the $MAX_OBJECTS limit dropped"
 
-        val taken = fixed.toMutableList()
-        val placed = mutableListOf<RoomTableDto>()
-        tables.take(MAX_TABLES).forEachIndexed { i, raw ->
+        val shaped = tables.take(MAX_TABLES).mapIndexedNotNull { i, raw ->
             val shape = TABLE_SHAPE[raw.shape.trim().uppercase()]
-            if (shape == null) { rejected += "table ${i + 1}: unknown shape '${raw.shape.take(20)}'"; return@forEachIndexed }
+            if (shape == null) { rejected += "table ${i + 1}: unknown shape '${raw.shape.take(20)}'"; return@mapIndexedNotNull null }
             val w = raw.width.coerceIn(20, 400)
             val h = (if (shape == "SQUARE") w else raw.height).coerceIn(20, 400)
-            val rot = Math.floorMod(raw.rotation, 360)
-            var x = raw.x.coerceIn(0, 1000 - w)
-            var y = raw.y.coerceIn(0, 1000 - h)
-            val spot = freeSpot(x, y, w, h, rot, taken)
-            if (spot == null) { rejected += "table ${i + 1}: no free spot, it overlapped others"; return@forEachIndexed }
-            if (spot != x to y) { x = spot.first; y = spot.second }
-            taken += Box.of(x, y, w, h, rot)
-            placed += RoomTableDto(x = x, y = y, width = w, height = h, rotation = rot, shape = shape,
-                seats = raw.seats.coerceIn(1, MAX_SEATS), number = raw.number)
+            (i + 1) to RoomTableDto(x = raw.x.coerceIn(0, 1000 - w), y = raw.y.coerceIn(0, 1000 - h), width = w, height = h,
+                rotation = Math.floorMod(raw.rotation, 360), shape = shape, seats = raw.seats.coerceIn(1, MAX_SEATS), number = raw.number)
         }
 
-        // numbers: the picture's own where free and unique, then the lowest free ones
-        val used = usedNumbers.toMutableSet()
-        val kept = placed.map { t ->
-            t.number?.takeIf { it in 1..9999 && used.add(it) }
-        }
-        var next = 1
-        val numbered = placed.mapIndexed { i, t ->
-            val n = kept[i] ?: run { while (next in used) next++; used += next; next }
-            t.copy(id = "ai-t${i + 1}", label = "$prefix-$n", number = n)
-        }
-
-        val objs = objects.take(MAX_OBJECTS).mapIndexedNotNull { i, raw ->
+        var objs = objects.take(MAX_OBJECTS).mapIndexedNotNull { i, raw ->
             val key = raw.type.trim().uppercase().replace(' ', '_').replace('-', '_')
             val type = (OBJECT_TYPE[key] ?: key).takeIf { it in FLOOR_OBJECT_TYPES }
             if (type == null) { rejected += "object ${i + 1}: unknown type '${raw.type.take(20)}'"; return@mapIndexedNotNull null }
@@ -213,7 +195,108 @@ internal object RoomLayoutRules {
                 icon = raw.icon?.lowercase()?.takeIf { it in FLOOR_OBJECT_ICONS } ?: "star",
                 shape = raw.shape?.uppercase()?.takeIf { it in FLOOR_OBJECT_SHAPES } ?: "RECT")
         }
+
+        var candidates = shaped
+        if (spread) {
+            val (ts, os) = spread(shaped.map { it.second }, objs, fixed)
+            candidates = shaped.mapIndexed { k, (n, _) -> n to ts[k] }
+            objs = os
+        }
+
+        // in a fresh proposal a table may not sit on an object either
+        val taken = (fixed + if (spread) objs.map { Box.of(it.x, it.y, it.width, it.height, it.rotation) } else emptyList())
+            .toMutableList()
+        val placed = mutableListOf<RoomTableDto>()
+        for ((n, t) in candidates) {
+            val spot = freeSpot(t.x, t.y, t.width, t.height, t.rotation, taken)
+            if (spot == null) { rejected += "table $n: no free spot, it overlapped others"; continue }
+            taken += Box.of(spot.first, spot.second, t.width, t.height, t.rotation)
+            placed += t.copy(x = spot.first, y = spot.second)
+        }
+
+        // numbers: the picture's own where free and unique, then the lowest free ones
+        val used = usedNumbers.toMutableSet()
+        val kept = placed.map { t ->
+            t.number?.takeIf { it in 1..9999 && used.add(it) }
+        }
+        var next = 1
+        val numbered = placed.mapIndexed { i, t ->
+            val n = kept[i] ?: run { while (next in used) next++; used += next; next }
+            t.copy(id = "ai-t${i + 1}", label = "$prefix-$n", number = n)
+        }
         return Result(numbered, objs, rejected)
+    }
+
+    const val MARGIN = 30
+    const val GAP = 40
+
+    /**
+     * Stretch the layout so it fills the room (a [MARGIN] from the walls), then
+     * push overlapping items apart until each is [GAP] from the next (walkways),
+     * inside the room. Sizes never change; [fixed] boxes never move; a big item
+     * (the bar, the pool table) moves less than a small one.
+     */
+    internal fun spread(
+        tables: List<RoomTableDto>, objects: List<RoomObjectDto>, fixed: List<Box>,
+    ): Pair<List<RoomTableDto>, List<RoomObjectDto>> {
+        class Item(var cx: Double, var cy: Double, val hw: Double, val hh: Double, val movable: Boolean)
+        fun item(x: Int, y: Int, w: Int, h: Int, rot: Int, movable: Boolean = true) =
+            Box.of(x, y, w, h, rot).let { Item((it.l + it.r) / 2, (it.t + it.b) / 2, (it.r - it.l) / 2, (it.b - it.t) / 2, movable) }
+        val items = tables.map { item(it.x, it.y, it.width, it.height, it.rotation) } +
+            objects.map { item(it.x, it.y, it.width, it.height, it.rotation) }
+        val moving = items
+        if (moving.isEmpty()) return tables to objects
+        val all = items + fixed.map { Item((it.l + it.r) / 2, (it.t + it.b) / 2, (it.r - it.l) / 2, (it.b - it.t) / 2, false) }
+
+        fun clamp(it: Item) {
+            it.cx = it.cx.coerceIn(it.hw, maxOf(it.hw, 1000 - it.hw))
+            it.cy = it.cy.coerceIn(it.hh, maxOf(it.hh, 1000 - it.hh))
+        }
+        // 1. fill the room, per axis: the outermost items end up MARGIN from the walls
+        fun stretch(c: (Item) -> Double, half: (Item) -> Double, set: (Item, Double) -> Unit) {
+            val lo = moving.minBy { c(it) - half(it) }
+            val hi = moving.maxBy { c(it) + half(it) }
+            val from = c(lo) to c(hi)
+            val to = (MARGIN + half(lo)) to (1000 - MARGIN - half(hi))
+            if (from.second - from.first < 1 || to.second <= to.first) return
+            val k = (to.second - to.first) / (from.second - from.first)
+            moving.forEach { set(it, to.first + (c(it) - from.first) * k) }
+        }
+        stretch({ it.cx }, { it.hw }) { it, v -> it.cx = v }
+        stretch({ it.cy }, { it.hh }) { it, v -> it.cy = v }
+        moving.forEach(::clamp)
+
+        // 2. push apart along the axis of least overlap, a GAP between items
+        for (round in 0 until 300) {
+            var moved = false
+            for (i in all.indices) for (j in i + 1 until all.size) {
+                val a = all[i]; val b = all[j]
+                if (!a.movable && !b.movable) continue
+                val ox = a.hw + b.hw + GAP - abs(a.cx - b.cx)
+                val oy = a.hh + b.hh + GAP - abs(a.cy - b.cy)
+                if (ox <= 0.5 || oy <= 0.5) continue
+                moved = true
+                val areaA = a.hw * a.hh; val areaB = b.hw * b.hh
+                val shareA = if (!a.movable) 0.0 else if (!b.movable) 1.0 else areaB / (areaA + areaB)
+                if (ox < oy) {
+                    val s = if (a.cx < b.cx || (a.cx == b.cx && i < j)) -1.0 else 1.0
+                    a.cx += s * ox * shareA; b.cx -= s * ox * (1 - shareA)
+                } else {
+                    val s = if (a.cy < b.cy || (a.cy == b.cy && i < j)) -1.0 else 1.0
+                    a.cy += s * oy * shareA; b.cy -= s * oy * (1 - shareA)
+                }
+                if (a.movable) clamp(a)
+                if (b.movable) clamp(b)
+            }
+            if (!moved) break
+        }
+
+        fun Item.x(w: Int) = (cx - w / 2.0).roundToInt()
+        fun Item.y(h: Int) = (cy - h / 2.0).roundToInt()
+        return tables.mapIndexed { k, t -> items[k].let { t.copy(x = it.x(t.width).coerceIn(0, 1000 - t.width),
+                y = it.y(t.height).coerceIn(0, 1000 - t.height)) } } to
+            objects.mapIndexed { k, o -> items[tables.size + k].let { o.copy(x = it.x(o.width).coerceIn(0, 1000 - o.width),
+                y = it.y(o.height).coerceIn(0, 1000 - o.height)) } }
     }
 
     /** (x, y) when free, else the nearest free spot within [NUDGE_RADIUS], else null. */
@@ -244,8 +327,14 @@ internal object RoomLayoutAi {
          "tables": [{"shape":"round|square|rect|booth","seats":4,"x":0,"y":0,"w":100,"h":100,"rotation":0,"number":null}],
          "objects": [{"type":"<type>","x":0,"y":0,"w":100,"h":100,"rotation":0,"nameEn":"","nameFr":"","icon":""}]}
         Rules:
-        - The room is a 1000 x 1000 plan seen from above: x to the right, y down, (x, y) is the top-left corner
-          of each thing, w and h its size. Whole numbers. Keep the room's proportions and relative positions.
+        - Draw a floor plan seen from straight above, not the camera view: work out where each thing stands on
+          the floor. The room is 1000 wide and 1000 high: x to the right, y down, (x, y) is the top-left corner
+          of each thing, w and h its size. Whole numbers. Use the WHOLE room, wall to wall, keeping the
+          relative positions; the far side of a photo is not the top edge of the plan.
+        - Leave a walkway (at least 50) between tables. The bar, the pool table and other fixtures stand along
+          or near the walls unless the pictures clearly show them in the middle.
+        - Several pictures show the SAME room from different spots: merge them into ONE plan and draw each
+          table once, even when it is seen in several pictures.
         - Sizes: a 2-seat table is about 70 x 70, a 4-seat about 100 x 100, a 6-seat rect about 180 x 110,
           a booth about 160 x 100. Tables never overlap. Seats 1 to 20: count the chairs, else guess from the size.
         - "number": the table number written on a plan or sketch, else null.

@@ -226,6 +226,29 @@ class RoomFromPhotoTest {
     }
 
     @Test
+    fun aCrammedMultiPhotoLayoutIsSpreadOverTheRoom() {
+        // a real 3-photo reply: all in the lower half, tables on the bar and the pool table
+        val tables = listOf(t(10, 640), t(15, 825, 120, 120), t(115, 645, 180, 180), t(200, 525, 120, 120),
+            t(300, 645, 130, 130), t(330, 520, 115, 115), t(585, 665, 140, 140), t(535, 535, 115, 115), t(725, 710, 125, 125))
+        val objects = listOf(RoomObjectDto(type = "BAR_FRONT", x = 600, y = 520, width = 380, height = 100),
+            RoomObjectDto(type = "POOL", x = 740, y = 600, width = 250, height = 220),
+            RoomObjectDto(type = "ENTRANCE", x = 470, y = 485, width = 80, height = 100),
+            RoomObjectDto(type = "CUSTOM", x = 400, y = 565, width = 80, height = 65, labelEn = "Armchair", icon = "plant"))
+        val r = RoomLayoutRules.validate(tables, objects, emptyList(), emptySet(), "U", spread = true)
+        assertEquals(9, r.tables.size, r.rejected.toString())
+        assertEquals(4, r.objects.size)
+        assertTrue(r.rejected.isEmpty(), r.rejected.toString())
+        // sizes kept
+        assertEquals(listOf(380 to 100, 250 to 220), r.objects.take(2).map { it.width to it.height })
+        val boxes = r.tables.map { Box.of(it.x, it.y, it.width, it.height, it.rotation) } +
+            r.objects.map { Box.of(it.x, it.y, it.width, it.height, it.rotation) }
+        for (i in boxes.indices) for (j in i + 1 until boxes.size) assertFalse(boxes[i].overlaps(boxes[j]), "$i overlaps $j")
+        boxes.forEach { assertTrue(it.l >= 0 && it.t >= 0 && it.r <= 1000 && it.b <= 1000, it.toString()) }
+        // the whole room is used, not just the lower half
+        assertTrue(boxes.minOf { it.t } < 100 && boxes.maxOf { it.b } > 900)
+    }
+
+    @Test
     fun outOfBoundsIsClampedAndSeatsLimited() {
         val r = RoomLayoutRules.validate(listOf(t(-50, 990, 900, 5, "rect", seats = 99), t(2000, -3, seats = 0)),
             emptyList(), emptyList(), emptySet(), "L")

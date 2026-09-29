@@ -278,7 +278,7 @@ class MenuAiService(
             val plan = transaction {
                 RoomLayoutRules.validate(parsed.tables, parsed.objects,
                     room.tables.filter { it[dev.dwhipstock.pos.restaurant.DiningTables.id] in room.protectedIds }.map(RoomLayoutAi::box),
-                    RoomLayoutAi.usedNumbers(), room.prefix)
+                    RoomLayoutAi.usedNumbers(), room.prefix, spread = true)
             }
             if (plan.tables.isEmpty() && plan.objects.isEmpty()) return@tracked refuse(AiGuard.Refusal.ROOM_NO_LAYOUT, plan.rejected)
             val cutoff = now() - PROPOSAL_TTL_MS
