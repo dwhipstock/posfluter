@@ -140,6 +140,21 @@ class MenuAiProvidersTest {
     }
 
     @Test
+    fun roomLayoutsUseTheLayoutModelWithMoreThinking() {
+        fun cfg(vararg kv: Pair<String, String>) = MenuAiConfig.fromProperties(Properties().apply {
+            setProperty("menu.ai", "on"); setProperty("menu.ai.provider", "gemini"); setProperty("menu.ai.gemini.apiKey", key)
+            kv.forEach { (k, v) -> setProperty(k, v) }
+        })
+        val http = Recorder(200, geminiOk)
+        MenuAiProviders.layout(cfg(), http)!!.complete("sys", "user", photo)
+        MenuAiProviders.from(cfg(), http)!!.complete("sys", "user", photo)
+        val (layout, chat) = http.requests.map { it.bodyText }
+        assertTrue(layout.contains("\"model\":\"${GeminiMenuProvider.LAYOUT_MODEL}\"") && layout.contains("\"thinking_level\":\"medium\""))
+        assertTrue(chat.contains("\"model\":\"${GeminiMenuProvider.DEFAULT_MODEL}\"") && chat.contains("\"thinking_level\":\"low\""))
+        assertEquals("gemini-x", MenuAiProviders.layout(cfg("menu.ai.layoutModel" to "gemini-x"))!!.model)
+    }
+
+    @Test
     fun abbreviations() {
         assertEquals("CS", abbrev("Caesar Salad"))
         assertEquals("PO", abbrev("Poutine"))

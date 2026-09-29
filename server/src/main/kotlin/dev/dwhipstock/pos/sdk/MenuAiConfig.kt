@@ -12,6 +12,9 @@ import java.util.Properties
  *   / `menu.ai.anthropic.apiKey` in store.properties, or `GEMINI_API_KEY` /
  *   `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` in the env (desktop / Windows / docker).
  * - optional `menu.ai.model` (the provider's model id).
+ * - optional `menu.ai.layoutModel`: the model for the room-from-picture and
+ *   object-from-photo calls only (spatial work, a one-off setup: slower is
+ *   fine). Default: Gemini's thinking flash model, else `menu.ai.model`.
  *
  * Env vars (`POS_MENU_AI`, `POS_MENU_AI_PROVIDER`, `POS_MENU_AI_MODEL`, the
  * keys) win over the `POS_CONFIG_FILE` properties file. The key is never
@@ -25,6 +28,8 @@ object MenuAiConfig {
     const val ENV_ENABLED = "POS_MENU_AI"
     const val ENV_PROVIDER = "POS_MENU_AI_PROVIDER"
     const val ENV_MODEL = "POS_MENU_AI_MODEL"
+    const val KEY_LAYOUT_MODEL = "menu.ai.layoutModel"
+    const val ENV_LAYOUT_MODEL = "POS_MENU_AI_LAYOUT_MODEL"
 
     enum class Provider(val wire: String, val keyProperty: String?, val keyEnv: String?) {
         GEMINI("gemini", "menu.ai.gemini.apiKey", "GEMINI_API_KEY"),
@@ -50,6 +55,7 @@ object MenuAiConfig {
         val model: String?,
         val source: String,
         val warning: String? = null,
+        val layoutModel: String? = null,
     ) {
         val disabled: Disabled? = when {
             !enabledFlag -> Disabled.MENU_AI_OFF
@@ -105,6 +111,7 @@ object MenuAiConfig {
             model = pick(ENV_MODEL, KEY_MODEL),
             source = key?.second ?: source,
             warning = warnings.takeIf { it.isNotEmpty() }?.joinToString("; "),
+            layoutModel = pick(ENV_LAYOUT_MODEL, KEY_LAYOUT_MODEL),
         )
     }
 

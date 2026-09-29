@@ -493,10 +493,10 @@ class L {
     'Braucht die KI-Kartenerstellung und Internet.',
   );
   String get roomFromPictureWorking => _t(
-    'L’IA dessine la salle…',
-    'AI is drawing the room…',
-    'La IA dibuja la sala…',
-    'Die KI zeichnet den Raum…',
+    'L’IA dessine la salle… (jusqu’à une minute)',
+    'AI is drawing the room… this can take up to a minute',
+    'La IA dibuja la sala… puede tardar hasta un minuto',
+    'Die KI zeichnet den Raum… das kann bis zu einer Minute dauern',
   );
   String get roomLayoutHistory => _t(
     'Salles créées par l’IA',
