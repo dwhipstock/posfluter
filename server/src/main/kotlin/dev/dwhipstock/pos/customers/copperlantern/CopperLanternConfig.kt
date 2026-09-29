@@ -48,7 +48,8 @@ class CopperLanternConfig(
     // extra names live in the translations table)
     // Express is the quick-serve counter (no floor plan, numbered orders)
     override val profile = StoreProfile.QUEBEC_PUB.copy(
-        locales = StoreProfile.QUEBEC_PUB.locales + listOf(LocaleCode.ES, LocaleCode.DE),
+        // English first: the demo is presented in English (the first language is the default)
+        locales = listOf(LocaleCode.EN, LocaleCode.FR, LocaleCode.ES, LocaleCode.DE),
         kind = if (venue.quickServe) StoreProfile.Kind.QUICK_SERVE else StoreProfile.Kind.RESTAURANT,
     )
 

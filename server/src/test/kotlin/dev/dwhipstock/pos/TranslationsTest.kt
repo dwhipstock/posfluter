@@ -21,8 +21,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Copper Lantern's extra languages: the tablet offers fr, en, es, de; names
- * beyond the fr / en catalog slots come from the translations table (seeded
+ * Copper Lantern's extra languages: the tablet offers en, fr, es, de; names
+ * beyond the en / fr catalog slots come from the translations table (seeded
  * for the demo in es and de) and fall back to English, then French.
  */
 class TranslationsTest {
@@ -49,7 +49,7 @@ class TranslationsTest {
     fun copperLanternSpeaksFourLanguagesButSlipsStayTwo() = testApplication {
         store()
         val health = Json.parseToJsonElement(client.get("/health").bodyAsText()).jsonObject
-        assertEquals(listOf("fr", "en", "es", "de"), health["locales"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("en", "fr", "es", "de"), health["locales"]!!.jsonArray.map { it.jsonPrimitive.content })
         val config = CopperLanternConfig(
             settings = dev.dwhipstock.pos.base.SettingsRepository(),
             printer = dev.dwhipstock.pos.sdk.PrinterAdapter.VirtualPrinter(tempDir("r"), tempDir("b")),

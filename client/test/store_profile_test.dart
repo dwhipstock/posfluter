@@ -63,7 +63,7 @@ void main() {
     // an older store says nothing: the pub defaults
     final old = StoreProfile.fromHealth({'status': 'ok', 'venue': 'x'});
     expect(old.currency, 'CAD');
-    expect(old.locales, ['fr', 'en']);
+    expect(old.locales, ['en', 'fr']);
     expect(old.isRetail, isFalse);
   });
 

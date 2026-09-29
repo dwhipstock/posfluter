@@ -60,7 +60,7 @@ class QuickServeTest {
         assertEquals(StoreProfile.Kind.QUICK_SERVE, config.profile.kind)
         assertEquals("express", config.venueId)
         assertEquals("copper-lantern", config.brand)
-        assertEquals(listOf("fr", "en", "es", "de"), config.profile.locales.map { it.tag })
+        assertEquals(listOf("en", "fr", "es", "de"), config.profile.locales.map { it.tag })
         assertEquals(StoreProfile.Kind.RESTAURANT,
             CopperLanternConfig(venue = CopperLanternVenue.PLATEAU, settings = SettingsRepository(),
                 printer = PrinterAdapter.VirtualPrinter("r", "b"), publicBaseUrl = "http://x").profile.kind)

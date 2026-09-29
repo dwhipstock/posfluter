@@ -61,8 +61,8 @@ class KioskController extends ChangeNotifier {
   String? storeUrl, message;
   String storeName = '';
   String currency = 'CAD';
-  List<String> locales = const ['fr', 'en', 'es', 'de'];
-  String lang = 'fr';
+  List<String> locales = const ['en', 'fr', 'es', 'de'];
+  String lang = 'en';
   bool busy = false, offline = false;
 
   List<Item> items = const [];
@@ -212,7 +212,7 @@ class KioskController extends ChangeNotifier {
     result = null;
     message = null;
     busy = false;
-    lang = locales.isEmpty ? 'fr' : locales.first;
+    lang = locales.isEmpty ? 'en' : locales.first;
     stage = KioskStage.welcome;
     _changed();
   }

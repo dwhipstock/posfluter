@@ -29,7 +29,7 @@ class KioskConfig {
     j['storeName'] as String? ?? '',
     j['currency'] as String? ?? 'CAD',
     [
-      for (final l in (j['locales'] as List? ?? const ['fr', 'en']))
+      for (final l in (j['locales'] as List? ?? const ['en', 'fr']))
         if (l is String) l,
     ],
   );
