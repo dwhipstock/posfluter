@@ -246,6 +246,9 @@ export interface ItemReportRow {
   byVenue: VenueQtyRow[];
   /** An item is one row per currency. */
   currency?: Currency;
+  /** The store's names beyond fr/en ({es: ..., de: ...}); absent from older servers. */
+  names?: Record<string, string>;
+  categoryNames?: Record<string, string>;
 }
 
 export interface ItemsReport {
@@ -275,6 +278,8 @@ export interface ZoneRow {
   checkCount: number;
   venueId: string;
   currency?: Currency;
+  /** The store's names beyond fr/en ({es: ..., de: ...}); absent from older servers. */
+  names?: Record<string, string>;
 }
 
 export interface ZoneTableRow {
@@ -286,6 +291,8 @@ export interface ZoneTableRow {
   checkCount: number;
   venueId: string;
   currency?: Currency;
+  /** The store's names beyond fr/en ({es: ..., de: ...}); absent from older servers. */
+  zoneNames?: Record<string, string>;
 }
 
 export interface TablesReport {
@@ -577,6 +584,8 @@ export interface MenuVariant {
   labelEn: string;
   priceCents: number;
   sortOrder: number;
+  /** The store's names beyond fr/en ({es: ..., de: ...}); absent from older servers. */
+  names?: Record<string, string>;
 }
 
 export interface MenuItem {
@@ -598,6 +607,8 @@ export interface MenuItem {
   brand?: string | null;
   subcategory?: string | null;
   size?: string | null;
+  /** The store's names beyond fr/en ({es: ..., de: ...}); absent from older servers. */
+  names?: Record<string, string>;
 }
 
 export interface MenuCategory {
@@ -605,6 +616,8 @@ export interface MenuCategory {
   nameFr: string;
   nameEn: string;
   sortOrder: number;
+  /** The store's names beyond fr/en ({es: ..., de: ...}); absent from older servers. */
+  names?: Record<string, string>;
 }
 
 /** One filter value and how many products carry it (under the other filters). */

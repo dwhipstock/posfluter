@@ -7,6 +7,7 @@ import dev.dwhipstock.poscloud.MoneyScope
 import dev.dwhipstock.poscloud.NotFoundException
 import dev.dwhipstock.poscloud.PayloadTooLargeException
 import dev.dwhipstock.poscloud.VenueScope
+import dev.dwhipstock.poscloud.catalog.Catalog
 import dev.dwhipstock.poscloud.db.CashMovements
 import dev.dwhipstock.poscloud.db.CatalogCategories
 import dev.dwhipstock.poscloud.db.CheckLines
@@ -517,14 +518,18 @@ data class ItemRow(
     val categoryId: String?, val categoryNameFr: String?, val categoryNameEn: String?,
     val qty: Int, val revenueCents: Long,
     val byVenue: List<VenueQtyRow> = emptyList(),
-    val currency: String = "CAD")
+    val currency: String = "CAD",
+    // the catalog's names beyond fr/en (es, de, ...; 026)
+    val names: Map<String, String> = emptyMap(),
+    val categoryNames: Map<String, String> = emptyMap())
 
 @Serializable
 data class CategoryRow(
     val categoryId: String?, val nameFr: String?, val nameEn: String?,
     val qty: Int, val revenueCents: Long,
     val byVenue: List<VenueQtyRow> = emptyList(),
-    val currency: String = "CAD")
+    val currency: String = "CAD",
+    val names: Map<String, String> = emptyMap())
 
 @Serializable
 data class VenueHourRow(val venueId: String, val grossCents: Long, val checkCount: Int, val currency: String = "CAD")
@@ -553,12 +558,15 @@ data class HourlyResponse(val rows: List<HourRow>, val byVenue: List<VenueTotalR
 @Serializable
 data class ZoneRow(
     val zoneId: String?, val zoneNameFr: String?, val zoneNameEn: String?,
-    val grossCents: Long, val checkCount: Int, val venueId: String, val currency: String = "CAD")
+    val grossCents: Long, val checkCount: Int, val venueId: String, val currency: String = "CAD",
+    // the zone's names beyond fr/en (es, de, ...; 026)
+    val names: Map<String, String> = emptyMap())
 
 @Serializable
 data class TableRow(
     val zoneId: String?, val zoneNameEn: String?, val tableId: String?, val tableLabel: String?,
-    val grossCents: Long, val checkCount: Int, val venueId: String, val currency: String = "CAD")
+    val grossCents: Long, val checkCount: Int, val venueId: String, val currency: String = "CAD",
+    val zoneNames: Map<String, String> = emptyMap())
 
 @Serializable
 data class TablesResponse(
@@ -1294,6 +1302,7 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
         val ctx = reportCtx(call, fx)
         val response = transaction {
             val categoryNames = categoryNames(ctx)
+            val extra = Catalog.namesIn(ctx.tenantId, ctx.venues.map { it.id }, listOf("item", "category"))
             val items = itemSums(ctx)
             val rows = items
                 // an item is one row per currency: never add CAD and USD revenue
@@ -1316,6 +1325,8 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
                             by[v.id]?.let { g -> VenueQtyRow(v.id, g.sumOf { it.qty }, g.sumOf { it.revenue }, v.currency) }
                         },
                         currency = currency,
+                        names = extra.of("item", first.venueId, itemId),
+                        categoryNames = extra.of("category", first.venueId, first.categoryId),
                     )
                 }.sortedByDescending { comparable(ctx, it.currency, it.revenueCents) }
             val checks = checkSums(ctx, "CLOSED", by = "store").groupBy { it.venueId }
@@ -1333,6 +1344,7 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
         val ctx = reportCtx(call, fx)
         val response = transaction {
             val categoryNames = categoryNames(ctx)
+            val extra = Catalog.namesIn(ctx.tenantId, ctx.venues.map { it.id }, listOf("category"))
             val closed = closedChecks(ctx)
             val lines = linesOf(ctx, closed)
             val rows = lines
@@ -1348,6 +1360,7 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
                         revenueCents = group.sumOf { it[CheckLines.lineTotalCents] },
                         byVenue = lineSplit(ctx, group),
                         currency = currency,
+                        names = extra.of("category", group.first()[CheckLines.venueId], categoryId),
                     )
                 }.sortedByDescending { comparable(ctx, it.currency, it.revenueCents) }
             CategoriesResponse(rows, lineTotals(ctx, closed, lines), ctx.money())
@@ -1378,12 +1391,14 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
         val ctx = reportCtx(call, fx)
         val response = transaction {
             val closed = closedChecks(ctx)
+            val zoneNames = Catalog.namesIn(ctx.tenantId, ctx.venues.map { it.id }, listOf("zone"))
             // zone and table ids repeat across stores: group within a store
             val byZone = closed.groupBy { it[Checks.venueId] to it[Checks.zoneId] }.map { (key, group) ->
                 val first = group.first()
                 ZoneRow(
                     key.second, first[Checks.zoneNameFr], first[Checks.zoneNameEn],
                     group.sumOf(::gross), group.size, key.first, ctx.currencyOf(key.first),
+                    zoneNames.exact("zone", key.first, key.second),
                 )
             }.sortedByDescending { comparable(ctx, it.currency, it.grossCents) }
             val byTable = closed.groupBy { it[Checks.venueId] to it[Checks.tableId] }.map { (key, group) ->
@@ -1391,6 +1406,7 @@ fun Route.reportRoutes(fx: Fx.Rates = Fx.Rates.NONE) {
                 TableRow(
                     first[Checks.zoneId], first[Checks.zoneNameEn], key.second, first[Checks.tableLabel],
                     group.sumOf(::gross), group.size, key.first, ctx.currencyOf(key.first),
+                    zoneNames.exact("zone", key.first, first[Checks.zoneId]),
                 )
             }.sortedByDescending { comparable(ctx, it.currency, it.grossCents) }
             TablesResponse(byZone, byTable, checkTotals(ctx, closed), ctx.money())

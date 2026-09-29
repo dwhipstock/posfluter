@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { messages, type MsgKey } from "./messages";
 import { es } from "./messages.es";
 import { de } from "./messages.de";
-import { translate } from "./translate";
+import { pickName, translate } from "./translate";
 import { makeFmt } from "./format";
 import { count, decimal, money, moneyCents } from "../format";
 
@@ -75,4 +75,30 @@ test("German numbers and dates: 1.234,56 and dd.MM.yyyy, the store's own currenc
   assert.equal(fmt.day("2026-01-08"), "08.01.");
   assert.equal(fmt.dateTime("2026-01-08T20:14:00.000-05:00"), "08.01. 20:14");
   assert.equal(fmt.rangeLabel({ from: "2026-01-08", to: "2026-01-08" } as never), "08.01.2026");
+});
+
+test("catalog names: the store's own es/de name, else English, else French", () => {
+  const names = { es: "Cerveza", de: "Bier" };
+  assert.equal(pickName("de", "Bière", "Beer", names), "Bier");
+  assert.equal(pickName("es", "Bière", "Beer", names), "Cerveza");
+  assert.equal(pickName("en", "Bière", "Beer", names), "Beer");
+  assert.equal(pickName("fr", "Bière", "Beer", names), "Bière");
+  // blank, missing or absent names fall back to English, then French
+  assert.equal(pickName("de", "Bière", "Beer", { de: "  " }), "Beer");
+  assert.equal(pickName("de", "Bière", "Beer", {}), "Beer");
+  assert.equal(pickName("es", "Bière", "Beer"), "Beer");
+  assert.equal(pickName("de", "Bière", "", null), "Bière");
+  assert.equal(pickName("fr", "", "Beer", names), "Beer");
+  assert.equal(pickName("de", null, null), "");
+});
+
+test("product counts follow the portal language, not the browser's", () => {
+  const n = count(5234, "de");
+  assert.equal(translate("de", "catalog_products", { n }), "5.234 Produkte");
+  assert.equal(translate("en", "catalog_products", { n: count(5234, "en") }), "5,234 products");
+  assert.equal(translate("fr", "catalog_products", { n: count(5234, "fr") }), "5 234 produits");
+  assert.equal(
+    translate("de", "catalog_range", { from: count(1, "de"), to: count(100, "de"), total: count(5234, "de") }),
+    "1–100 von 5.234"
+  );
 });

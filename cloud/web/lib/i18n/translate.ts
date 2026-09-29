@@ -15,3 +15,19 @@ export function translate(locale: Locale, key: MsgKey, vars?: Vars): string {
   if (vars) s = s.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? `{${k}}`));
   return s;
 }
+
+/**
+ * A data-driven name (item, category, zone): French reads French; any other
+ * locale reads the store's own name in it ([names], e.g. es/de from the
+ * tablet's translations) when there is one, else English, else French.
+ */
+export function pickName(
+  locale: Locale,
+  fr?: string | null,
+  en?: string | null,
+  names?: Record<string, string> | null
+): string {
+  if (locale === "fr") return fr || en || "";
+  const own = locale === "en" ? undefined : names?.[locale]?.trim();
+  return own || en || fr || "";
+}

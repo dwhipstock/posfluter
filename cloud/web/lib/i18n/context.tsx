@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { Locale, MsgKey } from "./messages";
-import { translate } from "./translate";
+import { pickName, translate } from "./translate";
 import { makeFmt, type Fmt } from "./format";
 
 export type { Locale } from "./messages";
@@ -17,8 +17,12 @@ interface I18n {
   toggleLocale: () => void;
   t: (key: MsgKey, vars?: Vars) => string;
   fmt: Fmt;
-  /** Data-driven bilingual names (items, categories, zones): locale first (Spanish and German read the English name). */
-  name: (fr?: string | null, en?: string | null) => string;
+  /**
+   * Data-driven names (items, categories, zones): locale first. Spanish and
+   * German read the store's own name in that language ([names]) when it sent
+   * one, else the English name.
+   */
+  name: (fr?: string | null, en?: string | null, names?: Record<string, string> | null) => string;
   /** The other language — the small secondary line; "" when redundant. */
   nameAlt: (fr?: string | null, en?: string | null) => string;
 }
@@ -58,7 +62,8 @@ export function LocaleProvider({
   const fmt = useMemo(() => makeFmt(locale, t), [locale, t]);
 
   const name = useCallback(
-    (fr?: string | null, en?: string | null) => (locale === "fr" ? fr || en || "" : en || fr || ""),
+    (fr?: string | null, en?: string | null, names?: Record<string, string> | null) =>
+      pickName(locale, fr, en, names),
     [locale]
   );
   const nameAlt = useCallback(

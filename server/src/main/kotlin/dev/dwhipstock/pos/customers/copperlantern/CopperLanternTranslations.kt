@@ -2,7 +2,8 @@ package dev.dwhipstock.pos.customers.copperlantern
 
 /**
  * Spanish and German names for the Copper Lantern demo seed (items,
- * categories, zones, floor-object captions), beyond the fr/en catalog slots.
+ * categories, zones, floor-object captions, size labels), beyond the fr/en
+ * catalog slots.
  * Written by hand and seeded into the translations table.
  */
 internal object CopperLanternTranslations {
@@ -122,5 +123,18 @@ internal object CopperLanternTranslations {
         arrayOf("floor_object", "upper-bar", "Barra de cobre", "Kupfertheke"),
         arrayOf("floor_object", "lower-pool", "Billar", "Billard"),
         arrayOf("floor_object", "sushi-counter", "Barra de sushi", "Sushi-Theke"),
+    )
+
+    /** Size / container labels by their English label: Spanish, German. */
+    val variantLabels: Map<String, Pair<String, String>> = mapOf(
+        "Regular" to ("Normal" to "Normal"),
+        "Glass" to ("Copa" to "Glas"),
+        "Bottle" to ("Botella" to "Flasche"),
+        "20 oz pint" to ("Pinta de 20 oz" to "Pint (20 oz)"),
+        "60 oz pitcher" to ("Jarra de 60 oz" to "Krug (60 oz)"),
+        "2 oz glass" to ("Copa de 2 oz" to "Glas (2 oz)"),
+        "375 ml bottle" to ("Botella de 375 ml" to "Flasche (375 ml)"),
+        "180 ml carafe" to ("Jarrita de 180 ml" to "Karaffe (180 ml)"),
+        "720 ml bottle" to ("Botella de 720 ml" to "Flasche (720 ml)"),
     )
 }

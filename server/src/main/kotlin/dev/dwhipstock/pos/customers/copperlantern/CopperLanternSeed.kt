@@ -224,11 +224,18 @@ object CopperLanternSeed {
     private fun menuFor(venue: CopperLanternVenue) =
         if (venue == CopperLanternVenue.PLATEAU) menu + plateauMenu else menu
 
+    /** Set once the portal has had this store's names beyond fr/en (a store that synced before they existed). */
+    const val NAMES_SYNCED_KEY = "translations_synced_v1"
+
     /**
      * The demo's Spanish and German names ([CopperLanternTranslations]) for
      * the things this store has, where none is set yet: runs on every boot,
      * so an already-seeded demo store picks them up and a manager's own edit
-     * is never overwritten.
+     * is never overwritten. Variant labels match on their English label.
+     * A store that already synced sends its catalog up again (one batch of
+     * `catalog.snapshot` events, zones included) when names were added, or
+     * once for names it never sent; one that never synced sends them with
+     * its first snapshot anyway.
      */
     fun seedTranslations() = transaction {
         val present = mapOf(
@@ -238,11 +245,27 @@ object CopperLanternSeed {
             Translations.FLOOR_OBJECT to FloorObjects.selectAll().map { it[FloorObjects.id] }.toSet(),
         )
         val have = Translations.selectAll().map { Triple(it[Translations.entity], it[Translations.entityId], it[Translations.lang]) }.toSet()
+        var added = 0
+        fun add(entity: String, id: String, lang: String, text: String) {
+            if (Triple(entity, id, lang) in have) return
+            Translations.set(entity, id, lang, text, sync = false)
+            added++
+        }
         for ((entity, id, es, de) in CopperLanternTranslations.rows.map { it.toList() }) {
             if (id !in present[entity].orEmpty()) continue
-            if (Triple(entity, id, "es") !in have) Translations.set(entity, id, "es", es)
-            if (Triple(entity, id, "de") !in have) Translations.set(entity, id, "de", de)
+            add(entity, id, "es", es)
+            add(entity, id, "de", de)
         }
+        ItemVariants.selectAll().where { ItemVariants.deletedAt.isNull() }.forEach { v ->
+            val (es, de) = CopperLanternTranslations.variantLabels[v[ItemVariants.labelEn]] ?: return@forEach
+            add(Translations.VARIANT, v[ItemVariants.id], "es", es)
+            add(Translations.VARIANT, v[ItemVariants.id], "de", de)
+        }
+        val synced = dev.dwhipstock.pos.db.SyncState.get(dev.dwhipstock.pos.sync.CloudSync.CATALOG_SNAPSHOT_SEQ) != null
+        if (synced && (added > 0 || dev.dwhipstock.pos.db.SyncState.get(NAMES_SYNCED_KEY) == null)) {
+            dev.dwhipstock.pos.api.writeChunkedCatalogSnapshot(reason = "translations")
+        }
+        dev.dwhipstock.pos.db.SyncState.set(NAMES_SYNCED_KEY, "1")
     }
 
     /** Empty-mode stores (POS_SEED=none): one manager so the owner can sign in and set up. */

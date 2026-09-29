@@ -908,7 +908,7 @@ class CheckService(private val config: CustomerConfig) {
      * in cash would round — the rounding and the cash total underneath it.
      * Returns the rendered text for the client preview.
      */
-    fun printBill(checkId: Int, groupId: Int? = null): String = transaction {
+    fun printBill(checkId: Int, groupId: Int? = null, lang: String? = null): String = transaction {
         val check = requireCheck(checkId)
         if (check[Checks.status] !in listOf("OPEN", "TOTAL_LOCKED")) {
             throw BadRequestException("check $checkId is ${check[Checks.status]}; no bill to print", "check_not_billable")
@@ -925,7 +925,7 @@ class CheckService(private val config: CustomerConfig) {
             cashDue = config.roundingPolicy.roundCashDue(due),
             cashRounding = config.roundingPolicy.cashAdjustment(due),
         )
-        val lines = ReceiptRenderer.render(receipt, receiptPolicyFor(check), ReceiptKind.PROVISIONAL)
+        val lines = ReceiptRenderer.render(receipt, receiptPolicyFor(check, lang), ReceiptKind.PROVISIONAL)
         val text = config.printer.printProvisional(PrintJob(checkId, lines))
         Outbox.write("check.bill_printed", "check", checkId.toString(), buildJsonObject {
             put("checkId", checkId)
@@ -950,6 +950,8 @@ class CheckService(private val config: CustomerConfig) {
         val totals = groupTotals(check, groups)[groups.indexOf(group)]
 
         val variantCounts = variantCountsOnCheck(checkId)
+        val itemNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ITEM)
+        val variantNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.VARIANT)
         val items = BillGroupAllocations
             .join(CheckLines, JoinType.INNER, BillGroupAllocations.lineId, CheckLines.id)
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
@@ -967,6 +969,8 @@ class CheckService(private val config: CustomerConfig) {
                     unitPrice = Money(row[CheckLines.unitPriceCents]),
                     lineTotal = Money(row[CheckLines.unitPriceCents] * row[BillGroupAllocations.qty]),
                     note = row[CheckLines.note],
+                    names = row[CheckLines.itemId]?.let { itemNames[it] }.orEmpty(),
+                    variantNames = if (showVariant) row[CheckLines.variantId]?.let { variantNames[it] }.orEmpty() else emptyMap(),
                 )
             }
         val tenders = Tenders.selectAll()
@@ -1010,18 +1014,39 @@ class CheckService(private val config: CustomerConfig) {
         return (method?.labelFr ?: "Comptant") to (method?.labelEn ?: "Cash")
     }
 
-    fun receiptText(checkId: Int): String = transaction {
+    fun receiptText(checkId: Int, lang: String? = null): String = transaction {
         val check = requireCheck(checkId)
         if (check[Checks.status] != "CLOSED") throw ConflictException("check $checkId is ${check[Checks.status]}; no receipt yet", "no_receipt_yet")
-        PrinterAdapter.renderText(ReceiptRenderer.render(buildReceipt(checkId), receiptPolicyFor(check)))
+        PrinterAdapter.renderText(ReceiptRenderer.render(buildReceipt(checkId), receiptPolicyFor(check, lang)))
+    }
+
+    /**
+     * Print the final receipt of a closed check again (a copy for the guest,
+     * maybe in another of the store's languages: [lang]). Returns its text.
+     */
+    fun reprintReceipt(checkId: Int, lang: String? = null): String = transaction {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] != "CLOSED") throw ConflictException("check $checkId is ${check[Checks.status]}; no receipt yet", "no_receipt_yet")
+        val lines = ReceiptRenderer.render(buildReceipt(checkId), receiptPolicyFor(check, lang))
+        config.printer.print(PrintJob(checkId, lines, meta = mapOf("reprint" to "true")))
+        PrinterAdapter.renderText(lines)
     }
 
     /**
      * Print language follows the check owner's (opener's) preference whenever a
      * message catalog for it is loaded — the venue default policy covers
-     * qr-customer-opened checks and unknown users.
+     * qr-customer-opened checks and unknown users. [lang] (one copy in another
+     * language, the tablet's long-press) wins when it is one of the store's
+     * languages; any other value is refused (400 unsupported_lang). It never
+     * changes the owner's preference.
      */
-    private fun receiptPolicyFor(check: ResultRow): dev.dwhipstock.pos.sdk.ReceiptPolicy {
+    private fun receiptPolicyFor(check: ResultRow, lang: String? = null): dev.dwhipstock.pos.sdk.ReceiptPolicy {
+        if (lang != null) {
+            val chosen = LocaleCode.of(lang)
+            if (chosen !in config.profile.locales || !Messages.supports(chosen))
+                throw BadRequestException("this store does not print in '$lang'", "unsupported_lang")
+            return config.receiptPolicy.withLocale(chosen)
+        }
         val locale = Users.selectAll().where { Users.id eq check[Checks.openedBy] }
             .firstOrNull()?.get(Users.languageCode)?.let { LocaleCode.of(it) }
         return if (locale != null && Messages.supports(locale)) config.receiptPolicy.withLocale(locale)
@@ -1043,6 +1068,8 @@ class CheckService(private val config: CustomerConfig) {
             .selectAll().where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
             .toList()
         val fuel = dev.dwhipstock.pos.forecourt.fuelLineViews(itemRows.mapNotNull { it[CheckLines.fuelSaleId] })
+        val itemNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ITEM)
+        val variantNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.VARIANT)
         val items = itemRows
             .map { row ->
                 val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
@@ -1059,6 +1086,8 @@ class CheckService(private val config: CustomerConfig) {
                     fuel = row[CheckLines.fuelSaleId]?.let { fuel[it] }?.let { f ->
                         dev.dwhipstock.pos.sdk.ReceiptFuel(f.pump, f.mode == "PREPAY", f.volumeMilli, f.priceMills)
                     },
+                    names = row[CheckLines.itemId]?.let { itemNames[it] }.orEmpty(),
+                    variantNames = if (showVariant) row[CheckLines.variantId]?.let { variantNames[it] }.orEmpty() else emptyMap(),
                 )
             }
         val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->

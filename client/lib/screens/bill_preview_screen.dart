@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
+import '../widgets/print_language_picker.dart';
 
 /// Provisional "check please" bill preview. Same paper card as the receipt
 /// preview, but the server render carries the CUSTOMER BILL header, no tender
@@ -31,10 +32,14 @@ class _BillPreviewScreenState extends State<BillPreviewScreen> {
   late String _text = widget.text;
   bool _printing = false;
 
-  Future<void> _printAgain() async {
+  Future<void> _printAgain({String? lang}) async {
     setState(() => _printing = true);
     try {
-      final text = await Api.printBill(widget.checkId, groupId: widget.groupId);
+      final text = await Api.printBill(
+        widget.checkId,
+        groupId: widget.groupId,
+        lang: lang,
+      );
       if (mounted) setState(() => _text = text);
     } catch (e) {
       if (mounted) showApiError(context, e);
@@ -73,6 +78,12 @@ class _BillPreviewScreenState extends State<BillPreviewScreen> {
                   icon: const Icon(LucideIcons.printer),
                   label: Text(l.printAgain),
                   onPressed: _printing ? null : _printAgain,
+                  onLongPress: _printing
+                      ? null
+                      : () => printInPickedLanguage(
+                          context,
+                          (lang) => _printAgain(lang: lang),
+                        ),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.fromHeight(T.minTouch),
                   ),

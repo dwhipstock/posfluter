@@ -27,7 +27,9 @@
   header h1 { color: var(--accent); font-size: 19px; letter-spacing: -.2px; }
   header .table { color: var(--muted-strong); font-size: 13px; margin-top: 2px; }
   header .lang { background: var(--accent-soft); border: 1px solid #a8c7ec; color: var(--accent);
-                 border-radius: 18px; padding: 7px 14px; font-size: 14px; font-weight: 700; }
+                 border-radius: 18px; padding: 7px 12px; font-size: 14px; font-weight: 700; flex: none;
+                 max-width: 130px; margin-left: 10px; }
+  header > div { min-width: 0; }
   .tabs { display: flex; background: var(--paper); position: sticky; top: 65px; z-index: 5;
           border-bottom: 1px solid var(--line); }
   .tabs button { flex: 1; background: none; border: 0; color: var(--muted); font-size: 15px;
@@ -113,7 +115,7 @@
     <h1>{{VENUE_NAME}}</h1>
     <div class="table" id="hdr-table"></div>
   </div>
-  <button class="lang" id="lang-btn" onclick="toggleLang()"></button>
+  <select class="lang" id="lang-sel" onchange="setLang(this.value)"></select>
 </header>
 
 <nav class="tabs">
@@ -160,13 +162,18 @@
 const TABLE_TOKEN = "{{TABLE_TOKEN}}";
 const TABLE_LABEL = "{{TABLE_LABEL}}";
 
-// The pubs' two languages, fr + en, persisted per phone. French: vous, and a
-// no-break space before : ; ! ? (LocaleCoverageTest reads these tables).
-let lang = localStorage.getItem("menu_lang") || "en";
+// The store's languages (GET /health): fr + en at the pubs, + es and de at
+// Copper Lantern. The guest's pick is kept per phone; the first visit takes
+// the phone's own language when the store speaks it. French: vous, and a
+// no-break space before : ; ! ?; German: Sie; Spanish: usted
+// (LocaleCoverageTest reads these tables).
+const savedLang = (() => { try { return localStorage.getItem("menu_lang"); } catch (_) { return null; } })();
+let lang = savedLang || "en";
+const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch" };
 const STR = {
   fr: {
     orderFromPhone: "Table " + TABLE_LABEL + " — commandez de votre téléphone",
-    langBtn: "English",
+    langLabel: "Langue",
     basket: "Panier", send: "Envoyer la commande", note: "Note (facultative)",
     addToBasket: "＋ Ajouter au panier", sizes: "formats",
     doneTitle: "Commande envoyée !", doneText: "Notre équipe confirmera votre commande sous peu.",
@@ -182,7 +189,7 @@ const STR = {
   },
   en: {
     orderFromPhone: "Table " + TABLE_LABEL + " — order from your phone",
-    langBtn: "Français",
+    langLabel: "Language",
     basket: "Basket", send: "Send order", note: "Note (optional)",
     addToBasket: "＋ Add to basket", sizes: "sizes",
     doneTitle: "Order sent!", doneText: "Staff will confirm your order shortly.",
@@ -196,26 +203,75 @@ const STR = {
     billLoading: "Loading your bill…",
     menuLoading: "Loading menu…", menuUnavailable: "The menu is unavailable right now. Please try again.",
   },
+  es: {
+    orderFromPhone: "Mesa " + TABLE_LABEL + " — pida desde su teléfono",
+    langLabel: "Idioma",
+    basket: "Carrito", send: "Enviar pedido", note: "Nota (opcional)",
+    addToBasket: "＋ Añadir al carrito", sizes: "tamaños",
+    doneTitle: "¡Pedido enviado!", doneText: "El personal confirmará su pedido en breve.",
+    orderMore: "Pedir algo más", failed: "No se pudo enviar. Inténtelo de nuevo.",
+    billLocked: "Su cuenta se está pagando; consulte al personal.",
+    viewCart: "Ver carrito", addedToast: "Añadido ✓", subtotal: "Subtotal (impuestos aparte)", billSubtotal: "Subtotal",
+    tabMenu: "Menú", tabBill: "Su cuenta", seeBill: "Ver la cuenta",
+    onBill: "En su cuenta", beingConfirmed: "Pendiente de confirmación", total: "Total",
+    rounding: "Redondeo", cashTotal: "Total en efectivo",
+    noOrders: "Aún no hay pedidos: consulte el menú para empezar.", billPaying: "La cuenta se está pagando",
+    billLoading: "Cargando su cuenta…",
+    menuLoading: "Cargando el menú…", menuUnavailable: "El menú no está disponible en este momento. Inténtelo de nuevo.",
+  },
+  de: {
+    orderFromPhone: "Tisch " + TABLE_LABEL + " – bestellen Sie per Handy",
+    langLabel: "Sprache",
+    basket: "Warenkorb", send: "Bestellung senden", note: "Notiz (optional)",
+    addToBasket: "＋ In den Warenkorb", sizes: "Größen",
+    doneTitle: "Bestellung gesendet!", doneText: "Unser Team bestätigt Ihre Bestellung in Kürze.",
+    orderMore: "Mehr bestellen", failed: "Senden fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    billLocked: "Ihre Rechnung wird gerade bezahlt – bitte wenden Sie sich an das Personal.",
+    viewCart: "Warenkorb ansehen", addedToast: "Hinzugefügt ✓", subtotal: "Zwischensumme (zzgl. Steuern)", billSubtotal: "Zwischensumme",
+    tabMenu: "Speisekarte", tabBill: "Ihre Rechnung", seeBill: "Rechnung ansehen",
+    onBill: "Auf Ihrer Rechnung", beingConfirmed: "Wird bestätigt", total: "Summe",
+    rounding: "Rundung", cashTotal: "Summe bar",
+    noOrders: "Noch keine Bestellungen – stöbern Sie in der Speisekarte.", billPaying: "Rechnung wird bezahlt",
+    billLoading: "Ihre Rechnung wird geladen…",
+    menuLoading: "Speisekarte wird geladen…", menuUnavailable: "Die Speisekarte ist gerade nicht verfügbar. Bitte versuchen Sie es erneut.",
+  },
 };
-const T = () => STR[lang];
-const iname = i => lang === "en" ? i.nameEn : i.nameFr;
-const inameAlt = i => lang === "en" ? i.nameFr : i.nameEn;
-const idesc = i => lang === "en" ? i.descriptionEn : i.descriptionFr;
-const vlabel = v => lang === "en" ? v.labelEn : v.labelFr;
+const T = () => STR[lang] || STR.en;
+// A name in the guest's language: French and English are the catalog's own
+// two; Spanish and German read the row's `names` (the translations table),
+// else English, else French.
+const nm = (o, fr, en) => lang === "fr" ? (fr || en || "")
+  : lang === "en" ? (en || fr || "")
+  : ((o && o.names && o.names[lang]) || en || fr || "");
+const iname = i => nm(i, i.nameFr, i.nameEn);
+// the other official language as a small second line (French and English only)
+const inameAlt = i => lang === "fr" ? i.nameEn : lang === "en" ? i.nameFr : "";
+const idesc = i => (lang === "fr" ? i.descriptionFr : i.descriptionEn) || "";
+const vlabel = v => nm(v, v.labelFr, v.labelEn);
 
 let items = [], categories = [], cat = null, basket = [];
 let menuError = false;
 const catName = c => {
   const row = categories.find(x => x.id === c);
-  return row ? (lang === "en" ? row.nameEn : row.nameFr) : c;
+  return row ? nm(row, row.nameFr, row.nameEn) : c;
 };
 
-// The store's currency (GET /health); a store without French (the US shop)
-// shows English only, no language button.
+// The store's currency (GET /health), written the way the language writes
+// it: "12,99 $" (fr), "$12.99" (en), "12,99 $" (es, de: their own figures,
+// the plain symbol). One language: no picker.
 let store = { locales: ["fr", "en"], currency: "CAD", country: "CA" };
-const cad = cents => (cents / 100).toLocaleString((lang === "fr" ? "fr-" : "en-") + store.country, {
+const cad = cents => (cents / 100).toLocaleString(lang + "-" + store.country, {
   style: "currency", currency: store.currency,
+  ...(lang === "de" || lang === "es" ? { currencyDisplay: "narrowSymbol" } : {}),
 });
+// the languages this page can show, in the store's order
+const guestLangs = () => store.locales.filter(l => STR[l]);
+/** The saved pick, else the phone's language, else English, else the store's first. */
+function chooseLang(saved, phone, langs) {
+  if (saved && langs.includes(saved)) return saved;
+  const own = (phone || []).map(x => String(x).slice(0, 2).toLowerCase()).find(l => langs.includes(l));
+  return own || (langs.includes("en") ? "en" : langs[0] || "en");
+}
 async function loadStore() {
   try {
     const r = await fetch("/health");
@@ -224,15 +280,17 @@ async function loadStore() {
     if (h && h.currency) store.currency = h.currency;
     if (h && h.country) store.country = h.country;
   } catch (_) {}
-  if (!store.locales.includes("fr")) {
-    lang = "en";
-    document.getElementById("lang-btn").style.display = "none";
-  }
+  const langs = guestLangs();
+  lang = chooseLang(savedLang, navigator.languages || [navigator.language], langs);
+  const sel = document.getElementById("lang-sel");
+  sel.innerHTML = langs.map(l => `<option value="${l}">${LANG_NAMES[l] || l}</option>`).join("");
+  sel.style.display = langs.length > 1 ? "" : "none";
 }
 
-function toggleLang() {
-  lang = lang === "fr" ? "en" : "fr";
-  localStorage.setItem("menu_lang", lang);
+function setLang(l) {
+  if (!STR[l]) return;
+  lang = l;
+  try { localStorage.setItem("menu_lang", lang); } catch (_) {}
   render();
 }
 
@@ -253,7 +311,9 @@ async function load() {
 function render() {
   document.documentElement.lang = lang;
   document.getElementById("hdr-table").textContent = T().orderFromPhone;
-  document.getElementById("lang-btn").textContent = T().langBtn;
+  const sel = document.getElementById("lang-sel");
+  sel.value = lang;
+  sel.setAttribute("aria-label", T().langLabel);
   document.getElementById("submit").textContent = T().send;
   document.getElementById("done-title").textContent = T().doneTitle;
   document.getElementById("done-text").textContent = T().doneText;
@@ -308,7 +368,7 @@ function renderCart() {
     `🛒 ${T().basket} (${count}) · ${cad(cartSubtotal())}`;
   document.getElementById("cart-lines").innerHTML = basket.map((b, ix) => `
     <div class="bline">
-      <span>${esc(lang === "en" ? b.nameEn : b.nameFr)}${b.variantId && b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
+      <span>${esc(nm(b, b.nameFr, b.nameEn))}${b.variantId && b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
       <span class="bqty">
         <button class="step" onclick="bumpQty(${ix},-1)">−</button>
         <b>${b.qty}</b>
@@ -361,7 +421,7 @@ function add(itemId) {
   const same = basket.find(b => b.variantId === variant.id && b.note === note);
   if (same) same.qty++;
   else basket.push({ itemId, variantId: variant.id, qty: 1, note,
-                     nameFr: item.nameFr, nameEn: item.nameEn,
+                     nameFr: item.nameFr, nameEn: item.nameEn, names: item.names,
                      multiSize: item.variants.length > 1, variant,
                      priceCents: variant.priceCents });
   render();
@@ -426,14 +486,16 @@ async function fetchBill() {
 // notes are guest-typed text seen by everyone at the table — always escape
 const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const lineName = l => {
-  const name = lang === "en" ? l.nameEn : l.nameFr;
-  const variant = lang === "en" ? l.variantLabelEn : l.variantLabelFr;
+  const name = nm(l, l.nameFr, l.nameEn);
+  const variant = l.variantLabelFr || l.variantLabelEn
+    ? nm({ names: l.variantNames }, l.variantLabelFr, l.variantLabelEn) : "";
   return esc(name + (variant ? " (" + variant + ")" : ""));
 };
-// "GST 5%" / "TVQ 9,975 %" — the rate is the server's decimal string
+// "GST 5%" / "TVQ 9,975 %" / "GST 9,975 %" (es, de: the comma, the English
+// label) — the rate is the server's decimal string
 const taxLabel = t => lang === "en"
   ? `${t.labelEn} ${t.ratePercent}%`
-  : `${t.labelFr} ${String(t.ratePercent).replace(".", ",")}\u00a0%`;
+  : `${lang === "fr" ? t.labelFr : t.labelEn} ${String(t.ratePercent).replace(".", ",")}\u00a0%`;
 const billRow = l => `
   <div class="brow">
     <span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
@@ -454,7 +516,7 @@ function renderBill() {
   }
   const fees = bill.fees.map(f => `
     <div class="brow">
-      <span class="nm">${esc(lang === "en" ? f.labelEn : f.labelFr)}</span>
+      <span class="nm">${esc(lang === "fr" ? f.labelFr : f.labelEn)}</span>
       <span>${cad(f.amountCents)}</span>
     </div>`).join("");
   const pending = bill.pendingLines.length ? `

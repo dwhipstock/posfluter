@@ -361,6 +361,17 @@ object CatalogVariants : Table("catalog_variants") {
     override val primaryKey = PrimaryKey(tenantId, venueId, id)
 }
 
+/** Names beyond fr/en per catalog entity (026): item | variant | category | zone. */
+object CatalogNames : Table("catalog_names") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val entity = text("entity")
+    val entityId = text("entity_id")
+    val lang = text("lang")
+    val value = text("text")
+    override val primaryKey = PrimaryKey(tenantId, venueId, entity, entityId, lang)
+}
+
 object CatalogChanges : Table("catalog_changes") {
     val version = long("version").autoIncrement()
     val tenantId = text("tenant_id")
