@@ -44,6 +44,20 @@ class MenuAiProvidersTest {
         assertFalse(req.toString().contains(key))
     }
 
+    @Test
+    fun geminiSendsVoiceAsAnAudioPartAndTheOthersSayNo() {
+        val http = Recorder(200, geminiOk)
+        GeminiMenuProvider(key, http).complete("sys", "user", listOf(MenuImage(ByteArray(2000), "audio/wav")))
+        assertTrue(http.requests.single().bodyText.contains("\"type\":\"audio\",\"mime_type\":\"audio/wav\""))
+        val voice = listOf(MenuImage(ByteArray(2000), "audio/wav"))
+        val other = Recorder(200, "{}")
+        assertEquals("menu_ai_voice_unsupported",
+            assertFailsWith<ImageGenException> { OpenAiMenuProvider(key, other).complete("s", "u", voice) }.code)
+        assertEquals("menu_ai_voice_unsupported",
+            assertFailsWith<ImageGenException> { AnthropicMenuProvider(key, other).complete("s", "u", voice) }.code)
+        assertTrue(other.requests.isEmpty())
+    }
+
     /** Scripted replies, one per request. */
     private class Script(vararg val replies: Pair<Int, String>) : ImageHttp {
         val requests = mutableListOf<ImageHttpRequest>()

@@ -218,3 +218,32 @@ GET  /menu-ai/history?source=room      the floor-plan change sets (revert via /m
 Tested with a fake provider in `RoomFromPhotoTest` (a good layout, overlaps,
 out of bounds, unknown types, huge counts, number collisions, an open bill
 protected, revert) and `client/test/room_layout_test.dart` (the preview).
+
+## Voice input
+
+A mic button sits next to the menu AI chat and the floor assistant: hold to
+talk and release, or tap to start and tap again (30 s at most). The tablet
+and the Windows Surface both record 16 kHz mono WAV into memory (the `record`
+package streams PCM on both) and send it once to `/menu-ai/chat/voice` or
+`/zones/{zoneId}/ai-edit/voice`. The store passes the clip to Gemini as an
+audio part with the usual instruction, so one call transcribes and interprets;
+the model writes what it heard in `transcript` and the tablet shows
+"Heard: …" above the answer. The transcript gets the typed text's checks, so
+an injection by voice gets the fixed reply. The audio is never stored or
+logged. OpenAI and Anthropic answer `409 menu_ai_voice_unsupported` (type
+instead). Android asks for the microphone at first use (`RECORD_AUDIO`);
+Windows uses its microphone privacy setting.
+
+## Floor plan: "Ask AI"
+
+In the floor-plan editor (manager PIN), the ✨ menu → "Ask AI…" edits the
+CURRENT room by text or voice: "add four 2-tops along the window", "make
+table 5 round with 6 seats", "remove the pool table", "renumber the patio
+tables from 40". The model gets the room (tables with ids, numbers, shapes,
+seats and geometry; objects; the walls are the plan's edges) and answers ops
+(add / update / remove tables and objects). The store checks them with the
+room-from-picture rules (known shapes and types, inside the room, no table on
+another, numbers free in the store) and never moves, reshapes, renumbers or
+removes a table with an open bill or in a join. The result is the usual ghost
+preview with a list of changes; Apply re-checks against the room as it is
+then and saves a "room" change set that reverts like the others.

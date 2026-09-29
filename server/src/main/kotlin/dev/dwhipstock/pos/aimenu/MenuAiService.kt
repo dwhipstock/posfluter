@@ -83,6 +83,8 @@ data class MenuProposalDto(
     val message: String? = null,
     /** More than [MenuAiService.BULK_CONFIRM] removals or price changes: Apply needs an extra confirm. */
     val bulk: Boolean = false,
+    /** Voice: what the model heard (checked plain text), shown as "Heard: …". */
+    val transcript: String? = null,
 )
 
 @Serializable
@@ -114,6 +116,8 @@ class MenuAiService(
     private class RoomProposal(val zoneId: String, val at: Long)
     private val roomProposals = ConcurrentHashMap<String, RoomProposal>()
     private class Proposal(val ops: Map<String, MenuOp>, val source: String, val summary: String, val at: Long)
+    private class FloorProposal(val zoneId: String, val ops: List<FloorOp>, val summary: String, val at: Long)
+    private val floorProposals = ConcurrentHashMap<String, FloorProposal>()
     private val proposals = ConcurrentHashMap<String, Proposal>()
     @Volatile private var probe: Pair<Boolean, Long>? = null
     private val limiter = RateLimiter(now = now)
@@ -180,8 +184,12 @@ class MenuAiService(
         return tracked(who, "photos") { propose(task, images, "photos", who = who) }
     }
 
-    fun chat(text: String, who: AiCaller? = null): MenuProposalDto {
+    /** [audio]: the request spoken instead of typed ([AiVoice]); the clip lives only for this call. */
+    fun chat(text: String, who: AiCaller? = null, audio: MenuImage? = null): MenuProposalDto {
         val t = text.trim()
+        if (audio != null) return tracked(who, "chat_voice") {
+            propose("<manager_request>\n${AiVoice.REQUEST}\n</manager_request>", listOf(audio), "chat", who = who, voice = true)
+        }
         require(t.isNotEmpty()) { "type what to change" }
         require(t.length <= 2000) { "that request is too long" }
         return tracked(who, "chat") {
@@ -211,6 +219,8 @@ class MenuAiService(
                         r.rejected.size, now() - started)
                     is RoomLayoutProposalDto -> AiRequestLog.record(who, kind, r.refusal ?: "proposed",
                         r.tables.size + r.objects.size, r.rejected.size, now() - started)
+                    is FloorEditProposalDto -> AiRequestLog.record(who, kind, r.refusal ?: "proposed",
+                        r.changes.size, r.rejected.size, now() - started)
                     else -> AiRequestLog.record(who, kind, "proposed", 1, 0, now() - started)
                 }
             }
@@ -221,9 +231,10 @@ class MenuAiService(
         }
     }
 
-    private fun refusal(r: AiGuard.Refusal, who: AiCaller?, rejected: List<String> = emptyList(), elapsed: Long = 0) =
-        MenuProposalDto("", provider?.id ?: "", provider?.model ?: "", "", emptyList(), rejected, elapsed,
-            refusal = r.code, message = AiGuard.reply(r, who?.lang))
+    private fun refusal(
+        r: AiGuard.Refusal, who: AiCaller?, rejected: List<String> = emptyList(), elapsed: Long = 0, heard: String? = null,
+    ) = MenuProposalDto("", provider?.id ?: "", provider?.model ?: "", "", emptyList(), rejected, elapsed,
+            refusal = r.code, message = AiGuard.reply(r, who?.lang), transcript = heard)
 
     /** The manager's log of AI calls, newest first. */
     fun requests(): List<AiRequestDto> = AiRequestLog.recent()
@@ -321,6 +332,75 @@ class MenuAiService(
     }
 
     /**
+     * Floor-plan "Ask AI": a typed or spoken ([audio]) request → validated ops
+     * on the CURRENT room ([FloorEditAi]) to preview as a ghost. Nothing
+     * changes; the clip lives only for this call. Not about the room → the fixed reply.
+     */
+    fun floorEdit(zoneId: String, text: String?, who: AiCaller? = null, audio: MenuImage? = null): FloorEditProposalDto {
+        val t = text?.trim().orEmpty()
+        require(audio != null || t.isNotEmpty()) { "type or say what to change" }
+        require(t.length <= 1000) { "that request is too long" }
+        val existing = transaction { RoomLayoutAi.room(zoneId) }.tables.size
+        return tracked(who, if (audio != null) "floor_voice" else "floor_edit") {
+            val p = requireProvider(layout = true)
+            val started = now()
+            fun refuse(r: AiGuard.Refusal, heard: String? = null, rejected: List<String> = emptyList()) =
+                FloorEditProposalDto("", zoneId, p.id, p.model, transcript = heard, rejected = rejected,
+                    existingTables = existing, elapsedMs = now() - started, refusal = r.code, message = AiGuard.reply(r, who?.lang))
+            // plainly not a floor-plan request: the fixed reply, and the model is never asked
+            if (audio == null && AiGuard.offTopic(t)) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC)
+            val room = transaction { FloorEditAi.context(zoneId) }
+            val request = if (audio != null) AiVoice.REQUEST else AiGuard.quote(t, 1000)
+            val reply = try {
+                p.complete(FloorEditAi.systemPrompt(bilingual, voice = audio != null),
+                    "<current_room>\n$room\n</current_room>\n\n<manager_request>\n$request\n</manager_request>", listOfNotNull(audio))
+            } catch (e: ImageGenException) {
+                if (e.code == ImageGenException.REFUSED) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC)
+                if (e.code == ImageGenException.UNAVAILABLE) probe = false to now()
+                log.info("AI floor edit via ${p.id} failed: ${e.code} ${e.message}")
+                throw ImageGenException(e.status, e.code.replace("image_", "menu_ai_"), e.message ?: "AI floor edit failed",
+                    e.retryAfterSeconds, e)
+            }
+            val heard = if (audio != null) AiVoice.heard(reply) else null
+            if (audio != null && heard.isNullOrBlank()) return@tracked refuse(AiGuard.Refusal.FLOOR_NO_CHANGE)
+            if (heard != null && !AiVoice.safe(heard)) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC, heard)
+            val parsed = try { FloorEditAi.parse(reply) } catch (e: MenuAiReplyException) {
+                log.info("AI floor edit via ${p.id}: unusable reply (${e.message})")
+                return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC, heard)
+            }
+            if (parsed.refused) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC, heard)
+            val plan = transaction { FloorEditAi.plan(zoneId, parsed.ops) }
+            if (plan.changes.isEmpty()) return@tracked refuse(AiGuard.Refusal.FLOOR_NO_CHANGE, heard, parsed.rejected + plan.rejected)
+            val cutoff = now() - PROPOSAL_TTL_MS
+            floorProposals.entries.removeIf { it.value.at < cutoff }
+            val id = UUID.randomUUID().toString()
+            floorProposals[id] = FloorProposal(zoneId, parsed.ops, parsed.summary, now())
+            log.info("AI floor edit via ${p.id}/${p.model}: ${plan.changes.size} change(s), ${plan.rejected.size} rejected")
+            FloorEditProposalDto(id, zoneId, p.id, p.model, parsed.summary, heard, plan.changes, plan.tables, plan.objects,
+                plan.removedTables, plan.removedObjects, parsed.rejected + plan.rejected, plan.existingTables,
+                plan.protectedTables, now() - started)
+        }
+    }
+
+    /** Apply a floor assistant proposal (checked again against the room now), saved as a "room" change set. */
+    fun applyFloorEdit(zoneId: String, req: FloorEditApplyRequest, userId: String, approverId: String): FloorEditApplyResult {
+        val proposal = floorProposals[req.proposalId]?.takeIf { it.zoneId == zoneId }
+            ?: throw NotFoundException("that change has expired; ask again")
+        val setId = UUID.randomUUID().toString()
+        val result = transaction {
+            val rows = mutableListOf<MenuChangeLog.Row>()
+            val plan = FloorEditAi.apply(zoneId, proposal.ops, rows)
+            val what = proposal.summary.ifBlank { "${plan.changes.size} change(s)" }
+            MenuChangeLog.record(setId, userId, approverId, MenuChangeLog.ROOM, "${plan.roomName}: $what (AI assistant)", rows)
+            val (tables, objects) = RoomLayoutAi.roomNow(zoneId)
+            FloorEditApplyResult(setId, plan.changes.size, tables, objects, plan.rejected)
+        }
+        floorProposals.remove(req.proposalId)
+        log.info("AI floor edit: applied ${result.applied} change(s) to $zoneId as $setId")
+        return result
+    }
+
+    /**
      * "Translate menu": the names of items and categories that have no name
      * yet in one of the store's extra languages (es, de) → a proposal of
      * set_name changes, previewed, applied and revertable like any other.
@@ -362,12 +442,13 @@ class MenuAiService(
 
     private fun propose(
         task: String, images: List<MenuImage>, source: String, includeMenu: Boolean = true, who: AiCaller? = null,
+        voice: Boolean = false,
     ): MenuProposalDto {
         val p = requireProvider()
         val (menuJson, facts) = transaction { menuContext() }
         val started = now()
         val reply = try {
-            p.complete(systemPrompt(),
+            p.complete(systemPrompt() + if (voice) "\n" + AiVoice.PROMPT.trimIndent() else "",
                 if (includeMenu) "<current_menu>\n$menuJson\n</current_menu>\n\n$task" else task, images)
         } catch (e: ImageGenException) {
             // the provider's own safety refusal is the same fixed reply, not an error
@@ -379,15 +460,19 @@ class MenuAiService(
                 e.retryAfterSeconds, e)
         }
         val elapsed = now() - started
+        // voice: what was heard gets the typed text's check (an injection by voice = the fixed reply)
+        val heard = if (voice) AiVoice.heard(reply) else null
+        if (voice && heard.isNullOrBlank()) return refusal(AiGuard.Refusal.NO_CHANGE, who, elapsed = elapsed)
+        if (heard != null && !AiVoice.safe(heard)) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard)
         val parsed = try {
             MenuChangeSetParser.parse(reply, facts)
         } catch (e: MenuAiReplyException) {
             // prose, code, a leaked prompt, 1000 changes...: the fixed reply, never the model's text
             log.info("AI menu via ${p.id}: unusable reply (${e.message})")
-            return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed)
+            return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard)
         }
-        if (parsed.refused) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed)
-        if (parsed.ops.isEmpty()) return refusal(AiGuard.Refusal.NO_CHANGE, who, parsed.rejected, elapsed)
+        if (parsed.refused) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard)
+        if (parsed.ops.isEmpty()) return refusal(AiGuard.Refusal.NO_CHANGE, who, parsed.rejected, elapsed, heard)
         sweep()
         val ids = parsed.ops.indices.map { "c${it + 1}" }
         val ops = ids.zip(parsed.ops).toMap()
@@ -396,7 +481,7 @@ class MenuAiService(
         val changes = transaction { ops.map { (id, op) -> preview(id, op, ops) } }
         log.info("AI menu via ${p.id}/${p.model}: ${changes.size} change(s), ${parsed.rejected.size} rejected, ${elapsed}ms")
         return MenuProposalDto(proposalId, p.id, p.model, parsed.summary, changes, parsed.rejected, elapsed,
-            bulk = isBulk(parsed.ops))
+            bulk = isBulk(parsed.ops), transcript = heard)
     }
 
     /** "Remove all" / "everything 20% off": more than [BULK_CONFIRM] removals or price changes. */
@@ -528,7 +613,7 @@ class MenuAiService(
                     val v = vs.getValue(vid)
                     changed("price", money(v[ItemVariants.priceCents]), money(price), v[ItemVariants.labelEn])
                 },
-                needs = ops.entries.firstOrNull { (it.value as? MenuOp.AddCategory)?.ref == op.category }?.key)
+                needs = op.category?.let { c -> ops.entries.firstOrNull { (it.value as? MenuOp.AddCategory)?.ref == c }?.key })
         }
         is MenuOp.RemoveItem -> {
             val row = Items.selectAll().where { Items.id eq op.itemId }.first()

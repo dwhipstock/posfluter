@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
+import 'mic_button.dart';
 
 typedef MenuPhoto = ({List<int> bytes, String contentType});
 
@@ -33,6 +34,10 @@ class AiMenuBackend {
 
   /// "Translate menu" (a store with languages beyond fr / en); null = no button.
   final Future<MenuProposal> Function(String pin)? translate;
+
+  /// The request spoken instead of typed; null = no mic button.
+  final Future<MenuProposal> Function(VoiceClip clip, String pin)? chatVoice;
+  final VoiceRecorder? recorder;
   const AiMenuBackend({
     required this.chat,
     required this.fromPhotos,
@@ -40,6 +45,8 @@ class AiMenuBackend {
     required this.history,
     required this.revert,
     this.translate,
+    this.chatVoice,
+    this.recorder,
   });
 
   static final AiMenuBackend store = AiMenuBackend(
@@ -49,10 +56,12 @@ class AiMenuBackend {
     history: Api.menuAiHistory,
     revert: (id, pin, force) => Api.menuAiRevert(id, pin, force: force),
     translate: Api.menuAiTranslate,
+    chatVoice: (clip, pin) =>
+        Api.menuAiChatVoice(clip.bytes, clip.contentType, pin),
   );
 }
 
-/// AI menu setup: type (or dictate with the keyboard mic) a change, or read
+/// AI menu setup: type (or say, with the mic button) a change, or read
 /// photos of a paper menu. The AI's answer is only a proposal: a list of
 /// new / changed / removed things the manager ticks, and nothing changes until
 /// Apply. The history tab lists every applied AI update with Revert.
@@ -135,6 +144,12 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     final text = _text.text.trim();
     if (text.isEmpty) return;
     _show(await _run((pin) => widget.backend.chat(text, pin)));
+  }
+
+  Future<void> _voice(VoiceClip clip) async {
+    final call = widget.backend.chatVoice;
+    if (call == null) return;
+    _show(await _run((pin) => call(clip, pin)));
   }
 
   Future<void> _photos() async {
@@ -361,6 +376,15 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
                 decoration: InputDecoration(hintText: l.aiMenuChatHint),
               ),
             ),
+            if (widget.backend.chatVoice != null) ...[
+              const SizedBox(width: 8),
+              MicButton(
+                key: const Key('ai-menu-mic'),
+                enabled: enabled,
+                recorder: widget.backend.recorder,
+                onClip: _voice,
+              ),
+            ],
             const SizedBox(width: 8),
             FilledButton(
               key: const Key('ai-menu-ask'),
@@ -438,20 +462,37 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
       (l.aiMenuRemoved, p.changes.where((c) => c.isRemoved).toList()),
     ];
     final refusal = p.refusal;
+    final heard = (p.transcript ?? '').isEmpty
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Text(
+              l.aiHeard(p.transcript!),
+              key: const Key('ai-menu-heard'),
+              style: T.small(color: T.textMuted),
+            ),
+          );
     if (refusal != null) {
       // a normal assistant message, not an error
-      return Padding(
-        padding: const EdgeInsets.only(top: 14),
-        child: Text(
-          l.aiMenuRefusal(refusal),
-          key: const Key('ai-menu-refusal'),
-          style: T.text(size: 15),
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ?heard,
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Text(
+              l.aiMenuRefusal(refusal),
+              key: const Key('ai-menu-refusal'),
+              style: T.text(size: 15),
+            ),
+          ),
+        ],
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        ?heard,
         const SizedBox(height: 14),
         if (p.summary.isNotEmpty) Text(p.summary, style: T.text(size: 15)),
         const SizedBox(height: 4),

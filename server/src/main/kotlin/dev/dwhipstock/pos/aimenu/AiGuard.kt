@@ -37,6 +37,10 @@ object AiGuard {
         ROOM_OFF_TOPIC("off_topic"),
         /** "Set up from picture": no table or object could be read. */
         ROOM_NO_LAYOUT("no_change"),
+        /** The floor assistant: not about this room's floor plan. */
+        FLOOR_OFF_TOPIC("off_topic"),
+        /** The floor assistant: nothing it could safely change (or no speech heard). */
+        FLOOR_NO_CHANGE("no_change"),
     }
 
     private val REPLIES = mapOf(
@@ -63,6 +67,18 @@ object AiGuard {
             "fr" to "Je n'ai trouvé aucune table sur ces images. Essayez une photo plus nette prise de plus haut, ou un croquis.",
             "es" to "No encontré ninguna mesa en esas imágenes. Prueba una foto más nítida tomada desde más arriba, o un boceto.",
             "de" to "Ich habe auf diesen Bildern keine Tische gefunden. Versuchen Sie ein schärferes Foto von weiter oben oder eine Skizze.",
+        ),
+        Refusal.FLOOR_OFF_TOPIC to mapOf(
+            "en" to "I can only help edit this room's floor plan. Try something like \"add four 2-tops along the window\".",
+            "fr" to "Je peux seulement vous aider à modifier le plan de cette salle. Essayez par exemple « ajoute quatre tables de 2 le long de la fenêtre ».",
+            "es" to "Solo puedo ayudarte a editar el plano de esta sala. Prueba algo como «añade cuatro mesas de 2 junto a la ventana».",
+            "de" to "Ich kann nur beim Bearbeiten des Raumplans helfen. Versuchen Sie zum Beispiel „vier Zweiertische am Fenster hinzufügen“.",
+        ),
+        Refusal.FLOOR_NO_CHANGE to mapOf(
+            "en" to "I couldn't find a change to make to this room from that. Name the table or object and what to change, for example \"make table 5 round\".",
+            "fr" to "Je n'ai trouvé aucun changement à faire dans cette salle. Nommez la table ou l'élément et ce qu'il faut changer, par exemple « rends la table 5 ronde ».",
+            "es" to "No encontré ningún cambio que hacer en esta sala. Indica la mesa o el elemento y qué cambiar, por ejemplo «haz redonda la mesa 5».",
+            "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 5 rund machen“.",
         ),
     )
 
@@ -130,7 +146,7 @@ object AiGuard {
     /** Phrases of the menu system prompt: a name or summary quoting them is the model leaking its instructions. */
     private val PROMPT_MARKERS = listOf(
         "you maintain the menu", "reply with one json object", "each op is one of", "these instructions",
-        "system prompt", "untrusted data", "never reveal", "you draw the floor plan",
+        "system prompt", "untrusted data", "never reveal", "you draw the floor plan", "you edit the floor plan",
     )
 
     /**

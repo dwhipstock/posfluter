@@ -1345,6 +1345,93 @@ class Api {
     return MenuProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
+  /// The request spoken instead of typed: a short WAV clip, sent once and
+  /// never kept; the proposal carries what the AI heard ([MenuProposal.transcript]).
+  static Future<MenuProposal> menuAiChatVoice(
+    List<int> audio,
+    String contentType,
+    String managerPin,
+  ) async => MenuProposal.fromJson(
+    await _postVoice('/menu-ai/chat/voice', audio, contentType, managerPin),
+  );
+
+  static Future<dynamic> _postVoice(
+    String path,
+    List<int> audio,
+    String contentType,
+    String managerPin,
+  ) async {
+    final req = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
+      ..headers['Authorization'] = 'Bearer $_token'
+      ..fields['managerPin'] = managerPin
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'audio',
+          audio,
+          filename: 'voice.wav',
+          contentType: http_parser.MediaType.parse(contentType),
+        ),
+      );
+    if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
+    final res = await http.Response.fromStream(
+      await req.send(),
+    ).timeout(_aiTimeout);
+    _throwOnError(res);
+    return jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  /// Floor-plan "Ask AI": a typed request → changes to this room, to preview.
+  static Future<RoomLayoutProposal> floorEdit(
+    String zoneId,
+    String text,
+    String managerPin,
+  ) async {
+    final res = await http
+        .post(
+          Uri.parse('$baseUrl/zones/$zoneId/ai-edit'),
+          headers: _headers,
+          body: jsonEncode({'managerPin': managerPin, 'text': text}),
+        )
+        .timeout(_aiLayoutTimeout);
+    _throwOnError(res);
+    return RoomLayoutProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// Floor-plan "Ask AI" by voice (the clip is never kept).
+  static Future<RoomLayoutProposal> floorEditVoice(
+    String zoneId,
+    List<int> audio,
+    String contentType,
+    String managerPin,
+  ) async => RoomLayoutProposal.fromJson(
+    await _postVoice(
+      '/zones/$zoneId/ai-edit/voice',
+      audio,
+      contentType,
+      managerPin,
+    ),
+  );
+
+  /// Apply a floor assistant proposal; saved as a "room" change set (revertable).
+  static Future<RoomLayoutApplyResult> floorEditApply(
+    String zoneId,
+    String proposalId,
+    String managerPin,
+  ) async {
+    final res = await _send(
+      () => http.post(
+        Uri.parse('$baseUrl/zones/$zoneId/ai-edit/apply'),
+        headers: _headers,
+        body: jsonEncode({'managerPin': managerPin, 'proposalId': proposalId}),
+      ),
+      operation: 'POST ai-edit/apply',
+    );
+    _throwOnError(res);
+    return RoomLayoutApplyResult.fromJson(
+      jsonDecode(utf8.decode(res.bodyBytes)),
+    );
+  }
+
   /// "Translate menu": names missing in the store's extra languages (es, de) → a proposal.
   static Future<MenuProposal> menuAiTranslate(String managerPin) async {
     final res = await http
@@ -2410,6 +2497,17 @@ class RoomLayoutProposal {
 
   /// off_topic | no_change: show [message] (a fixed reply), no layout.
   final String? refusal, message;
+
+  /// The floor assistant ("Ask AI") edits the room instead of drafting it:
+  /// [tables] / [objects] are the new and changed things (changed ones keep
+  /// their id), [removedTables] / [removedObjects] go, [changes] lists it all.
+  final bool isEdit;
+  final String summary;
+
+  /// Voice: what the AI heard.
+  final String? transcript;
+  final List<FloorChange> changes;
+  final List<String> removedTables, removedObjects;
   const RoomLayoutProposal({
     required this.proposalId,
     required this.zoneId,
@@ -2421,25 +2519,56 @@ class RoomLayoutProposal {
     this.protectedTables = const [],
     this.refusal,
     this.message,
+    this.isEdit = false,
+    this.summary = '',
+    this.transcript,
+    this.changes = const [],
+    this.removedTables = const [],
+    this.removedObjects = const [],
   });
-  factory RoomLayoutProposal.fromJson(Map<String, dynamic> j) =>
-      RoomLayoutProposal(
-        proposalId: j['proposalId'] as String? ?? '',
-        zoneId: j['zoneId'] as String? ?? '',
-        tables: ((j['tables'] as List?) ?? const [])
-            .map((t) => TableInfo.fromJson(t))
-            .toList(),
-        objects: ((j['objects'] as List?) ?? const [])
-            .map((o) => FloorObject.fromJson(o))
-            .toList(),
-        notes: j['notes'] as String? ?? '',
-        rejected: ((j['rejected'] as List?) ?? const []).cast<String>(),
-        existingTables: (j['existingTables'] as num?)?.toInt() ?? 0,
-        protectedTables: ((j['protectedTables'] as List?) ?? const [])
-            .cast<String>(),
-        refusal: j['refusal'] as String?,
-        message: j['message'] as String?,
-      );
+  factory RoomLayoutProposal.fromJson(
+    Map<String, dynamic> j,
+  ) => RoomLayoutProposal(
+    proposalId: j['proposalId'] as String? ?? '',
+    zoneId: j['zoneId'] as String? ?? '',
+    tables: ((j['tables'] as List?) ?? const [])
+        .map((t) => TableInfo.fromJson(t))
+        .toList(),
+    objects: ((j['objects'] as List?) ?? const [])
+        .map((o) => FloorObject.fromJson(o))
+        .toList(),
+    notes: j['notes'] as String? ?? '',
+    rejected: ((j['rejected'] as List?) ?? const []).cast<String>(),
+    existingTables: (j['existingTables'] as num?)?.toInt() ?? 0,
+    protectedTables: ((j['protectedTables'] as List?) ?? const [])
+        .cast<String>(),
+    refusal: j['refusal'] as String?,
+    message: j['message'] as String?,
+    isEdit: j['edit'] == true,
+    summary: j['summary'] as String? ?? '',
+    transcript: j['transcript'] as String?,
+    changes: ((j['changes'] as List?) ?? const [])
+        .map((c) => FloorChange.fromJson(c))
+        .toList(),
+    removedTables: ((j['removedTables'] as List?) ?? const []).cast<String>(),
+    removedObjects: ((j['removedObjects'] as List?) ?? const []).cast<String>(),
+  );
+}
+
+/// One line of the floor assistant's change list ([kind]: add_table |
+/// update_table | remove_table | add_object | update_object | remove_object).
+class FloorChange {
+  final String id, kind, title;
+  final List<MenuChangeDetail> details;
+  const FloorChange(this.id, this.kind, this.title, this.details);
+  factory FloorChange.fromJson(Map<String, dynamic> j) => FloorChange(
+    j['id'] as String? ?? '',
+    j['kind'] as String? ?? '',
+    j['title'] as String? ?? '',
+    ((j['details'] as List?) ?? const [])
+        .map((d) => MenuChangeDetail.fromJson(d))
+        .toList(),
+  );
 }
 
 class RoomLayoutApplyResult {
@@ -2457,7 +2586,7 @@ class RoomLayoutApplyResult {
   factory RoomLayoutApplyResult.fromJson(Map<String, dynamic> j) =>
       RoomLayoutApplyResult(
         j['changeSetId'] as String? ?? '',
-        (j['added'] as num?)?.toInt() ?? 0,
+        ((j['added'] ?? j['applied']) as num?)?.toInt() ?? 0,
         (j['removed'] as num?)?.toInt() ?? 0,
         ((j['tables'] as List?) ?? const [])
             .map((t) => TableInfo.fromJson(t))
@@ -3729,6 +3858,9 @@ class MenuProposal {
 
   /// Many removals or price changes: Apply asks for an extra confirm.
   final bool bulk;
+
+  /// Voice: what the AI heard, shown as "Heard: …".
+  final String? transcript;
   const MenuProposal({
     required this.proposalId,
     required this.provider,
@@ -3737,6 +3869,7 @@ class MenuProposal {
     this.rejected = const [],
     this.refusal,
     this.bulk = false,
+    this.transcript,
   });
   factory MenuProposal.fromJson(Map<String, dynamic> j) => MenuProposal(
     proposalId: j['proposalId'] as String,
@@ -3748,6 +3881,7 @@ class MenuProposal {
     rejected: ((j['rejected'] as List?) ?? const []).cast<String>(),
     refusal: j['refusal'] as String?,
     bulk: j['bulk'] == true,
+    transcript: j['transcript'] as String?,
   );
 }
 
