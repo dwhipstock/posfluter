@@ -162,6 +162,24 @@ class MenuAiService(
         return propose("Manager's request: $t", emptyList(), "chat")
     }
 
+    /**
+     * Floor-plan "Add from photo": one photo of a thing in the room → a CUSTOM
+     * object suggestion (name, icon key, shape, size). Same provider, key and
+     * on/off switch as the menu; the photo lives only for this call.
+     */
+    fun suggestRoomObject(image: MenuImage): RoomObjectSuggestion {
+        val p = requireProvider()
+        val reply = try {
+            p.complete(RoomObjectSuggest.systemPrompt(bilingual), "What is this? Suggest the floor-plan object.", listOf(image))
+        } catch (e: ImageGenException) {
+            if (e.code == ImageGenException.UNAVAILABLE) probe = false to now()
+            log.info("AI room object via ${p.id} failed: ${e.code} ${e.message}")
+            throw ImageGenException(e.status, e.code.replace("image_", "menu_ai_"), e.message ?: "AI suggestion failed",
+                e.retryAfterSeconds, e)
+        }
+        return RoomObjectSuggest.parse(reply, bilingual, p.id, p.model)
+    }
+
     private fun propose(task: String, images: List<MenuImage>, source: String): MenuProposalDto {
         val p = requireProvider()
         val (menuJson, facts) = transaction { menuContext() }

@@ -1,11 +1,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
+import '../widgets/custom_object_dialog.dart';
+import '../widgets/floor_object_icons.dart';
 import '../widgets/floor_plan.dart';
 
 /// Manager floor-plan editor. Geometry edits (drag / resize / rotate / shape /
@@ -38,6 +41,17 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   String? _selectedObjectId; // selected object
   bool _dirty = false;
   bool _busy = false;
+  // "Add from photo" rides the AI menu add-on; off/offline → disabled + a note
+  AiPhotoStatus _ai = AiPhotoStatus.hidden;
+
+  @override
+  void initState() {
+    super.initState();
+    Api.menuAiStatus().then((s) {
+      if (mounted) setState(() => _ai = s);
+    }, onError: (_) {});
+  }
+
   // geometry-only undo: snapshots of BOTH layers before each drag/resize/toolbar
   // tweak. Cleared on add/delete/rename — those already live on the server.
   final List<_Snapshot> _undo = [];
@@ -319,19 +333,27 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   (int, int) _defaultObjectSize(String type) => switch (type) {
     'BAR_FRONT' => (320, 60), // long, shallow counter
     'POOL' => (200, 120), // a plain table slab
+    'ENTRANCE' || 'KITCHEN' => (120, 40), // a doorway / the pass
+    'HOST_STAND' => (80, 60),
+    'RESTROOMS' => (120, 80),
+    'STAGE' => (240, 140),
     _ => (80, 80), // PILLAR — a small block
   };
 
   /// Drop a structural prop near the canvas centre. Like _addTable, add hits the
   /// server immediately (identity); geometry then edits locally until save.
-  Future<void> _addObject(String type) async {
+  Future<void> _addObject(String type, [Map<String, dynamic>? custom]) async {
+    if (type == 'CUSTOM' && custom == null) return _addCustom();
+    if (type == 'PHOTO') return _addFromPhoto();
     try {
       final nudge = ((_tables.length + _objects.length) % 5) * 30;
-      final (w, h) = _defaultObjectSize(type);
+      var (w, h) = _defaultObjectSize(type);
+      if (custom != null) (w, h) = (custom['width'], custom['height']);
       final created = await Api.addObject(widget.zone.id, {
         'type': type,
-        'x': 400 + nudge,
-        'y': 400 + nudge,
+        ...?custom,
+        'x': (400 + nudge).clamp(0, 1000 - w),
+        'y': (400 + nudge).clamp(0, 1000 - h),
         'width': w,
         'height': h,
       }, widget.managerPin);
@@ -346,6 +368,70 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     } catch (e) {
       if (mounted) showApiError(context, e);
     }
+  }
+
+  /// A CUSTOM object by hand (name + icon + shape), or from an AI [suggestion].
+  Future<void> _addCustom([RoomObjectSuggestion? suggestion]) async {
+    final body = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => CustomObjectDialog(suggestion: suggestion),
+    );
+    if (body != null && mounted) await _addObject('CUSTOM', body);
+  }
+
+  /// "Add from photo": camera or a picked file (Windows) → the AI suggests a
+  /// name / icon / shape / size, the manager edits it, then places it. The
+  /// photo is sent once and kept nowhere.
+  Future<void> _addFromPhoto() async {
+    final l = L.of(context);
+    final picker = ImagePicker();
+    final source = picker.supportsImageSource(ImageSource.camera)
+        ? await showDialog<ImageSource>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: Text(l.objectFromPhoto),
+              children: [
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.camera),
+                  child: Text(l.aiTakePhoto),
+                ),
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.gallery),
+                  child: Text(l.aiChooseFromGallery),
+                ),
+              ],
+            ),
+          )
+        : ImageSource.gallery;
+    if (source == null || !mounted) return;
+    final picked = await picker.pickImage(
+      source: source,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(l.objectFromPhotoWorking),
+        duration: const Duration(minutes: 3),
+      ),
+    );
+    RoomObjectSuggestion suggestion;
+    try {
+      suggestion = await Api.suggestRoomObject(
+        await picked.readAsBytes(),
+        picked.name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+        widget.managerPin,
+      );
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      if (mounted) showApiError(context, e);
+      return;
+    }
+    messenger.hideCurrentSnackBar();
+    if (mounted) await _addCustom(suggestion);
   }
 
   Future<void> _deleteSelectedObject() async {
@@ -396,7 +482,10 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   String _objectName(FloorObject o, L l) => switch (o.type) {
     'POOL' => l.objectPool,
     'BAR_FRONT' => l.objectBarFront,
-    _ => l.objectPillar,
+    'PILLAR' => l.objectPillar,
+    _ =>
+      l.objectTypeName(o.type) ??
+          l.name(o.labelFr ?? o.labelEn ?? '', o.labelEn ?? o.labelFr ?? ''),
   };
 
   void _undoLast() {
@@ -474,7 +563,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
               tooltip: l.addTable,
               onPressed: _addTable,
             ),
-            // palette: drop a structural prop (pool / bar front / pillar)
+            // palette: drop a structural prop, a custom one, or one from a photo
             PopupMenuButton<String>(
               icon: const Icon(LucideIcons.shapes),
               tooltip: l.addObject,
@@ -487,6 +576,29 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                   l.objectBarFront,
                 ),
                 _objectMenuItem('PILLAR', LucideIcons.columns2, l.objectPillar),
+                for (final type in const [
+                  'ENTRANCE',
+                  'HOST_STAND',
+                  'KITCHEN',
+                  'RESTROOMS',
+                  'STAGE',
+                ])
+                  _objectMenuItem(
+                    type,
+                    floorObjectTypeIcon(type, null)!,
+                    l.objectTypeName(type)!,
+                  ),
+                const PopupMenuDivider(),
+                _objectMenuItem('CUSTOM', LucideIcons.pencil, l.customObject),
+                // hidden when the store has no AI menu route at all
+                if (_ai.configured || _ai.available)
+                  _objectMenuItem(
+                    'PHOTO',
+                    LucideIcons.camera,
+                    l.objectFromPhoto,
+                    enabled: _ai.available,
+                    note: _ai.available ? null : l.objectFromPhotoOffNote,
+                  ),
               ],
             ),
             Padding(
@@ -905,14 +1017,32 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   PopupMenuItem<String> _objectMenuItem(
     String type,
     IconData icon,
-    String label,
-  ) => PopupMenuItem<String>(
+    String label, {
+    bool enabled = true,
+    String? note,
+  }) => PopupMenuItem<String>(
+    key: Key('object-menu-$type'),
     value: type,
+    enabled: enabled,
     child: Row(
       children: [
         Icon(icon, size: 18, color: T.textMuted),
         const SizedBox(width: 12),
-        Text(label),
+        if (note == null)
+          Text(label)
+        else
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label),
+                SizedBox(
+                  width: 260,
+                  child: Text(note, style: T.small(color: T.textMuted)),
+                ),
+              ],
+            ),
+          ),
       ],
     ),
   );

@@ -368,6 +368,39 @@ class L {
   // the short caption on an unlabelled pool table / bar front on the plan
   String get objectPoolCaption => _t('Billard', 'Pool', 'Billar');
   String get objectBarCaption => _t('Bar', 'Bar', 'Barra');
+  // the room's built-in landmarks: palette name and default caption
+  String? objectTypeName(String type) => switch (type) {
+    'ENTRANCE' => _t('Entrée', 'Entrance', 'Entrada'),
+    'HOST_STAND' => _t('Accueil', 'Host stand', 'Recepción'),
+    'KITCHEN' => _t('Cuisine', 'Kitchen', 'Cocina'),
+    'RESTROOMS' => _t('Toilettes', 'Restrooms', 'Baños'),
+    'STAGE' => _t('Scène', 'Stage', 'Escenario'),
+    _ => null,
+  };
+  // a manager-made object: by hand, or suggested by the AI from a photo
+  String get customObject =>
+      _t('Élément personnalisé…', 'Custom object…', 'Elemento personalizado…');
+  String get objectFromPhoto =>
+      _t('Ajouter depuis une photo…', 'Add from photo…', 'Agregar desde foto…');
+  String get objectFromPhotoOffNote => _t(
+    'Photo IA : Internet et le menu IA requis. L’élément personnalisé fonctionne toujours.',
+    'Add from photo needs AI menu setup and internet. Custom object still works.',
+    'Foto con IA: requiere el menú con IA e internet. El elemento personalizado sigue funcionando.',
+  );
+  String get objectFromPhotoWorking => _t(
+    'L’IA regarde la photo…',
+    'AI is looking at the photo…',
+    'La IA mira la foto…',
+  );
+  String get objectNameFr =>
+      _t('Nom (français)', 'Name (French)', 'Nombre (francés)');
+  String get objectNameEn =>
+      _t('Nom (anglais)', 'Name (English)', 'Nombre (inglés)');
+  String get objectIcon => _t('Icône', 'Icon', 'Ícono');
+  String get objectShapeRect => _t('Rectangle', 'Rectangle', 'Rectángulo');
+  String get objectShapeRound => _t('Rond', 'Round', 'Redondo');
+  String get objectSize => _t('Taille', 'Size', 'Tamaño');
+  String get placeObject => _t('Placer', 'Place', 'Colocar');
   String get deleteObject =>
       _t('Retirer l’élément', 'Remove object', 'Quitar elemento');
   String deleteObjectConfirm(String name) => _t(

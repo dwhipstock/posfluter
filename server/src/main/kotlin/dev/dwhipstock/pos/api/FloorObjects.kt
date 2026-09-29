@@ -23,13 +23,31 @@ import org.jetbrains.exposed.sql.update
 
 /**
  * Floor-object management: inert structural props a manager drops on the plan so
- * it matches the real room — pool tables, the bar front, pillars. Deliberately
+ * it matches the real room — pool tables, the bar front, pillars, the entrance,
+ * host stand, kitchen, restrooms, a stage, or a CUSTOM thing (a jukebox) with
+ * the manager's own name, an icon from a fixed list, and a rect/round shape. Deliberately
  * separate from tableRoutes: objects are never orderable, carry no check, no
  * seats, no status. The API mirrors the table geometry endpoints (add / move /
  * resize / delete + a batch layout save), same inline manager-PIN gate.
  */
 
-val FLOOR_OBJECT_TYPES = setOf("POOL", "BAR_FRONT", "PILLAR")
+val FLOOR_OBJECT_TYPES = setOf(
+    "POOL", "BAR_FRONT", "PILLAR",
+    "ENTRANCE", "HOST_STAND", "KITCHEN", "RESTROOMS", "STAGE",
+    // made by the manager (by hand or "Add from photo"): label + icon + shape
+    "CUSTOM",
+)
+
+/**
+ * The fixed icons a CUSTOM object may wear — keys the tablet maps to Material
+ * icons it ships (floor_object_icons.dart); the AI picks from these, never draws.
+ */
+val FLOOR_OBJECT_ICONS = listOf(
+    "music", "speaker", "tv", "piano", "plant", "coat", "stairs", "elevator",
+    "fireplace", "games", "casino", "atm", "window", "door", "wine", "coffee",
+    "cake", "fridge", "storage", "star",
+)
+val FLOOR_OBJECT_SHAPES = setOf("RECT", "ROUND")
 
 @Serializable
 data class FloorObjectCreateRequest(
@@ -41,6 +59,9 @@ data class FloorObjectCreateRequest(
     val labelEn: String? = null,
     /** One caption for both languages (older clients); labelFr / labelEn win. */
     val label: String? = null,
+    /** CUSTOM only: a [FLOOR_OBJECT_ICONS] key (default "star") and RECT | ROUND (default RECT). */
+    val icon: String? = null,
+    val shape: String? = null,
     val managerPin: String? = null,
 )
 
@@ -65,6 +86,16 @@ fun Route.floorObjectRoutes(auth: AuthService) {
         val req = call.receive<FloorObjectCreateRequest>()
         requireManagerApproval(auth, req.managerPin)
         validateObjectGeometry(req.x, req.y, req.width, req.height, req.rotation, req.type)
+        val custom = req.type == "CUSTOM"
+        val shared = req.label?.trim()?.ifBlank { null }
+        val labelFr = req.labelFr?.trim()?.ifBlank { null } ?: shared
+        val labelEn = req.labelEn?.trim()?.ifBlank { null } ?: shared
+        if (custom) {
+            require(labelFr != null || labelEn != null) { "a custom object needs a name" }
+            require(req.icon == null || req.icon in FLOOR_OBJECT_ICONS) { "icon must be one of $FLOOR_OBJECT_ICONS" }
+            require(req.shape == null || req.shape in FLOOR_OBJECT_SHAPES) { "shape must be RECT or ROUND" }
+        }
+        require((labelFr?.length ?: 0) <= 64 && (labelEn?.length ?: 0) <= 64) { "name is too long (max 64)" }
         val dto = transaction {
             requireObjectZone(zoneId)
             val objectId = uniqueObjectId(zoneId, req.type)
@@ -77,9 +108,12 @@ fun Route.floorObjectRoutes(auth: AuthService) {
                 it[width] = req.width
                 it[height] = req.height
                 it[rotation] = req.rotation
-                val shared = req.label?.trim()?.ifBlank { null }
-                it[labelFr] = req.labelFr?.trim()?.ifBlank { null } ?: shared
-                it[labelEn] = req.labelEn?.trim()?.ifBlank { null } ?: shared
+                it[FloorObjects.labelFr] = labelFr
+                it[FloorObjects.labelEn] = labelEn
+                if (custom) {
+                    it[icon] = req.icon ?: "star"
+                    it[shape] = req.shape ?: "RECT"
+                }
             }
             Outbox.write("floor_object.added", "floor_object", objectId, buildJsonObject {
                 put("objectId", objectId)
@@ -187,5 +221,6 @@ private fun floorObjectDto(objectId: String): FloorObjectDto {
         row[FloorObjects.x], row[FloorObjects.y],
         row[FloorObjects.width], row[FloorObjects.height],
         row[FloorObjects.rotation], row[FloorObjects.labelFr], row[FloorObjects.labelEn],
+        row[FloorObjects.icon], row[FloorObjects.shape],
     )
 }

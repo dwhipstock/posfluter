@@ -112,3 +112,20 @@ revert round trip, revert of a soft delete, the conflict warning, the key never
 in logs or responses) and fake HTTP for the three providers
 (`MenuAiProvidersTest`). `client/test/ai_menu_test.dart` covers the dialog.
 No network in CI.
+
+## Floor plan: room objects and "Add from photo"
+
+The floor-plan editor (manager PIN) places inert room objects: pool table,
+bar front, pillar, entrance, host stand, kitchen, restrooms, stage, and
+**custom** ones. A custom object is a name (French and English), an icon from
+a fixed list the tablet ships (`client/lib/widgets/floor_object_icons.dart`,
+same keys as `FLOOR_OBJECT_ICONS` on the store; never a generated image), and
+a rect or round shape. Make one by hand ("Custom object…"), or "Add from
+photo…": take or pick (file pick on Windows) one photo of the thing, and the
+same provider and key as AI menu setup suggest the name, icon, shape and
+size. The manager edits the suggestion before placing it; nothing is created
+until then, and the photo is sent once and kept nowhere. With AI menu off or
+the store offline the item is disabled with a note; hand-made custom objects
+always work. `POST /floor-objects/ai-suggest` (multipart photo + managerPin).
+Floor objects are not mirrored to the portal. Tested with the fake provider in
+`FloorObjectKindsTest` and `client/test/room_objects_test.dart`.
