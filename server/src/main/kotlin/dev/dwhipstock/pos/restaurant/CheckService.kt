@@ -222,7 +222,22 @@ class CheckService(private val config: CustomerConfig) {
         // new checks only — existing open checks (returned above) stay usable in a
         // closed zone so staff can finish editing and tender them
         requireZoneOpenForTable(tableId)
+        loadCheck(insertCheck(tableId, userId))
+    }
 
+    /**
+     * A quick-serve counter order: always a NEW check on the counter's one
+     * "table" (many orders are open there at once, each with its number).
+     * Joins the caller's transaction. Returns the check id.
+     */
+    fun openCounterCheck(tableId: String, userId: String): Int = transaction {
+        DiningTables.selectAll()
+            .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
+            .firstOrNull() ?: throw NotFoundException("table $tableId not found")
+        insertCheck(tableId, userId)
+    }
+
+    private fun insertCheck(tableId: String, userId: String): Int {
         val checkId = Checks.insertAndGetId {
             it[Checks.tableId] = tableId
             it[status] = "OPEN"
@@ -235,7 +250,7 @@ class CheckService(private val config: CustomerConfig) {
             put("tableId", tableId)
             put("openedBy", userId)
         })
-        loadCheck(checkId)
+        return checkId
     }
 
     fun addLine(checkId: Int, itemId: String, variantId: String, qty: Int, note: String?): CheckView = transaction {

@@ -24,10 +24,15 @@ import '../widgets/tax_rows.dart';
 class CheckScreen extends StatefulWidget {
   final int checkId;
   final String tableLabel;
+
+  /// A quick-serve counter order ("#101 · Take out"): no table to move it to,
+  /// and the header shows the order, not a table.
+  final bool counterOrder;
   const CheckScreen({
     super.key,
     required this.checkId,
     required this.tableLabel,
+    this.counterOrder = false,
   });
 
   @override
@@ -515,7 +520,10 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             icon: const Icon(LucideIcons.arrowRightLeft),
             tooltip: l.moveMerge,
             // only while money is fluid: no tender, no split (server re-guards)
-            onPressed: check.status == 'OPEN' && check.split == null
+            onPressed:
+                !widget.counterOrder &&
+                    check.status == 'OPEN' &&
+                    check.split == null
                 ? () => _moveOrMerge(check)
                 : null,
           ),
@@ -673,7 +681,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${l.table} ${widget.tableLabel}',
+                        widget.counterOrder
+                            ? widget.tableLabel
+                            : '${l.table} ${widget.tableLabel}',
                         style: T.text(
                           size: 22,
                           weight: FontWeight.w700,

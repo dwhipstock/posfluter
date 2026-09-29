@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pickup board</title>
+<style>
+  :root { --bg:#10202e; --panel:#172b3c; --ink:#f4efe6; --muted:#9fb0bf; --copper:#c9793f; --ready:#3fb37f; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family: "Inter", "Helvetica Neue", Arial, sans-serif; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:2vh 3vw; }
+  header h1 { margin:0; font-size:4vh; letter-spacing:.02em; }
+  header h1 span { color:var(--copper); }
+  #clock { font-size:3.2vh; color:var(--muted); font-variant-numeric:tabular-nums; }
+  main { display:grid; grid-template-columns:1fr 1fr; gap:2vw; padding:0 3vw 3vh; height:calc(100% - 11vh); }
+  section { background:var(--panel); border-radius:2vh; padding:2vh 2vw; overflow:hidden; display:flex; flex-direction:column; }
+  section h2 { margin:0 0 2vh; font-size:4.2vh; font-weight:700; }
+  section h2 small { display:block; font-size:2.4vh; font-weight:500; color:var(--muted); }
+  #ready h2 { color:var(--ready); }
+  .nums { display:flex; flex-wrap:wrap; gap:2vh 2vw; align-content:flex-start; }
+  .n { font-size:9vh; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.1; min-width:4ch; text-align:center; }
+  #preparing .n { color:var(--muted); font-size:7vh; }
+  #ready .n { color:var(--ink); background:rgba(63,179,127,.18); border-radius:1.5vh; padding:0 1vw; }
+  #ready .n.fresh { animation: pop 1.2s ease-out 3; background:var(--ready); color:#07140d; }
+  @keyframes pop { 0% { transform:scale(1); } 30% { transform:scale(1.15); } 100% { transform:scale(1); } }
+  #sound { position:fixed; right:2vw; bottom:2vh; background:transparent; border:1px solid var(--muted);
+    color:var(--muted); border-radius:1vh; padding:.8vh 1.2vw; font-size:2vh; cursor:pointer; }
+  #offline { display:none; position:fixed; left:0; right:0; bottom:0; background:#7a2e2e; text-align:center; padding:1vh; font-size:2.4vh; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="venue">Copper Lantern <span>Express</span></h1>
+  <div id="clock"></div>
+</header>
+<main>
+  <section id="preparing"><h2>En préparation<small>Preparing · Preparando · In Zubereitung</small></h2><div class="nums"></div></section>
+  <section id="ready"><h2>Prêt · Ready<small>Listo · Fertig</small></h2><div class="nums"></div></section>
+</main>
+<button id="sound" type="button">🔔 Son / Sound</button>
+<div id="offline">Connexion perdue — reconnexion… / Connection lost — reconnecting…</div>
+<script>
+(function () {
+  var known = null;          // ready numbers seen last poll (null = first load, no chime)
+  var soundOn = false;
+  var ctx = null;
+  var btn = document.getElementById('sound');
+  btn.addEventListener('click', function () {
+    // browsers only play sound after a tap on the page
+    try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); ctx.resume(); } catch (e) {}
+    soundOn = true; btn.textContent = '🔔 ✓'; chime();
+  });
+  function chime() {
+    if (!soundOn || !ctx) return;
+    [880, 1318.5].forEach(function (f, i) {
+      var o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + i * 0.22;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+      o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + 0.65);
+    });
+  }
+  function fill(id, nums, fresh) {
+    var box = document.querySelector('#' + id + ' .nums');
+    box.innerHTML = '';
+    nums.forEach(function (n) {
+      var d = document.createElement('div');
+      d.className = 'n' + (fresh && fresh.indexOf(n) >= 0 ? ' fresh' : '');
+      d.textContent = n;
+      box.appendChild(d);
+    });
+  }
+  var freshUntil = {};
+  function poll() {
+    fetch('/pickup/board', { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error(r.status); return r.json();
+    }).then(function (b) {
+      document.getElementById('offline').style.display = 'none';
+      if (b.venue) { document.title = b.venue; }
+      var now = Date.now();
+      if (known !== null) {
+        var added = b.ready.filter(function (n) { return known.indexOf(n) < 0; });
+        added.forEach(function (n) { freshUntil[n] = now + 8000; });
+        if (added.length) chime();
+      }
+      known = b.ready.slice();
+      var fresh = b.ready.filter(function (n) { return (freshUntil[n] || 0) > now; });
+      fill('preparing', b.preparing, null);
+      fill('ready', b.ready, fresh);
+    }).catch(function () {
+      document.getElementById('offline').style.display = 'block';
+    });
+  }
+  function tick() {
+    var d = new Date();
+    document.getElementById('clock').textContent =
+      String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  poll(); tick();
+  setInterval(poll, 2000); setInterval(tick, 10000);
+})();
+</script>
+</body>
+</html>

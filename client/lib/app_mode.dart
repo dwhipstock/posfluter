@@ -34,6 +34,12 @@ class AppMode {
   /// True in the card reader app (the phone for Tap to Pay).
   static bool isReader = _define == 'reader';
 
+  /// True in the self-order kiosk (`--dart-define=POS_APP=kiosk`): a
+  /// portrait, full-screen customer app at a quick-serve store. It never runs
+  /// a store; it finds the store on the Wi-Fi, pairs with the code the POS
+  /// shows, and sends each order straight to the counter (lib/kiosk/).
+  static bool isKiosk = _define == 'kiosk';
+
   /// True in the stock app. Settable for tests.
   static bool isStock =
       _define == 'stock' ||

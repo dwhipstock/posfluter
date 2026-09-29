@@ -11,7 +11,7 @@ class StoreProfile {
   /// 'copper-lantern' | 'sage-poppy' | 'pronghorn'
   final String brand;
 
-  /// 'restaurant' | 'retail'
+  /// 'restaurant' | 'retail' | 'quick-serve'
   final String kind;
   final String country;
   final String currency;
@@ -51,6 +51,9 @@ class StoreProfile {
   static StoreProfile current = pub;
 
   bool get isRetail => kind == 'retail';
+
+  /// A quick-serve counter (Copper Lantern Express): numbered orders, no floor plan.
+  bool get isQuickServe => kind == 'quick-serve';
   bool get isSagePoppy => brand == 'sage-poppy';
   bool get isPronghorn => brand == 'pronghorn';
 

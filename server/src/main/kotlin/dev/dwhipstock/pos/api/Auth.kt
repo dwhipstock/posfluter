@@ -189,7 +189,11 @@ private fun isOpenRoute(path: String, method: HttpMethod): Boolean =
         path == "/terminal" || path.startsWith("/terminal/ui/") ||
         // the phone card reader's API (payment.terminal=tap_to_pay): the phone's own
         // bearer token from pairing is checked by each route, not a staff session
-        path.startsWith("/reader/")
+        path.startsWith("/reader/") ||
+        // quick-serve: the pickup board (order numbers only, for a TV) and the
+        // self-order kiosks, whose paired device token each route checks itself
+        (method == HttpMethod.Get && (path == "/pickup" || path == "/pickup/board")) ||
+        path.startsWith("/kiosk/")
 
 fun Route.authRoutes(auth: AuthService) {
     /** Open: the login screen shows staff tiles ("who's clocking in?"). Names only, no PINs. */

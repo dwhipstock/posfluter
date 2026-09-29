@@ -10,8 +10,8 @@ import java.util.Properties
  * its IANA zone. Data, not code: every store's config names its own profile,
  * and nothing in the engine assumes a country or a currency.
  *
- * [kind] says which screens the terminal shows (table service or a retail
- * counter). [legalAge] is the store's default minimum age for age-restricted
+ * [kind] says which screens the terminal shows (table service, a retail
+ * counter or a quick-serve counter). [legalAge] is the store's default minimum age for age-restricted
  * items; `POS_LEGAL_AGE` / `legal.age` overrides it ([LegalAge]).
  */
 data class StoreProfile(
@@ -22,7 +22,12 @@ data class StoreProfile(
     val kind: Kind = Kind.RESTAURANT,
     val legalAge: Int = 18,
 ) {
-    enum class Kind(val wire: String) { RESTAURANT("restaurant"), RETAIL("retail") }
+    /**
+     * QUICK_SERVE is a counter restaurant (Copper Lantern Express): no floor
+     * plan, numbered orders, the kitchen and the self-order kiosks. Everything
+     * that is not RETAIL keeps the restaurant behaviour.
+     */
+    enum class Kind(val wire: String) { RESTAURANT("restaurant"), RETAIL("retail"), QUICK_SERVE("quick-serve") }
 
     init {
         require(country.length == 2 && country == country.uppercase()) { "country is an ISO 3166 alpha-2 code" }

@@ -28,6 +28,8 @@ class _Table {
 const _tables = [
   _Table('lib/i18n.dart', ['fr', 'en', 'es', 'de']),
   _Table('lib/kitchen/kitchen_i18n.dart', ['fr', 'en', 'es', 'de']),
+  _Table('lib/quickserve/quick_serve_i18n.dart', ['fr', 'en', 'es', 'de']),
+  _Table('lib/kiosk/kiosk_i18n.dart', ['fr', 'en', 'es', 'de']),
   _Table('lib/retail/retail_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/stock/stock_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/forecourt/forecourt_i18n.dart', ['en', 'es', 'fr']),
