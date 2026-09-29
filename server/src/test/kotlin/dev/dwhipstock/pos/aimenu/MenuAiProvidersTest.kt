@@ -26,17 +26,48 @@ class MenuAiProvidersTest {
         }
     }
 
+    private val geminiOk = """{"status":"completed","steps":[{"type":"thought","signature":"abc"},""" +
+        """{"type":"model_output","content":[{"type":"text","text":"{\"ops\":[]}"}]}],"usage":{"total_tokens":9}}"""
+
     @Test
-    fun geminiSendsJsonModeAndReadsTheText() {
-        val http = Recorder(200, """{"candidates":[{"content":{"parts":[{"text":"{\"ops\":[]}"}]}}]}""")
+    fun geminiSendsAnInteractionAndReadsTheText() {
+        val http = Recorder(200, geminiOk)
         val out = GeminiMenuProvider(key, http).complete("sys", "user", photo)
         assertEquals("""{"ops":[]}""", out)
         val req = http.requests.single()
-        assertTrue(req.url.endsWith("/v1beta/models/${GeminiMenuProvider.DEFAULT_MODEL}:generateContent"))
+        assertTrue(req.url.endsWith("/v1beta/interactions"))
         assertEquals(key, req.headers["x-goog-api-key"])
-        assertTrue(req.bodyText.contains("\"responseMimeType\":\"application/json\""))
-        assertTrue(req.bodyText.contains("inline_data"))
+        assertTrue(req.bodyText.contains("\"model\":\"${GeminiMenuProvider.DEFAULT_MODEL}\""))
+        assertTrue(req.bodyText.contains("\"system_instruction\":\"sys\""))
+        assertTrue(req.bodyText.contains("\"mime_type\":\"application/json\""))
+        assertTrue(req.bodyText.contains("\"type\":\"image\",\"mime_type\":\"image/jpeg\""))
         assertFalse(req.toString().contains(key))
+    }
+
+    /** Scripted replies, one per request. */
+    private class Script(vararg val replies: Pair<Int, String>) : ImageHttp {
+        val requests = mutableListOf<ImageHttpRequest>()
+        override fun send(request: ImageHttpRequest): ImageHttpResponse {
+            val (status, body) = replies[requests.size]
+            requests += request
+            return ImageHttpResponse(status, body.toByteArray())
+        }
+    }
+
+    @Test
+    fun geminiRetriesHighDemandThenFallsBackOnce() {
+        val busy = 503 to """{"error":{"message":"This model is currently experiencing high demand."}}"""
+        val pauses = mutableListOf<Long>()
+        val http = Script(busy, busy, 200 to geminiOk)
+        assertEquals("""{"ops":[]}""", GeminiMenuProvider(key, http, pause = { pauses += it }).complete("s", "u", emptyList()))
+        assertEquals(listOf(GeminiMenuProvider.DEFAULT_MODEL, GeminiMenuProvider.DEFAULT_MODEL, GeminiMenuProvider.FALLBACK_MODEL),
+            http.requests.map { Regex("\"model\":\"([^\"]+)\"").find(it.bodyText)!!.groupValues[1] })
+        assertEquals(1, pauses.size)
+        val allBusy = Script(busy, busy, busy)
+        assertEquals(ImageGenException.UNAVAILABLE, assertFailsWith<ImageGenException> {
+            GeminiMenuProvider(key, allBusy, pause = {}).complete("s", "u", emptyList())
+        }.code)
+        assertEquals(3, allBusy.requests.size)
     }
 
     @Test

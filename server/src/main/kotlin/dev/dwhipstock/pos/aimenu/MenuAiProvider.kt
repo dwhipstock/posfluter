@@ -57,48 +57,64 @@ private fun failure(provider: String, res: ImageHttpResponse, json: JsonObject?)
 
 private fun b64(bytes: ByteArray) = Base64.getEncoder().encodeToString(bytes)
 
-/** Gemini `generateContent` with `responseMimeType: application/json`. */
+/**
+ * Gemini Interactions API (`POST /v1beta/interactions`): new keys get a 404 on
+ * the old `generateContent` endpoint. JSON output via `response_format`.
+ * A 503 ("high demand") is retried once after a short pause, then tried once on
+ * [FALLBACK_MODEL] before the usual error is thrown.
+ */
 class GeminiMenuProvider(
     private val apiKey: String,
     private val http: ImageHttp,
     override val model: String = DEFAULT_MODEL,
     private val baseUrl: String = "https://generativelanguage.googleapis.com",
+    private val pause: (Long) -> Unit = { Thread.sleep(it) },
 ) : MenuAiProvider {
     override val id = "gemini"
     override val host: String get() = URI(baseUrl).host
 
-    companion object { const val DEFAULT_MODEL = "gemini-2.5-flash" }
+    companion object {
+        const val DEFAULT_MODEL = "gemini-3.8-flash"
+        const val FALLBACK_MODEL = "gemini-3.5-flash"
+        const val RETRY_PAUSE_MS = 1_500L
+    }
 
     override fun complete(system: String, user: String, images: List<MenuImage>): String {
-        val body = buildJsonObject {
-            putJsonObject("systemInstruction") { putJsonArray("parts") { addJsonObject { put("text", system) } } }
-            putJsonArray("contents") {
-                addJsonObject {
-                    put("role", "user")
-                    putJsonArray("parts") {
-                        images.forEach { img ->
-                            addJsonObject {
-                                putJsonObject("inline_data") { put("mime_type", img.contentType); put("data", b64(img.bytes)) }
-                            }
-                        }
-                        addJsonObject { put("text", user) }
+        val body = { m: String ->
+            buildJsonObject {
+                put("model", m)
+                put("system_instruction", system)
+                putJsonArray("input") {
+                    images.forEach { img ->
+                        addJsonObject { put("type", "image"); put("mime_type", img.contentType); put("data", b64(img.bytes)) }
                     }
+                    addJsonObject { put("type", "text"); put("text", user) }
                 }
-            }
-            putJsonObject("generationConfig") {
-                put("responseMimeType", "application/json")
-                put("temperature", 0)
-            }
+                putJsonObject("response_format") {
+                    put("type", "text")
+                    put("mime_type", "application/json")
+                    putJsonObject("schema") { put("type", "object") }
+                }
+                putJsonObject("generation_config") { put("temperature", 0) }
+            }.toString().toByteArray()
         }
-        val res = send("Gemini", http, ImageHttpRequest("POST", "$baseUrl/v1beta/models/$model:generateContent",
-            mapOf("x-goog-api-key" to apiKey), body.toString().toByteArray(), "application/json"))
+        val post = { m: String ->
+            send("Gemini", http, ImageHttpRequest("POST", "$baseUrl/v1beta/interactions",
+                mapOf("x-goog-api-key" to apiKey), body(m), "application/json"))
+        }
+        var res = post(model)
+        if (res.status == 503) { pause(RETRY_PAUSE_MS); res = post(model) }
+        if (res.status == 503 && model != FALLBACK_MODEL) res = post(FALLBACK_MODEL)
         val json = parseJsonObject(res.text)
         if (res.status !in 200..299) throw failure("Gemini", res, json)
-        val candidate = (json?.get("candidates") as? JsonArray)?.firstOrNull() as? JsonObject
-        val text = ((candidate?.get("content") as? JsonObject)?.get("parts") as? JsonArray)
-            ?.mapNotNull { (it as? JsonObject)?.get("text").str() }?.joinToString("")
-        if (text.isNullOrBlank()) throw ImageGenException.refused("Gemini", candidate?.get("finishReason").str()
-            ?: ((json?.get("promptFeedback") as? JsonObject)?.get("blockReason").str()))
+        val status = json?.get("status").str()
+        val text = (json?.get("steps") as? JsonArray)
+            ?.mapNotNull { it as? JsonObject }
+            ?.filter { it["type"].str() == "model_output" }
+            ?.flatMap { (it["content"] as? JsonArray).orEmpty() }
+            ?.mapNotNull { c -> (c as? JsonObject)?.takeIf { it["type"].str() == "text" }?.get("text").str() }
+            ?.joinToString("")
+        if (text.isNullOrBlank()) throw ImageGenException.refused("Gemini", status?.takeIf { it != "completed" })
         return text
     }
 
