@@ -1277,10 +1277,13 @@ class Api {
   }
 
   /// Apply the ticked changes (through the store's usual menu code).
+  /// [confirmed]: the manager confirmed a bulk change (more than 10 removals
+  /// or price changes); the store refuses a bulk Apply without it.
   static Future<MenuApplyResult> menuAiApply(
     String proposalId,
     List<String> changeIds,
     String managerPin,
+    bool confirmed,
   ) async {
     final res = await _send(
       () => http.post(
@@ -1290,6 +1293,7 @@ class Api {
           'managerPin': managerPin,
           'proposalId': proposalId,
           'changeIds': changeIds,
+          'confirmed': confirmed,
         }),
       ),
       operation: 'POST menu-ai/apply',
@@ -3517,12 +3521,21 @@ class MenuProposal {
   final String proposalId, provider, summary;
   final List<MenuChange> changes;
   final List<String> rejected;
+
+  /// No change set: `off_topic` (not a menu request) or `no_change`; the
+  /// dialog shows its own fixed reply for it, never the model's words.
+  final String? refusal;
+
+  /// Many removals or price changes: Apply asks for an extra confirm.
+  final bool bulk;
   const MenuProposal({
     required this.proposalId,
     required this.provider,
     required this.summary,
     required this.changes,
     this.rejected = const [],
+    this.refusal,
+    this.bulk = false,
   });
   factory MenuProposal.fromJson(Map<String, dynamic> j) => MenuProposal(
     proposalId: j['proposalId'] as String,
@@ -3532,6 +3545,8 @@ class MenuProposal {
         .map((c) => MenuChange.fromJson(c))
         .toList(),
     rejected: ((j['rejected'] as List?) ?? const []).cast<String>(),
+    refusal: j['refusal'] as String?,
+    bulk: j['bulk'] == true,
   );
 }
 

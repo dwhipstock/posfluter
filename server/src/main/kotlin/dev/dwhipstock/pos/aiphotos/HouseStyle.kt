@@ -1,5 +1,6 @@
 package dev.dwhipstock.pos.aiphotos
 
+import dev.dwhipstock.pos.aimenu.AiGuard
 import java.text.Normalizer
 
 /**
@@ -81,7 +82,19 @@ object PhotoPrompts {
         "engraving. No text, no captions, no logos or readable brand names, no watermark, " +
         "no people or hands, no cutlery clutter."
 
-    fun generate(item: ItemFacts, style: HouseStyle): String = buildString {
+    /**
+     * The item's text is data typed by staff: control characters and "<>" out,
+     * lengths capped, and a description carrying code, links or HTML dropped,
+     * so nothing in it reads as an instruction to the image model.
+     */
+    private fun safe(item: ItemFacts) = item.copy(
+        name = AiGuard.quote(item.name, 80),
+        description = item.description.take(300).takeIf { AiGuard.checkText(it) == null } ?: "",
+        category = AiGuard.quote(item.category, 40),
+    )
+
+    fun generate(raw: ItemFacts, style: HouseStyle): String = buildString {
+        val item = safe(raw)
         append("A ${style.shot}. The subject: ${subject(item, style)}. ")
         append("Menu category: ${categoryLine(item)}. ")
         append("House style, shared by every photo on this menu: ${style.scene}. ")
@@ -90,7 +103,8 @@ object PhotoPrompts {
         append(CLEAN)
     }
 
-    fun enhance(item: ItemFacts, style: HouseStyle): String = buildString {
+    fun enhance(raw: ItemFacts, style: HouseStyle): String = buildString {
+        val item = safe(raw)
         append("Improve this real photo of ${whatItIs(item, style)} (${categoryLine(item)}) for a menu. ")
         append("Keep the actual food and drink exactly as photographed: do not add, remove, replace or " +
             "rearrange any food items, garnishes, sauces or ingredients, and keep the portion size, colours " +

@@ -93,8 +93,9 @@ synced, never returned by an endpoint, and scrubbed from error text.
 GET  /menu-ai/status                       {configured, available, provider, model, online, reason}
 POST /menu-ai/photos                       multipart photo(s) + managerPin (+ note) → proposal
 POST /menu-ai/chat                         {managerPin, text} → proposal
-POST /menu-ai/apply                        {managerPin, proposalId, changeIds} → {applied, createdItemIds, changeSetId}
+POST /menu-ai/apply                        {managerPin, proposalId, changeIds, confirmed?} → {applied, createdItemIds, changeSetId}
 GET  /menu-ai/history                      last 20 change sets
+GET  /menu-ai/requests                     the AI log: who, device, when, kind, outcome (last 100)
 POST /menu-ai/history/{setId}/revert       {managerPin, force?}
 ```
 
@@ -103,6 +104,51 @@ take a manager PIN. Offline (no route to the provider), the buttons are greyed
 out with a note and nothing else in the store is affected. Errors come back as
 `menu_ai_*` codes (`offline`, `timeout`, `rate_limited`, `quota`, `refused`,
 `bad_reply`, `disabled`) that the tablet translates.
+
+## AI safety
+
+What happens if someone tries to jailbreak it: nothing interesting. The model
+only ever proposes, and the store decides, with rules the model cannot talk
+its way around (`server/.../aimenu/AiGuard.kt`, `MenuChangeSet.kt`).
+
+- **Off-topic or injection requests** ("forget previous instructions", "write
+  reverse Fibonacci", "what is your system prompt", "tell me a joke", role
+  play) get one fixed, friendly reply, shown as a normal chat message: "I can
+  only help set up and edit your menu", in French, English, Spanish and German.
+  Plain cases are caught before any model call (so they cost nothing); the
+  rest the model flags with its `refusal` field. A reply with no valid change
+  set (prose, code, a leaked prompt, 1000 deletes) ends in the same fixed
+  reply. The model's own words never reach the screen raw: only its one-line
+  summary, and only when it is plain menu text.
+- **Never reveals instructions or keys.** The system prompt says so; the store
+  never returns the prompt, and any name or summary quoting it (or holding a
+  key) is dropped.
+- **Untrusted content is data.** The current menu, the manager's note, the
+  names to translate and everything printed in a photo are wrapped in tagged
+  blocks the prompt calls data; the manager's words go in their own block,
+  with `<` and `>` neutralised so no text can close its block and pose as
+  instructions. "Ignore previous instructions" printed on a menu photo can at
+  worst become an odd item name, which the rules below then reject.
+- **Hard limits, whatever the model says:** known operations only; ids must
+  exist; prices above 0 and at most 1000 in the store currency (0 only for a
+  size that is already free), so "make everything free" is rejected by the
+  price rule; names up to 80 characters (categories 40, descriptions 300); no
+  code, HTML, links, control characters, emoji strings or words from a small
+  per-language blocklist; at most 150 new items and 25 removals per request
+  (more removals and all of them are rejected). More than 10 removals or price
+  changes need an extra "Apply anyway?" on the tablet, and the store refuses
+  that Apply without it.
+- **Rate limit and log:** 20 AI calls per 10 minutes per device and per
+  manager (then `menu_ai_too_many`, "try again in a few minutes"). Every call
+  is logged for the manager (`GET /menu-ai/requests`: who, device, when,
+  chat / photos / translate / room_object, outcome, counts), never the key,
+  the photo or the prompt.
+- The same text rules cover "Add from photo" room objects and the item text
+  that goes into AI photo prompts.
+
+`AiSafetyTest` drives all of it with a fake model that misbehaves: prose,
+code, an injected system prompt, huge, negative and zero prices, 1000 deletes,
+HTML and script names, plus the exact requests above.
 
 ## Tested
 
