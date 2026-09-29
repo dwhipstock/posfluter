@@ -165,12 +165,10 @@ sealed interface ReceiptPolicy {
     val alwaysCents: Boolean get() = false
 
     /**
-     * Money on the receipt, in this policy's style: bare figures, no symbol.
-     * French prints the French way ("10,50", "1 010" with a no-break space).
+     * Money on the receipt, in this policy's style: bare figures, no symbol,
+     * always North American ("10.50", "1,010") whatever the receipt language.
      */
-    fun money(m: Money): String = (if (alwaysCents) m.formatCents() else m.format()).let {
-        if (locale.tag == LocaleCode.FR.tag) Money.frenchFigure(it) else it
-    }
+    fun money(m: Money): String = if (alwaysCents) m.formatCents() else m.format()
 
     /**
      * The printed block under the store's name: [headerLines], then the phone

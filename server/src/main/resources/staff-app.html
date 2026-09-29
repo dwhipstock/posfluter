@@ -456,12 +456,10 @@ function photoFallback(img) {
   d.textContent = img.dataset.fallback || "";
   img.replaceWith(d);
 }
-// Money in the store's currency, the way the language writes it: "12,99 $"
-// (fr-CA), "$12.99" (en-CA, en-US, es-US), "1.234,50 $" (de: German figures,
-// the store's own currency, its plain symbol).
-const money = cents => (cents / 100).toLocaleString(lang + "-" + store.country, {
-  style: "currency", currency: store.currency,
-  ...(lang === "de" ? { currencyDisplay: "narrowSymbol" } : {}),
+// Money in the store's currency, always North American style whatever the
+// language: "$12.99", "$1,234.50", "-$5.00" (the owner's rule).
+const money = cents => (cents / 100).toLocaleString("en-US", {
+  style: "currency", currency: store.currency, currencyDisplay: "narrowSymbol",
 });
 // Catalog data carries French and English: French reads the French side,
 // English, Spanish and German read the English side, unless the row carries

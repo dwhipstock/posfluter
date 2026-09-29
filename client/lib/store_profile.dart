@@ -1,5 +1,3 @@
-import 'i18n.dart';
-
 /// What this terminal's store is: which screens, brand, languages and money
 /// format it uses. Read from the store's public `GET /health` (before
 /// sign-in), so a retail counter, a US store or a Québec pub each come up
@@ -103,18 +101,16 @@ class StoreProfile {
 
 /// Money for people, in this store's currency. Cents on the wire everywhere.
 ///
-/// - CAD (the pubs): the house style they always had — `$1,010` for whole
-///   dollars, `$10.50` otherwise — in English; in French the Québec way,
-///   `1 010 $` and `10,50 $` (no-break spaces, the symbol after).
-/// - USD: `$12.99`, `$5.00` — US shelf style, always with cents, in English
-///   and US Spanish alike.
+/// Always North American style, whatever the UI language (owner's rule):
+/// symbol first, period decimal, comma thousands.
 ///
-/// [lang] defaults to the terminal's current UI language.
-String money(int cents, {String? currency, String? lang}) => formatMoney(
-  cents,
-  currency ?? StoreProfile.current.currency,
-  lang: lang ?? Prefs.instance.lang,
-);
+/// - CAD (the pubs): the house style they always had — `$1,010` for whole
+///   dollars, `$10.50` otherwise.
+/// - USD: `$12.99`, `$5.00` — US shelf style, always with cents.
+///
+/// [lang] is kept for compatibility and ignored.
+String money(int cents, {String? currency, String? lang}) =>
+    formatMoney(cents, currency ?? StoreProfile.current.currency);
 
 /// A signed adjustment (cash rounding): `+$0.01`, `−$0.02`. Always shows the
 /// sign so the cashier reads it as a correction, not an amount.
@@ -123,45 +119,25 @@ String signedMoney(int cents, {String? currency}) {
   return cents < 0 ? '−$abs' : '+$abs';
 }
 
-/// [lang] is a UI language (`en`, `fr`, `es`, `de`) or a tag (`fr-CA`).
+/// North American money text: `$1,234.56`, `-$5.00` (CAD whole dollars:
+/// `$1,010`). [lang] is kept for compatibility and ignored — money never
+/// changes shape with the UI language.
 String formatMoney(int cents, String currency, {String lang = 'en'}) {
   final sign = cents < 0 ? '-' : '';
   final abs = cents.abs();
   final whole = abs ~/ 100;
   final frac = abs % 100;
-  String grouped(String sep) => whole.toString().replaceAllMapped(
+  final grouped = whole.toString().replaceAllMapped(
     RegExp(r'(\d)(?=(\d{3})+$)'),
-    (m) => '${m[1]}$sep',
+    (m) => '${m[1]},',
   );
   final cc = frac.toString().padLeft(2, '0');
-  if (lang.toLowerCase().startsWith('de')) {
-    // German: 1.234,56 $ — dot thousands, decimal comma, the store's own
-    // symbol after (CAD keeps the pubs' whole-dollar style: 1.010 $)
-    final sym = switch (currency.toUpperCase()) {
-      'CAD' || 'USD' => '\$',
-      'EUR' => '€',
-      final c => c,
-    };
-    final figure = currency.toUpperCase() == 'CAD' && frac == 0
-        ? grouped('.')
-        : '${grouped('.')},$cc';
-    return '$sign$figure$_nbsp$sym';
-  }
   switch (currency.toUpperCase()) {
     case 'CAD':
-      if (lang.toLowerCase().startsWith('fr')) {
-        // Québec French: 1 010 $ / 10,50 $ (no-break spaces keep it on one line)
-        final figure = frac == 0 ? grouped(_nbsp) : '${grouped(_nbsp)},$cc';
-        return '$sign$figure$_nbsp\$';
-      }
-      return frac == 0
-          ? '$sign\$${grouped(',')}'
-          : '$sign\$${grouped(',')}.$cc';
+      return frac == 0 ? '$sign\$$grouped' : '$sign\$$grouped.$cc';
     case 'USD':
-      return '$sign\$${grouped(',')}.$cc';
+      return '$sign\$$grouped.$cc';
     default:
-      return '$sign${currency.toUpperCase()} ${grouped(',')}.$cc';
+      return '$sign${currency.toUpperCase()} $grouped.$cc';
   }
 }
-
-const _nbsp = '\u00A0';

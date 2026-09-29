@@ -40,7 +40,7 @@ data class StoreProfile(
     /** "en-US", "fr-CA": the BCP 47 tag of [locale] in this store's country. */
     fun tag(locale: LocaleCode = defaultLocale): String = "${locale.tag}-$country"
 
-    /** Money in this store's currency, formatted for [locale] ([MoneyFormat]). */
+    /** Money in this store's currency, North American style ([MoneyFormat]); [locale] doesn't change it. */
     fun format(amount: Money, locale: LocaleCode = defaultLocale): String =
         MoneyFormat.format(amount, currency, tag(locale))
 
@@ -55,33 +55,27 @@ data class StoreProfile(
 }
 
 /**
- * Locale-correct money text for people (receipts keep the bare [Money.format]
- * figures they always printed). Covers the currencies and languages the
- * stores use; the symbol goes where the language puts it:
- *
- *  - `en-US` / `es-US` USD: `$12.99`, `-$1,234.50`
- *  - `en-CA` CAD: `$12.99`; `fr-CA` CAD: `12,99 $`, `1 234,50 $`
+ * Money text for people (receipts keep the bare [Money.format] figures they
+ * always printed). Always North American style, whatever the language (the
+ * owner's rule): symbol first, period decimal, comma thousands —
+ * `$12.99`, `-$1,234.50` in `en-US`, `fr-CA`, `es-US` or `de-*` alike.
+ * [localeTag] is kept for compatibility and ignored.
  *
  * [unambiguous] adds the country to a dollar sign (`US$12.99`, `CA$12.99`) for
  * places that show several currencies side by side.
  */
 object MoneyFormat {
     private const val NBSP = '\u00A0'
-    private const val NNBSP = '\u202F' // narrow no-break space: French thousands
 
+    @Suppress("UNUSED_PARAMETER")
     fun format(amount: Money, currency: String, localeTag: String, unambiguous: Boolean = false): String {
-        val lang = localeTag.substringBefore('-').lowercase()
         val cents = amount.cents
         val abs = kotlin.math.abs(cents)
         val whole = abs / 100
         val frac = (abs % 100).toString().padStart(2, '0')
         val sign = if (cents < 0) "-" else ""
         val symbol = symbol(currency, unambiguous)
-        return if (lang == "fr") {
-            "$sign${group(whole, NNBSP)},$frac$NBSP$symbol"
-        } else {
-            "$sign$symbol${group(whole, ',')}.$frac"
-        }
+        return "$sign$symbol${group(whole, ',')}.$frac"
     }
 
     fun symbol(currency: String, unambiguous: Boolean = false): String = when (currency.uppercase()) {

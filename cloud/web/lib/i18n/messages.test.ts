@@ -62,12 +62,14 @@ test("translate fills placeholders per locale", () => {
   assert.equal(translate("en", "account_footer", { brand: "X", version: "1" }), "X cloud portal · v1");
 });
 
-test("German numbers and dates: 1.234,56 and dd.MM.yyyy, the store's own currency", () => {
-  const NBSP = " ";
-  assert.equal(money(123456, "CAD", { locale: "de" }), `1.234,56${NBSP}$`);
-  assert.equal(money(123400, "CAD", { locale: "de" }), `1.234${NBSP}$`);
-  assert.equal(money(1299, "CAD", { locale: "de", unambiguous: true }), `12,99${NBSP}CA$`);
-  assert.equal(moneyCents(-123400, "USD", { locale: "de" }), `-1.234,00${NBSP}$`);
+test("German numbers and dates: 1.234 and dd.MM.yyyy; money stays North American", () => {
+  assert.equal(money(123456, "CAD", { locale: "de" }), "$1,234.56");
+  assert.equal(money(123400, "CAD", { locale: "de" }), "$1,234");
+  assert.equal(money(1299, "CAD", { locale: "de", unambiguous: true }), "CA$12.99");
+  assert.equal(moneyCents(-123400, "USD", { locale: "de" }), "-$1,234.00");
+  assert.equal(money(123456, "CAD", { locale: "fr" }), "$1,234.56");
+  assert.equal(money(123456, "CAD", { locale: "fr", short: true }), "$1.2k");
+  assert.equal(moneyCents(-500, "CAD", { locale: "fr" }), "-$5.00");
   assert.equal(count(1234567, "de"), "1.234.567");
   assert.equal(decimal(9.975, 3, "de"), "9,975");
   const fmt = makeFmt("de", (k) => translate("de", k));

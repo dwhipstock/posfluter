@@ -9,6 +9,7 @@ import '../design/widgets.dart';
 import '../i18n.dart';
 import '../kitchen/kitchen_banner.dart';
 import '../kitchen/kitchen_i18n.dart';
+import '../quickserve/quick_serve_i18n.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/print_language_picker.dart';
@@ -26,8 +27,14 @@ class CheckScreen extends StatefulWidget {
   final String tableLabel;
 
   /// A quick-serve counter order ("#101 · Take out"): no table to move it to,
-  /// and the header shows the order, not a table.
+  /// and the header shows the order, not a table. The counter gets a fast
+  /// layout: every category on a rail, a dense grid, one tap = one more, and
+  /// a "New order" button. Pops with [nextOrder] when paid or when the
+  /// cashier asks for the next order.
   final bool counterOrder;
+
+  /// Pop result: start the next counter order (same dine in / take out).
+  static const nextOrder = 'next';
   const CheckScreen({
     super.key,
     required this.checkId,
@@ -54,6 +61,11 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   KitchenCheckState? _kitchen;
   bool _sending = false;
 
+  /// Counter: the tile just tapped flashes; "All" shows every category.
+  String? _flashItem;
+  Timer? _flashTimer;
+  static const _allCategories = '*';
+
   @override
   void initState() {
     super.initState();
@@ -65,6 +77,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   @override
   void dispose() {
     _poll?.cancel();
+    _flashTimer?.cancel();
     // leaving the bill sends whatever the kitchen doesn't have yet (best
     // effort, never blocks; the store already handles voids on its own)
     if (KitchenApi.enabled) KitchenApi.sendQuietly(widget.checkId);
@@ -206,6 +219,13 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   Future<void> _addItem(Item item, {bool forceSheet = false}) async {
     if (!item.active) return; // 86'd: visible but not orderable
+    if (widget.counterOrder && !forceSheet && item.variants.length == 1) {
+      _flashTimer?.cancel();
+      setState(() => _flashItem = item.id);
+      _flashTimer = Timer(const Duration(milliseconds: 350), () {
+        if (mounted) setState(() => _flashItem = null);
+      });
+    }
     Variant variant = item.variants.first;
     int qty = 1;
     String? note;
@@ -449,11 +469,16 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       ),
     );
     if (closed == true && mounted) {
-      Navigator.of(context).pop();
+      _paidAndDone();
     } else {
       _load();
     }
   }
+
+  /// Paid in full: back to the tables; a counter goes on to the next order.
+  void _paidAndDone() => Navigator.of(
+    context,
+  ).pop(widget.counterOrder ? CheckScreen.nextOrder : null);
 
   @override
   Widget build(BuildContext context) {
@@ -480,7 +505,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                           // fixed cart: roomy on the landscape tablet, narrower
                           // when the screen is (portrait / small windows)
                           SizedBox(
-                            width: c.maxWidth >= 1100 ? 420 : 340,
+                            width: !widget.counterOrder && c.maxWidth >= 1100
+                                ? 420
+                                : 340,
                             child: _billPanel(check, l),
                           ),
                         ],
@@ -536,6 +563,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   }
 
   Widget _menuColumn(L l) {
+    if (widget.counterOrder) return _counterMenu(l);
     final visible = _items.where((i) => i.category == _category).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -602,6 +630,215 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   /// Name (two lines) + price block under each tile's photo.
   static const _tileTextHeight = 90.0;
+
+  /// Counter: every category at once on a rail (no scrolling), then a dense
+  /// grid of small tiles — built for speed, like a fast-food register.
+  Widget _counterMenu(L l) {
+    final q = Q.of(context);
+    final all = _category == _allCategories;
+    final visible = all
+        ? _items
+        : _items.where((i) => i.category == _category).toList();
+    final entries = <(String, String)>[
+      (_allCategories, q.all),
+      for (final c in _categories) (c.id, l.name(c.nameFr, c.nameEn, c.names)),
+    ];
+    final counts = <String, int>{};
+    for (final line in _check?.lines ?? const <CheckLine>[]) {
+      final id = line.itemId;
+      if (id != null) counts[id] = (counts[id] ?? 0) + line.qty;
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          width: 176,
+          color: T.surface,
+          padding: const EdgeInsets.all(6),
+          child: LayoutBuilder(
+            builder: (context, c) {
+              // all of them fit: the buttons share the height (max 76 each)
+              const gap = 8.0, openItemH = 52.0;
+              final n = entries.length;
+              final h = ((c.maxHeight - openItemH - gap * n) / n).clamp(
+                36.0,
+                76.0,
+              );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (id, label) in entries) ...[
+                    SizedBox(
+                      height: h,
+                      child: _RailButton(
+                        key: Key('cat-$id'),
+                        label: label,
+                        selected: id == _category,
+                        onTap: () => setState(() => _category = id),
+                      ),
+                    ),
+                    const SizedBox(height: gap),
+                  ],
+                  const Spacer(),
+                  SizedBox(
+                    height: openItemH,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(LucideIcons.pencilLine, size: 18),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(l.openItem, maxLines: 1),
+                      ),
+                      onPressed: _check?.status == 'OPEN' ? _addOpenItem : null,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: T.navy,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        const VerticalDivider(),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, c) {
+              // ~112pt columns: 6 across on the landscape tablet and the Surface
+              const pad = 8.0, gap = 6.0;
+              final avail = c.maxWidth - pad * 2;
+              final cols = ((avail + gap) / (112 + gap)).floor().clamp(3, 6);
+              final tileW = (avail - gap * (cols - 1)) / cols;
+              return GridView.builder(
+                padding: const EdgeInsets.all(pad),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: cols,
+                  mainAxisSpacing: gap,
+                  crossAxisSpacing: gap,
+                  mainAxisExtent: tileW / 2.2 + _counterTextHeight,
+                ),
+                itemCount: visible.length,
+                itemBuilder: (_, i) =>
+                    _counterTile(visible[i], l, counts[visible[i].id] ?? 0),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Counter tile: name (two lines, a third for the long ones) + price under a 2:1 photo.
+  static const _counterTextHeight = 76.0;
+
+  Widget _counterTile(Item item, L l, int inOrder) {
+    final inactive = !item.active;
+    final flash = _flashItem == item.id;
+    return Opacity(
+      opacity: inactive ? 0.45 : 1,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PosPanel(
+            key: Key('tile-${item.id}'),
+            raised: !inactive,
+            color: flash ? T.accent.withValues(alpha: .18) : T.surface,
+            borderColor: flash || inOrder > 0 ? T.accent : T.border,
+            onTap: inactive ? null : () => _addItem(item),
+            onLongPress: inactive
+                ? null
+                : () => _addItem(item, forceSheet: true),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AspectRatio(
+                  aspectRatio: 2.2,
+                  child: ItemPhoto(
+                    item,
+                    width: 320,
+                    fallback: AbbrevFallback(item.abbrev, size: 36),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l.name(item.nameFr, item.nameEn, item.names),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: T
+                                .text(size: 13, weight: FontWeight.w600)
+                                .copyWith(
+                                  height: 1.15,
+                                  decoration: inactive
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.variants.length == 1
+                                    ? money(item.variants.first.priceCents)
+                                    : '${money(item.variants.first.priceCents)}+',
+                                maxLines: 1,
+                                style: T.price(
+                                  size: 15,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (inactive)
+                              const Pill('86', color: T.destructive),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // how many are on the order: the cashier sees each tap land
+          if (inOrder > 0)
+            Positioned(
+              top: 6,
+              right: 6,
+              child: IgnorePointer(
+                child: Container(
+                  key: Key('badge-${item.id}'),
+                  constraints: const BoxConstraints(minWidth: 30),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: T.accent,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: T.raised,
+                  ),
+                  child: Text(
+                    '$inOrder',
+                    textAlign: TextAlign.center,
+                    style: T.text(
+                      size: 16,
+                      weight: FontWeight.w800,
+                      color: T.onAccent,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _menuTile(Item item, L l) {
     final inactive = !item.active; // 86'd: greyed + strike-through, NOT hidden
@@ -703,7 +940,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     ],
                   ),
                 ),
-                if (KitchenApi.enabled)
+                if (KitchenApi.enabled && !widget.counterOrder)
                   TextButton.icon(
                     style: TextButton.styleFrom(
                       foregroundColor: T.onPrimary,
@@ -725,17 +962,18 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       color: T.attention,
                     ),
                   ),
-                IconButton(
-                  icon: const Icon(LucideIcons.plusCircle),
-                  color: T.onPrimary,
-                  disabledColor: T.onNavyMuted.withValues(alpha: .5),
-                  tooltip: l.corkageTitle,
-                  constraints: const BoxConstraints(
-                    minWidth: T.minTouch,
-                    minHeight: T.minTouch,
+                if (!widget.counterOrder)
+                  IconButton(
+                    icon: const Icon(LucideIcons.plusCircle),
+                    color: T.onPrimary,
+                    disabledColor: T.onNavyMuted.withValues(alpha: .5),
+                    tooltip: l.corkageTitle,
+                    constraints: const BoxConstraints(
+                      minWidth: T.minTouch,
+                      minHeight: T.minTouch,
+                    ),
+                    onPressed: check.status == 'OPEN' ? _setCorkage : null,
                   ),
-                  onPressed: check.status == 'OPEN' ? _setCorkage : null,
-                ),
               ],
             ),
           ),
@@ -830,6 +1068,21 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     ),
                   ],
                 ),
+                // Canada has no pennies: what cash comes to, rounded by the
+                // store (the same figure Pay → Cash and the receipt use)
+                if (widget.counterOrder && check.cashRoundingCents != 0)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      Q.of(context).cashLine(money(check.cashDueCents)),
+                      key: const Key('cash-due'),
+                      style: T.price(
+                        size: 18,
+                        weight: FontWeight.w700,
+                        color: T.textMuted,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 // secondary "check please" bill above — not competing with — Pay.
                 // Same enable rule as Pay: needs real, resolved (non-pending) content.
@@ -888,6 +1141,47 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 // (long in French) never has to squeeze
                 Row(
                   children: [
+                    // counter: the next customer is one tap away, always
+                    if (widget.counterOrder) ...[
+                      SizedBox(
+                        height: 64,
+                        child: OutlinedButton(
+                          key: const Key('new-order'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: T.navy,
+                            side: const BorderSide(color: T.navy, width: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            textStyle: T.text(
+                              size: 15,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                          // an empty order is already the new one
+                          onPressed: check.lines.isEmpty
+                              ? null
+                              : () => Navigator.of(
+                                  context,
+                                ).pop(CheckScreen.nextOrder),
+                          child: SizedBox(
+                            width: 112,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.plus, size: 20),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    Q.of(context).newOrder,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Expanded(
                       child: SizedBox(
                         height: 64,
@@ -934,7 +1228,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                         ),
                                       );
                                   if (closed == true && mounted) {
-                                    Navigator.of(context).pop();
+                                    _paidAndDone();
                                   } else {
                                     _load();
                                   }
@@ -1262,6 +1556,52 @@ class _CategoryChip extends StatelessWidget {
                 color: selected ? T.onAccent : T.textPrimary,
                 weight: FontWeight.w600,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Counter category rail: a big full-width button, copper when selected.
+class _RailButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _RailButton({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? T.accent : T.background,
+      shape: RoundedRectangleBorder(
+        borderRadius: T.radiusMedium,
+        side: BorderSide(color: selected ? T.accent : T.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: T
+                  .text(
+                    size: 15,
+                    weight: FontWeight.w700,
+                    color: selected ? T.onAccent : T.textPrimary,
+                  )
+                  .copyWith(height: 1.15),
             ),
           ),
         ),

@@ -160,7 +160,7 @@ class NetworkThermalPrinter(
             PrintLine.Divider,
             PrintLine.KeyValue("Français\u00A0: àâçéèêëîïôûùüÿœ", "OK"),
             PrintLine.KeyValue("English", "OK"),
-            PrintLine.KeyValue("Ventes", "1\u00A0234,50\u00A0$", emphasized = true),
+            PrintLine.KeyValue("Ventes", "\$1,234.50", emphasized = true),
             PrintLine.Divider,
             PrintLine.Text("${t.ip}:${t.port}", Align.CENTER),
             PrintLine.Blank,

@@ -27,18 +27,18 @@ void main() {
     expect(money(1299), '\$12.99');
   });
 
-  test('CAD keeps the pubs\' house style; fr-CA puts the symbol after', () {
+  test('CAD keeps the pubs\' house style, North American in every language', () {
     expect(money(101000), '\$1,010'); // default profile: the pubs, unchanged
     expect(money(21550), '\$215.50');
     expect(cad(21550), '\$215.50');
-    expect(formatMoney(1299, 'CAD', lang: 'fr-CA'), '12,99\u00A0\$');
-    expect(formatMoney(123450, 'CAD', lang: 'fr-CA'), '1\u00A0234,50\u00A0\$');
-    expect(formatMoney(101000, 'CAD', lang: 'fr'), '1\u00A0010\u00A0\$');
-    expect(formatMoney(-50, 'CAD', lang: 'fr'), '-0,50\u00A0\$');
-    // money() follows the UI language; USD stays the US way in every language
+    expect(formatMoney(1299, 'CAD', lang: 'fr-CA'), '\$12.99');
+    expect(formatMoney(123450, 'CAD', lang: 'fr-CA'), '\$1,234.50');
+    expect(formatMoney(101000, 'CAD', lang: 'fr'), '\$1,010');
+    expect(formatMoney(-50, 'CAD', lang: 'fr'), '-\$0.50');
+    // money() ignores the UI language: always symbol first, period decimal
     Prefs.instance.lang = 'fr';
-    expect(money(4000), '40\u00A0\$');
-    expect(money(1050), '10,50\u00A0\$');
+    expect(money(4000), '\$40');
+    expect(money(1050), '\$10.50');
     expect(money(1050, lang: 'en'), '\$10.50');
     expect(money(1299, currency: 'USD'), '\$12.99');
   });
@@ -155,11 +155,11 @@ void main() {
     expect(de.name(item.nameFr, item.nameEn, item.names), 'Klassische Poutine');
   });
 
-  test('German numbers and dates', () {
-    expect(formatMoney(123456, 'CAD', lang: 'de'), '1.234,56\u00A0\$');
-    expect(formatMoney(101000, 'CAD', lang: 'de'), '1.010\u00A0\$');
-    expect(formatMoney(1299, 'USD', lang: 'de'), '12,99\u00A0\$');
-    expect(formatMoney(-550, 'EUR', lang: 'de'), '-5,50\u00A0€');
+  test('German dates; money stays North American', () {
+    expect(formatMoney(123456, 'CAD', lang: 'de'), '\$1,234.56');
+    expect(formatMoney(101000, 'CAD', lang: 'de'), '\$1,010');
+    expect(formatMoney(1299, 'USD', lang: 'de'), '\$12.99');
+    expect(formatMoney(-500, 'USD', lang: 'de'), '-\$5.00');
     expect(const L.forLang('de').retry, 'Erneut versuchen');
     Prefs.instance.lang = 'de';
     expect(Prefs.instance.fmtDate(DateTime(2026, 10, 8)), '08.10.2026');

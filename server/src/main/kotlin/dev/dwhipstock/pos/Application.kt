@@ -554,7 +554,7 @@ fun Application.module(
         customerRoutes(checkService, config)
         tableLinkRoutes(config)
         authRoutes(authService)
-        staffAdminRoutes(authService)
+        staffAdminRoutes(authService, config.profile.defaultLocale.tag)
         pairingRoutes(pairingService)
         posRoutes(checkService, authService, photoStore, stripeService, terminals)
         retailRoutes(retailService, authService)
@@ -646,7 +646,7 @@ data class HealthResponse(
     val country: String = "CA",
     val currency: String = "CAD",
     /** Languages staff can pick; the first is the store's default. */
-    val locales: List<String> = listOf("fr", "en"),
+    val locales: List<String> = listOf("en", "fr"),
     val legalAge: Int = 18,
     /** Cash payments round to the nickel ("nickel") or are charged to the cent ("off"). */
     val cashRounding: String = "nickel",

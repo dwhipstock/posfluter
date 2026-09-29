@@ -39,11 +39,11 @@ fun main(args: Array<String>) {
         PrintLine.Text("French raster probe", Align.CENTER),
         PrintLine.Divider,
         PrintLine.Header("Essai des accents français"),
-        PrintLine.KeyValue("Poutine au smoked meat ×1", "16,75"),
-        PrintLine.KeyValue("Stout à l’avoine et à l’érable (pinte) ×2", "17,00"),
-        PrintLine.KeyValue("TPS/GST 5\u00A0%", "1,69"),
+        PrintLine.KeyValue("Poutine au smoked meat ×1", "16.75"),
+        PrintLine.KeyValue("Stout à l’avoine et à l’érable (pinte) ×2", "17.00"),
+        PrintLine.KeyValue("TPS/GST 5\u00A0%", "1.69"),
         PrintLine.Divider,
-        PrintLine.KeyValue("Total", "35,44", emphasized = true),
+        PrintLine.KeyValue("Total", "35.44", emphasized = true),
         PrintLine.Text("Merci de votre visite\u00A0!", Align.CENTER),
     )
     val img = ThermalReceiptRenderer.renderImage(lines)

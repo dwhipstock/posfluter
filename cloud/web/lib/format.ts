@@ -1,6 +1,6 @@
 // Money + numeric helpers. Cents only when nonzero, matching the POS client.
-// English: "$1,234.50"; French (Québec): "1 234,50 $" — pass the locale to
-// `money` (useMoney does). Dates and tender labels live in lib/i18n/.
+// Money is always North American style — "$1,234.50", "-$5.00" — whatever the
+// UI language (the owner's rule). Dates and tender labels live in lib/i18n/.
 
 export function hourLabel(h: number): string {
   return `${String(h).padStart(2, "0")}:00`;
@@ -50,42 +50,22 @@ export function currencySymbol(currency: string = "CAD", unambiguous = false): s
   }
 }
 
-const NBSP = "\u00A0";
-const NNBSP = "\u202F"; // narrow no-break space: French thousands
+const NNBSP = "\u202F"; // narrow no-break space: French thousands (counts only)
 
 function groupThousands(n: number, sep: string): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, sep);
 }
 
-/** French (Québec) dollar suffix: "$", or "$ CA" / "$ US" when several currencies are shown. */
-function frSuffix(currency: string, unambiguous: boolean): string {
-  switch (currency.toUpperCase()) {
-    case "CAD":
-      return unambiguous ? `$${NBSP}CA` : "$";
-    case "USD":
-      return unambiguous ? `$${NBSP}US` : "$";
-    case "EUR":
-      return "€";
-    default:
-      return currency.toUpperCase();
-  }
-}
-
-/**
- * Money follows the UI locale; Spanish (US) writes dollars like English
- * ("$1,234.50"); German groups with a dot and puts the store's own symbol
- * after the figure ("1.234,50 $", "12,99 CA$").
- */
+/** UI locales. Money ignores them: it is North American in every language. */
 export type MoneyLocale = "fr" | "en" | "es" | "de";
 
 /**
- * Currency-aware house style: cents only when nonzero. English puts the
- * symbol first with comma grouping ("$1,234", "US$12.99"); French (Québec)
- * puts it after, with a decimal comma and a narrow no-break space between
- * thousands ("1 234 $", "12,99 $ US"). For a CAD-only tenant in English
- * `money(c)` is exactly `cad(c)`. [unambiguous] is set by callers when the
- * tenant has several currencies, so a dollar always says whose. [short] is the
- * chart-axis form ("$1.2k" / "1,2 k$").
+ * Currency-aware house style: cents only when nonzero, symbol first, comma
+ * thousands, period decimal ("$1,234", "US$12.99", "-$5.50") in every UI
+ * language — [opts.locale] is accepted for compatibility and ignored. For a
+ * CAD-only tenant `money(c)` is exactly `cad(c)`. [unambiguous] is set by
+ * callers when the tenant has several currencies, so a dollar always says
+ * whose. [short] is the chart-axis form ("$1.2k").
  */
 export function money(
   cents: number,
@@ -93,8 +73,6 @@ export function money(
   opts?: { unambiguous?: boolean; short?: boolean; locale?: MoneyLocale }
 ): string {
   const cur = currency || "CAD";
-  const fr = opts?.locale === "fr";
-  const de = opts?.locale === "de";
   const unambiguous = !!opts?.unambiguous;
   if (opts?.short) {
     const b = cents / 100;
@@ -108,8 +86,6 @@ export function money(
           : abs >= 1_000
             ? [(abs / 1000).toFixed(1), "k"]
             : [String(Math.round(abs)), ""];
-    if (fr) return `${sign}${num.replace(".", ",")}${NBSP}${unit}${frSuffix(cur, unambiguous)}`;
-    if (de) return `${sign}${num.replace(".", ",")}${NBSP}${unit}${currencySymbol(cur, unambiguous).trim()}`;
     return `${sign}${currencySymbol(cur, unambiguous)}${num}${unit}`;
   }
   const neg = cents < 0;
@@ -117,19 +93,12 @@ export function money(
   const whole = Math.floor(abs / 100);
   const frac = abs % 100;
   const cc = String(frac).padStart(2, "0");
-  if (fr) {
-    return `${neg ? "-" : ""}${groupThousands(whole, NNBSP)}${frac ? "," + cc : ""}${NBSP}${frSuffix(cur, unambiguous)}`;
-  }
-  if (de) {
-    return `${neg ? "-" : ""}${groupThousands(whole, ".")}${frac ? "," + cc : ""}${NBSP}${currencySymbol(cur, unambiguous).trim()}`;
-  }
   return `${neg ? "-" : ""}${currencySymbol(cur, unambiguous)}${groupThousands(whole, ",")}${frac ? "." + cc : ""}`;
 }
 
 /**
- * Always two decimals, for PDF tables: "$1,234.50" / "1 234,50 $". French
- * thousands use a full no-break space here: the PDF's bundled font is sure to
- * have it.
+ * Always two decimals, for PDF tables: "$1,234.50", "-$5.00" — North
+ * American in every language ([opts.locale] is ignored).
  */
 export function moneyCents(
   cents: number,
@@ -141,12 +110,6 @@ export function moneyCents(
   const abs = Math.abs(cents);
   const whole = Math.floor(abs / 100);
   const cc = String(abs % 100).padStart(2, "0");
-  if (opts?.locale === "fr") {
-    return `${neg ? "-" : ""}${groupThousands(whole, NBSP)},${cc}${NBSP}${frSuffix(cur, !!opts?.unambiguous)}`;
-  }
-  if (opts?.locale === "de") {
-    return `${neg ? "-" : ""}${groupThousands(whole, ".")},${cc}${NBSP}${currencySymbol(cur, opts?.unambiguous).trim()}`;
-  }
   return `${neg ? "-" : ""}${currencySymbol(cur, opts?.unambiguous)}${groupThousands(whole, ",")}.${cc}`;
 }
 

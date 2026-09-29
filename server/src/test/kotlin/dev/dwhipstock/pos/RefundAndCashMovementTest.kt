@@ -84,14 +84,14 @@ class RefundAndCashMovementTest {
         // the manager (fr preference) opened the check → French slip, labels pinned exactly
         val slip = refundBody["slipText"]!!.jsonPrimitive.content
         val slipKv = slip.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
-        assertTrue("Sous-total | 20,25" in slipKv, slip)
-        assertTrue("TPS/GST 5\u00A0% | 1,01" in slipKv, slip)
-        assertTrue("TVQ/QST 9,975\u00A0% | 2,02" in slipKv, slip)
+        assertTrue("Sous-total | 20.25" in slipKv, slip)
+        assertTrue("TPS/GST 5\u00A0% | 1.01" in slipKv, slip)
+        assertTrue("TVQ/QST 9,975\u00A0% | 2.02" in slipKv, slip)
         assertTrue("*** REMBOURSEMENT / REFUND ***" in slip, "fr refund header expected:\n$slip")
         assertTrue("Addition d’origine n°\u00A0$checkId" in slip)
         assertTrue("Remboursement n°\u00A0" in slip)
         assertTrue("Total remboursé" in slip)
-        assertTrue("Arrondi | +0,02" in slipKv && "Remis en argent comptant | 23,30" in slipKv, slip)
+        assertTrue("Arrondi | +0.02" in slipKv && "Remis en argent comptant | 23.30" in slipKv, slip)
         assertTrue("Remboursé par" in slip && "Comptant" in slip)
         assertTrue("Motif\u00A0: Le client retourne le produit" in slip) // no-break space, colon, space, reason
 

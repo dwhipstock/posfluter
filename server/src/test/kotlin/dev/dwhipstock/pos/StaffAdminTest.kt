@@ -49,7 +49,13 @@ class StaffAdminTest {
         assertEquals("camille-tremblay", id)
 
         // the new PIN logs in at once, with no cloud anywhere
-        loginClient("4321")
+        val staff = loginClient("4321")
+        // ...in the store's first language (English at Copper Lantern), never a hardcoded one
+        val first = json.parseToJsonElement(client.get("/health").bodyAsText())
+            .jsonObject["locales"]!!.jsonArray.first().jsonPrimitive.content
+        assertEquals("en", first)
+        assertEquals(first, json.parseToJsonElement(staff.get("/me").bodyAsText())
+            .jsonObject["languageCode"]!!.jsonPrimitive.content)
 
         // PINs are unique: login resolves the user by PIN
         assertEquals(HttpStatusCode.Conflict,

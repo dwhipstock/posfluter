@@ -30,7 +30,8 @@ data class RoleGrantsRequest(val roles: Map<String, Map<String, Boolean>>)
  * pushes snapshots up for the portal to display). Every route needs a session
  * whose user effectively holds `manage_staff` — works fully offline.
  */
-fun Route.staffAdminRoutes(auth: AuthService) {
+/** [defaultLanguage]: a new staff member starts in the store's first language. */
+fun Route.staffAdminRoutes(auth: AuthService, defaultLanguage: String = "en") {
     route("/staff/manage") {
         get {
             requireGrant(auth, call, Permissions.MANAGE_STAFF, null)
@@ -39,7 +40,7 @@ fun Route.staffAdminRoutes(auth: AuthService) {
         post {
             requireGrant(auth, call, Permissions.MANAGE_STAFF, null)
             val req = call.receive<StaffCreateRequest>()
-            call.respond(HttpStatusCode.Created, StaffAdmin.create(req.name, req.role, req.pin))
+            call.respond(HttpStatusCode.Created, StaffAdmin.create(req.name, req.role, req.pin, defaultLanguage))
         }
         patch("/{id}") {
             requireGrant(auth, call, Permissions.MANAGE_STAFF, null)
