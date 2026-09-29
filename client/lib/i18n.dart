@@ -383,7 +383,7 @@ class L {
   String get objectFromPhoto =>
       _t('Ajouter depuis une photo…', 'Add from photo…', 'Agregar desde foto…');
   String get objectFromPhotoOffNote => _t(
-    'Photo IA : Internet et le menu IA requis. L’élément personnalisé fonctionne toujours.',
+    'Photo IA : Internet et le menu IA requis. L’élément personnalisé fonctionne toujours.',
     'Add from photo needs AI menu setup and internet. Custom object still works.',
     'Foto con IA: requiere el menú con IA e internet. El elemento personalizado sigue funcionando.',
   );
@@ -397,7 +397,7 @@ class L {
   String get objectNameEn =>
       _t('Nom (anglais)', 'Name (English)', 'Nombre (inglés)');
   String get objectIcon => _t('Icône', 'Icon', 'Ícono');
-  String get objectShapeRect => _t('Rectangle', 'Rectangle', 'Rectángulo');
+  String get objectShapeRect => _t('Rectangulaire', 'Rectangle', 'Rectangular');
   String get objectShapeRound => _t('Rond', 'Round', 'Redondo');
   String get objectSize => _t('Taille', 'Size', 'Tamaño');
   String get placeObject => _t('Placer', 'Place', 'Colocar');
