@@ -40,6 +40,7 @@ class HouseStyleTest {
         assertEquals(
             "A professional food and drink menu photograph for a pub. " +
                 "The subject: Crisp, malty lager brewed in Montréal. Menu category: Beer & Cider. " +
+                "Serve it like this: a tall slender glass of crystal-clear pale gold lager with lively bubbles and a bright white head. " +
                 "House style, shared by every photo on this menu: ${cpr.scene}. " +
                 "One single serving is the only subject, centred and filling most of the frame, realistic, " +
                 "appetising and true to how it is actually served. " +
@@ -102,5 +103,21 @@ class HouseStyleTest {
         assertTrue(p.contains("recognisable as the same dish"))
         assertTrue(p.contains(cpr.scene))
         assertTrue(p.contains("Plain, unbranded glassware, bottles and plates with no printing, labels or engraving."))
+    }
+
+    @Test
+    fun beersGetTheirOwnGlassByStyle() {
+        fun beer(name: String, desc: String = "") = BeerServe.hint(ItemFacts(name, desc, "Beer & Cider"))
+        assertTrue(beer("Maple Oat Stout")!!.contains("pitch-black"))
+        assertTrue(beer("Citrus Wheat")!!.contains("weizen"))
+        assertTrue(beer("Local Hazy IPA")!!.contains("teku"))
+        assertTrue(beer("North Trail IPA")!!.contains("tulip"))
+        assertTrue(beer("Pilsner Can")!!.let { it.contains("pilsner glass") && it.contains("unlabelled beer can") })
+        assertEquals(null, beer("House Special"))
+        // not a pub beer list, or a retail pack: left alone
+        assertEquals(null, BeerServe.hint(ItemFacts("Lager Burger", "", "Burgers & Sandwiches")))
+        assertEquals(null, BeerServe.hint(ItemFacts("Lager 6-pack", "", "Beer", brand = "Acme")))
+        assertTrue(PhotoPrompts.generate(lager, cpr).contains("Serve it like this: a tall slender glass"))
+        assertFalse(PhotoPrompts.generate(burger, cpr).contains("Serve it like this"))
     }
 }

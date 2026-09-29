@@ -97,6 +97,7 @@ object PhotoPrompts {
         val item = safe(raw)
         append("A ${style.shot}. The subject: ${subject(item, style)}. ")
         append("Menu category: ${categoryLine(item)}. ")
+        BeerServe.hint(item)?.let { append("Serve it like this: $it. ") }
         append("House style, shared by every photo on this menu: ${style.scene}. ")
         append("One single serving is the only subject, centred and filling most of the frame, realistic, " +
             "appetising and true to how it is actually served. ")
@@ -180,4 +181,37 @@ object PhotoPrompts {
 
     private val WS = Regex("\\s+")
     private val MARKS = Regex("\\p{M}+")
+}
+
+/**
+ * A poured beer's glass, colour and one small prop by style, so a menu's beers
+ * don't all come out as the same golden pint. Only for a pub's draught/bottle
+ * list (no brand or subcategory: a retail shelf shows the pack itself), and
+ * only when the item's words name a style. "Can" in the name puts a plain,
+ * unlabelled can beside the glass.
+ */
+internal object BeerServe {
+    private val STYLES = listOf(
+        listOf("hazy", "neipa", "juicy") to "a wide stemmed teku glass of opaque juicy orange hazy beer that looks almost like orange juice, soft white foam",
+        listOf("stout") to "a stemmed tulip glass of pitch-black creamy stout with a thick smooth tan head",
+        listOf("porter") to "a nonic pint glass of very dark ruby-brown porter with a mocha-coloured head",
+        listOf("wheat", "weizen", "weiss", "witbier", "blanche") to "a tall curvy weizen glass of cloudy pale-yellow wheat beer with a fluffy white head and an orange slice on the rim",
+        listOf("saison", "farmhouse", "belgian", "tripel", "dubbel") to "a large round stemmed goblet of pale golden slightly hazy ale with a big rocky white head",
+        listOf("ipa", "pale ale", "apa") to "a stemmed tulip glass of clear bright orange-gold ale with a creamy white head",
+        listOf("amber", "red ale", "rousse", "ambrée", "brown ale") to "a dimpled glass pub mug of clear deep copper-red ale with an off-white head",
+        listOf("pilsner", "pils") to "a tall tapered pilsner glass of brilliant clear light-gold beer with a tall dense white head",
+        listOf("cider", "cidre") to "a stemmed wine-style glass of sparkling clear golden apple cider, a fresh apple slice beside it",
+        listOf("lager", "helles", "blonde") to "a tall slender glass of crystal-clear pale gold lager with lively bubbles and a bright white head",
+    )
+
+    fun hint(item: ItemFacts): String? {
+        if (item.brand != null || item.subcategory != null) return null
+        val cat = item.category.lowercase()
+        if (listOf("beer", "bière", "biere", "cider", "cidre", "draught", "draft").none { it in cat }) return null
+        val words = " ${item.name} ${item.description} ".lowercase()
+        val glass = STYLES.firstOrNull { (keys, _) -> keys.any { Regex("\\b${Regex.escape(it)}\\b").containsMatchIn(words) } }?.second
+            ?: return null
+        val can = Regex("\\bcan(s|nette)?\\b").containsMatchIn(words)
+        return if (can) "$glass, with a plain unlabelled beer can standing beside the glass" else glass
+    }
 }
