@@ -14,6 +14,7 @@ import dev.dwhipstock.pos.api.PairingService
 import dev.dwhipstock.pos.api.floorObjectRoutes
 import dev.dwhipstock.pos.api.photoRoutes
 import dev.dwhipstock.pos.api.aiPhotoRoutes
+import dev.dwhipstock.pos.api.menuAiRoutes
 import dev.dwhipstock.pos.api.posRoutes
 import dev.dwhipstock.pos.api.retailRoutes
 import dev.dwhipstock.pos.api.stockRoutes
@@ -148,6 +149,13 @@ fun Application.module(
     // test seams: a fake image provider and the online probe
     imageProvider: dev.dwhipstock.pos.aiphotos.ImageProvider? = null,
     imageReachable: ((String) -> Boolean)? = null,
+    // AI menu setup (add-on): menu.ai=on|off + menu.ai.provider=gemini|openai|
+    // anthropic|off + the provider's key (POS_MENU_AI* / GEMINI_API_KEY /
+    // OPENAI_API_KEY / ANTHROPIC_API_KEY; the tablet passes its store.properties).
+    // Default off. Online-only; proposals only, applied through the catalog routes' code.
+    menuAiConfig: dev.dwhipstock.pos.sdk.MenuAiConfig.Resolved = dev.dwhipstock.pos.sdk.MenuAiConfig.fromEnv(),
+    // test seams: a fake menu model (the online probe is imageReachable)
+    menuAiProvider: dev.dwhipstock.pos.aimenu.MenuAiProvider? = null,
     // kitchen.printing=on|off (POS_KITCHEN_PRINTING / POS_CONFIG_FILE; the
     // tablet passes its store.properties). Default off; restaurants only.
     kitchenPrinting: dev.dwhipstock.pos.sdk.KitchenPrinting.Resolved = dev.dwhipstock.pos.sdk.KitchenPrinting.fromEnv(),
@@ -368,6 +376,11 @@ fun Application.module(
         provider = imageProvider ?: dev.dwhipstock.pos.aiphotos.ImageProviders.from(imageGenConfig),
         reachable = imageReachable ?: dev.dwhipstock.pos.aiphotos.AiPhotoService::tcpReachable,
     ).also { it.start() }
+    val menuAi = dev.dwhipstock.pos.aimenu.MenuAiService(
+        menuAiConfig, config.profile,
+        provider = menuAiProvider ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.from(menuAiConfig),
+        reachable = imageReachable ?: dev.dwhipstock.pos.aiphotos.AiPhotoService::tcpReachable,
+    ).also { it.start() }
 
     // Cloud sync (CONTRACT.md): one-way outbox pusher + revocation pull. Never constructed
     // unless both env vars are set — offline-first stays the default (and tests).
@@ -452,6 +465,17 @@ fun Application.module(
             call.respond(HttpStatusCode.fromValue(cause.status),
                 mapOf("error" to (cause.message ?: "image generation failed"), "code" to cause.code))
         }
+        exception<dev.dwhipstock.pos.aimenu.MenuAiReplyException> { call, cause ->
+            call.respond(HttpStatusCode.BadGateway,
+                mapOf("error" to (cause.message ?: "unusable AI reply"), "code" to "menu_ai_bad_reply"))
+        }
+        exception<dev.dwhipstock.pos.aimenu.MenuRevertConflictException> { call, cause ->
+            call.respond(HttpStatusCode.Conflict, kotlinx.serialization.json.buildJsonObject {
+                put("error", kotlinx.serialization.json.JsonPrimitive(cause.message))
+                put("code", kotlinx.serialization.json.JsonPrimitive("menu_ai_revert_conflict"))
+                put("titles", kotlinx.serialization.json.JsonArray(cause.titles.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            })
+        }
         exception<RateLimitException> { call, cause ->
             call.response.header(HttpHeaders.RetryAfter, cause.retryAfterSeconds.toString())
             call.respond(HttpStatusCode.TooManyRequests,
@@ -533,6 +557,7 @@ fun Application.module(
         catalogRoutes()
         photoRoutes(photoStore, authService)
         aiPhotoRoutes(aiPhotos, photoStore, authService)
+        menuAiRoutes(menuAi, authService)
         shiftRoutes(shiftService, authService)
         settingsRoutes(settingsRepo)
         printerRoutes(thermalPrinter, config, settingsRepo)

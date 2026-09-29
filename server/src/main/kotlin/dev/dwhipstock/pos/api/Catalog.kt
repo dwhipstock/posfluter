@@ -76,12 +76,86 @@ fun Route.catalogRoutes() {
 
     post("/items") {
         requireManagerSession(call)
-        val req = call.receive<ItemCreateRequest>()
+        call.respond(HttpStatusCode.Created, CatalogOps.createItem(call.receive<ItemCreateRequest>()))
+    }
+
+    patch("/items/{itemId}") {
+        requireManagerSession(call)
+        call.respond(CatalogOps.patchItem(call.parameters["itemId"]!!, call.receive<ItemPatchRequest>()))
+    }
+
+    /** Soft delete: the item vanishes from every list; closed checks keep their rows. */
+    delete("/items/{itemId}") {
+        requireManagerSession(call)
+        val itemId = call.parameters["itemId"]!!
+        CatalogOps.deleteItem(itemId)
+        call.respond(mapOf("itemId" to itemId, "deleted" to "true"))
+    }
+
+    // --- variants ---
+
+    post("/items/{itemId}/variants") {
+        requireManagerSession(call)
+        call.respond(HttpStatusCode.Created,
+            CatalogOps.addVariant(call.parameters["itemId"]!!, call.receive<VariantCreateRequest>()))
+    }
+
+    patch("/items/{itemId}/variants/{variantId}") {
+        requireManagerSession(call)
+        call.respond(CatalogOps.patchVariant(call.parameters["itemId"]!!, call.parameters["variantId"]!!,
+            call.receive<VariantPatchRequest>()))
+    }
+
+    /**
+     * Soft delete a size. Refused while an OPEN/TOTAL_LOCKED check line
+     * references it, and for the item's last remaining size.
+     */
+    delete("/items/{itemId}/variants/{variantId}") {
+        requireManagerSession(call)
+        call.respond(CatalogOps.deleteVariant(call.parameters["itemId"]!!, call.parameters["variantId"]!!))
+    }
+
+    // --- categories ---
+
+    post("/categories") {
+        requireManagerSession(call)
+        call.respond(HttpStatusCode.Created, CatalogOps.createCategory(call.receive<CategoryCreateRequest>()))
+    }
+
+    patch("/categories/{categoryId}") {
+        requireManagerSession(call)
+        call.respond(CatalogOps.patchCategory(call.parameters["categoryId"]!!, call.receive<CategoryPatchRequest>()))
+    }
+
+    /** Hard delete is fine here — only allowed while no live item references it. */
+    delete("/categories/{categoryId}") {
+        requireManagerSession(call)
+        val categoryId = call.parameters["categoryId"]!!
+        CatalogOps.deleteCategory(categoryId)
+        call.respond(mapOf("categoryId" to categoryId, "deleted" to "true"))
+    }
+
+    /** Drag-reorder: index in the list becomes sort_order. */
+    patch("/categories/order") {
+        requireManagerSession(call)
+        CatalogOps.reorderCategories(call.receive<CategoryReorderRequest>().orderedIds)
+        call.respond(mapOf("ok" to "true"))
+    }
+}
+
+/**
+ * The menu edits behind the routes above, with their validation and outbox
+ * events (so portal sync sees exactly the same thing whoever calls). Each one
+ * runs in its own transaction, or joins the caller's: AI menu setup applies a
+ * whole change set inside one transaction through these same functions.
+ */
+internal object CatalogOps {
+
+    fun createItem(req: ItemCreateRequest): ItemDto {
         validateItemFields(req.nameFr, req.nameEn, req.abbrev)
         require(req.variants.isNotEmpty()) { "at least one variant (size + price) is required" }
         req.variants.forEach { validateVariantFields(it.labelFr, it.labelEn, it.priceCents) }
-
-        val dto = transaction {
+        return transaction {
             requireCategory(req.categoryId)
             val itemId = uniqueSlug(req.nameEn, taken = { candidate ->
                 Items.selectAll().where { Items.id eq candidate }.any()
@@ -112,18 +186,13 @@ fun Route.catalogRoutes() {
             })
             itemDto(itemId)
         }
-        call.respond(HttpStatusCode.Created, dto)
     }
 
-    patch("/items/{itemId}") {
-        requireManagerSession(call)
-        val itemId = call.parameters["itemId"]!!
-        val req = call.receive<ItemPatchRequest>()
+    fun patchItem(itemId: String, req: ItemPatchRequest): ItemDto {
         req.abbrev?.let { require(it.isNotBlank() && it.trim().length <= 4) { "abbrev must be 1-4 characters" } }
         req.nameFr?.let { require(it.isNotBlank()) { "nameFr must not be blank" } }
         req.nameEn?.let { require(it.isNotBlank()) { "nameEn must not be blank" } }
-
-        val dto = transaction {
+        return transaction {
             requireLiveItem(itemId)
             req.categoryId?.let { requireCategory(it) }
             Items.update({ Items.id eq itemId }) { row ->
@@ -150,13 +219,9 @@ fun Route.catalogRoutes() {
             })
             itemDto(itemId)
         }
-        call.respond(dto)
     }
 
-    /** Soft delete: the item vanishes from every list; closed checks keep their rows. */
-    delete("/items/{itemId}") {
-        requireManagerSession(call)
-        val itemId = call.parameters["itemId"]!!
+    fun deleteItem(itemId: String) {
         transaction {
             requireLiveItem(itemId)
             val openLines = openCheckLineCount(CheckLines.itemId eq itemId)
@@ -172,17 +237,30 @@ fun Route.catalogRoutes() {
                 put("item", itemSnapshotJson(itemId)) // post-mutation: deleted = true
             })
         }
-        call.respond(mapOf("itemId" to itemId, "deleted" to "true"))
     }
 
-    // --- variants ---
+    /**
+     * Undo of [deleteItem] (AI menu "undo last apply" only): the row comes back
+     * live with its earlier on/off state; the item.updated snapshot says so.
+     */
+    fun restoreItem(itemId: String, active: Boolean) {
+        transaction {
+            val count = Items.update({ (Items.id eq itemId) and Items.deletedAt.isNotNull() }) {
+                it[deletedAt] = null
+                it[Items.active] = active
+            }
+            if (count == 0) throw NotFoundException("deleted item $itemId not found")
+            Outbox.write("item.updated", "item", itemId, buildJsonObject {
+                put("itemId", itemId)
+                put("active", active)
+                put("item", itemSnapshotJson(itemId))
+            })
+        }
+    }
 
-    post("/items/{itemId}/variants") {
-        requireManagerSession(call)
-        val itemId = call.parameters["itemId"]!!
-        val req = call.receive<VariantCreateRequest>()
+    fun addVariant(itemId: String, req: VariantCreateRequest): ItemDto {
         validateVariantFields(req.labelFr, req.labelEn, req.priceCents)
-        val dto = transaction {
+        return transaction {
             requireLiveItem(itemId)
             val maxSort = ItemVariants.selectAll()
                 .where { ItemVariants.itemId eq itemId }
@@ -196,19 +274,13 @@ fun Route.catalogRoutes() {
             })
             itemDto(itemId)
         }
-        call.respond(HttpStatusCode.Created, dto)
     }
 
-    patch("/items/{itemId}/variants/{variantId}") {
-        requireManagerSession(call)
-        val itemId = call.parameters["itemId"]!!
-        val variantId = call.parameters["variantId"]!!
-        val req = call.receive<VariantPatchRequest>()
+    fun patchVariant(itemId: String, variantId: String, req: VariantPatchRequest): ItemDto {
         req.priceCents?.let { require(it >= 0) { "price must be >= 0" } }
         req.labelFr?.let { require(it.isNotBlank()) { "labelFr must not be blank" } }
         req.labelEn?.let { require(it.isNotBlank()) { "labelEn must not be blank" } }
-
-        val dto = transaction {
+        return transaction {
             requireLiveVariant(itemId, variantId)
             ItemVariants.update({ ItemVariants.id eq variantId }) { row ->
                 req.labelFr?.let { row[labelFr] = it.trim() }
@@ -226,47 +298,32 @@ fun Route.catalogRoutes() {
             })
             itemDto(itemId)
         }
-        call.respond(dto)
     }
 
-    /**
-     * Soft delete a size. Refused while an OPEN/TOTAL_LOCKED check line
-     * references it, and for the item's last remaining size.
-     */
-    delete("/items/{itemId}/variants/{variantId}") {
-        requireManagerSession(call)
-        val itemId = call.parameters["itemId"]!!
-        val variantId = call.parameters["variantId"]!!
-        val dto = transaction {
-            requireLiveVariant(itemId, variantId)
-            val openLines = openCheckLineCount(CheckLines.variantId eq variantId)
-            if (openLines > 0) throw ConflictException(
-                "variant $variantId is on $openLines open check line(s)", "variant_in_use")
-            val liveSiblings = ItemVariants.selectAll().where {
-                (ItemVariants.itemId eq itemId) and ItemVariants.deletedAt.isNull()
-            }.count()
-            if (liveSiblings <= 1) throw ConflictException(
-                "cannot delete the last size of $itemId; delete the item instead", "last_variant")
-            ItemVariants.update({ ItemVariants.id eq variantId }) {
-                it[deletedAt] = VenueClock.now()
-            }
-            Outbox.write("item.variant_deleted", "item", itemId, buildJsonObject {
-                put("itemId", itemId)
-                put("variantId", variantId)
-                put("item", itemSnapshotJson(itemId)) // post-mutation: variant deleted = true
-            })
-            itemDto(itemId)
+    fun deleteVariant(itemId: String, variantId: String): ItemDto = transaction {
+        requireLiveVariant(itemId, variantId)
+        val openLines = openCheckLineCount(CheckLines.variantId eq variantId)
+        if (openLines > 0) throw ConflictException(
+            "variant $variantId is on $openLines open check line(s)", "variant_in_use")
+        val liveSiblings = ItemVariants.selectAll().where {
+            (ItemVariants.itemId eq itemId) and ItemVariants.deletedAt.isNull()
+        }.count()
+        if (liveSiblings <= 1) throw ConflictException(
+            "cannot delete the last size of $itemId; delete the item instead", "last_variant")
+        ItemVariants.update({ ItemVariants.id eq variantId }) {
+            it[deletedAt] = VenueClock.now()
         }
-        call.respond(dto)
+        Outbox.write("item.variant_deleted", "item", itemId, buildJsonObject {
+            put("itemId", itemId)
+            put("variantId", variantId)
+            put("item", itemSnapshotJson(itemId)) // post-mutation: variant deleted = true
+        })
+        itemDto(itemId)
     }
 
-    // --- categories ---
-
-    post("/categories") {
-        requireManagerSession(call)
-        val req = call.receive<CategoryCreateRequest>()
+    fun createCategory(req: CategoryCreateRequest): CategoryDto {
         require(req.nameFr.isNotBlank() && req.nameEn.isNotBlank()) { "category names must not be blank" }
-        val dto = transaction {
+        return transaction {
             val categoryId = uniqueSlug(req.nameEn, taken = { candidate ->
                 Categories.selectAll().where { Categories.id eq candidate }.any()
             })
@@ -285,16 +342,12 @@ fun Route.catalogRoutes() {
             })
             categoryDto(categoryId)
         }
-        call.respond(HttpStatusCode.Created, dto)
     }
 
-    patch("/categories/{categoryId}") {
-        requireManagerSession(call)
-        val categoryId = call.parameters["categoryId"]!!
-        val req = call.receive<CategoryPatchRequest>()
+    fun patchCategory(categoryId: String, req: CategoryPatchRequest): CategoryDto {
         req.nameFr?.let { require(it.isNotBlank()) { "nameFr must not be blank" } }
         req.nameEn?.let { require(it.isNotBlank()) { "nameEn must not be blank" } }
-        val dto = transaction {
+        return transaction {
             requireCategory(categoryId)
             Categories.update({ Categories.id eq categoryId }) { row ->
                 req.nameFr?.let { row[nameFr] = it.trim() }
@@ -310,13 +363,9 @@ fun Route.catalogRoutes() {
             })
             categoryDto(categoryId)
         }
-        call.respond(dto)
     }
 
-    /** Hard delete is fine here — only allowed while no live item references it. */
-    delete("/categories/{categoryId}") {
-        requireManagerSession(call)
-        val categoryId = call.parameters["categoryId"]!!
+    fun deleteCategory(categoryId: String) {
         transaction {
             requireCategory(categoryId)
             val liveItems = Items.selectAll().where {
@@ -332,25 +381,20 @@ fun Route.catalogRoutes() {
                 put("category", snapshot)
             })
         }
-        call.respond(mapOf("categoryId" to categoryId, "deleted" to "true"))
     }
 
-    /** Drag-reorder: index in the list becomes sort_order. */
-    patch("/categories/order") {
-        requireManagerSession(call)
-        val req = call.receive<CategoryReorderRequest>()
-        require(req.orderedIds.isNotEmpty()) { "orderedIds must not be empty" }
+    fun reorderCategories(orderedIds: List<String>) {
+        require(orderedIds.isNotEmpty()) { "orderedIds must not be empty" }
         transaction {
-            req.orderedIds.forEachIndexed { index, id ->
+            orderedIds.forEachIndexed { index, id ->
                 requireCategory(id)
                 Categories.update({ Categories.id eq id }) { it[sortOrder] = index }
             }
             Outbox.write("categories.reordered", "category", "*", buildJsonObject {
-                put("orderedIds", req.orderedIds.joinToString(","))
+                put("orderedIds", orderedIds.joinToString(","))
                 put("categories", allCategoriesJson())
             })
         }
-        call.respond(mapOf("ok" to "true"))
     }
 }
 

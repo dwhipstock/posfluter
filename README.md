@@ -51,6 +51,11 @@ photo in the client's house style, or enhance a real photo of the dish, from the
 menu editor. See `docs/ai-photos.md` for setup, costs, the demo steps and the
 provider bake-off (`scripts/image-bakeoff.py`).
 
+AI menu setup (an add-on, off by default) builds or edits the menu from photos
+of a paper menu or from typed requests; every change is previewed, applied
+through the normal menu code and can be reverted from its history. See
+`docs/ai-menu.md` (`scripts/tablet-ai-menu.sh` turns it on for the tablet).
+
 For the complete local stack, see `docs/demo-runbook.md`.
 
 ## Sample catalog
