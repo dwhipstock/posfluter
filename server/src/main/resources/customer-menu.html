@@ -256,13 +256,12 @@ const catName = c => {
   return row ? nm(row, row.nameFr, row.nameEn) : c;
 };
 
-// The store's currency (GET /health), written the way the language writes
-// it: "12,99 $" (fr), "$12.99" (en), "12,99 $" (es, de: their own figures,
-// the plain symbol). One language: no picker.
+// The store's currency (GET /health), always written North American style
+// whatever the language: "$12.99", "$1,234.50", "-$5.00" (the owner's rule).
+// One language: no picker.
 let store = { locales: ["fr", "en"], currency: "CAD", country: "CA" };
-const cad = cents => (cents / 100).toLocaleString(lang + "-" + store.country, {
-  style: "currency", currency: store.currency,
-  ...(lang === "de" || lang === "es" ? { currencyDisplay: "narrowSymbol" } : {}),
+const cad = cents => (cents / 100).toLocaleString("en-US", {
+  style: "currency", currency: store.currency, currencyDisplay: "narrowSymbol",
 });
 // the languages this page can show, in the store's order
 const guestLangs = () => store.locales.filter(l => STR[l]);

@@ -109,7 +109,7 @@ object StaffAdmin {
         ManagedStaffList(staff, matrix, Permissions.ALL)
     }
 
-    fun create(name: String, role: String, pin: String): ManagedStaffDto = transaction {
+    fun create(name: String, role: String, pin: String, languageCode: String = "en"): ManagedStaffDto = transaction {
         require(name.isNotBlank()) { "name must not be blank" }
         requireRole(role)
         requirePin(pin)
@@ -121,7 +121,7 @@ object StaffAdmin {
             it[Users.role] = role
             it[Users.pin] = AuthService.hashPin(pin)
             it[Users.active] = true
-            it[languageCode] = "en"
+            it[Users.languageCode] = languageCode
         }
         emit("staff.created", id)
         dto(id)

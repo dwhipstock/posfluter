@@ -152,7 +152,7 @@ function el(tag, attrs = {}, ...kids) {
 }
 function money(cents, cur) {
   if (cents == null) return "";
-  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur || "USD" }).format(cents / 100); }
+  try { return new Intl.NumberFormat("en-US", { style: "currency", currency: cur || "USD", currencyDisplay: "narrowSymbol" }).format(cents / 100); }
   catch { return (cents / 100).toFixed(2); }
 }
 function buildWallet() {

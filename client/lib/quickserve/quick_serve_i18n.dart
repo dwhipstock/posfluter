@@ -108,4 +108,13 @@ class Q {
     n == 1 ? '1 artículo' : '$n artículos',
     '$n Artikel',
   );
+  String get all => _t('Tout', 'All', 'Todo', 'Alle');
+  String get newOrder =>
+      _t('Nouvelle commande', 'New order', 'Nuevo pedido', 'Neue Bestellung');
+  String cashLine(String amount) => _t(
+    'Comptant : $amount',
+    'Cash: $amount',
+    'Efectivo: $amount',
+    'Bar: $amount',
+  );
 }

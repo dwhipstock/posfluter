@@ -82,21 +82,34 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
   }
 
   Future<void> _open(CounterOrder o) async {
-    final q = Q.of(context);
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CheckScreen(
-          checkId: o.checkId,
-          tableLabel: '#${o.orderNumber} · ${o.takeOut ? q.takeOut : q.dineIn}',
-          counterOrder: true,
+    var order = o;
+    while (true) {
+      if (!mounted) return;
+      final q = Q.of(context);
+      final next = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => CheckScreen(
+            checkId: order.checkId,
+            tableLabel:
+                '#${order.orderNumber} · ${order.takeOut ? q.takeOut : q.dineIn}',
+            counterOrder: true,
+          ),
         ),
-      ),
-    );
-    // back from ringing: a new order goes to the kitchen and the board
-    if (o.status == 'NEW') {
+      );
+      // back from ringing: a new order goes to the kitchen and the board
+      if (order.status == 'NEW') {
+        try {
+          await QuickServeApi.place(order.checkId);
+        } catch (_) {} // an emptied (cancelled) order has nothing to place
+      }
+      // paid, or "New order": straight on to the next customer, same mode
+      if (next != CheckScreen.nextOrder || !mounted) break;
       try {
-        await QuickServeApi.place(o.checkId);
-      } catch (_) {} // an emptied (cancelled) order has nothing to place
+        order = await QuickServeApi.create(order.serviceMode);
+      } catch (e) {
+        if (mounted) showApiError(context, e);
+        break;
+      }
     }
     _reload();
   }

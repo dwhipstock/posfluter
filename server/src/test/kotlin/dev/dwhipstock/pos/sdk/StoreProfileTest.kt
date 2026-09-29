@@ -27,11 +27,13 @@ class StoreProfileTest {
     }
 
     @Test
-    fun cadFormatsWithTheSymbolWhereEachLanguagePutsIt() {
+    fun cadIsNorthAmericanInEveryLanguage() {
         val pub = StoreProfile.QUEBEC_PUB
         assertEquals("fr-CA", pub.tag())
-        assertEquals("12,99 $", pub.format(Money(1299)))
-        assertEquals("1 234,50 $", pub.format(Money(123450)))
+        assertEquals("$12.99", pub.format(Money(1299)))
+        assertEquals("$1,234.50", pub.format(Money(123450)))
+        assertEquals("-$5.00", pub.format(Money(-500), LocaleCode.FR))
+        assertEquals("$1,234.50", MoneyFormat.format(Money(123450), "CAD", "de-DE"))
         assertEquals("$12.99", pub.format(Money(1299), LocaleCode.EN))
     }
 
