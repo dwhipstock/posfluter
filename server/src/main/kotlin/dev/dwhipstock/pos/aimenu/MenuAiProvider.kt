@@ -69,6 +69,8 @@ class GeminiMenuProvider(
     override val model: String = DEFAULT_MODEL,
     private val baseUrl: String = "https://generativelanguage.googleapis.com",
     private val pause: (Long) -> Unit = { Thread.sleep(it) },
+    /** low for chat and menus; the room layout call thinks more ([LAYOUT_THINKING]). */
+    private val thinkingLevel: String = "low",
 ) : MenuAiProvider {
     override val id = "gemini"
     override val host: String get() = URI(baseUrl).host
@@ -76,6 +78,10 @@ class GeminiMenuProvider(
     companion object {
         const val DEFAULT_MODEL = "gemini-3.5-flash-lite" // 2–6 s a menu edit; 3.8-flash took 20–85 s
         const val FALLBACK_MODEL = "gemini-3.5-flash"
+        /** Room from picture: the lite model gets the spatial part wrong; this one thinks it through. */
+        // flash-lite: reliable and fast; 3.8-flash was often "high demand" or took minutes (set menu.ai.layoutModel to try it)
+        const val LAYOUT_MODEL = "gemini-3.5-flash-lite"
+        const val LAYOUT_THINKING = "medium"
         const val RETRY_PAUSE_MS = 1_500L
     }
 
@@ -96,7 +102,7 @@ class GeminiMenuProvider(
                     put("mime_type", "application/json")
                 }
                 // low thinking: a menu edit needs no long reasoning, and full thinking took minutes
-                putJsonObject("generation_config") { put("temperature", 0); put("thinking_level", "low") }
+                putJsonObject("generation_config") { put("temperature", 0); put("thinking_level", thinkingLevel) }
             }.toString().toByteArray()
         }
         val post = { m: String ->
@@ -230,6 +236,20 @@ object MenuAiProviders {
             MenuAiConfig.Provider.GEMINI -> GeminiMenuProvider(key, http, config.model ?: GeminiMenuProvider.DEFAULT_MODEL)
             MenuAiConfig.Provider.OPENAI -> OpenAiMenuProvider(key, http, config.model ?: OpenAiMenuProvider.DEFAULT_MODEL)
             MenuAiConfig.Provider.ANTHROPIC -> AnthropicMenuProvider(key, http, config.model ?: AnthropicMenuProvider.DEFAULT_MODEL)
+            MenuAiConfig.Provider.OFF -> null
+        }
+    }
+
+    /** Room from picture / object from photo: `menu.ai.layoutModel`, more thinking, a longer wait. */
+    fun layout(config: MenuAiConfig.Resolved, http: ImageHttp = UrlImageHttp(readTimeoutMs = 300_000)): MenuAiProvider? {
+        val key = config.apiKey ?: return null
+        Scrub.register(key)
+        val m = config.layoutModel
+        return when (config.provider) {
+            MenuAiConfig.Provider.GEMINI -> GeminiMenuProvider(key, http, m ?: GeminiMenuProvider.LAYOUT_MODEL,
+                thinkingLevel = GeminiMenuProvider.LAYOUT_THINKING)
+            MenuAiConfig.Provider.OPENAI -> OpenAiMenuProvider(key, http, m ?: config.model ?: OpenAiMenuProvider.DEFAULT_MODEL)
+            MenuAiConfig.Provider.ANTHROPIC -> AnthropicMenuProvider(key, http, m ?: config.model ?: AnthropicMenuProvider.DEFAULT_MODEL)
             MenuAiConfig.Provider.OFF -> null
         }
     }

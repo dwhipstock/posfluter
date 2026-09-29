@@ -104,6 +104,8 @@ class MenuAiService(
     val config: MenuAiConfig.Resolved,
     private val profile: StoreProfile,
     private val provider: MenuAiProvider? = MenuAiProviders.from(config),
+    /** Room from picture and object from photo only (a slower, thinking model); null = [provider]. */
+    private val layoutProvider: MenuAiProvider? = null,
     private val reachable: (String) -> Boolean = AiPhotoService::tcpReachable,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
@@ -157,7 +159,8 @@ class MenuAiService(
             reason = if (online) null else "menu_ai_offline")
     }
 
-    private fun requireProvider(): MenuAiProvider = provider?.takeIf { config.enabled }
+    private fun requireProvider(layout: Boolean = false): MenuAiProvider =
+        (if (layout) layoutProvider ?: provider else provider)?.takeIf { config.enabled }
         ?: throw ImageGenException(409, "menu_ai_disabled",
             "AI menu setup is off on this store (${config.disabled?.code ?: "menu_ai_provider_off"})")
 
@@ -231,7 +234,7 @@ class MenuAiService(
      * on/off switch as the menu; the photo lives only for this call.
      */
     fun suggestRoomObject(image: MenuImage, who: AiCaller? = null): RoomObjectSuggestion = tracked(who, "room_object") {
-        val p = requireProvider()
+        val p = requireProvider(layout = true)
         val reply = try {
             p.complete(RoomObjectSuggest.systemPrompt(bilingual), "What is this? Suggest the floor-plan object.", listOf(image))
         } catch (e: ImageGenException) {
@@ -254,7 +257,7 @@ class MenuAiService(
         require(images.size <= MAX_ROOM_PHOTOS) { "at most $MAX_ROOM_PHOTOS pictures at a time" }
         val room = transaction { RoomLayoutAi.room(zoneId) }
         return tracked(who, "room_layout") {
-            val p = requireProvider()
+            val p = requireProvider(layout = true)
             val started = now()
             fun refuse(r: AiGuard.Refusal, rejected: List<String> = emptyList()) = RoomLayoutProposalDto("", zoneId,
                 p.id, p.model, emptyList(), emptyList(), rejected = rejected, elapsedMs = now() - started,
@@ -278,7 +281,7 @@ class MenuAiService(
             val plan = transaction {
                 RoomLayoutRules.validate(parsed.tables, parsed.objects,
                     room.tables.filter { it[dev.dwhipstock.pos.restaurant.DiningTables.id] in room.protectedIds }.map(RoomLayoutAi::box),
-                    RoomLayoutAi.usedNumbers(), room.prefix)
+                    RoomLayoutAi.usedNumbers(), room.prefix, spread = true)
             }
             if (plan.tables.isEmpty() && plan.objects.isEmpty()) return@tracked refuse(AiGuard.Refusal.ROOM_NO_LAYOUT, plan.rejected)
             val cutoff = now() - PROPOSAL_TTL_MS

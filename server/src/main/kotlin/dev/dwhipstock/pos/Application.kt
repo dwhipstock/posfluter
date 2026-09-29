@@ -397,6 +397,7 @@ fun Application.module(
     val menuAi = dev.dwhipstock.pos.aimenu.MenuAiService(
         menuAiConfig, config.profile,
         provider = menuAiProvider ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.from(menuAiConfig),
+        layoutProvider = menuAiProvider ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.layout(menuAiConfig),
         reachable = imageReachable ?: dev.dwhipstock.pos.aiphotos.AiPhotoService::tcpReachable,
     ).also { it.start() }
 

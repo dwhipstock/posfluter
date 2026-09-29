@@ -771,7 +771,7 @@ class Api {
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
     final res = await http.Response.fromStream(
       await req.send(),
-    ).timeout(_aiTimeout);
+    ).timeout(_aiLayoutTimeout);
     _throwOnError(res);
     return RoomObjectSuggestion.fromJson(
       jsonDecode(utf8.decode(res.bodyBytes)),
@@ -806,7 +806,7 @@ class Api {
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
     final res = await http.Response.fromStream(
       await req.send(),
-    ).timeout(_aiTimeout);
+    ).timeout(_aiLayoutTimeout);
     _throwOnError(res);
     return RoomLayoutProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
@@ -1192,6 +1192,8 @@ class Api {
   // slow or offline provider must not look like the local store dropping out.
 
   static const Duration _aiTimeout = Duration(seconds: 200);
+  // room layouts use a slower, thinking model on the store (menu.ai.layoutModel)
+  static const Duration _aiLayoutTimeout = Duration(seconds: 320);
 
   /// Is "Generate photo" / "Snap and enhance" usable now? Any failure → the
   /// buttons show as unavailable; an older store without the route → hidden.
