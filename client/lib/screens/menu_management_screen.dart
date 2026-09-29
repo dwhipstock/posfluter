@@ -6,6 +6,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../widgets/ai_menu.dart';
 import '../widgets/ai_photos.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
@@ -32,6 +33,8 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
   List<Category> _categories = [];
   // AI menu photos (paid add-on): hidden until the store says it is on
   AiPhotoStatus _aiStatus = AiPhotoStatus.hidden;
+  // AI menu setup (add-on): same idea, its own switch
+  AiPhotoStatus _menuAiStatus = AiPhotoStatus.hidden;
   bool _loaded = false;
   String? _error;
 
@@ -50,6 +53,109 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
       final st = await Api.aiPhotoStatus();
       if (mounted) setState(() => _aiStatus = st);
     } catch (_) {}
+    try {
+      final st = await Api.menuAiStatus();
+      if (mounted) setState(() => _menuAiStatus = st);
+    } catch (_) {}
+  }
+
+  /// Photos of a paper menu: the camera (one page at a time) or several from the gallery.
+  Future<List<MenuPhoto>?> _pickMenuPhotos() async {
+    final l = L.of(context);
+    final picker = ImagePicker();
+    final canCamera = picker.supportsImageSource(ImageSource.camera);
+    final source = canCamera
+        ? await showDialog<ImageSource>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: Text(l.aiMenuFromPhotos),
+              children: [
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.camera),
+                  child: Text(l.aiTakePhoto),
+                ),
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.gallery),
+                  child: Text(l.aiChooseFromGallery),
+                ),
+              ],
+            ),
+          )
+        : ImageSource.gallery;
+    if (source == null) return null;
+    final files = source == ImageSource.camera
+        ? [
+            ?await picker.pickImage(
+              source: source,
+              maxWidth: 2400,
+              maxHeight: 2400,
+              imageQuality: 88,
+            ),
+          ]
+        : await picker.pickMultiImage(
+            maxWidth: 2400,
+            maxHeight: 2400,
+            imageQuality: 88,
+            limit: 6,
+          );
+    return [
+      for (final f in files.take(6))
+        (
+          bytes: await f.readAsBytes(),
+          contentType: f.name.toLowerCase().endsWith('.png')
+              ? 'image/png'
+              : 'image/jpeg',
+        ),
+    ];
+  }
+
+  Future<void> _openAiMenu() async {
+    final l = L.of(context);
+    final outcome = await showDialog<AiMenuOutcome>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AiMenuDialog(
+        status: _menuAiStatus,
+        askPin: () => askManagerPin(context, title: l.aiMenuTitle),
+        pickPhotos: _pickMenuPhotos,
+        backend: AiMenuBackend.store,
+      ),
+    );
+    if (outcome == null || !mounted) return;
+    if (outcome.changed) await _load();
+    // nice touch: photos for what the import just created (the AI photos add-on)
+    final created = outcome.createdItemIds;
+    final pin = outcome.managerPin;
+    if (created.isEmpty || pin == null || !_aiStatus.available || !mounted) {
+      return;
+    }
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: Text(l.aiMenuPhotosFor(created.length)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.aiGeneratePhoto),
+          ),
+        ],
+      ),
+    );
+    if (go != true) return;
+    for (final id in created) {
+      final item = _items.where((i) => i.id == id).firstOrNull;
+      if (item == null || !mounted) continue;
+      await _runAiDialog(
+        title: l.aiGenerateFor(l.name(item.nameFr, item.nameEn)),
+        run: () =>
+            Api.aiGeneratePhoto(item.id, pin, count: _aiStatus.defaultCount),
+        choose: (cid) => Api.aiChoosePhoto(item.id, cid, pin),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -250,6 +356,13 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
         actions: [
           const LangActions(),
           if (_isManager) ...[
+            if (_menuAiStatus.configured)
+              IconButton(
+                key: const Key('ai-menu-open'),
+                icon: const Icon(LucideIcons.sparkles),
+                tooltip: l.aiMenuTitle,
+                onPressed: _openAiMenu,
+              ),
             IconButton(
               icon: const Icon(LucideIcons.tags),
               tooltip: l.editCategories,

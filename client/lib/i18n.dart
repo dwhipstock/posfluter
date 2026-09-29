@@ -1184,6 +1184,111 @@ class L {
     ),
   };
 
+  // AI menu setup
+  String get aiMenuTitle =>
+      _t('Configurer le menu avec l’IA', 'AI menu setup', 'Menú con IA');
+  String get aiMenuFromPhotos =>
+      _t('Menu à partir de photos', 'Menu from photos', 'Menú desde fotos');
+  String get aiMenuChatHint => _t(
+    'Ex. : « ajoute salade César 14 \$ dans Entrées », « monte les burgers d’un dollar », « 86 le saumon »',
+    'e.g. “add Caesar salad \$14 under starters”, “raise all burgers by a dollar”, “86 the salmon”',
+    'p. ej. «agrega ensalada César \$14 en entradas», «sube las hamburguesas un dólar», «86 el salmón»',
+  );
+  String get aiMenuAsk => _t('Proposer', 'Propose', 'Proponer');
+  String get aiMenuPreviewNote => _t(
+    'Rien ne change avant « Appliquer ». Cochez ce que vous voulez garder.',
+    'Nothing changes until you tap Apply. Tick what you want to keep.',
+    'Nada cambia hasta que toques Aplicar. Marca lo que quieras conservar.',
+  );
+  String get aiMenuNew => _t('Nouveau', 'New', 'Nuevo');
+  String get aiMenuChanged => _t('Modifié', 'Changed', 'Cambiado');
+  String get aiMenuRemoved => _t('Retiré', 'Removed', 'Eliminado');
+  String get aiMenuNothing => _t(
+    'Aucun changement proposé.',
+    'No changes proposed.',
+    'No se propusieron cambios.',
+  );
+  String aiMenuRejected(int n) => _t(
+    '$n suggestion(s) ignorée(s) (produit inconnu ou prix invalide).',
+    '$n suggestion(s) skipped (unknown item or invalid price).',
+    '$n sugerencia(s) omitida(s) (producto desconocido o precio no válido).',
+  );
+  String aiMenuApply(int n) =>
+      _t('Appliquer ($n)', 'Apply ($n)', 'Aplicar ($n)');
+  String aiMenuApplied(int n) => _t(
+    '$n changement(s) appliqué(s)',
+    '$n change(s) applied',
+    '$n cambio(s) aplicado(s)',
+  );
+  String get aiMenuHistory => _t('Historique IA', 'AI history', 'Historial IA');
+  String get aiMenuRevert => _t('Défaire', 'Revert', 'Revertir');
+  String get aiMenuReverted => _t('Défait', 'Reverted', 'Revertido');
+  String get aiMenuRevertDone => _t(
+    'Mise à jour IA défaite',
+    'AI update reverted',
+    'Actualización IA revertida',
+  );
+  String get aiMenuNoHistory => _t(
+    'Aucune mise à jour IA pour l’instant.',
+    'No AI updates yet.',
+    'Aún no hay actualizaciones con IA.',
+  );
+  String aiMenuRevertConflict(String titles) => _t(
+    'Modifié depuis cette mise à jour : $titles. Défaire quand même et écraser ces changements ?',
+    'Changed since this AI update: $titles. Revert anyway and overwrite those changes?',
+    'Cambiado desde esta actualización: $titles. ¿Revertir de todos modos y sobrescribir esos cambios?',
+  );
+  String get aiMenuRevertAnyway =>
+      _t('Défaire quand même', 'Revert anyway', 'Revertir de todos modos');
+  String aiMenuSourceLabel(String source) => source == 'photos'
+      ? _t('Photos du menu', 'Menu photos', 'Fotos del menú')
+      : _t('Clavardage', 'Chat', 'Conversación');
+  String aiMenuPhotosFor(int n) => _t(
+    'Générer des photos pour les $n nouveaux produits ?',
+    'Generate photos for the $n new items?',
+    '¿Generar fotos para los $n productos nuevos?',
+  );
+  String get aiMenuAddPhoto =>
+      _t('Ajouter une photo', 'Add photo', 'Agregar foto');
+  String get aiMenuReadPhotos => _t('Lire le menu', 'Read menu', 'Leer menú');
+  String aiMenuField(String field) => switch (field) {
+    'nameEn' => _t('Nom (anglais)', 'Name (English)', 'Nombre (inglés)'),
+    'nameFr' => _t('Nom (français)', 'Name (French)', 'Nombre (francés)'),
+    'descriptionEn' => _t(
+      'Description (anglais)',
+      'Description (English)',
+      'Descripción (inglés)',
+    ),
+    'descriptionFr' => _t(
+      'Description (français)',
+      'Description (French)',
+      'Descripción (francés)',
+    ),
+    'price' => _t('Prix', 'Price', 'Precio'),
+    'category' => _t('Catégorie', 'Category', 'Categoría'),
+    'available' => _t('En vente', 'On sale', 'A la venta'),
+    'order' => _t('Ordre', 'Order', 'Orden'),
+    _ => field,
+  };
+  String get aiMenuCategoryOrder =>
+      _t('Ordre des catégories', 'Category order', 'Orden de categorías');
+  String aiMenuNewCategory(String name) =>
+      _t('Catégorie : $name', 'Category: $name', 'Categoría: $name');
+
+  /// Why the AI menu buttons are greyed out.
+  String aiMenuUnavailableNote(String? reason) => switch (reason) {
+    'menu_ai_offline' || 'menu_ai_unavailable' => _t(
+      'Menu IA : connexion Internet requise. Tout le reste fonctionne normalement.',
+      'AI menu setup needs an internet connection. Everything else works as usual.',
+      'El menú con IA necesita internet. Todo lo demás funciona con normalidad.',
+    ),
+    _ => _t(
+      'Menu IA pas encore configuré sur ce magasin.',
+      'AI menu setup isn’t set up on this store yet.',
+      'El menú con IA aún no está configurado en esta tienda.',
+    ),
+  };
+
   // pin pad / manager approval
   String get managerPinTitle => _t(
     'Gérant : entrez votre NIP',
@@ -1718,6 +1823,28 @@ class L {
       'The AI photo service returned an error. Try again later.',
       'El servicio de fotos con IA devolvió un error. Inténtalo más tarde.',
     ),
+    'menu_ai_unavailable' ||
+    'menu_ai_offline' ||
+    'menu_ai_disabled' => aiMenuUnavailableNote(code),
+    'menu_ai_timeout' || 'menu_ai_rate_limited' => _t(
+      'Le service IA est occupé ou lent. Réessayez dans une minute.',
+      'The AI service is busy or slow. Try again in a minute.',
+      'El servicio de IA está ocupado o lento. Inténtalo en un minuto.',
+    ),
+    'menu_ai_quota' => _t(
+      'Le compte IA n’a plus de crédits.',
+      'The AI account is out of credits.',
+      'La cuenta de IA se quedó sin créditos.',
+    ),
+    'menu_ai_bad_reply' ||
+    'menu_ai_refused' ||
+    'menu_ai_auth' ||
+    'menu_ai_error' => _t(
+      'L’IA n’a pas pu proposer de changements. Reformulez et réessayez.',
+      'The AI couldn’t propose changes. Rephrase and try again.',
+      'La IA no pudo proponer cambios. Reformula e inténtalo de nuevo.',
+    ),
+    'menu_ai_already_reverted' => aiMenuReverted,
     'wifi_not_configured' => wifiNotConfigured,
     'pin_in_use' => _t(
       'Ce NIP est déjà utilisé par un autre employé',

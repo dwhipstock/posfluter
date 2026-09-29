@@ -1166,6 +1166,129 @@ class Api {
     _throwOnError(res);
   }
 
+  // --- AI menu setup (add-on, online only) ---------------------------------
+  // Proposals only: nothing changes until [menuAiApply]. Like the AI photo
+  // calls these wait on a model and never feed the ConnectionMonitor.
+
+  /// Is AI menu setup usable now? An older store without the route → hidden.
+  static Future<AiPhotoStatus> menuAiStatus() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/menu-ai/status'), headers: _headers)
+          .timeout(const Duration(seconds: 8));
+      _throwOnError(res);
+      return AiPhotoStatus.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+    } on ApiException catch (e) {
+      if (e.code == null || e.code == 'not_found') return AiPhotoStatus.hidden;
+      return AiPhotoStatus.unavailable(e.code);
+    } on SessionExpiredException {
+      rethrow;
+    } catch (_) {
+      return AiPhotoStatus.unavailable('menu_ai_offline');
+    }
+  }
+
+  /// Photos of a paper menu → a proposal to review.
+  static Future<MenuProposal> menuAiFromPhotos(
+    List<({List<int> bytes, String contentType})> photos,
+    String managerPin, {
+    String? note,
+  }) async {
+    final req =
+        http.MultipartRequest('POST', Uri.parse('$baseUrl/menu-ai/photos'))
+          ..headers['Authorization'] = 'Bearer $_token'
+          ..fields['managerPin'] = managerPin;
+    if (note != null && note.trim().isNotEmpty) req.fields['note'] = note;
+    for (final (i, p) in photos.indexed) {
+      req.files.add(
+        http.MultipartFile.fromBytes(
+          'photo',
+          p.bytes,
+          filename: 'menu-$i',
+          contentType: http_parser.MediaType.parse(p.contentType),
+        ),
+      );
+    }
+    if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
+    final res = await http.Response.fromStream(
+      await req.send(),
+    ).timeout(_aiTimeout);
+    _throwOnError(res);
+    return MenuProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// "add Caesar salad $14 under starters" → a proposal to review.
+  static Future<MenuProposal> menuAiChat(String text, String managerPin) async {
+    final res = await http
+        .post(
+          Uri.parse('$baseUrl/menu-ai/chat'),
+          headers: _headers,
+          body: jsonEncode({'managerPin': managerPin, 'text': text}),
+        )
+        .timeout(_aiTimeout);
+    _throwOnError(res);
+    return MenuProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// Apply the ticked changes (through the store's usual menu code).
+  static Future<MenuApplyResult> menuAiApply(
+    String proposalId,
+    List<String> changeIds,
+    String managerPin,
+  ) async {
+    final res = await _send(
+      () => http.post(
+        Uri.parse('$baseUrl/menu-ai/apply'),
+        headers: _headers,
+        body: jsonEncode({
+          'managerPin': managerPin,
+          'proposalId': proposalId,
+          'changeIds': changeIds,
+        }),
+      ),
+      operation: 'POST menu-ai/apply',
+    );
+    _throwOnError(res);
+    return MenuApplyResult.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// The last AI menu updates, newest first.
+  static Future<List<MenuChangeSet>> menuAiHistory() async {
+    final res = await http
+        .get(Uri.parse('$baseUrl/menu-ai/history'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwOnError(res);
+    return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
+        .map((j) => MenuChangeSet.fromJson(j))
+        .toList();
+  }
+
+  /// Put an applied AI update back. Throws [MenuRevertConflict] when a later
+  /// edit touched the same things (ask, then call again with [force]).
+  static Future<void> menuAiRevert(
+    String setId,
+    String managerPin, {
+    bool force = false,
+  }) async {
+    final res = await _send(
+      () => http.post(
+        Uri.parse('$baseUrl/menu-ai/history/$setId/revert'),
+        headers: _headers,
+        body: jsonEncode({'managerPin': managerPin, 'force': force}),
+      ),
+      operation: 'POST menu-ai revert',
+    );
+    if (res.statusCode == 409) {
+      final body = jsonDecode(utf8.decode(res.bodyBytes));
+      if (body is Map && body['code'] == 'menu_ai_revert_conflict') {
+        throw MenuRevertConflict(
+          ((body['titles'] as List?) ?? const []).cast<String>(),
+        );
+      }
+    }
+    _throwOnError(res);
+  }
+
   static Future<Check> setCorkage(int checkId, int bottles) async =>
       Check.fromJson(
         await _post('/checks/$checkId/corkage', {'bottles': bottles}),
@@ -3225,4 +3348,115 @@ class AiPhotoCandidates {
             ),
         ],
       );
+}
+
+/// One line of a proposed change: [field] is nameEn / nameFr / descriptionEn /
+/// descriptionFr / price / category / available / order.
+class MenuChangeDetail {
+  final String field;
+  final String? label, before, after;
+  const MenuChangeDetail(this.field, {this.label, this.before, this.after});
+  factory MenuChangeDetail.fromJson(Map<String, dynamic> j) => MenuChangeDetail(
+    j['field'] as String,
+    label: j['label'],
+    before: j['before'],
+    after: j['after'],
+  );
+}
+
+/// One change the AI proposed ([kind]: add_category, add_item, update_item,
+/// remove_item, rename_category, reorder_categories).
+class MenuChange {
+  final String id, kind, title;
+  final String? category, needs;
+  final List<MenuChangeDetail> details;
+  const MenuChange({
+    required this.id,
+    required this.kind,
+    required this.title,
+    this.category,
+    this.needs,
+    this.details = const [],
+  });
+  bool get isNew => kind == 'add_category' || kind == 'add_item';
+  bool get isRemoved => kind == 'remove_item';
+  factory MenuChange.fromJson(Map<String, dynamic> j) => MenuChange(
+    id: j['id'] as String,
+    kind: j['kind'] as String,
+    title: j['title'] as String? ?? '',
+    category: j['category'],
+    needs: j['needs'],
+    details: ((j['details'] as List?) ?? const [])
+        .map((d) => MenuChangeDetail.fromJson(d))
+        .toList(),
+  );
+}
+
+class MenuProposal {
+  final String proposalId, provider, summary;
+  final List<MenuChange> changes;
+  final List<String> rejected;
+  const MenuProposal({
+    required this.proposalId,
+    required this.provider,
+    required this.summary,
+    required this.changes,
+    this.rejected = const [],
+  });
+  factory MenuProposal.fromJson(Map<String, dynamic> j) => MenuProposal(
+    proposalId: j['proposalId'] as String,
+    provider: j['provider'] as String? ?? '',
+    summary: j['summary'] as String? ?? '',
+    changes: ((j['changes'] as List?) ?? const [])
+        .map((c) => MenuChange.fromJson(c))
+        .toList(),
+    rejected: ((j['rejected'] as List?) ?? const []).cast<String>(),
+  );
+}
+
+class MenuApplyResult {
+  final int applied;
+  final List<String> createdItemIds;
+  final String changeSetId;
+  const MenuApplyResult(this.applied, this.createdItemIds, this.changeSetId);
+  factory MenuApplyResult.fromJson(Map<String, dynamic> j) => MenuApplyResult(
+    (j['applied'] as num).toInt(),
+    ((j['createdItemIds'] as List?) ?? const []).cast<String>(),
+    j['changeSetId'] as String? ?? '',
+  );
+}
+
+/// One applied AI menu update in the history ([source]: photos | chat).
+class MenuChangeSet {
+  final String id, source, summary, appliedBy;
+  final DateTime? createdAt;
+  final int changeCount;
+  final List<String> titles;
+  final bool reverted;
+  const MenuChangeSet({
+    required this.id,
+    required this.source,
+    required this.summary,
+    required this.appliedBy,
+    required this.createdAt,
+    required this.changeCount,
+    required this.titles,
+    required this.reverted,
+  });
+  factory MenuChangeSet.fromJson(Map<String, dynamic> j) => MenuChangeSet(
+    id: j['id'] as String,
+    source: j['source'] as String? ?? '',
+    summary: j['summary'] as String? ?? '',
+    appliedBy: j['appliedBy'] as String? ?? '',
+    createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '')?.toLocal(),
+    changeCount: (j['changeCount'] as num?)?.toInt() ?? 0,
+    titles: ((j['titles'] as List?) ?? const []).cast<String>(),
+    reverted: j['reverted'] == true,
+  );
+}
+
+/// A revert would overwrite later edits of [titles].
+class MenuRevertConflict implements Exception {
+  final List<String> titles;
+  const MenuRevertConflict(this.titles);
 }

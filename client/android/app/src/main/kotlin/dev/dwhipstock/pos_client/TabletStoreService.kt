@@ -11,6 +11,7 @@ import android.util.Log
 import dev.dwhipstock.pos.module
 import dev.dwhipstock.pos.sdk.CashRounding
 import dev.dwhipstock.pos.sdk.ImageGenConfig
+import dev.dwhipstock.pos.sdk.MenuAiConfig
 import dev.dwhipstock.pos.sdk.KitchenPrinting
 import dev.dwhipstock.pos.sdk.PaymentTerminalConfig
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
@@ -107,6 +108,11 @@ class TabletStoreService : Service() {
             val imageGenConfig = runCatching { ImageGenConfig.fromProperties(storeProps) }
                 .getOrElse { ImageGenConfig.OFF }
             Log.i("TabletStore", imageGenConfig.describe())
+            // AI menu setup: menu.ai / menu.ai.provider / menu.ai.<provider>.apiKey
+            // (scripts/tablet-ai-menu.sh). Missing → off; the key is never logged.
+            val menuAiConfig = runCatching { MenuAiConfig.fromProperties(storeProps) }
+                .getOrElse { MenuAiConfig.OFF }
+            Log.i("TabletStore", menuAiConfig.describe())
             // kitchen.printing=on|off; unset → off (restaurants only)
             val kitchenPrinting = KitchenPrinting.resolve(storeProps?.getProperty(KitchenPrinting.KEY), "store.properties")
             kitchenPrinting.warning?.let { Log.w("TabletStore", "Kitchen tickets config ignored: $it") }
@@ -140,6 +146,7 @@ class TabletStoreService : Service() {
                     legalAgeOverride = legalAge,
                     cashRounding = cashRounding,
                     imageGenConfig = imageGenConfig,
+                    menuAiConfig = menuAiConfig,
                     kitchenPrinting = kitchenPrinting,
                     paymentTerminal = paymentTerminal,
                     forecourtUrl = forecourtUrl,
