@@ -79,7 +79,8 @@ class GeminiMenuProvider(
         const val DEFAULT_MODEL = "gemini-3.5-flash-lite" // 2–6 s a menu edit; 3.8-flash took 20–85 s
         const val FALLBACK_MODEL = "gemini-3.5-flash"
         /** Room from picture: the lite model gets the spatial part wrong; this one thinks it through. */
-        const val LAYOUT_MODEL = "gemini-3.8-flash"
+        // flash-lite: reliable and fast; 3.8-flash was often "high demand" or took minutes (set menu.ai.layoutModel to try it)
+        const val LAYOUT_MODEL = "gemini-3.5-flash-lite"
         const val LAYOUT_THINKING = "medium"
         const val RETRY_PAUSE_MS = 1_500L
     }
