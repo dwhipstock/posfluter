@@ -185,7 +185,7 @@ class FloorObjectShape extends StatelessWidget {
   /// type default. Pillars stay unlabeled — a small block needs no word.
   String? _caption(L l) {
     final fr = object.labelFr, en = object.labelEn;
-    final label = l.name(fr ?? en ?? '', en ?? fr ?? '');
+    final label = l.name(fr ?? en ?? '', en ?? fr ?? '', object.names);
     if (label.isNotEmpty) return label;
     return switch (object.type) {
       'POOL' => l.objectPoolCaption,

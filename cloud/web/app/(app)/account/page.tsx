@@ -17,7 +17,7 @@ import { PageHeader } from "@/components/page-header";
 const APP_VERSION = "0.1.0";
 
 // each language named in itself, whatever the page's language
-const LANGUAGE_NAMES: Record<Locale, string> = { fr: "Français", en: "English", es: "Español" };
+const LANGUAGE_NAMES: Record<Locale, string> = { fr: "Français", en: "English", es: "Español", de: "Deutsch" };
 
 export default function AccountPage() {
   const t = useT();

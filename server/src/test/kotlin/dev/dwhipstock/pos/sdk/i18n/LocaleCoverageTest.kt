@@ -27,6 +27,8 @@ class LocaleCoverageTest {
     private val stores = mapOf(
         "Copper Lantern" to StoreProfile.QUEBEC_PUB.locales.map { it.tag },
         "Sage & Poppy" to SagePoppy.PROFILE.locales.map { it.tag },
+        // the Copper Lantern staff can also switch to Spanish and German
+        "Copper Lantern (staff)" to listOf("fr", "en", "es", "de"),
     )
     private val allLocales = stores.values.flatten().toSortedSet()
 

@@ -333,4 +333,48 @@ void main() {
     Prefs.instance.lang = 'fr';
     await _shoot(tester, 'menu-management-fr', const MenuManagementScreen());
   });
+
+  // German (Copper Lantern's fourth language): the long compounds must fit
+  // the landscape layouts — any overflow fails these
+  group('German', () {
+    setUp(() => Prefs.instance.lang = 'de');
+
+    testWidgets('sign-in', (tester) async {
+      Api.currentUser = null;
+      await _shoot(tester, 'login-de', const LoginScreen());
+    });
+
+    testWidgets('floor', (tester) async {
+      await _shoot(
+        tester,
+        'floor-de',
+        const ZonesScreen(),
+        act: _checkTableLabels(many: '4 Plätze', one: '1 Platz'),
+      );
+    });
+
+    testWidgets('check: the menu reads its German names', (tester) async {
+      await _shoot(
+        tester,
+        'check-de',
+        const CheckScreen(checkId: 1, tableLabel: 'U-1'),
+        // a seeded German name; the others fall back to English
+        expectText: 'Lantern Hauslager',
+        act: (t) async => expect(find.text('Copper Amber Ale'), findsWidgets),
+      );
+    });
+
+    testWidgets('tender', (tester) async {
+      await _shoot(
+        tester,
+        'tender-de',
+        TenderScreen(check: Check.fromJson(_check())),
+        expectText: 'Bar',
+      );
+    });
+
+    testWidgets('menu management', (tester) async {
+      await _shoot(tester, 'menu-management-de', const MenuManagementScreen());
+    });
+  });
 }

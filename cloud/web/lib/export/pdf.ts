@@ -34,11 +34,11 @@ function moneyStr(cents: number, currency = "CAD", unambiguous = false, approxim
 
 // set per render from the doc (one PDF at a time)
 let unambiguousDollars = false;
-let docLocale: "fr" | "en" = "en";
+let docLocale: "fr" | "en" | "de" = "en";
 
 function cellText(c: Cell): string {
   if (c.kind === "money") return moneyStr(Number(c.value ?? 0), c.currency, unambiguousDollars, c.approximate);
-  if (c.kind === "int") return Number(c.value ?? 0).toLocaleString("en-US").replace(/,/g, docLocale === "fr" ? "\u00A0" : ",");
+  if (c.kind === "int") return Number(c.value ?? 0).toLocaleString("en-US").replace(/,/g, docLocale === "fr" ? "\u00A0" : docLocale === "de" ? "." : ",");
   return String(c.value ?? "");
 }
 
@@ -129,7 +129,7 @@ export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
   HEADER_FILL = c.headerFill;
   LINE = c.rule;
   RULE = c.rule;
-  docLocale = doc.locale === "fr" ? "fr" : "en";
+  docLocale = doc.locale === "fr" || doc.locale === "de" ? doc.locale : "en";
   const content: Content[] = [
     { text: doc.venue || " ", style: "venue" },
     {

@@ -31,7 +31,11 @@ import org.jetbrains.exposed.sql.update
 data class VariantDto(val id: String, val labelFr: String, val labelEn: String, val priceCents: Long)
 
 @Serializable
-data class CategoryDto(val id: String, val nameFr: String, val nameEn: String, val sortOrder: Int)
+data class CategoryDto(
+    val id: String, val nameFr: String, val nameEn: String, val sortOrder: Int,
+    /** Names in the store's other languages (es, de…): [dev.dwhipstock.pos.base.Translations]. */
+    val names: Map<String, String> = emptyMap(),
+)
 
 @Serializable
 data class StaffDto(val id: String, val name: String, val role: String)
@@ -58,11 +62,14 @@ data class ItemDto(
     val size: String? = null,
     /** Demo popularity (seeded stores); the quick keys' cold start. */
     val salesWeight: Int = 0,
+    /** Names in the store's other languages (es, de…): [dev.dwhipstock.pos.base.Translations]. */
+    val names: Map<String, String> = emptyMap(),
 )
 
 /** An item row as the API shows it (menu and retail screens). */
 internal fun itemDtoOf(
     row: org.jetbrains.exposed.sql.ResultRow, variants: List<VariantDto>, photoVersion: Long? = null,
+    names: Map<String, String> = emptyMap(),
 ) = ItemDto(
     row[Items.id], row[Items.nameFr], row[Items.nameEn],
     row[Items.descriptionFr], row[Items.descriptionEn], row[Items.categoryId],
@@ -79,6 +86,7 @@ internal fun itemDtoOf(
     subcategory = row[Items.subcategory],
     size = row[Items.sizeLabel],
     salesWeight = row[Items.salesWeight],
+    names = names,
 )
 
 @Serializable
@@ -159,6 +167,8 @@ data class FloorObjectDto(
     val labelFr: String? = null, val labelEn: String? = null,
     /** CUSTOM objects only: an icon key from [FLOOR_OBJECT_ICONS], and RECT | ROUND. */
     val icon: String? = null, val shape: String? = null,
+    /** Captions in the store's other languages (es, de…). */
+    val names: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -170,6 +180,8 @@ data class ZoneDto(
     val objects: List<FloorObjectDto> = emptyList(),
     /** Table-label prefix (U/O/B/L): every table here is labelled "{prefix}-{n}". */
     val labelPrefix: String = "",
+    /** Names in the store's other languages (es, de…). */
+    val names: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -488,6 +500,7 @@ fun Route.posRoutes(
             val matched = CatalogQuery.select(query)
             val page = query.page(matched)
             val ids = if (query.paged) page.map { it[Items.id] }.toSet() else null
+            val names = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ITEM)
             val variantsByItem = ItemVariants.selectAll()
                 .where { ItemVariants.deletedAt.isNull() }
                 .orderBy(ItemVariants.sortOrder)
@@ -500,6 +513,7 @@ fun Route.posRoutes(
                 itemDtoOf(
                     it, variantsByItem[it[Items.id]] ?: emptyList(),
                     photoVersion = it[Items.photoPath]?.let { _ -> photos.version(it[Items.id]) },
+                    names = names[it[Items.id]].orEmpty(),
                 )
             } to matched.size
         }
@@ -510,6 +524,7 @@ fun Route.posRoutes(
     // open route: the customer menu page renders category chips from this too
     get("/categories") {
         val categories = transaction {
+            val names = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.CATEGORY)
             dev.dwhipstock.pos.base.Categories.selectAll()
                 .orderBy(dev.dwhipstock.pos.base.Categories.sortOrder).map {
                     CategoryDto(
@@ -517,6 +532,7 @@ fun Route.posRoutes(
                         it[dev.dwhipstock.pos.base.Categories.nameFr],
                         it[dev.dwhipstock.pos.base.Categories.nameEn],
                         it[dev.dwhipstock.pos.base.Categories.sortOrder],
+                        names[it[dev.dwhipstock.pos.base.Categories.id]].orEmpty(),
                     )
                 }
         }
@@ -544,6 +560,8 @@ fun Route.posRoutes(
                         menuPath = row[DiningTables.publicToken]?.let(TableTokens::menuPath),
                     )
                 }
+            val objectNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.FLOOR_OBJECT)
+            val zoneNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ZONE)
             val objectsByZone = FloorObjects.selectAll()
                 .groupBy({ o -> o[FloorObjects.zoneId] }) { o ->
                     FloorObjectDto(
@@ -552,13 +570,14 @@ fun Route.posRoutes(
                         o[FloorObjects.width], o[FloorObjects.height],
                         o[FloorObjects.rotation], o[FloorObjects.labelFr], o[FloorObjects.labelEn],
                         o[FloorObjects.icon], o[FloorObjects.shape],
+                        objectNames[o[FloorObjects.id]].orEmpty(),
                     )
                 }
             Zones.selectAll().orderBy(Zones.sortOrder).map {
                 ZoneDto(it[Zones.id], it[Zones.nameFr], it[Zones.nameEn], it[Zones.status],
                     tablesByZone[it[Zones.id]] ?: emptyList(),
                     objectsByZone[it[Zones.id]] ?: emptyList(),
-                    labelPrefix = it[Zones.labelPrefix])
+                    labelPrefix = it[Zones.labelPrefix], names = zoneNames[it[Zones.id]].orEmpty())
             }
         }
         call.respond(zones)

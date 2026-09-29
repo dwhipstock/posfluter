@@ -8,6 +8,7 @@ import dev.dwhipstock.pos.aimenu.MenuImage
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.db.SyncOutbox
 import dev.dwhipstock.pos.sdk.MenuAiConfig
 import io.ktor.client.request.*
@@ -279,6 +280,66 @@ class MenuAiRoutesTest {
         assertEquals("menu_ai_bad_reply", obj(res.bodyAsText()).s("code"))
         assertEquals(1, fake.images.size)
         assertTrue(fake.prompts.single().contains("paper menu"))
+    }
+
+    @Test
+    fun translateFillsMissingNamesAsAChangeSetAndReverts() = testApplication {
+        val fake = FakeMenuProvider("""{"summary":"German and Spanish names.","ops":[
+          {"op":"set_name","entity":"item","id":"poutine","lang":"de","name":"Poutine (Pommes mit Käse und Bratensoße)"},
+          {"op":"set_name","entity":"category","id":"starters","lang":"es","name":"Entradas"},
+          {"op":"set_name","entity":"item","id":"poutine","lang":"it","name":"Poutine"},
+          {"op":"set_name","entity":"item","id":"no-such-item","lang":"de","name":"X"}
+        ]}""")
+        store(fake)
+        val manager = loginClient()
+        // the demo seed already has every es / de name: nothing to ask the model
+        val none = obj(manager.post("/menu-ai/translate") {
+            contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234"}""")
+        }.bodyAsText())
+        assertEquals(0, none["changes"]!!.jsonArray.size)
+        assertTrue(fake.prompts.isEmpty())
+
+        transaction {
+            Translations.set(Translations.ITEM, "poutine", "de", null)
+            Translations.set(Translations.CATEGORY, "starters", "es", null)
+        }
+        assertEquals(HttpStatusCode.Forbidden, manager.post("/menu-ai/translate") {
+            contentType(ContentType.Application.Json); setBody("""{}""")
+        }.status)
+        val res = manager.post("/menu-ai/translate") {
+            contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234"}""")
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val proposal = obj(res.bodyAsText())
+        // only the missing ones were sent, with the languages they lack
+        val prompt = fake.prompts.single()
+        assertTrue(prompt.contains("item poutine") && prompt.contains("→ de"))
+        assertTrue(prompt.contains("category starters") && prompt.contains("→ es"))
+        assertFalse(prompt.contains("item wings"))
+        val changes = proposal["changes"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("set_name", "set_name"), changes.map { it.s("kind") })
+        assertEquals(2, proposal["rejected"]!!.jsonArray.size) // a language the store lacks, an unknown item
+        assertNull(transaction { Translations.get(Translations.ITEM, "poutine", "de") }) // previewing changes nothing
+
+        val apply = obj(manager.post("/menu-ai/apply") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"managerPin":"1234","proposalId":"${proposal.s("proposalId")}","changeIds":["c1","c2"]}""")
+        }.bodyAsText())
+        assertEquals("2", apply.s("applied"))
+        assertEquals("Poutine (Pommes mit Käse und Bratensoße)", transaction { Translations.get(Translations.ITEM, "poutine", "de") })
+        assertEquals("Entradas", transaction { Translations.get(Translations.CATEGORY, "starters", "es") })
+        val poutine = Json.parseToJsonElement(manager.get("/items").bodyAsText()).jsonArray.map { it.jsonObject }
+            .first { it.s("id") == "poutine" }
+        assertEquals("Poutine (Pommes mit Käse und Bratensoße)", poutine["names"]!!.jsonObject.s("de"))
+        val entry = Json.parseToJsonElement(manager.get("/menu-ai/history").bodyAsText()).jsonArray.single().jsonObject
+        assertEquals("translate", entry.s("source"))
+
+        val revert = manager.post("/menu-ai/history/${apply.s("changeSetId")}/revert") {
+            contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234"}""")
+        }
+        assertEquals(HttpStatusCode.OK, revert.status, revert.bodyAsText())
+        assertNull(transaction { Translations.get(Translations.ITEM, "poutine", "de") })
+        assertNull(transaction { Translations.get(Translations.CATEGORY, "starters", "es") })
     }
 
     @Test

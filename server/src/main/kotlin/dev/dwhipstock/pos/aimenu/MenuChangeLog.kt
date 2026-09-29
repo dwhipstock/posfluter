@@ -7,6 +7,7 @@ import dev.dwhipstock.pos.api.VariantPatchRequest
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.db.utcTimestamp
 import dev.dwhipstock.pos.restaurant.ConflictException
@@ -19,6 +20,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -123,7 +125,19 @@ internal object MenuChangeLog {
         }
     }
 
+    /** A translations-table name: key "entity:id:lang" ([translationKey]). */
+    fun translationState(key: String): JsonObject {
+        val (entity, id, lang) = splitTranslationKey(key)
+        return buildJsonObject { put("text", Translations.get(entity, id, lang)) }
+    }
+
+    fun translationKey(entity: String, id: String, lang: String) = "$entity:$id:$lang"
+
+    private fun splitTranslationKey(key: String): Triple<String, String, String> =
+        Triple(key.substringBefore(':'), key.substringAfter(':').substringBeforeLast(':'), key.substringAfterLast(':'))
+
     fun state(entity: String, id: String): JsonObject? = when (entity) {
+        "translation" -> translationState(id)
         "item" -> itemState(id)
         "variant" -> variantState(id)
         "category" -> categoryState(id)
@@ -218,6 +232,10 @@ internal object MenuChangeLog {
                     VariantPatchRequest(priceCents = before["priceCents"]!!.jsonPrimitive.long))
                 "category" to "update" -> CatalogOps.patchCategory(id,
                     CategoryPatchRequest(nameFr = before!!.s("nameFr"), nameEn = before.s("nameEn")))
+                "translation" to "update" -> {
+                    val (entity, eid, lang) = splitTranslationKey(id)
+                    Translations.set(entity, eid, lang, (before!!["text"] as? JsonPrimitive)?.contentOrNull)
+                }
                 "category_order" to "reorder" -> {
                     val old = (before!!["order"] as JsonArray).map { it.jsonPrimitive.content }
                     val now = orderState()["order"]!!.let { it as JsonArray }.map { it.jsonPrimitive.content }

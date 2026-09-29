@@ -163,6 +163,112 @@ void main() {
     },
   );
 
+  group('translate menu', () {
+    MenuProposal names() => MenuProposal.fromJson({
+      'proposalId': 'p2',
+      'provider': 'fake',
+      'summary': 'German and Spanish names.',
+      'changes': [
+        {
+          'id': 'c1',
+          'kind': 'set_name',
+          'title': 'Classic Poutine',
+          'details': [
+            {'field': 'name', 'label': 'de', 'after': 'Klassische Poutine'},
+          ],
+        },
+        {
+          'id': 'c2',
+          'kind': 'set_name',
+          'title': 'Starters',
+          'details': [
+            {'field': 'name', 'label': 'es', 'after': 'Entradas'},
+          ],
+        },
+      ],
+    });
+
+    AiMenuBackend withTranslate(_Fake fake, List<String> calls) =>
+        AiMenuBackend(
+          chat: fake.backend.chat,
+          fromPhotos: fake.backend.fromPhotos,
+          apply: fake.backend.apply,
+          history: fake.backend.history,
+          revert: fake.backend.revert,
+          translate: (pin) async {
+            calls.add(pin);
+            return names();
+          },
+        );
+
+    Widget dialog(AiMenuBackend backend, {AiPhotoStatus status = _online}) =>
+        AiMenuDialog(
+          status: status,
+          askPin: () async => '1234',
+          pickPhotos: () async => null,
+          backend: backend,
+        );
+
+    setUp(
+      () => StoreProfile.current = const StoreProfile(
+        venueId: 'vieux-port',
+        brand: 'copper-lantern',
+        kind: 'restaurant',
+        country: 'CA',
+        currency: 'CAD',
+        locales: ['fr', 'en', 'es', 'de'],
+        legalAge: 18,
+      ),
+    );
+    tearDown(() => StoreProfile.current = StoreProfile.pub);
+
+    testWidgets('previews the missing names and applies the ticked ones', (
+      tester,
+    ) async {
+      final fake = _Fake();
+      final calls = <String>[];
+      await tester.pumpWidget(_app(dialog(withTranslate(fake, calls))));
+      await tester.tap(find.byKey(const Key('ai-menu-translate')));
+      await tester.pumpAndSettle();
+      expect(calls, ['1234']);
+      expect(
+        find.textContaining('Name (German): Klassische Poutine'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Name (Spanish): Entradas'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('ai-menu-apply')));
+      await tester.pumpAndSettle();
+      expect(fake.applied.single, ['c1', 'c2']);
+    });
+
+    testWidgets('in German, and off when offline', (tester) async {
+      Prefs.instance.lang = 'de';
+      final fake = _Fake();
+      await tester.pumpWidget(
+        _app(
+          dialog(
+            withTranslate(fake, []),
+            status: AiPhotoStatus.unavailable('menu_ai_offline'),
+          ),
+        ),
+      );
+      expect(find.text('Karte übersetzen'), findsOneWidget);
+      expect(
+        tester
+            .widget<OutlinedButton>(find.byKey(const Key('ai-menu-translate')))
+            .onPressed,
+        isNull,
+      );
+      expect(find.byKey(const Key('ai-menu-unavailable')), findsOneWidget);
+    });
+
+    testWidgets('a fr / en store has no translate button', (tester) async {
+      StoreProfile.current = StoreProfile.pub;
+      await tester.pumpWidget(_app(dialog(withTranslate(_Fake(), []))));
+      expect(find.byKey(const Key('ai-menu-translate')), findsNothing);
+    });
+  });
+
   testWidgets('history: revert asks before overwriting a later edit', (
     tester,
   ) async {

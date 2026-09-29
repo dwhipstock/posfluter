@@ -55,7 +55,7 @@ function TaxPage() {
     ? cashRoundingAmounts(data.totals.cashRoundingCents, data.byCurrency, money?.currency ?? m.scopeCurrency)
     : [];
   const hasRounding = rounding.length > 0;
-  const rateText = (r: string) => (locale === "fr" ? r.replace(".", ",") : r);
+  const rateText = (r: string) => (locale === "fr" || locale === "de" ? r.replace(".", ",") : r);
   const taxLabel = (r: { code: string; labelFr: string; labelEn: string; ratePercent: string }) =>
     r.ratePercent
       ? t("tax_col_rate", { label: name(r.labelFr, r.labelEn) || r.code, rate: rateText(r.ratePercent) })

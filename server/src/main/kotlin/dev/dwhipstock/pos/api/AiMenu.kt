@@ -15,6 +15,9 @@ import kotlinx.serialization.Serializable
 data class MenuAiChatRequest(val managerPin: String? = null, val text: String)
 
 @Serializable
+data class MenuAiTranslateRequest(val managerPin: String? = null)
+
+@Serializable
 data class MenuAiApplyRequest(val managerPin: String? = null, val proposalId: String, val changeIds: List<String>)
 
 @Serializable
@@ -30,6 +33,7 @@ private const val MAX_MENU_PHOTO_BYTES = 12 * 1024 * 1024
  *   POST /menu-ai/photos    multipart photo(s) + managerPin (+ note) → a proposal (nothing changes)
  *   POST /floor-objects/ai-suggest  multipart one photo + managerPin → a CUSTOM floor-object suggestion
  *   POST /menu-ai/chat      JSON {managerPin, text} → a proposal (nothing changes)
+ *   POST /menu-ai/translate JSON {managerPin} → set_name proposal for missing es / de names (nothing changes)
  *   POST /menu-ai/apply     JSON {managerPin, proposalId, changeIds} → applied through CatalogOps, saved as a change set
  *   GET  /menu-ai/history   the last 20 applied change sets (who, when, source, reverted?)
  *   POST /menu-ai/history/{setId}/revert   JSON {managerPin, force?} → the before state put back;
@@ -100,6 +104,13 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
         val req = call.receive<MenuAiChatRequest>()
         requireManagerApproval(auth, req.managerPin)
         call.respond(onIo { ai.chat(req.text) })
+    }
+
+    post("/menu-ai/translate") {
+        requireManagerSession(call)
+        val req = call.receive<MenuAiTranslateRequest>()
+        requireManagerApproval(auth, req.managerPin)
+        call.respond(onIo { ai.translate() })
     }
 
     post("/menu-ai/apply") {

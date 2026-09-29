@@ -17,7 +17,7 @@ interface I18n {
   toggleLocale: () => void;
   t: (key: MsgKey, vars?: Vars) => string;
   fmt: Fmt;
-  /** Data-driven bilingual names (items, categories, zones): locale first (Spanish reads the English name). */
+  /** Data-driven bilingual names (items, categories, zones): locale first (Spanish and German read the English name). */
   name: (fr?: string | null, en?: string | null) => string;
   /** The other language — the small secondary line; "" when redundant. */
   nameAlt: (fr?: string | null, en?: string | null) => string;
@@ -65,7 +65,7 @@ export function LocaleProvider({
     (fr?: string | null, en?: string | null) => {
       // the second line is the pub's other official language; a Spanish
       // reader (or a client without French) gets no French subtitle
-      if (locale === "es" || !available.includes("fr")) return "";
+      if (locale === "es" || locale === "de" || !available.includes("fr")) return "";
       const primary = locale === "en" ? en : fr;
       const alt = locale === "en" ? fr : en;
       return alt && alt !== primary ? alt : "";

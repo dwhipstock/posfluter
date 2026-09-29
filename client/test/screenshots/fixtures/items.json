@@ -23,7 +23,11 @@
     "priceCents": 2025
    }
   ],
-  "photoVersion": null
+  "photoVersion": null,
+  "names": {
+   "es": "Lager de la casa Lantern",
+   "de": "Lantern Hauslager"
+  }
  },
  {
   "id": "amber-ale",

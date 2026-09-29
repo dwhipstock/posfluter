@@ -120,7 +120,7 @@ String signedMoney(int cents, {String? currency}) {
   return cents < 0 ? '−$abs' : '+$abs';
 }
 
-/// [lang] is a UI language (`en`, `fr`, `es`) or a tag (`fr-CA`).
+/// [lang] is a UI language (`en`, `fr`, `es`, `de`) or a tag (`fr-CA`).
 String formatMoney(int cents, String currency, {String lang = 'en'}) {
   final sign = cents < 0 ? '-' : '';
   final abs = cents.abs();
@@ -131,6 +131,19 @@ String formatMoney(int cents, String currency, {String lang = 'en'}) {
     (m) => '${m[1]}$sep',
   );
   final cc = frac.toString().padLeft(2, '0');
+  if (lang.toLowerCase().startsWith('de')) {
+    // German: 1.234,56 $ — dot thousands, decimal comma, the store's own
+    // symbol after (CAD keeps the pubs' whole-dollar style: 1.010 $)
+    final sym = switch (currency.toUpperCase()) {
+      'CAD' || 'USD' => '\$',
+      'EUR' => '€',
+      final c => c,
+    };
+    final figure = currency.toUpperCase() == 'CAD' && frac == 0
+        ? grouped('.')
+        : '${grouped('.')},$cc';
+    return '$sign$figure$_nbsp$sym';
+  }
   switch (currency.toUpperCase()) {
     case 'CAD':
       if (lang.toLowerCase().startsWith('fr')) {

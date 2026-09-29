@@ -1263,6 +1263,19 @@ class Api {
     return MenuProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
+  /// "Translate menu": names missing in the store's extra languages (es, de) → a proposal.
+  static Future<MenuProposal> menuAiTranslate(String managerPin) async {
+    final res = await http
+        .post(
+          Uri.parse('$baseUrl/menu-ai/translate'),
+          headers: _headers,
+          body: jsonEncode({'managerPin': managerPin}),
+        )
+        .timeout(_aiTimeout);
+    _throwOnError(res);
+    return MenuProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
   /// Apply the ticked changes (through the store's usual menu code).
   static Future<MenuApplyResult> menuAiApply(
     String proposalId,
@@ -1962,12 +1975,36 @@ class Perm {
 /// Screens call [money], which follows the store's own currency.
 String cad(int cents) => formatMoney(cents, 'CAD');
 
+/// Names beyond the two catalog slots (`{"de": "…", "es": "…"}`): the
+/// store's translations table. Missing or odd → empty.
+Map<String, String> namesFromJson(Object? raw) => raw is Map
+    ? {
+        for (final e in raw.entries)
+          if (e.key is String && e.value is String)
+            e.key as String: e.value as String,
+      }
+    : const {};
+
 class Category {
   final String id, nameFr, nameEn;
   final int sortOrder;
-  Category(this.id, this.nameFr, this.nameEn, this.sortOrder);
-  factory Category.fromJson(Map<String, dynamic> j) =>
-      Category(j['id'], j['nameFr'], j['nameEn'], j['sortOrder'] ?? 0);
+
+  /// Extra-language names (es, de, …); see [namesFromJson].
+  final Map<String, String> names;
+  Category(
+    this.id,
+    this.nameFr,
+    this.nameEn,
+    this.sortOrder, {
+    this.names = const {},
+  });
+  factory Category.fromJson(Map<String, dynamic> j) => Category(
+    j['id'],
+    j['nameFr'],
+    j['nameEn'],
+    j['sortOrder'] ?? 0,
+    names: namesFromJson(j['names']),
+  );
 }
 
 class Staff {
@@ -2118,6 +2155,9 @@ class Zone {
 
   /// Table-label prefix (U/O/B/L): every table here is labelled "{prefix}-{n}".
   final String labelPrefix;
+
+  /// Extra-language names (es, de, …); see [namesFromJson].
+  final Map<String, String> names;
   Zone(
     this.id,
     this.nameFr,
@@ -2125,8 +2165,9 @@ class Zone {
     this.status,
     this.tables,
     this.objects,
-    this.labelPrefix,
-  );
+    this.labelPrefix, {
+    this.names = const {},
+  });
   bool get isClosed => status == 'CLOSED';
   factory Zone.fromJson(Map<String, dynamic> j) => Zone(
     j['id'],
@@ -2138,6 +2179,7 @@ class Zone {
         .map((o) => FloorObject.fromJson(o))
         .toList(),
     j['labelPrefix'] ?? '',
+    names: namesFromJson(j['names']),
   );
 }
 
@@ -2157,6 +2199,9 @@ class FloorObject {
 
   /// CUSTOM only: an icon key (floorObjectIcons) and RECT | ROUND.
   final String? icon, shape;
+
+  /// Extra-language captions (es, de, …); see [namesFromJson].
+  final Map<String, String> names;
   FloorObject(
     this.id,
     this.type,
@@ -2169,6 +2214,7 @@ class FloorObject {
     this.labelEn, {
     this.icon,
     this.shape,
+    this.names = const {},
   });
   factory FloorObject.fromJson(Map<String, dynamic> j) => FloorObject(
     j['id'],
@@ -2183,6 +2229,7 @@ class FloorObject {
     j['labelEn'] ?? j['label'],
     icon: j['icon'],
     shape: j['shape'],
+    names: namesFromJson(j['names']),
   );
 
   /// Editor-local geometry mutation (drag/resize/rotate); identity carries over.
@@ -2204,6 +2251,7 @@ class FloorObject {
     labelEn,
     icon: icon,
     shape: shape,
+    names: names,
   );
 
   /// The geometry slice the batch "objects layout" endpoint expects.
@@ -2424,6 +2472,9 @@ class Item {
   /// pack label; containers in the pack; the demo popularity weight.
   final String? brand, subcategory, size;
   final int packUnits, salesWeight;
+
+  /// Extra-language names (es, de, …); see [namesFromJson].
+  final Map<String, String> names;
   Item(
     this.id,
     this.nameFr,
@@ -2446,6 +2497,7 @@ class Item {
     this.size,
     this.packUnits = 1,
     this.salesWeight = 0,
+    this.names = const {},
   });
   factory Item.fromJson(Map<String, dynamic> j) => Item(
     j['id'],
@@ -2469,6 +2521,7 @@ class Item {
     size: j['size'],
     packUnits: j['packUnits'] ?? 1,
     salesWeight: j['salesWeight'] ?? 0,
+    names: namesFromJson(j['names']),
   );
 
   /// The first price (a shelf product has exactly one).
