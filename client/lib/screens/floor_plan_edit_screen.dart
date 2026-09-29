@@ -2,12 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemChannels;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
+import '../widgets/ai_working.dart';
 import '../widgets/custom_object_dialog.dart';
 import '../widgets/floor_object_icons.dart';
 import '../widgets/floor_plan.dart';
@@ -22,10 +24,14 @@ import '../widgets/room_layout_preview.dart';
 class FloorPlanEditScreen extends StatefulWidget {
   final Zone zone;
   final String managerPin;
+
+  /// null = the device microphone; tests pass a fake.
+  final VoiceRecorder? recorder;
   const FloorPlanEditScreen({
     super.key,
     required this.zone,
     required this.managerPin,
+    this.recorder,
   });
 
   @override
@@ -56,6 +62,40 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   AiPhotoStatus _ai = AiPhotoStatus.hidden;
   // "Set up from picture": the AI's layout, previewed as a ghost until Apply
   RoomLayoutProposal? _proposal;
+  // non-null while "Ask AI" or "set up from picture" waits on the model: the
+  // working card shows over the (dimmed) canvas instead of a banner. Cancel
+  // just flips [_AiRequest.cancelled] so a result that arrives late is dropped.
+  _AiRequest? _asking;
+
+  // The one snackbar this screen may have up (add-from-photo's "working" one,
+  // or the applied/Revert one): tracked so it can be closed explicitly before
+  // showing the next one and on dispose. A Material snackbar with an action
+  // does not reliably auto-dismiss on its own, and one left up after this
+  // screen is popped would call back into a disposed State when tapped.
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _snack;
+  bool _addingFromPhoto = false;
+
+  void _closeSnack() {
+    _snack?.close();
+    _snack = null;
+  }
+
+  /// Drops focus AND tells the platform to put its on-screen keyboard away.
+  /// FocusScope/FocusManager alone can leave a real software keyboard (e.g.
+  /// on Windows touch) showing over a screen with no text field at all,
+  /// because the platform text-input connection stays open until told to
+  /// close — not just unfocused.
+  void _hideKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod('TextInput.hide');
+  }
+
+  @override
+  void dispose() {
+    _closeSnack();
+    _hideKeyboard();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -415,6 +455,16 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   /// name / icon / shape / size, the manager edits it, then places it. The
   /// photo is sent once and kept nowhere.
   Future<void> _addFromPhoto() async {
+    if (_addingFromPhoto) return; // a double tap must not fire this twice
+    _addingFromPhoto = true;
+    try {
+      await _addFromPhotoImpl();
+    } finally {
+      _addingFromPhoto = false;
+    }
+  }
+
+  Future<void> _addFromPhotoImpl() async {
     final l = L.of(context);
     final picker = ImagePicker();
     final source = picker.supportsImageSource(ImageSource.camera)
@@ -443,8 +493,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       imageQuality: 85,
     );
     if (picked == null || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
+    _closeSnack(); // never queue behind a leftover applied/Revert snackbar
+    _snack = ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(l.objectFromPhotoWorking),
         duration: const Duration(minutes: 3),
@@ -458,11 +508,11 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         widget.managerPin,
       );
     } catch (e) {
-      messenger.hideCurrentSnackBar();
+      _closeSnack();
       if (mounted) showApiError(context, e);
       return;
     }
-    messenger.hideCurrentSnackBar();
+    _closeSnack();
     if (mounted) await _addCustom(suggestion);
   }
 
@@ -518,13 +568,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         ),
     ];
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(l.roomFromPictureWorking),
-        duration: const Duration(minutes: 3),
-      ),
-    );
+    // several pictures for the model to read: the slowest of the AI asks
+    final req = _AiRequest(const Duration(seconds: 40));
+    setState(() => _asking = req);
     RoomLayoutProposal proposal;
     try {
       proposal = await Api.roomLayoutFromPhotos(
@@ -533,12 +579,13 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         widget.managerPin,
       );
     } catch (e) {
-      messenger.hideCurrentSnackBar();
-      if (mounted) showApiError(context, e);
+      if (req.cancelled || !mounted) return;
+      setState(() => _asking = null);
+      showApiError(context, e);
       return;
     }
-    messenger.hideCurrentSnackBar();
-    if (!mounted) return;
+    if (req.cancelled || !mounted) return;
+    setState(() => _asking = null);
     if (proposal.refusal != null) {
       // the store's fixed reply, never the model's words
       await showDialog<void>(
@@ -563,6 +610,13 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     });
   }
 
+  /// Cancel on the AI working card: the request keeps running (nothing to
+  /// abort it with), but its result — or error — is dropped when it arrives.
+  void _cancelAsking() {
+    _asking?.cancelled = true;
+    setState(() => _asking = null);
+  }
+
   /// Floor-plan "Ask AI": type or say a change to THIS room ("add four
   /// 2-tops along the window", "remove the pool table") → the changes,
   /// previewed as a ghost with a list, then Apply (revertable) or Cancel.
@@ -583,7 +637,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                 child: TextField(
                   key: const Key('floor-ai-text'),
                   controller: text,
-                  autofocus: true,
+                  // no autofocus: on a touch Surface it pops the on-screen
+                  // keyboard over the canvas before the manager asked for it
                   minLines: 1,
                   maxLines: 3,
                   textInputAction: TextInputAction.send,
@@ -596,6 +651,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
               const SizedBox(width: 8),
               MicButton(
                 key: const Key('floor-ai-mic'),
+                recorder: widget.recorder,
                 onClip: (clip) async =>
                     Navigator.pop(ctx, (text: null, clip: clip)),
               ),
@@ -617,15 +673,16 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         ],
       ),
     );
-    text.dispose();
+    // not text.dispose() here: the dialog's exit transition can still be
+    // animating a frame or two after showDialog resolves (as the other
+    // dialogs in this screen already assume by never disposing their own
+    // short-lived controllers either)
     if (ask == null || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(l.floorAskAiWorking),
-        duration: const Duration(minutes: 3),
-      ),
-    );
+    // sent (text or voice): drop focus so the on-screen keyboard doesn't sit
+    // over the canvas/panel while the request runs, or once the result shows
+    _hideKeyboard();
+    final req = _AiRequest(const Duration(seconds: 15));
+    setState(() => _asking = req);
     RoomLayoutProposal proposal;
     try {
       final clip = ask.clip;
@@ -638,12 +695,13 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
             )
           : await Api.floorEdit(widget.zone.id, ask.text!, widget.managerPin);
     } catch (e) {
-      messenger.hideCurrentSnackBar();
-      if (mounted) showApiError(context, e);
+      if (req.cancelled || !mounted) return;
+      setState(() => _asking = null);
+      showApiError(context, e);
       return;
     }
-    messenger.hideCurrentSnackBar();
-    if (!mounted) return;
+    if (req.cancelled || !mounted) return;
+    setState(() => _asking = null);
     if (proposal.refusal != null) {
       // the store's fixed reply, never the model's words
       await showDialog<void>(
@@ -667,6 +725,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       );
       return;
     }
+    if (!mounted) return;
+    _hideKeyboard(); // the preview panel is about to show
     setState(() {
       _proposal = proposal;
       _selectedId = null;
@@ -705,15 +765,21 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         _dirty = false;
         _undo.clear();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      _closeSnack();
+      _snack = ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             p.isEdit ? l.floorEditApplied(r.added) : l.roomApplied(r.added),
           ),
-          duration: const Duration(seconds: 10),
+          // a snackbar with an action can otherwise sit forever (Flutter
+          // 3.44) and block the next one from ever showing
+          duration: const Duration(seconds: 8),
           action: SnackBarAction(
             label: l.aiMenuRevert,
-            onPressed: () => _revertRoom(r.changeSetId),
+            onPressed: () {
+              _closeSnack();
+              _revertRoom(r.changeSetId);
+            },
           ),
         ),
       );
@@ -739,7 +805,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         _dirty = false;
         _undo.clear();
       });
-      ScaffoldMessenger.of(
+      _closeSnack();
+      _snack = ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(l.aiMenuRevertDone)));
     } on MenuRevertConflict catch (c) {
@@ -893,6 +960,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   Future<void> _confirmLeave(bool didPop, Object? result) async {
     if (didPop) return;
     if (_proposal != null) return setState(() => _proposal = null);
+    if (_asking != null) return _cancelAsking();
     final l = L.of(context);
     final leave = await showDialog<bool>(
       context: context,
@@ -929,7 +997,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     final l = L.of(context);
     final selected = _selected;
     return PopScope(
-      canPop: !_dirty && _proposal == null,
+      canPop: !_dirty && _proposal == null && _asking == null,
       onPopInvokedWithResult: _confirmLeave,
       child: Scaffold(
         appBar: AppBar(
@@ -938,7 +1006,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
               l.name(widget.zone.nameFr, widget.zone.nameEn, widget.zone.names),
             ),
           ),
-          actions: _proposal != null
+          actions: _proposal != null || _asking != null
               ? null
               : [
                   // independent editor controls: dot-grid dropdown (off + 3 sizes) +
@@ -1064,16 +1132,21 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                 onApply: _applyRoom,
                 onCancel: () => setState(() => _proposal = null),
               )
-            : Column(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                      child: _canvas(l),
+            : AiWorkingOverlay(
+                active: _asking != null,
+                expected: _asking?.expected ?? const Duration(seconds: 15),
+                onCancel: _cancelAsking,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                        child: _canvas(l),
+                      ),
                     ),
-                  ),
-                  _toolbar(selected, _selectedObject, l),
-                ],
+                    _toolbar(selected, _selectedObject, l),
+                  ],
+                ),
               ),
       ),
     );
@@ -1495,18 +1568,17 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       children: [
         Icon(icon, size: 18, color: T.textMuted),
         const SizedBox(width: 12),
+        // Expanded either way: a long label (or its note) must shrink to
+        // the menu's own width, never force the Row wider than it.
         if (note == null)
-          Text(label)
+          Expanded(child: Text(label, overflow: TextOverflow.ellipsis))
         else
-          Flexible(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label),
-                SizedBox(
-                  width: 260,
-                  child: Text(note, style: T.small(color: T.textMuted)),
-                ),
+                Text(note, style: T.small(color: T.textMuted)),
               ],
             ),
           ),
@@ -1557,6 +1629,15 @@ class _Snapshot {
   final List<TableInfo> tables;
   final List<FloorObject> objects;
   _Snapshot(this.tables, this.objects);
+}
+
+/// One in-flight AI request: [expected] paces the working card, and Cancel
+/// only sets [cancelled] — the request itself is never aborted, its answer
+/// (or error) is just ignored when it arrives.
+class _AiRequest {
+  final Duration expected;
+  bool cancelled = false;
+  _AiRequest(this.expected);
 }
 
 /// Dot grid so snap-to-grid has a visual anchor. T.border is nearly the canvas

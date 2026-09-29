@@ -79,6 +79,10 @@ class GeminiMenuProvider(
     private val pause: (Long) -> Unit = { Thread.sleep(it) },
     /** low for chat and menus; the room layout call thinks more ([LAYOUT_THINKING]). */
     private val thinkingLevel: String = "low",
+    /** Wall-clock cap across the initial try + retry + fallback (up to 3 HTTP
+     *  calls), so three stacked per-call read timeouts can never together run
+     *  past the client's own request timeout. */
+    private val budgetMs: Long = 180_000L,
 ) : MenuAiProvider {
     override val id = "gemini"
     override val host: String get() = URI(baseUrl).host
@@ -120,10 +124,12 @@ class GeminiMenuProvider(
             send("Gemini", http, ImageHttpRequest("POST", "$baseUrl/v1beta/interactions",
                 mapOf("x-goog-api-key" to apiKey), body(m), "application/json"))
         }
+        val deadline = System.currentTimeMillis() + budgetMs
+        fun timeLeft() = System.currentTimeMillis() < deadline
         var res = post(model)
-        if (res.status == 503) { pause(RETRY_PAUSE_MS); res = post(model) }
+        if (res.status == 503 && timeLeft()) { pause(RETRY_PAUSE_MS); res = post(model) }
         // busy, or this model's daily free quota used up: the fallback model has its own quota
-        if ((res.status == 503 || res.status == 429) && model != FALLBACK_MODEL) res = post(FALLBACK_MODEL)
+        if ((res.status == 503 || res.status == 429) && model != FALLBACK_MODEL && timeLeft()) res = post(FALLBACK_MODEL)
         val json = parseJsonObject(res.text)
         if (res.status !in 200..299) throw failure("Gemini", res, json)
         val status = json?.get("status").str()
@@ -246,7 +252,8 @@ object MenuAiProviders {
         val key = config.apiKey ?: return null
         Scrub.register(key)
         return when (config.provider) {
-            MenuAiConfig.Provider.GEMINI -> GeminiMenuProvider(key, http, config.model ?: GeminiMenuProvider.DEFAULT_MODEL)
+            MenuAiConfig.Provider.GEMINI -> GeminiMenuProvider(key, http, config.model ?: GeminiMenuProvider.DEFAULT_MODEL,
+                budgetMs = 180_000L)
             MenuAiConfig.Provider.OPENAI -> OpenAiMenuProvider(key, http, config.model ?: OpenAiMenuProvider.DEFAULT_MODEL)
             MenuAiConfig.Provider.ANTHROPIC -> AnthropicMenuProvider(key, http, config.model ?: AnthropicMenuProvider.DEFAULT_MODEL)
             MenuAiConfig.Provider.OFF -> null
@@ -260,7 +267,7 @@ object MenuAiProviders {
         val m = config.layoutModel
         return when (config.provider) {
             MenuAiConfig.Provider.GEMINI -> GeminiMenuProvider(key, http, m ?: GeminiMenuProvider.LAYOUT_MODEL,
-                thinkingLevel = GeminiMenuProvider.LAYOUT_THINKING)
+                thinkingLevel = GeminiMenuProvider.LAYOUT_THINKING, budgetMs = 280_000L)
             MenuAiConfig.Provider.OPENAI -> OpenAiMenuProvider(key, http, m ?: config.model ?: OpenAiMenuProvider.DEFAULT_MODEL)
             MenuAiConfig.Provider.ANTHROPIC -> AnthropicMenuProvider(key, http, m ?: config.model ?: AnthropicMenuProvider.DEFAULT_MODEL)
             MenuAiConfig.Provider.OFF -> null

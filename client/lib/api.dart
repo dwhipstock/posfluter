@@ -769,9 +769,10 @@ class Api {
             ),
           );
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
-    final res = await http.Response.fromStream(
-      await req.send(),
-    ).timeout(_aiLayoutTimeout);
+    // covers req.send() too, not just reading the reply
+    final res = await (() async =>
+            http.Response.fromStream(await req.send()))()
+        .timeout(_aiLayoutTimeout);
     _throwOnError(res);
     return RoomObjectSuggestion.fromJson(
       jsonDecode(utf8.decode(res.bodyBytes)),
@@ -804,9 +805,9 @@ class Api {
       );
     }
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
-    final res = await http.Response.fromStream(
-      await req.send(),
-    ).timeout(_aiLayoutTimeout);
+    final res = await (() async =>
+            http.Response.fromStream(await req.send()))()
+        .timeout(_aiLayoutTimeout);
     _throwOnError(res);
     return RoomLayoutProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
@@ -1254,9 +1255,9 @@ class Api {
           );
     if (count != null) req.fields['count'] = '$count';
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
-    final res = await http.Response.fromStream(
-      await req.send(),
-    ).timeout(_aiTimeout);
+    final res = await (() async =>
+            http.Response.fromStream(await req.send()))()
+        .timeout(_aiTimeout);
     _throwOnError(res);
     return AiPhotoCandidates.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
@@ -1325,9 +1326,9 @@ class Api {
       );
     }
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
-    final res = await http.Response.fromStream(
-      await req.send(),
-    ).timeout(_aiTimeout);
+    final res = await (() async =>
+            http.Response.fromStream(await req.send()))()
+        .timeout(_aiTimeout);
     _throwOnError(res);
     return MenuProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
@@ -1359,8 +1360,9 @@ class Api {
     String path,
     List<int> audio,
     String contentType,
-    String managerPin,
-  ) async {
+    String managerPin, {
+    Duration timeout = _aiTimeout,
+  }) async {
     final req = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
       ..headers['Authorization'] = 'Bearer $_token'
       ..fields['managerPin'] = managerPin
@@ -1373,9 +1375,11 @@ class Api {
         ),
       );
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
-    final res = await http.Response.fromStream(
-      await req.send(),
-    ).timeout(_aiTimeout);
+    // the timeout must cover sending the clip too, not just reading the
+    // reply: wrapping just the outer Future left req.send() unbounded
+    final res = await (() async =>
+            http.Response.fromStream(await req.send()))()
+        .timeout(timeout);
     _throwOnError(res);
     return jsonDecode(utf8.decode(res.bodyBytes));
   }
@@ -1404,11 +1408,13 @@ class Api {
     String contentType,
     String managerPin,
   ) async => RoomLayoutProposal.fromJson(
+    // the slower, thinking layout model — same budget as floorEdit's own
     await _postVoice(
       '/zones/$zoneId/ai-edit/voice',
       audio,
       contentType,
       managerPin,
+      timeout: _aiLayoutTimeout,
     ),
   );
 

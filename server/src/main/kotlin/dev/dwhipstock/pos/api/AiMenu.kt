@@ -181,7 +181,7 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
         val req = call.receive<RoomLayoutApplyRequest>()
         val approver = requireManagerApproval(auth, req.managerPin)
         val user = call.sessionUser().userId
-        call.respond(onIo { ai.applyRoom(req, user, approver) })
+        call.respond(onIo { ai.applyRoom(call.parameters["zoneId"]!!, req, user, approver) })
     }
 
     post("/menu-ai/chat") {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -492,12 +494,6 @@ class L {
     'Requiere el menú con IA e internet.',
     'Braucht die KI-Kartenerstellung und Internet.',
   );
-  String get roomFromPictureWorking => _t(
-    'L’IA dessine la salle… (jusqu’à une minute)',
-    'AI is drawing the room… this can take up to a minute',
-    'La IA dibuja la sala… puede tardar hasta un minuto',
-    'Die KI zeichnet den Raum… das kann bis zu einer Minute dauern',
-  );
   String get roomLayoutHistory => _t(
     'Salles créées par l’IA',
     'Rooms set up by AI',
@@ -581,12 +577,28 @@ class L {
     'p. ej. «añade cuatro mesas de 2 junto a la ventana», «mesa 5 redonda con 6 lugares», «quita el billar»',
     'z. B. „vier Zweiertische am Fenster“, „Tisch 5 rund mit 6 Plätzen“, „Billardtisch entfernen“',
   );
-  String get floorAskAiWorking => _t(
-    'L’IA prépare les changements…',
-    'AI is working on the room…',
-    'La IA prepara los cambios…',
-    'Die KI bereitet die Änderungen vor…',
-  );
+  // AI working card: a request can take 5-60s, so it gets a step label, a
+  // live elapsed count and an estimated progress bar instead of a banner
+  // that would otherwise look stuck.
+  String get aiStepListening =>
+      _t('Écoute…', 'Listening…', 'Escuchando…', 'Ich höre zu…');
+  String get aiStepSending =>
+      _t('Envoi…', 'Sending…', 'Enviando…', 'Wird gesendet…');
+  String aiStepThinking(bool slow) => slow
+      ? _t(
+          'Réflexion… habituellement 20 à 60 secondes',
+          'Thinking… usually 20–60 seconds',
+          'Pensando… habitualmente 20 a 60 segundos',
+          'Überlegt… meist 20 bis 60 Sekunden',
+        )
+      : _t(
+          'Réflexion… habituellement 5 à 15 secondes',
+          'Thinking… usually 5–15 seconds',
+          'Pensando… habitualmente 5 a 15 segundos',
+          'Überlegt… meist 5 bis 15 Sekunden',
+        );
+  String get aiStepAlmostDone =>
+      _t('Presque fini…', 'Almost done…', 'Casi listo…', 'Fast fertig…');
   String get floorEditHint => _t(
     'Aperçu : rien ne change avant « Appliquer ». Les contours montrent le nouveau et le déplacé, le pâle est retiré.',
     'Preview: nothing changes until Apply. Outlined = new or moved; faded = removed.',
@@ -2827,6 +2839,15 @@ class L {
       ? '${d.inHours}h ${(d.inMinutes % 60).toString().padLeft(2, '0')}m'
       : '${d.inMinutes}m';
 
+  /// The server never answered at all within this device's own wait limit —
+  /// a client-side [TimeoutException], not a coded server error.
+  String get requestTimedOut => _t(
+    'Ça prend trop de temps. Vérifiez la connexion et réessayez.',
+    'This is taking too long. Check the connection and try again.',
+    'Esto está tardando demasiado. Revisa la conexión e inténtalo de nuevo.',
+    'Das dauert zu lange. Verbindung prüfen und erneut versuchen.',
+  );
+
   /// Server error codes → local language. Fallback: raw server message.
   String? apiError(String? code) => switch (code) {
     'invalid_pin' => _t(
@@ -3877,10 +3898,16 @@ class L {
 }
 
 /// Show an API error as a snackbar — except session expiry, which already
-/// navigated to login and needs no acknowledgement.
+/// navigated to login and needs no acknowledgement. A client-side
+/// [TimeoutException] (the server never answered at all, so there's no error
+/// code to translate) gets the same friendly wording an AI timeout does,
+/// instead of its raw "TimeoutException after 0:03:20.000000: …" text.
 void showApiError(BuildContext context, Object error) {
   if (error is SessionExpiredException) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+  final text = error is TimeoutException
+      ? L.of(context).requestTimedOut
+      : '$error';
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 }
 
 /// Vertical variant for the 64pt nav rail on the check screen.

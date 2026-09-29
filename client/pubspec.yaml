@@ -53,6 +53,10 @@ dependencies:
   mobile_scanner: ^7.4.2
   shared_preferences: ^2.5.5
   record: ^7.1.1
+  # Zone-overridable "now" (flutter_test's fake_async already virtualizes it),
+  # so the AI working card's elapsed timer is real in the app and fast/exact
+  # in a widget test rather than needing to wait on the wall clock.
+  clock: ^1.1.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

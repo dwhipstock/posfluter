@@ -41,6 +41,11 @@ object AiGuard {
         FLOOR_OFF_TOPIC("off_topic"),
         /** The floor assistant: nothing it could safely change (or no speech heard). */
         FLOOR_NO_CHANGE("no_change"),
+        /** The reply was cut off or wasn't usable JSON — a technical hiccup, not an off-topic
+         *  request: worth trying again as-is. */
+        INCOMPLETE("menu_ai_incomplete"),
+        /** The model proposed more changes at once than the store accepts. */
+        TOO_MANY_CHANGES("menu_ai_too_many_changes"),
     }
 
     private val REPLIES = mapOf(
@@ -79,6 +84,18 @@ object AiGuard {
             "fr" to "Je n'ai trouvé aucun changement à faire dans cette salle. Nommez la table ou l'élément et ce qu'il faut changer, par exemple « rends la table 5 ronde ».",
             "es" to "No encontré ningún cambio que hacer en esta sala. Indica la mesa o el elemento y qué cambiar, por ejemplo «haz redonda la mesa 5».",
             "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 5 rund machen“.",
+        ),
+        Refusal.INCOMPLETE to mapOf(
+            "en" to "The AI's answer was cut off. Please try again.",
+            "fr" to "La réponse de l'IA a été coupée. Veuillez réessayer.",
+            "es" to "La respuesta de la IA se cortó. Vuelve a intentarlo.",
+            "de" to "Die Antwort der KI wurde abgeschnitten. Bitte versuchen Sie es erneut.",
+        ),
+        Refusal.TOO_MANY_CHANGES to mapOf(
+            "en" to "That's too many changes at once. Try asking for fewer things, or in smaller batches.",
+            "fr" to "C'est trop de changements à la fois. Essayez de demander moins de choses, ou en plus petits lots.",
+            "es" to "Son demasiados cambios a la vez. Pide menos cosas, o en tandas más pequeñas.",
+            "de" to "Das sind zu viele Änderungen auf einmal. Fragen Sie nach weniger Dingen oder in kleineren Schritten.",
         ),
     )
 

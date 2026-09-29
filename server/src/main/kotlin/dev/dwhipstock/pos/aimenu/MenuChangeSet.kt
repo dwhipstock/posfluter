@@ -85,7 +85,8 @@ object MenuChangeSetParser {
         val root = runCatching { json.parseToJsonElement(text) }.getOrNull() as? JsonObject
             ?: throw MenuAiReplyException("the AI reply was not a JSON object")
         val rawOps = root["ops"] as? JsonArray ?: throw MenuAiReplyException("the AI reply has no \"ops\" list")
-        if (rawOps.size > MAX_OPS) throw MenuAiReplyException("the AI proposed too many changes (${rawOps.size})")
+        if (rawOps.size > MAX_OPS) throw MenuAiReplyException(
+            "the AI proposed too many changes (${rawOps.size})", tooMany = true)
         val refused = (root["refusal"] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.contentOrNull?.isNotBlank() } == true
         if (refused) return ParsedChangeSet("", emptyList(), emptyList(), refused = true)
         // the model's own words reach the screen only when they are plain menu text
@@ -243,5 +244,7 @@ object MenuChangeSetParser {
     private fun JsonElement?.s(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
 }
 
-/** The model answered, but not with a usable change set (HTTP 502, code menu_ai_bad_reply). */
-class MenuAiReplyException(message: String) : RuntimeException(message)
+/** The model answered, but not with a usable change set (HTTP 502, code menu_ai_bad_reply).
+ *  [tooMany]: specifically over the change-count limit — a different, still retryable, message
+ *  than a truncated or unparseable reply. */
+class MenuAiReplyException(message: String, val tooMany: Boolean = false) : RuntimeException(message)

@@ -10,6 +10,7 @@ import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.db.utcTimestamp
+import dev.dwhipstock.pos.restaurant.Checks
 import dev.dwhipstock.pos.restaurant.ConflictException
 import dev.dwhipstock.pos.restaurant.DiningTables
 import dev.dwhipstock.pos.restaurant.FloorObjects
@@ -238,6 +239,22 @@ internal object MenuChangeLog {
         if (set[MenuChangeSets.revertedAt] != null) throw ConflictException("already reverted", "menu_ai_already_reverted")
         val rows = MenuChangeRows.selectAll().where { MenuChangeRows.setId eq setId }
             .orderBy(MenuChangeRows.seq, SortOrder.DESC).toList()
+
+        // A table this set touched now has a live order on it: reverting could move, reshape
+        // or delete it out from under the guests. Refused even with force — unlike the "changed
+        // since" conflict below, there is no safe way to override this one.
+        val tableIds = rows.filter { it[MenuChangeRows.entity] == "table" }.map { it[MenuChangeRows.entityId] }.distinct()
+        if (tableIds.isNotEmpty()) {
+            val open = Checks.selectAll()
+                .where { (Checks.tableId inList tableIds) and (Checks.status inList listOf("OPEN", "TOTAL_LOCKED")) }
+                .map { it[Checks.tableId] }.toSet()
+            if (open.isNotEmpty()) {
+                val titles = rows.filter { it[MenuChangeRows.entityId] in open }
+                    .map { it[MenuChangeRows.title].ifBlank { it[MenuChangeRows.entityId] } }.distinct()
+                throw ConflictException(
+                    "${titles.joinToString(", ")} now has an open check: not reverted", "menu_ai_revert_open_check")
+            }
+        }
 
         if (!force) {
             val changed = rows.filter { r ->
