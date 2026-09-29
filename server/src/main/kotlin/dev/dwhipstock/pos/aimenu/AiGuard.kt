@@ -33,6 +33,10 @@ object AiGuard {
         OFF_TOPIC("off_topic"),
         /** About the menu, but the model found nothing it could safely change. */
         NO_CHANGE("no_change"),
+        /** "Set up from picture": the pictures are not a room or a floor plan (or ask something else). */
+        ROOM_OFF_TOPIC("off_topic"),
+        /** "Set up from picture": no table or object could be read. */
+        ROOM_NO_LAYOUT("no_change"),
     }
 
     private val REPLIES = mapOf(
@@ -47,6 +51,18 @@ object AiGuard {
             "fr" to "Je n'ai trouvé aucun changement de menu à faire. Nommez le produit et ce qu'il faut changer, par exemple « poutine 14 ».",
             "es" to "No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «poutine 14».",
             "de" to "Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Poutine 14“.",
+        ),
+        Refusal.ROOM_OFF_TOPIC to mapOf(
+            "en" to "I can only set up a floor plan from pictures of a room, a sketch or a printed plan.",
+            "fr" to "Je peux seulement créer un plan de salle à partir de photos d'une salle, d'un croquis ou d'un plan imprimé.",
+            "es" to "Solo puedo crear un plano a partir de fotos de una sala, un boceto o un plano impreso.",
+            "de" to "Ich kann nur aus Fotos eines Raums, einer Skizze oder eines gedruckten Plans einen Raumplan erstellen.",
+        ),
+        Refusal.ROOM_NO_LAYOUT to mapOf(
+            "en" to "I couldn't find any tables in those pictures. Try a clearer photo taken from higher up, or a sketch.",
+            "fr" to "Je n'ai trouvé aucune table sur ces images. Essayez une photo plus nette prise de plus haut, ou un croquis.",
+            "es" to "No encontré ninguna mesa en esas imágenes. Prueba una foto más nítida tomada desde más arriba, o un boceto.",
+            "de" to "Ich habe auf diesen Bildern keine Tische gefunden. Versuchen Sie ein schärferes Foto von weiter oben oder eine Skizze.",
         ),
     )
 
@@ -114,7 +130,7 @@ object AiGuard {
     /** Phrases of the menu system prompt: a name or summary quoting them is the model leaking its instructions. */
     private val PROMPT_MARKERS = listOf(
         "you maintain the menu", "reply with one json object", "each op is one of", "these instructions",
-        "system prompt", "untrusted data", "never reveal",
+        "system prompt", "untrusted data", "never reveal", "you draw the floor plan",
     )
 
     /**
@@ -187,7 +203,7 @@ object AiRequests : Table("ai_requests") {
 @Serializable
 data class AiRequestDto(
     val at: String, val userId: String, val approverId: String, val deviceId: String? = null,
-    /** chat | photos | translate | room_object */
+    /** chat | photos | translate | room_object | room_layout */
     val kind: String,
     /** proposed | off_topic | no_change | rate_limited | menu_ai_<error> */
     val outcome: String,

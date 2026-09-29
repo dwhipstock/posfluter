@@ -109,6 +109,8 @@ class MenuAiService(
 ) {
     private val log = LoggerFactory.getLogger(MenuAiService::class.java)
 
+    private class RoomProposal(val zoneId: String, val at: Long)
+    private val roomProposals = ConcurrentHashMap<String, RoomProposal>()
     private class Proposal(val ops: Map<String, MenuOp>, val source: String, val summary: String, val at: Long)
     private val proposals = ConcurrentHashMap<String, Proposal>()
     @Volatile private var probe: Pair<Boolean, Long>? = null
@@ -116,6 +118,7 @@ class MenuAiService(
 
     companion object {
         const val MAX_PHOTOS = 6
+        const val MAX_ROOM_PHOTOS = 4
         /** Removals or price changes above this in one Apply need the manager's extra confirm. */
         const val BULK_CONFIRM = 10
         private const val PROPOSAL_TTL_MS = 60 * 60 * 1000L
@@ -203,6 +206,8 @@ class MenuAiService(
                 when (r) {
                     is MenuProposalDto -> AiRequestLog.record(who, kind, r.refusal ?: "proposed", r.changes.size,
                         r.rejected.size, now() - started)
+                    is RoomLayoutProposalDto -> AiRequestLog.record(who, kind, r.refusal ?: "proposed",
+                        r.tables.size + r.objects.size, r.rejected.size, now() - started)
                     else -> AiRequestLog.record(who, kind, "proposed", 1, 0, now() - started)
                 }
             }
@@ -236,6 +241,80 @@ class MenuAiService(
                 e.retryAfterSeconds, e)
         }
         RoomObjectSuggest.parse(reply, bilingual, p.id, p.model)
+    }
+
+    /**
+     * Floor-plan "Set up from picture": 1–4 pictures of one room (a photo, a
+     * sketch, a printed plan) → a validated layout of tables and objects to
+     * preview ([RoomLayoutRules]). Nothing changes; the pictures live only for
+     * this call. Not a room → the fixed reply.
+     */
+    fun roomFromPhotos(zoneId: String, images: List<MenuImage>, who: AiCaller? = null): RoomLayoutProposalDto {
+        require(images.isNotEmpty()) { "at least one picture is required" }
+        require(images.size <= MAX_ROOM_PHOTOS) { "at most $MAX_ROOM_PHOTOS pictures at a time" }
+        val room = transaction { RoomLayoutAi.room(zoneId) }
+        return tracked(who, "room_layout") {
+            val p = requireProvider()
+            val started = now()
+            fun refuse(r: AiGuard.Refusal, rejected: List<String> = emptyList()) = RoomLayoutProposalDto("", zoneId,
+                p.id, p.model, emptyList(), emptyList(), rejected = rejected, elapsedMs = now() - started,
+                refusal = r.code, message = AiGuard.reply(r, who?.lang))
+            val reply = try {
+                p.complete(RoomLayoutAi.systemPrompt(bilingual),
+                    "Set up the floor plan of this room from the attached picture(s).", images)
+            } catch (e: ImageGenException) {
+                if (e.code == ImageGenException.REFUSED) return@tracked refuse(AiGuard.Refusal.ROOM_OFF_TOPIC)
+                if (e.code == ImageGenException.UNAVAILABLE) probe = false to now()
+                log.info("AI room layout via ${p.id} failed: ${e.code} ${e.message}")
+                throw ImageGenException(e.status, e.code.replace("image_", "menu_ai_"), e.message ?: "AI layout failed",
+                    e.retryAfterSeconds, e)
+            }
+            val parsed = try { RoomLayoutAi.parse(reply) } catch (e: MenuAiReplyException) {
+                log.info("AI room layout via ${p.id}: unusable reply (${e.message})")
+                return@tracked refuse(AiGuard.Refusal.ROOM_OFF_TOPIC)
+            }
+            if (parsed.refused) return@tracked refuse(AiGuard.Refusal.ROOM_OFF_TOPIC)
+            // checked against the tables an apply keeps whatever the mode (open bills), numbers against the whole store
+            val plan = transaction {
+                RoomLayoutRules.validate(parsed.tables, parsed.objects,
+                    room.tables.filter { it[dev.dwhipstock.pos.restaurant.DiningTables.id] in room.protectedIds }.map(RoomLayoutAi::box),
+                    RoomLayoutAi.usedNumbers(), room.prefix)
+            }
+            if (plan.tables.isEmpty() && plan.objects.isEmpty()) return@tracked refuse(AiGuard.Refusal.ROOM_NO_LAYOUT, plan.rejected)
+            val cutoff = now() - PROPOSAL_TTL_MS
+            roomProposals.entries.removeIf { it.value.at < cutoff }
+            val id = UUID.randomUUID().toString()
+            roomProposals[id] = RoomProposal(zoneId, now())
+            log.info("AI room layout via ${p.id}/${p.model}: ${plan.tables.size} table(s), ${plan.objects.size} object(s), " +
+                "${plan.rejected.size} rejected")
+            RoomLayoutProposalDto(id, zoneId, p.id, p.model, plan.tables, plan.objects, parsed.notes, plan.rejected,
+                room.tables.size, room.protectedIds.sorted(), now() - started)
+        }
+    }
+
+    /**
+     * Apply a room layout as the manager left it in the preview: [replace]
+     * clears the room first (tables with an open bill stay where they are),
+     * merge adds to it. Validated again, all or nothing, saved as a "room"
+     * change set that [revert] puts back.
+     */
+    fun applyRoom(req: RoomLayoutApplyRequest, userId: String, approverId: String): RoomLayoutApplyResult {
+        val proposal = roomProposals[req.proposalId] ?: throw NotFoundException("that layout has expired; ask again")
+        require(req.mode == "replace" || req.mode == "merge") { "mode must be replace or merge" }
+        val setId = UUID.randomUUID().toString()
+        val result = transaction {
+            val rows = mutableListOf<MenuChangeLog.Row>()
+            val (plan, removed) = RoomLayoutAi.apply(proposal.zoneId, req.mode == "replace", req.tables, req.objects, rows)
+            val room = RoomLayoutAi.room(proposal.zoneId)
+            val summary = "${room.name}: ${plan.tables.size} table(s), ${plan.tables.sumOf { it.seats }} seat(s), " +
+                "${plan.objects.size} object(s) from a picture" + if (removed > 0) " (replaced $removed)" else ""
+            MenuChangeLog.record(setId, userId, approverId, MenuChangeLog.ROOM, summary, rows)
+            val (tables, objects) = RoomLayoutAi.roomNow(proposal.zoneId)
+            RoomLayoutApplyResult(setId, plan.tables.size + plan.objects.size, removed, tables, objects, plan.rejected)
+        }
+        roomProposals.remove(req.proposalId)
+        log.info("AI room layout: applied ${result.added} item(s) to ${proposal.zoneId} as $setId (${req.mode})")
+        return result
     }
 
     /**
@@ -591,7 +670,7 @@ class MenuAiService(
         }
     }
 
-    fun history(): List<MenuChangeSetDto> = transaction { MenuChangeLog.history() }
+    fun history(rooms: Boolean = false): List<MenuChangeSetDto> = transaction { MenuChangeLog.history(rooms = rooms) }
 
     /** Revert one applied change set (see [MenuChangeLog.revert]); all or nothing. */
     fun revert(setId: String, userId: String, force: Boolean): Int {

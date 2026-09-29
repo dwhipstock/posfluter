@@ -479,6 +479,74 @@ class L {
     'La IA mira la foto…',
     'Die KI sieht sich das Foto an…',
   );
+  // "Set up from picture": the AI drafts the whole room from 1–4 pictures
+  String get roomFromPicture => _t(
+    'Créer depuis une image…',
+    'Set up from picture…',
+    'Crear desde una imagen…',
+    'Aus Bild einrichten…',
+  );
+  String get roomFromPictureOffNote => _t(
+    'Nécessite le menu IA et Internet.',
+    'Needs AI menu setup and internet.',
+    'Requiere el menú con IA e internet.',
+    'Braucht die KI-Kartenerstellung und Internet.',
+  );
+  String get roomFromPictureWorking => _t(
+    'L’IA dessine la salle…',
+    'AI is drawing the room…',
+    'La IA dibuja la sala…',
+    'Die KI zeichnet den Raum…',
+  );
+  String get roomLayoutHistory => _t(
+    'Salles créées par l’IA',
+    'Rooms set up by AI',
+    'Salas creadas con IA',
+    'Von der KI eingerichtete Räume',
+  );
+  String roomPreviewSummary(int tables, int seats, int objects) => _t(
+    '$tables table(s), $seats place(s), $objects élément(s)',
+    '$tables table(s), $seats seat(s), $objects object(s)',
+    '$tables mesa(s), $seats lugar(es), $objects elemento(s)',
+    '$tables Tisch(e), $seats Platz/Plätze, $objects Element(e)',
+  );
+  String get roomPreviewHint => _t(
+    'Aperçu : rien ne change avant « Appliquer ». Glissez pour déplacer, × pour retirer.',
+    'Preview: nothing changes until Apply. Drag to move, × to remove.',
+    'Vista previa: nada cambia hasta Aplicar. Arrastra para mover, × para quitar.',
+    'Vorschau: nichts ändert sich vor „Übernehmen“. Ziehen zum Verschieben, × zum Entfernen.',
+  );
+  String get roomModeReplace =>
+      _t('Remplacer', 'Replace', 'Reemplazar', 'Ersetzen');
+  String get roomModeMerge =>
+      _t('Ajouter', 'Add to room', 'Añadir', 'Hinzufügen');
+  String roomExisting(int n) => _t(
+    'La salle a déjà $n table(s).',
+    'This room already has $n table(s).',
+    'La sala ya tiene $n mesa(s).',
+    'Der Raum hat schon $n Tisch(e).',
+  );
+  String roomProtected(int n) => _t(
+    '$n table(s) avec une addition ouverte restent en place.',
+    '$n table(s) with an open bill stay where they are.',
+    '$n mesa(s) con cuenta abierta se quedan donde están.',
+    '$n Tisch(e) mit offener Rechnung bleiben, wo sie sind.',
+  );
+  String get roomNotSure =>
+      _t('Pas certain :', 'Not sure:', 'No está seguro:', 'Unsicher:');
+  String roomSkipped(int n) => _t(
+    '$n élément(s) ignoré(s) ou corrigé(s) :',
+    '$n thing(s) skipped or fixed:',
+    '$n elemento(s) omitido(s) o corregido(s):',
+    '$n Element(e) übersprungen oder korrigiert:',
+  );
+  String get roomApply => _t('Appliquer', 'Apply', 'Aplicar', 'Übernehmen');
+  String roomApplied(int n) => _t(
+    '$n élément(s) ajouté(s) à la salle',
+    '$n thing(s) added to the room',
+    '$n elemento(s) añadido(s) a la sala',
+    '$n Element(e) zum Raum hinzugefügt',
+  );
   String get objectNameFr => _t(
     'Nom (français)',
     'Name (French)',

@@ -10,6 +10,7 @@ import '../i18n.dart';
 import '../widgets/custom_object_dialog.dart';
 import '../widgets/floor_object_icons.dart';
 import '../widgets/floor_plan.dart';
+import '../widgets/room_layout_preview.dart';
 
 /// Manager floor-plan editor. Geometry edits (drag / resize / rotate / shape /
 /// seats) are LOCAL until "Save layout" does one batch write; add / delete /
@@ -43,6 +44,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   bool _busy = false;
   // "Add from photo" rides the AI menu add-on; off/offline → disabled + a note
   AiPhotoStatus _ai = AiPhotoStatus.hidden;
+  // "Set up from picture": the AI's layout, previewed as a ghost until Apply
+  RoomLayoutProposal? _proposal;
 
   @override
   void initState() {
@@ -434,6 +437,243 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     if (mounted) await _addCustom(suggestion);
   }
 
+  /// "Set up from picture": 1–4 pictures (camera, gallery, or a picked file
+  /// on Windows) → the AI's layout, previewed as a ghost over the room.
+  Future<void> _setUpFromPicture() async {
+    final l = L.of(context);
+    if (_dirty) await _save(); // the preview draws the room as saved
+    if (_dirty || !mounted) return;
+    final picker = ImagePicker();
+    final source = picker.supportsImageSource(ImageSource.camera)
+        ? await showDialog<ImageSource>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: Text(l.roomFromPicture),
+              children: [
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.camera),
+                  child: Text(l.aiTakePhoto),
+                ),
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.gallery),
+                  child: Text(l.aiChooseFromGallery),
+                ),
+              ],
+            ),
+          )
+        : ImageSource.gallery;
+    if (source == null || !mounted) return;
+    final files = source == ImageSource.camera
+        ? [
+            ?await picker.pickImage(
+              source: source,
+              maxWidth: 2048,
+              maxHeight: 2048,
+              imageQuality: 88,
+            ),
+          ]
+        : await picker.pickMultiImage(
+            maxWidth: 2048,
+            maxHeight: 2048,
+            imageQuality: 88,
+            limit: 4,
+          );
+    if (files.isEmpty || !mounted) return;
+    final photos = [
+      for (final f in files.take(4))
+        (
+          bytes: await f.readAsBytes(),
+          contentType: f.name.toLowerCase().endsWith('.png')
+              ? 'image/png'
+              : 'image/jpeg',
+        ),
+    ];
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(l.roomFromPictureWorking),
+        duration: const Duration(minutes: 3),
+      ),
+    );
+    RoomLayoutProposal proposal;
+    try {
+      proposal = await Api.roomLayoutFromPhotos(
+        widget.zone.id,
+        photos,
+        widget.managerPin,
+      );
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      if (mounted) showApiError(context, e);
+      return;
+    }
+    messenger.hideCurrentSnackBar();
+    if (!mounted) return;
+    if (proposal.refusal != null) {
+      // the store's fixed reply, never the model's words
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l.roomFromPicture),
+          content: Text(proposal.message ?? ''),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _proposal = proposal;
+      _selectedId = null;
+      _selectedObjectId = null;
+    });
+  }
+
+  Future<void> _applyRoom(
+    String mode,
+    List<TableInfo> tables,
+    List<FloorObject> objects,
+  ) async {
+    final p = _proposal;
+    if (p == null) return;
+    final l = L.of(context);
+    try {
+      final r = await Api.roomLayoutApply(
+        widget.zone.id,
+        p.proposalId,
+        mode,
+        tables,
+        objects,
+        widget.managerPin,
+      );
+      if (!mounted) return;
+      setState(() {
+        _tables = r.tables;
+        _objects = r.objects;
+        _proposal = null;
+        _dirty = false;
+        _undo.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l.roomApplied(r.added)),
+          duration: const Duration(seconds: 10),
+          action: SnackBarAction(
+            label: l.aiMenuRevert,
+            onPressed: () => _revertRoom(r.changeSetId),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    }
+  }
+
+  /// Put a "set up from picture" back: the tables it removed come back, the
+  /// ones it added go (the store refuses while one has an open bill).
+  Future<void> _revertRoom(String setId, {bool force = false}) async {
+    final l = L.of(context);
+    try {
+      await Api.menuAiRevert(setId, widget.managerPin, force: force);
+      final zones = await Api.zones();
+      final zone = zones.where((z) => z.id == widget.zone.id).firstOrNull;
+      if (!mounted) return;
+      setState(() {
+        if (zone != null) {
+          _tables = List.of(zone.tables);
+          _objects = List.of(zone.objects);
+        }
+        _dirty = false;
+        _undo.clear();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.aiMenuRevertDone)));
+    } on MenuRevertConflict catch (c) {
+      if (!mounted) return;
+      final again = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          content: Text(l.aiMenuRevertConflict(c.titles.join(', '))),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l.aiMenuRevertAnyway),
+            ),
+          ],
+        ),
+      );
+      if (again == true) await _revertRoom(setId, force: true);
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    }
+  }
+
+  static String _when(DateTime t) =>
+      '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} '
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  /// The applied "set up from picture" changes, each with Revert.
+  Future<void> _roomHistory() async {
+    final l = L.of(context);
+    List<MenuChangeSet> sets;
+    try {
+      sets = await Api.roomLayoutHistory();
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+      return;
+    }
+    if (!mounted) return;
+    final setId = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.roomLayoutHistory),
+        content: SizedBox(
+          width: 480,
+          child: sets.isEmpty
+              ? Text(l.aiMenuNoHistory)
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final s in sets)
+                      ListTile(
+                        title: Text(s.summary),
+                        subtitle: Text(
+                          [
+                            s.appliedBy,
+                            if (s.createdAt != null) _when(s.createdAt!),
+                          ].join(' · '),
+                        ),
+                        trailing: s.reverted
+                            ? Text(l.aiMenuReverted, style: T.small())
+                            : TextButton(
+                                onPressed: () => Navigator.pop(ctx, s.id),
+                                child: Text(l.aiMenuRevert),
+                              ),
+                      ),
+                  ],
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l.cancel),
+          ),
+        ],
+      ),
+    );
+    if (setId != null && mounted) await _revertRoom(setId);
+  }
+
   Future<void> _deleteSelectedObject() async {
     final o = _selectedObject;
     if (o == null) return;
@@ -504,6 +744,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
 
   Future<void> _confirmLeave(bool didPop, Object? result) async {
     if (didPop) return;
+    if (_proposal != null) return setState(() => _proposal = null);
     final l = L.of(context);
     final leave = await showDialog<bool>(
       context: context,
@@ -540,7 +781,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     final l = L.of(context);
     final selected = _selected;
     return PopScope(
-      canPop: !_dirty,
+      canPop: !_dirty && _proposal == null,
       onPopInvokedWithResult: _confirmLeave,
       child: Scaffold(
         appBar: AppBar(
@@ -549,85 +790,133 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
               l.name(widget.zone.nameFr, widget.zone.nameEn, widget.zone.names),
             ),
           ),
-          actions: [
-            // independent editor controls: dot-grid dropdown (off + 3 sizes) +
-            // snap-to-grid toggle. accent when on, muted when off.
-            _gridMenu(l),
-            _toggleAction(
-              LucideIcons.magnet,
-              l.editorSnap,
-              _snapEnabled,
-              _toggleSnap,
-            ),
-            IconButton(
-              icon: const Icon(LucideIcons.undo2),
-              tooltip: l.undo,
-              onPressed: _undo.isEmpty ? null : _undoLast,
-            ),
-            IconButton(
-              icon: const Icon(LucideIcons.plus),
-              tooltip: l.addTable,
-              onPressed: _addTable,
-            ),
-            // palette: drop a structural prop, a custom one, or one from a photo
-            PopupMenuButton<String>(
-              icon: const Icon(LucideIcons.shapes),
-              tooltip: l.addObject,
-              onSelected: _addObject,
-              itemBuilder: (ctx) => [
-                _objectMenuItem('POOL', LucideIcons.circleDot, l.objectPool),
-                _objectMenuItem(
-                  'BAR_FRONT',
-                  LucideIcons.wine,
-                  l.objectBarFront,
-                ),
-                _objectMenuItem('PILLAR', LucideIcons.columns2, l.objectPillar),
-                for (final type in const [
-                  'ENTRANCE',
-                  'HOST_STAND',
-                  'KITCHEN',
-                  'RESTROOMS',
-                  'STAGE',
-                ])
-                  _objectMenuItem(
-                    type,
-                    floorObjectTypeIcon(type, null)!,
-                    l.objectTypeName(type)!,
+          actions: _proposal != null
+              ? null
+              : [
+                  // independent editor controls: dot-grid dropdown (off + 3 sizes) +
+                  // snap-to-grid toggle. accent when on, muted when off.
+                  _gridMenu(l),
+                  _toggleAction(
+                    LucideIcons.magnet,
+                    l.editorSnap,
+                    _snapEnabled,
+                    _toggleSnap,
                   ),
-                const PopupMenuDivider(),
-                _objectMenuItem('CUSTOM', LucideIcons.pencil, l.customObject),
-                // hidden when the store has no AI menu route at all
-                if (_ai.configured || _ai.available)
-                  _objectMenuItem(
-                    'PHOTO',
-                    LucideIcons.camera,
-                    l.objectFromPhoto,
-                    enabled: _ai.available,
-                    note: _ai.available ? null : l.objectFromPhotoOffNote,
+                  IconButton(
+                    icon: const Icon(LucideIcons.undo2),
+                    tooltip: l.undo,
+                    onPressed: _undo.isEmpty ? null : _undoLast,
                   ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: FilledButton.icon(
-                icon: const Icon(LucideIcons.check, size: 18),
-                label: Text(l.saveLayout),
-                onPressed: _dirty && !_busy ? _save : null,
-              ),
-            ),
-          ],
+                  IconButton(
+                    icon: const Icon(LucideIcons.plus),
+                    tooltip: l.addTable,
+                    onPressed: _addTable,
+                  ),
+                  // palette: drop a structural prop, a custom one, or one from a photo
+                  PopupMenuButton<String>(
+                    icon: const Icon(LucideIcons.shapes),
+                    tooltip: l.addObject,
+                    onSelected: _addObject,
+                    itemBuilder: (ctx) => [
+                      _objectMenuItem(
+                        'POOL',
+                        LucideIcons.circleDot,
+                        l.objectPool,
+                      ),
+                      _objectMenuItem(
+                        'BAR_FRONT',
+                        LucideIcons.wine,
+                        l.objectBarFront,
+                      ),
+                      _objectMenuItem(
+                        'PILLAR',
+                        LucideIcons.columns2,
+                        l.objectPillar,
+                      ),
+                      for (final type in const [
+                        'ENTRANCE',
+                        'HOST_STAND',
+                        'KITCHEN',
+                        'RESTROOMS',
+                        'STAGE',
+                      ])
+                        _objectMenuItem(
+                          type,
+                          floorObjectTypeIcon(type, null)!,
+                          l.objectTypeName(type)!,
+                        ),
+                      const PopupMenuDivider(),
+                      _objectMenuItem(
+                        'CUSTOM',
+                        LucideIcons.pencil,
+                        l.customObject,
+                      ),
+                      // hidden when the store has no AI menu route at all
+                      if (_ai.configured || _ai.available)
+                        _objectMenuItem(
+                          'PHOTO',
+                          LucideIcons.camera,
+                          l.objectFromPhoto,
+                          enabled: _ai.available,
+                          note: _ai.available ? null : l.objectFromPhotoOffNote,
+                        ),
+                    ],
+                  ),
+                  // "Set up from picture" + its history; hidden without the AI add-on
+                  if (_ai.configured || _ai.available)
+                    PopupMenuButton<String>(
+                      key: const Key('room-ai-menu'),
+                      icon: const Icon(LucideIcons.sparkles),
+                      tooltip: l.roomFromPicture,
+                      onSelected: (v) =>
+                          v == 'history' ? _roomHistory() : _setUpFromPicture(),
+                      itemBuilder: (ctx) => [
+                        _objectMenuItem(
+                          'ROOM_PHOTO',
+                          LucideIcons.imagePlus,
+                          l.roomFromPicture,
+                          enabled: _ai.available,
+                          note: _ai.available ? null : l.roomFromPictureOffNote,
+                        ),
+                        _objectMenuItem(
+                          'history',
+                          LucideIcons.history,
+                          l.roomLayoutHistory,
+                        ),
+                      ],
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: FilledButton.icon(
+                      icon: const Icon(LucideIcons.check, size: 18),
+                      label: Text(l.saveLayout),
+                      onPressed: _dirty && !_busy ? _save : null,
+                    ),
+                  ),
+                ],
         ),
-        body: Column(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                child: _canvas(l),
+        body: _proposal != null
+            ? RoomLayoutPreview(
+                existingTables: _tables,
+                existingObjects: _objects,
+                proposal: _proposal!,
+                onApply: _applyRoom,
+                onCancel: () => setState(() => _proposal = null),
+              )
+            : Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                      child: _canvas(l),
+                    ),
+                  ),
+                  _toolbar(selected, _selectedObject, l),
+                ],
               ),
-            ),
-            _toolbar(selected, _selectedObject, l),
-          ],
-        ),
       ),
     );
   }

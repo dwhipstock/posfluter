@@ -204,7 +204,7 @@ private fun requireObject(objectId: String): ResultRow =
         ?: throw NotFoundException("floor object $objectId not found")
 
 /** Ids need only be unique; type + a counter reads fine in the outbox stream. */
-private fun uniqueObjectId(zoneId: String, type: String): String {
+internal fun uniqueObjectId(zoneId: String, type: String): String {
     val base = "$zoneId-${type.lowercase()}"
     fun taken(candidate: String) =
         FloorObjects.selectAll().where { FloorObjects.id eq candidate }.any()
@@ -214,7 +214,7 @@ private fun uniqueObjectId(zoneId: String, type: String): String {
     return "$base-$n"
 }
 
-private fun floorObjectDto(objectId: String): FloorObjectDto {
+internal fun floorObjectDto(objectId: String): FloorObjectDto {
     val row = FloorObjects.selectAll().where { FloorObjects.id eq objectId }.first()
     return FloorObjectDto(
         row[FloorObjects.id], row[FloorObjects.type],
