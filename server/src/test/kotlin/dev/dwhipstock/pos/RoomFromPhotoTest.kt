@@ -106,8 +106,8 @@ class RoomFromPhotoTest {
         val before = liveTables("lower")
         val objectsBefore = objects("lower")
 
-        // PIN required; at most 4 pictures
-        assertEquals(HttpStatusCode.Forbidden, manager.submitFormWithBinaryData("/zones/lower/ai-layout",
+        // a non-manager session can't reach it at all; at most 4 pictures
+        assertEquals(HttpStatusCode.Forbidden, loginClient("9999").submitFormWithBinaryData("/zones/lower/ai-layout",
             formData { append("photo", png, Headers.build { append(HttpHeaders.ContentType, "image/png") }) }).status)
         assertEquals(HttpStatusCode.BadRequest, manager.propose("lower", pictures = 5).status)
 
@@ -156,6 +156,29 @@ class RoomFromPhotoTest {
         assertEquals("proposed", row.s("outcome"))
         assertEquals(5, row["changes"]!!.jsonPrimitive.int)
         assertFalse(log.contains("SECRET"))
+    }
+
+    @Test
+    fun `a manager's own session is the approval for set-up-from-picture, no second PIN`() = testApplication {
+        val fake = FakeMenuProvider(goodLayout)
+        store(fake)
+        val manager = loginClient()
+        val res = manager.submitFormWithBinaryData("/zones/lower/ai-layout", formData {
+            append("photo", png, Headers.build {
+                append(HttpHeaders.ContentType, "image/png")
+                append(HttpHeaders.ContentDisposition, "filename=\"room.png\"")
+            })
+        })
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val p = obj(res.bodyAsText())
+        val applied = manager.post("/zones/${p.s("zoneId")}/ai-layout/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                put("proposalId", p.s("proposalId")); put("mode", "merge")
+                put("tables", p["tables"]!!); put("objects", p["objects"]!!)
+            }.toString())
+        }
+        assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
     }
 
     @Test

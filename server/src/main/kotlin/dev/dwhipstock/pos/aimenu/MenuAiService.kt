@@ -495,10 +495,10 @@ class MenuAiService(
         voice: Boolean = false,
     ): MenuProposalDto {
         val p = requireProvider()
-        val (menuJson, facts) = transaction { menuContext() }
+        val (menuJson, facts) = transaction { menuContext(who) }
         val started = now()
         val reply = try {
-            p.complete(systemPrompt() + if (voice) "\n" + AiVoice.PROMPT.trimIndent() else "",
+            p.complete(systemPrompt(who) + if (voice) "\n" + AiVoice.PROMPT.trimIndent() else "",
                 if (includeMenu) "<current_menu>\n$menuJson\n</current_menu>\n\n$task" else task, images)
         } catch (e: ImageGenException) {
             // the provider's own safety refusal is the same fixed reply, not an error
@@ -548,10 +548,19 @@ class MenuAiService(
             .take(proposals.size - MAX_PROPOSALS).forEach { proposals.remove(it.key) }
     }
 
-    private fun systemPrompt(): String {
+    private fun systemPrompt(who: AiCaller? = null): String {
+        val requestLang = (who?.lang ?: "en").lowercase()
         val lang = if (bilingual)
-            "The store is bilingual: every name has English (nameEn) and French (nameFr). Fill both only when " +
-                "the menu or the manager gives both; otherwise fill the language you have and leave the other \"\"."
+            "The store is bilingual: every name has English (nameEn) and French (nameFr). Adding something " +
+                "(add_item, add_category): fill both only when the menu or the manager gives both; otherwise fill " +
+                "the language you have and leave the other \"\". Renaming something that already has both names " +
+                "(update_item, rename_category): change ONLY the name in the language the manager's request used; " +
+                "if the request does not say which language, that is the manager's own language, \"$requestLang\" " +
+                "here. Leave the OTHER language's name field out of the op entirely — never repeat the old or the " +
+                "new text into it, that is not a translation. Fill the other language too only when the manager " +
+                "explicitly asked for a translation or gave both names. The same applies to set_name in the " +
+                "store's other languages" + (extraLangs.takeIf { it.isNotEmpty() }?.let { " (${it.joinToString()})" }.orEmpty()) +
+                ": never copy a rename's new text into another language's slot unless asked to translate it."
         else "Write names in nameEn; leave nameFr \"\"."
         return """
             You maintain the menu of a restaurant point of sale. You never change anything yourself: you
@@ -590,11 +599,18 @@ class MenuAiService(
     }
 
     /** The live menu as the model sees it, and the ids it may use. Call inside a transaction. */
-    private fun menuContext(): Pair<String, MenuFacts> {
+    private fun menuContext(who: AiCaller? = null): Pair<String, MenuFacts> {
         val cats = Categories.selectAll().orderBy(Categories.sortOrder).toList()
         val items = Items.selectAll().where { Items.deletedAt.isNull() }.toList()
         val variants = ItemVariants.selectAll().where { ItemVariants.deletedAt.isNull() }
             .orderBy(ItemVariants.sortOrder).groupBy { it[ItemVariants.itemId] }
+        // for the rename language-bleed guard: today's names, core languages and any extra ones
+        val itemNames = items.associate { it[Items.id] to (it[Items.nameEn] to it[Items.nameFr]) }
+        val categoryNames = cats.associate { it[Categories.id] to (it[Categories.nameEn] to it[Categories.nameFr]) }
+        val extraNames = if (Translations.present())
+            Translations.of(Translations.ITEM).mapKeys { "item:${it.key}" } +
+                Translations.of(Translations.CATEGORY).mapKeys { "category:${it.key}" }
+        else emptyMap()
         val json = buildJsonObject {
             put("currency", profile.currency)
             // "<" as <: a name cannot close the <current_menu> block and pose as the manager
@@ -621,7 +637,9 @@ class MenuAiService(
             items.associate { i -> i[Items.id] to variants[i[Items.id]].orEmpty().map { it[ItemVariants.id] } },
             extraLangs,
             variantPrices = variants.values.flatten().associate { it[ItemVariants.id] to it[ItemVariants.priceCents] },
-            maxPriceMinor = 1000L * Math.pow(10.0, fractionDigits.toDouble()).toLong())
+            maxPriceMinor = 1000L * Math.pow(10.0, fractionDigits.toDouble()).toLong(),
+            itemNames = itemNames, categoryNames = categoryNames, extraNames = extraNames,
+            requestLang = (who?.lang ?: "en").lowercase())
         return json.toString().replace("<", "\\u003c").replace(">", "\\u003e") to facts
     }
 

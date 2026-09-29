@@ -103,10 +103,16 @@ class FloorAssistantTest {
         val before = tables("lower")
         val objectsBefore = objects("lower")
 
-        // PIN required
-        assertEquals(HttpStatusCode.Forbidden, manager.post("/zones/lower/ai-edit") {
+        // a non-manager session can't reach the floor assistant at all
+        assertEquals(HttpStatusCode.Forbidden, loginClient("9999").post("/zones/lower/ai-edit") {
             contentType(ContentType.Application.Json); setBody("""{"text":"add a table"}""")
         }.status)
+
+        // the manager's own session is the approval — no second PIN needed
+        val noPin = manager.post("/zones/lower/ai-edit") {
+            contentType(ContentType.Application.Json); setBody("""{"text":"add a table"}""")
+        }
+        assertEquals(HttpStatusCode.OK, noPin.status, noPin.bodyAsText())
 
         val res = manager.ask("lower", "add two 2-tops by the window, make table 5 round for 6, move L-8 up, " +
             "renumber L-3 to 40, remove L-2 and the pool table")
@@ -114,7 +120,7 @@ class FloorAssistantTest {
         val p = obj(res.bodyAsText())
         assertNull(p["refusal"]?.jsonPrimitive?.content?.takeIf { it != "null" })
         // the model saw the room: ids, numbers, geometry
-        val prompt = fake.prompts.single()
+        val prompt = fake.prompts.last()
         assertTrue(prompt.contains("<current_room>") && prompt.contains("\"id\":\"l10\"") && prompt.contains("lower-pool"))
         val kinds = p["changes"]!!.jsonArray.map { it.jsonObject.s("kind") }
         assertEquals(listOf("add_table", "add_table", "update_table", "update_table", "update_table",

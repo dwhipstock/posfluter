@@ -84,7 +84,7 @@ fun Route.floorObjectRoutes(auth: AuthService) {
     post("/zones/{zoneId}/objects") {
         val zoneId = call.parameters["zoneId"]!!
         val req = call.receive<FloorObjectCreateRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         validateObjectGeometry(req.x, req.y, req.width, req.height, req.rotation, req.type)
         val custom = req.type == "CUSTOM"
         val shared = req.label?.trim()?.ifBlank { null }
@@ -129,7 +129,7 @@ fun Route.floorObjectRoutes(auth: AuthService) {
     put("/zones/{zoneId}/objects-layout") {
         val zoneId = call.parameters["zoneId"]!!
         val req = call.receive<SaveObjectsLayoutRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         val updated = transaction {
             requireObjectZone(zoneId)
             req.objects.map { entry ->
@@ -147,7 +147,7 @@ fun Route.floorObjectRoutes(auth: AuthService) {
     post("/objects/{objectId}/delete") {
         val objectId = call.parameters["objectId"]!!
         val req = call.receive<FloorObjectDeleteRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         transaction {
             val row = requireObject(objectId)
             FloorObjects.deleteWhere { FloorObjects.id eq objectId }

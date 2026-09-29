@@ -137,9 +137,14 @@ abstract final class T {
     color: color,
   ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 
-  /// Receipt/bill paper: Noto Sans with tabular figures.
+  /// Receipt/bill paper: the platform's monospace font, so the printed
+  /// text's fixed-width columns (amounts right-aligned by padding, not a
+  /// table) actually line up on screen the way they do on the 48-column
+  /// thermal printout. Falls back through a couple of common monospace
+  /// families in case a platform doesn't recognise the generic name.
   static TextStyle receipt() => const TextStyle(
-    fontFamily: 'NotoSans',
+    fontFamily: 'monospace',
+    fontFamilyFallback: ['RobotoMono', 'Courier New', 'Courier'],
     fontSize: 14,
     color: receiptInk,
     fontFeatures: [FontFeature.tabularFigures()],

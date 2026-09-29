@@ -102,7 +102,8 @@ class FloorObjectKindsTest {
         val c = loginClient()
         val before = c.get("/zones").bodyAsText()
 
-        assertEquals(HttpStatusCode.Forbidden, c.suggest(pin = null).status)
+        // a non-manager session with no PIN → refused
+        assertEquals(HttpStatusCode.Forbidden, loginClient("9999").suggest(pin = null).status)
         val res = c.suggest()
         assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
         val s = obj(res.bodyAsText())
@@ -126,6 +127,10 @@ class FloorObjectKindsTest {
 
         fake.reply = "no idea"
         assertEquals(HttpStatusCode.BadGateway, c.suggest().status)
+
+        // the manager's own session is the approval — no second PIN needed
+        fake.reply = """{"nameEn":"Jukebox","nameFr":"Juke-box","icon":"music","shape":"RECT"}"""
+        assertEquals(HttpStatusCode.OK, c.suggest(pin = null).status)
     }
 
     @Test

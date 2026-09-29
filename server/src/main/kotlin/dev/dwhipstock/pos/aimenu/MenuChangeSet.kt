@@ -51,6 +51,14 @@ class MenuFacts(
     val variantPrices: Map<String, Long> = emptyMap(),
     /** The highest price the AI may set (1000 in the store currency). */
     val maxPriceMinor: Long = 100_000,
+    /** item id → today's (nameEn, nameFr) — for the rename language-bleed guard. */
+    val itemNames: Map<String, Pair<String, String>> = emptyMap(),
+    /** category id → today's (nameEn, nameFr) — for the rename language-bleed guard. */
+    val categoryNames: Map<String, Pair<String, String>> = emptyMap(),
+    /** "item:<id>" / "category:<id>" → lang → today's extra-language (es/de) name. */
+    val extraNames: Map<String, Map<String, String>> = emptyMap(),
+    /** The acting user's own UI language: what an unspecified-language rename means. */
+    val requestLang: String = "en",
 )
 
 class ParsedChangeSet(
@@ -115,7 +123,62 @@ object MenuChangeSetParser {
                 rejected += AiGuard.quote("#${i + 1} (${o["op"].s()?.take(20) ?: "?"}): ${e.message}", 160)
             }
         }
-        return ParsedChangeSet(summary, ops, rejected)
+        return ParsedChangeSet(summary, guardExtraLanguageBleed(ops, facts, rejected), rejected)
+    }
+
+    /**
+     * Cross-language bleed guard, part 2 (QA-3): a rename in one core language
+     * ([one]'s nameEn/nameFr guard) must not leak into the store's OTHER
+     * languages (es/de) either — a set_name proposed alongside a rename that
+     * just copies the new text into an extra language, overwriting a real,
+     * different existing translation, is dropped (kept as it was) rather than
+     * applied. A first-time translation (no existing extra name yet, the
+     * "translate menu" flow) is never touched by this.
+     */
+    private fun guardExtraLanguageBleed(ops: List<MenuOp>, facts: MenuFacts, rejected: MutableList<String>): List<MenuOp> {
+        if (ops.none { it is MenuOp.SetName }) return ops
+        fun newNames(entity: String, id: String): Pair<String?, String?> {
+            val old = if (entity == "item") facts.itemNames[id] else facts.categoryNames[id]
+            val update = ops.firstOrNull {
+                (entity == "item" && it is MenuOp.UpdateItem && it.itemId == id) ||
+                    (entity == "category" && it is MenuOp.RenameCategory && it.categoryId == id)
+            }
+            val newEn = (update as? MenuOp.UpdateItem)?.nameEn ?: (update as? MenuOp.RenameCategory)?.nameEn ?: old?.first
+            val newFr = (update as? MenuOp.UpdateItem)?.nameFr ?: (update as? MenuOp.RenameCategory)?.nameFr ?: old?.second
+            return newEn to newFr
+        }
+        return ops.filter { op ->
+            if (op !is MenuOp.SetName) return@filter true
+            val old = if (op.entity == "item") facts.itemNames[op.id] else facts.categoryNames[op.id]
+            val oldExtra = facts.extraNames["${op.entity}:${op.id}"]?.get(op.lang)
+            // nothing existed before (a translate proposal): never a bleed, always keep
+            if (old == null || oldExtra == null) return@filter true
+            val (newEn, newFr) = newNames(op.entity, op.id)
+            val copiedFromEn = op.name == newEn && oldExtra != old.first
+            val copiedFromFr = op.name == newFr && oldExtra != old.second
+            if (copiedFromEn || copiedFromFr) {
+                rejected += "set_name ${op.entity} ${op.id} (${op.lang}): looks like a copy of the rename, not a translation"
+                false
+            } else true
+        }
+    }
+
+    /**
+     * Cross-language bleed guard, part 1 (QA-3): "rename X to Y" must change
+     * only the language the manager's request used. If the model proposed the
+     * SAME text for nameEn and nameFr, but the item/category actually had two
+     * different names before, only one language really changed — the other is
+     * a copy, not a translation. Keep the change in the manager's own request
+     * language ([MenuFacts.requestLang]) and drop the other back to unchanged
+     * (null = no change), unless the two names were already the same word.
+     */
+    private fun guardNameBleed(
+        nameEn: String?, nameFr: String?, old: Pair<String, String>?, requestLang: String,
+    ): Pair<String?, String?> {
+        if (nameEn == null || nameFr == null || nameEn != nameFr) return nameEn to nameFr
+        val (oldEn, oldFr) = old ?: return nameEn to nameFr
+        if (oldEn == oldFr) return nameEn to nameFr // already one word in both languages
+        return if (requestLang == "fr") null to nameFr else nameEn to null
     }
 
     private fun one(o: JsonObject, facts: MenuFacts, newRefs: Set<String>): MenuOp {
@@ -184,10 +247,15 @@ object MenuChangeSetParser {
                     require(live.size == 1) { "$id has several sizes; give a price per size" }
                     prices[live.single()] = price(it, facts, facts.variantPrices[live.single()] == 0L)
                 }
+                val (guardedEn, guardedFr) = guardNameBleed(
+                    name("nameEn", MAX_ITEM_NAME)?.takeIf { it.isNotEmpty() },
+                    name("nameFr", MAX_ITEM_NAME)?.takeIf { it.isNotEmpty() },
+                    facts.itemNames[id], facts.requestLang,
+                )
                 val op = MenuOp.UpdateItem(
                     itemId = id,
-                    nameEn = name("nameEn", MAX_ITEM_NAME)?.takeIf { it.isNotEmpty() },
-                    nameFr = name("nameFr", MAX_ITEM_NAME)?.takeIf { it.isNotEmpty() },
+                    nameEn = guardedEn,
+                    nameFr = guardedFr,
                     descriptionEn = text("descriptionEn", MAX_DESCRIPTION),
                     descriptionFr = text("descriptionFr", MAX_DESCRIPTION),
                     category = o["category"].s()?.let { category(it) },
@@ -201,8 +269,11 @@ object MenuChangeSetParser {
             "rename_category" -> {
                 val id = o["category"].s()
                 require(id != null && id in facts.categoryIds) { "unknown category '${id?.take(40)}'" }
-                val en = name("nameEn", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() }
-                val fr = name("nameFr", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() }
+                val (en, fr) = guardNameBleed(
+                    name("nameEn", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() },
+                    name("nameFr", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() },
+                    facts.categoryNames[id], facts.requestLang,
+                )
                 require(en != null || fr != null) { "a new name is required" }
                 MenuOp.RenameCategory(id, en, fr)
             }

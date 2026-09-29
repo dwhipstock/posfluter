@@ -47,9 +47,13 @@ class FloorObjectsTest {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
 
-        // no PIN → refused
-        assertEquals(HttpStatusCode.Forbidden, c.postJson("/zones/outside/objects",
+        // a non-manager session with no PIN → refused
+        assertEquals(HttpStatusCode.Forbidden, loginClient("9999").postJson("/zones/outside/objects",
             """{"type":"POOL","x":100,"y":100,"width":200,"height":120}""").status)
+
+        // the manager's own session is the approval — no PIN needed
+        assertEquals(HttpStatusCode.BadRequest, c.postJson("/zones/outside/objects",
+            """{"type":"PLANT","x":100,"y":100,"width":100,"height":100}""").status)
 
         // bad type → rejected before touching the db
         assertEquals(HttpStatusCode.BadRequest, c.postJson("/zones/outside/objects",

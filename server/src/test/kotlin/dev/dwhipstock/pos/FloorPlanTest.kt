@@ -80,9 +80,14 @@ class FloorPlanTest {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
 
-        // no PIN → refused
+        // a non-manager session with no PIN → refused
         assertEquals(HttpStatusCode.Forbidden,
-            c.patchJson("/tables/t3/geometry", """{"x":500,"y":300}""").status)
+            loginClient("9999").patchJson("/tables/t3/geometry", """{"x":500,"y":300}""").status)
+
+        // the manager's own session needs no PIN either (a no-op patch: nothing to change)
+        assertEquals(HttpStatusCode.OK,
+            c.patchJson("/tables/t3/geometry", """{}""").status)
+        assertTrue(outboxEvents("table.moved").isEmpty(), "a no-op patch must not emit a move")
 
         // move
         assertEquals(HttpStatusCode.OK,

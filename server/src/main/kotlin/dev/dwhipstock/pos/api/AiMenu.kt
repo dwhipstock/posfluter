@@ -142,7 +142,7 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
             }
             part.dispose()
         }
-        val who = call.aiCaller(requireManagerApproval(auth, managerPin))
+        val who = call.aiCaller(requireManagerOrPin(auth, call, managerPin))
         val photo = requireNotNull(image) { "a photo is required" }
         call.respond(onIo { ai.suggestRoomObject(photo, who) })
     }
@@ -172,14 +172,14 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
             }
             part.dispose()
         }
-        val who = call.aiCaller(requireManagerApproval(auth, managerPin))
+        val who = call.aiCaller(requireManagerOrPin(auth, call, managerPin))
         call.respond(onIo { ai.roomFromPhotos(zoneId, images, who) })
     }
 
     post("/zones/{zoneId}/ai-layout/apply") {
         requireManagerSession(call)
         val req = call.receive<RoomLayoutApplyRequest>()
-        val approver = requireManagerApproval(auth, req.managerPin)
+        val approver = requireManagerOrPin(auth, call, req.managerPin)
         val user = call.sessionUser().userId
         call.respond(onIo { ai.applyRoom(call.parameters["zoneId"]!!, req, user, approver) })
     }
@@ -202,21 +202,21 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
     post("/zones/{zoneId}/ai-edit") {
         requireManagerSession(call)
         val req = call.receive<FloorEditChatRequest>()
-        val who = call.aiCaller(requireManagerApproval(auth, req.managerPin))
+        val who = call.aiCaller(requireManagerOrPin(auth, call, req.managerPin))
         call.respond(onIo { ai.floorEdit(call.parameters["zoneId"]!!, req.text, who) })
     }
 
     post("/zones/{zoneId}/ai-edit/voice") {
         requireManagerSession(call)
         val (pin, audio) = call.receiveVoice()
-        val who = call.aiCaller(requireManagerApproval(auth, pin))
+        val who = call.aiCaller(requireManagerOrPin(auth, call, pin))
         call.respond(onIo { ai.floorEdit(call.parameters["zoneId"]!!, null, who, audio) })
     }
 
     post("/zones/{zoneId}/ai-edit/apply") {
         requireManagerSession(call)
         val req = call.receive<FloorEditApplyRequest>()
-        val approver = requireManagerApproval(auth, req.managerPin)
+        val approver = requireManagerOrPin(auth, call, req.managerPin)
         val user = call.sessionUser().userId
         call.respond(onIo { ai.applyFloorEdit(call.parameters["zoneId"]!!, req, user, approver) })
     }

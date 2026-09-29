@@ -48,9 +48,13 @@ class ZoneManagementTest {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
 
-        // no PIN → refused
+        // a non-manager session with no PIN → refused
         assertEquals(HttpStatusCode.Forbidden,
-            c.postJson("/zones", """{"nameFr":"balcon","nameEn":"Patio"}""").status)
+            loginClient("9999").postJson("/zones", """{"nameFr":"balcon","nameEn":"Patio"}""").status)
+
+        // a manager's own session is the approval — no PIN needed
+        assertEquals(HttpStatusCode.BadRequest,
+            c.postJson("/zones", """{"nameFr":"","nameEn":"Patio"}""").status)
 
         // blank name → rejected before touching the db
         assertEquals(HttpStatusCode.BadRequest,
@@ -91,9 +95,15 @@ class ZoneManagementTest {
         assertEquals("cour", updated["nameFr"]!!.jsonPrimitive.content)
         assertEquals(1, outboxEvents("zone.renamed").size)
 
-        // no PIN → refused, names unchanged
+        // a manager's own session needs no PIN at all
+        val noPin = c.patchJson("/zones/outside", """{"nameEn":"Still Courtyard"}""")
+        assertEquals(HttpStatusCode.OK, noPin.status)
+        assertEquals("Still Courtyard",
+            zone(c.get("/zones").bodyAsText(), "outside")!!["nameEn"]!!.jsonPrimitive.content)
+
+        // a non-manager session with no PIN → refused, names unchanged
         assertEquals(HttpStatusCode.Forbidden,
-            c.patchJson("/zones/outside", """{"nameEn":"Nope"}""").status)
+            loginClient("9999").patchJson("/zones/outside", """{"nameEn":"Nope"}""").status)
     }
 
     @Test
@@ -140,13 +150,18 @@ class ZoneManagementTest {
     }
 
     @Test
-    fun `reorder without a manager PIN is refused`() = testApplication {
+    fun `reorder without a manager PIN is refused for a non-manager, fine for a manager`() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
         assertEquals(HttpStatusCode.Forbidden,
-            c.patchJson("/zones/order", """{"orderedIds":["outside","upper"]}""").status)
+            loginClient("9999").patchJson("/zones/order", """{"orderedIds":["outside","upper"]}""").status)
         // seed order untouched
         assertEquals("upper", zones(c.get("/zones").bodyAsText()).first()["id"]!!.jsonPrimitive.content)
+
+        // the manager's own session is the approval — no PIN needed
+        val res = c.patchJson("/zones/order", """{"orderedIds":["outside","upper"]}""")
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals("outside", zones(c.get("/zones").bodyAsText()).first()["id"]!!.jsonPrimitive.content)
     }
 
     @Test

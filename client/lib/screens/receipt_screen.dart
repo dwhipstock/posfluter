@@ -9,11 +9,10 @@ import '../widgets/print_language_picker.dart';
 import '../api.dart';
 import '../i18n.dart';
 
-/// Receipt preview after close. Renders the server's 42-col text form on a
-/// paper-white card — the one intentionally light surface in the app.
-/// TODO: no monospace font is bundled — Noto Sans with
-/// tabular figures keeps the number column straight; label widths drift
-/// slightly. Revisit with the thermal printer work (M2).
+/// Receipt preview after close. Renders the server's 48-col text form on a
+/// paper-white card — the one intentionally light surface in the app — in
+/// the platform's monospace font ([T.receipt]) so the amount columns line
+/// up the same way they do on the printed thermal receipt.
 class ReceiptScreen extends StatefulWidget {
   final int checkId;
   final String text;

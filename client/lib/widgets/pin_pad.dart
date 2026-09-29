@@ -257,10 +257,11 @@ Future<String?> askManagerPin(
   );
 }
 
-/// The AI actions (menu setup, translate, photos): a signed-in manager is
-/// already the approver, so no second PIN — the store accepts the manager
-/// session and ignores the empty PIN. Anyone else is asked for one.
-Future<String?> aiManagerPin(BuildContext context, {String? title}) async {
+/// A manager-only action (AI menu setup/translate/photos, the floor-plan
+/// layout editor and its room/object edits): a signed-in manager is already
+/// the approver, so no second PIN — the store accepts the manager session and
+/// ignores the empty PIN. Anyone else is asked for one.
+Future<String?> managerOrPin(BuildContext context, {String? title}) async {
   if (Api.currentUser?.isManager ?? false) return '';
   return askManagerPin(context, title: title);
 }

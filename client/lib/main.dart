@@ -19,6 +19,7 @@ import 'retail/sp_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'server_discovery.dart';
+import 'widgets/open_shift_prompt.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 const _storeChannel = MethodChannel('dev.dwhipstock.pos_client/store');
@@ -281,6 +282,12 @@ class _StartupGateState extends State<StartupGate> {
         return;
       }
       final user = await Api.restoreSession();
+      if (!mounted) return;
+      // A manager reopening the app on a still-valid session lands straight
+      // on the floor plan, never through the login screen's own offer — ask
+      // here too, so "no open shift" is offered once regardless of how the
+      // manager's session started (PAY-1).
+      if (user != null && !AppMode.isStock) await offerShiftAtSignIn(context);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(

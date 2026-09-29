@@ -220,7 +220,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('open-shift-prompt')), findsOneWidget);
       expect(
-        find.text('No cash drawer shift is open. Open one now?'),
+        find.text('Open one now to take cash?'),
         findsOne,
       );
       // the float defaults to $200 and can be changed
