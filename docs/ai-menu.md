@@ -71,7 +71,7 @@ category it touched. **AI history** in the dialog lists the last 20 with a
 | key | `menu.ai.gemini.apiKey` / `menu.ai.openai.apiKey` / `menu.ai.anthropic.apiKey`, or `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` |
 | `menu.ai.model` / `POS_MENU_AI_MODEL` | optional model id |
 
-Default models: Gemini `gemini-3.8-flash` (Interactions API, JSON output; a busy
+Default models: Gemini `gemini-3.5-flash-lite` (fast: 2–6 s a request; Interactions API, JSON output; a busy
 503 is retried once, then tried on `gemini-3.5-flash`),
 OpenAI `gpt-5.4-mini` (Chat Completions, `json_object`), Anthropic
 `claude-opus-5` (Messages API, low effort). All raw HTTP through the AI photos'

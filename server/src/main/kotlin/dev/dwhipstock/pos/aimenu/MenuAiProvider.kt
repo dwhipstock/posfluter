@@ -74,7 +74,7 @@ class GeminiMenuProvider(
     override val host: String get() = URI(baseUrl).host
 
     companion object {
-        const val DEFAULT_MODEL = "gemini-3.8-flash"
+        const val DEFAULT_MODEL = "gemini-3.5-flash-lite" // 2–6 s a menu edit; 3.8-flash took 20–85 s
         const val FALLBACK_MODEL = "gemini-3.5-flash"
         const val RETRY_PAUSE_MS = 1_500L
     }
