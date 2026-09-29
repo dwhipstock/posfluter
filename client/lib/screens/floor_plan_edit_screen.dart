@@ -11,6 +11,7 @@ import '../i18n.dart';
 import '../widgets/custom_object_dialog.dart';
 import '../widgets/floor_object_icons.dart';
 import '../widgets/floor_plan.dart';
+import '../widgets/mic_button.dart';
 import '../widgets/room_layout_preview.dart';
 
 /// Manager floor-plan editor. Geometry edits (drag / resize / rotate / shape /
@@ -535,6 +536,117 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     });
   }
 
+  /// Floor-plan "Ask AI": type or say a change to THIS room ("add four
+  /// 2-tops along the window", "remove the pool table") → the changes,
+  /// previewed as a ghost with a list, then Apply (revertable) or Cancel.
+  Future<void> _askAi() async {
+    final l = L.of(context);
+    if (_dirty) await _save(); // the assistant edits the room as saved
+    if (_dirty || !mounted) return;
+    final text = TextEditingController();
+    final ask = await showDialog<({String? text, VoiceClip? clip})>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.floorAskAi),
+        content: SizedBox(
+          width: 520,
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const Key('floor-ai-text'),
+                  controller: text,
+                  autofocus: true,
+                  minLines: 1,
+                  maxLines: 3,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (v) => v.trim().isEmpty
+                      ? null
+                      : Navigator.pop(ctx, (text: v.trim(), clip: null)),
+                  decoration: InputDecoration(hintText: l.floorAskAiHint),
+                ),
+              ),
+              const SizedBox(width: 8),
+              MicButton(
+                key: const Key('floor-ai-mic'),
+                onClip: (clip) async =>
+                    Navigator.pop(ctx, (text: null, clip: clip)),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l.cancel),
+          ),
+          FilledButton(
+            key: const Key('floor-ai-ask'),
+            onPressed: () => text.text.trim().isEmpty
+                ? null
+                : Navigator.pop(ctx, (text: text.text.trim(), clip: null)),
+            child: Text(l.aiMenuAsk),
+          ),
+        ],
+      ),
+    );
+    text.dispose();
+    if (ask == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(l.floorAskAiWorking),
+        duration: const Duration(minutes: 3),
+      ),
+    );
+    RoomLayoutProposal proposal;
+    try {
+      final clip = ask.clip;
+      proposal = clip != null
+          ? await Api.floorEditVoice(
+              widget.zone.id,
+              clip.bytes,
+              clip.contentType,
+              widget.managerPin,
+            )
+          : await Api.floorEdit(widget.zone.id, ask.text!, widget.managerPin);
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      if (mounted) showApiError(context, e);
+      return;
+    }
+    messenger.hideCurrentSnackBar();
+    if (!mounted) return;
+    if (proposal.refusal != null) {
+      // the store's fixed reply, never the model's words
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l.floorAskAi),
+          content: Text(
+            [
+              if ((proposal.transcript ?? '').isNotEmpty)
+                l.aiHeard(proposal.transcript!),
+              proposal.message ?? '',
+            ].join('\n\n'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _proposal = proposal;
+      _selectedId = null;
+      _selectedObjectId = null;
+    });
+  }
+
   Future<void> _applyRoom(
     String mode,
     List<TableInfo> tables,
@@ -544,14 +656,20 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     if (p == null) return;
     final l = L.of(context);
     try {
-      final r = await Api.roomLayoutApply(
-        widget.zone.id,
-        p.proposalId,
-        mode,
-        tables,
-        objects,
-        widget.managerPin,
-      );
+      final r = p.isEdit
+          ? await Api.floorEditApply(
+              widget.zone.id,
+              p.proposalId,
+              widget.managerPin,
+            )
+          : await Api.roomLayoutApply(
+              widget.zone.id,
+              p.proposalId,
+              mode,
+              tables,
+              objects,
+              widget.managerPin,
+            );
       if (!mounted) return;
       setState(() {
         _tables = r.tables;
@@ -562,7 +680,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(l.roomApplied(r.added)),
+          content: Text(
+            p.isEdit ? l.floorEditApplied(r.added) : l.roomApplied(r.added),
+          ),
           duration: const Duration(seconds: 10),
           action: SnackBarAction(
             label: l.aiMenuRevert,
@@ -869,9 +989,19 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                       key: const Key('room-ai-menu'),
                       icon: const Icon(LucideIcons.sparkles),
                       tooltip: l.roomFromPicture,
-                      onSelected: (v) =>
-                          v == 'history' ? _roomHistory() : _setUpFromPicture(),
+                      onSelected: (v) => switch (v) {
+                        'history' => _roomHistory(),
+                        'ASK' => _askAi(),
+                        _ => _setUpFromPicture(),
+                      },
                       itemBuilder: (ctx) => [
+                        _objectMenuItem(
+                          'ASK',
+                          LucideIcons.messageCircle,
+                          l.floorAskAi,
+                          enabled: _ai.available,
+                          note: _ai.available ? null : l.roomFromPictureOffNote,
+                        ),
                         _objectMenuItem(
                           'ROOM_PHOTO',
                           LucideIcons.imagePlus,

@@ -11,6 +11,11 @@ import 'floor_plan.dart';
 /// objects). The manager drags or removes ghost items, picks replace or merge
 /// when the room already has tables, then Apply. Nothing is saved before
 /// [onApply]; the editor owns the store call.
+///
+/// The floor assistant ("Ask AI", [RoomLayoutProposal.isEdit]) uses the same
+/// preview: the new and changed things outlined, the removed ones faded, the
+/// list of changes, then Apply or Cancel (the ghost is not dragged: the store
+/// applies the checked proposal).
 class RoomLayoutPreview extends StatefulWidget {
   final List<TableInfo> existingTables;
   final List<FloorObject> existingObjects;
@@ -40,10 +45,13 @@ class RoomLayoutPreview extends StatefulWidget {
 class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
   late List<TableInfo> _tables = List.of(widget.proposal.tables);
   late List<FloorObject> _objects = List.of(widget.proposal.objects);
-  late String _mode = widget.existingTables.isEmpty ? 'merge' : 'replace';
+  late String _mode = widget.existingTables.isEmpty || _edit
+      ? 'merge'
+      : 'replace';
   bool _busy = false;
 
-  bool get _hasExisting => widget.existingTables.isNotEmpty;
+  bool get _edit => widget.proposal.isEdit;
+  bool get _hasExisting => widget.existingTables.isNotEmpty && !_edit;
 
   Future<void> _apply() async {
     setState(() => _busy = true);
@@ -99,37 +107,51 @@ class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
   }
 
   Widget _canvas() {
-    final protected = widget.proposal.protectedTables.toSet();
-    // what an apply clears (replace) fades further than what it keeps
+    final p = widget.proposal;
+    final protected = p.protectedTables.toSet();
+    // an edit: the changed ones show as ghosts at their new place
+    final changed = {
+      for (final t in _tables) t.id,
+      for (final o in _objects) o.id,
+    };
+    final gone = {...p.removedTables, ...p.removedObjects};
+    // what an apply clears (replace, or the assistant removes) fades further than what it keeps
     double fade(TableInfo t) =>
-        _mode == 'replace' && _hasExisting && !protected.contains(t.id)
+        gone.contains(t.id) ||
+            (_mode == 'replace' && _hasExisting && !protected.contains(t.id))
         ? .12
         : .35;
     return FloorPlanViewport(
       interactive: false,
       builder: (scale) => [
         for (final o in widget.existingObjects)
-          placedObject(
-            o,
-            scale,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: _mode == 'replace' && _hasExisting ? .12 : .35,
-                child: FloorObjectShape(object: o, scale: scale),
+          if (!_edit || !changed.contains(o.id))
+            placedObject(
+              o,
+              scale,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity:
+                      gone.contains(o.id) ||
+                          (_mode == 'replace' && _hasExisting)
+                      ? .12
+                      : .35,
+                  child: FloorObjectShape(object: o, scale: scale),
+                ),
               ),
             ),
-          ),
         for (final t in widget.existingTables)
-          placedTable(
-            t,
-            scale,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: fade(t),
-                child: TableShape(table: t, scale: scale),
+          if (!_edit || !changed.contains(t.id))
+            placedTable(
+              t,
+              scale,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: fade(t),
+                  child: TableShape(table: t, scale: scale),
+                ),
               ),
             ),
-          ),
         for (final o in _objects)
           placedObject(
             o,
@@ -201,7 +223,7 @@ class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
     required Widget child,
   }) => GestureDetector(
     key: key,
-    onPanUpdate: (d) => onMove(d.delta),
+    onPanUpdate: _edit ? null : (d) => onMove(d.delta),
     child: Stack(
       clipBehavior: Clip.none,
       children: [
@@ -216,26 +238,27 @@ class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
             ),
           ),
         ),
-        Positioned(
-          right: -10,
-          top: -10,
-          child: GestureDetector(
-            onTap: onRemove,
-            child: Container(
-              width: 22,
-              height: 22,
-              decoration: const BoxDecoration(
-                color: T.destructive,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                LucideIcons.x,
-                size: 14,
-                color: T.onDestructive,
+        if (!_edit)
+          Positioned(
+            right: -10,
+            top: -10,
+            child: GestureDetector(
+              onTap: onRemove,
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: const BoxDecoration(
+                  color: T.destructive,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  LucideIcons.x,
+                  size: 14,
+                  color: T.onDestructive,
+                ),
               ),
             ),
           ),
-        ),
       ],
     ),
   );
@@ -249,62 +272,72 @@ class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                l.roomPreviewSummary(_tables.length, seats, _objects.length),
-                key: const Key('room-summary'),
-                style: T.headline(),
-              ),
-              const SizedBox(height: 6),
-              Text(l.roomPreviewHint, style: T.small(color: T.textMuted)),
-              if (_hasExisting) ...[
-                const SizedBox(height: 14),
-                Text(l.roomExisting(widget.existingTables.length)),
-                const SizedBox(height: 8),
-                SegmentedButton<String>(
-                  segments: [
-                    ButtonSegment(
-                      value: 'replace',
-                      label: Text(l.roomModeReplace),
+            children: _edit
+                ? _editList(l, p)
+                : [
+                    Text(
+                      l.roomPreviewSummary(
+                        _tables.length,
+                        seats,
+                        _objects.length,
+                      ),
+                      key: const Key('room-summary'),
+                      style: T.headline(),
                     ),
-                    ButtonSegment(value: 'merge', label: Text(l.roomModeMerge)),
+                    const SizedBox(height: 6),
+                    Text(l.roomPreviewHint, style: T.small(color: T.textMuted)),
+                    if (_hasExisting) ...[
+                      const SizedBox(height: 14),
+                      Text(l.roomExisting(widget.existingTables.length)),
+                      const SizedBox(height: 8),
+                      SegmentedButton<String>(
+                        segments: [
+                          ButtonSegment(
+                            value: 'replace',
+                            label: Text(l.roomModeReplace),
+                          ),
+                          ButtonSegment(
+                            value: 'merge',
+                            label: Text(l.roomModeMerge),
+                          ),
+                        ],
+                        selected: {_mode},
+                        onSelectionChanged: (s) =>
+                            setState(() => _mode = s.first),
+                      ),
+                      if (p.protectedTables.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          l.roomProtected(p.protectedTables.length),
+                          style: T.small(color: T.textMuted),
+                        ),
+                      ],
+                    ],
+                    if (p.notes.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text(l.roomNotSure, style: T.small()),
+                      Text(p.notes, style: T.small(color: T.textMuted)),
+                    ],
+                    if (p.rejected.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text(l.roomSkipped(p.rejected.length), style: T.small()),
+                      for (final r in p.rejected)
+                        Text('• $r', style: T.small(color: T.textMuted)),
+                    ],
+                    const SizedBox(height: 14),
+                    for (final t in _tables)
+                      _row(
+                        '${t.label} · ${t.seats} ${l.seatsLabel.toLowerCase()}',
+                        () => _removeTable(t.id),
+                        Key('room-remove-${t.id}'),
+                      ),
+                    for (final o in _objects)
+                      _row(
+                        _objectName(o, l),
+                        () => _removeObject(o.id),
+                        Key('room-remove-${o.id}'),
+                      ),
                   ],
-                  selected: {_mode},
-                  onSelectionChanged: (s) => setState(() => _mode = s.first),
-                ),
-                if (p.protectedTables.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    l.roomProtected(p.protectedTables.length),
-                    style: T.small(color: T.textMuted),
-                  ),
-                ],
-              ],
-              if (p.notes.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                Text(l.roomNotSure, style: T.small()),
-                Text(p.notes, style: T.small(color: T.textMuted)),
-              ],
-              if (p.rejected.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                Text(l.roomSkipped(p.rejected.length), style: T.small()),
-                for (final r in p.rejected)
-                  Text('• $r', style: T.small(color: T.textMuted)),
-              ],
-              const SizedBox(height: 14),
-              for (final t in _tables)
-                _row(
-                  '${t.label} · ${t.seats} ${l.seatsLabel.toLowerCase()}',
-                  () => _removeTable(t.id),
-                  Key('room-remove-${t.id}'),
-                ),
-              for (final o in _objects)
-                _row(
-                  _objectName(o, l),
-                  () => _removeObject(o.id),
-                  Key('room-remove-${o.id}'),
-                ),
-            ],
           ),
         ),
         Padding(
@@ -321,7 +354,11 @@ class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
               Expanded(
                 child: FilledButton(
                   key: const Key('room-apply'),
-                  onPressed: _busy || (_tables.isEmpty && _objects.isEmpty)
+                  onPressed:
+                      _busy ||
+                          (_edit
+                              ? p.changes.isEmpty
+                              : _tables.isEmpty && _objects.isEmpty)
                       ? null
                       : _apply,
                   child: Text(l.roomApply),
@@ -332,6 +369,65 @@ class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
         ),
       ],
     );
+  }
+
+  /// The floor assistant's side panel: what was heard, the summary, each change.
+  List<Widget> _editList(L l, RoomLayoutProposal p) {
+    String value(String field, String v) =>
+        field == 'shape' ? l.floorShapeName(v) : v;
+    return [
+      if ((p.transcript ?? '').isNotEmpty) ...[
+        Text(
+          l.aiHeard(p.transcript!),
+          key: const Key('floor-heard'),
+          style: T.small(color: T.textMuted),
+        ),
+        const SizedBox(height: 8),
+      ],
+      if (p.summary.isNotEmpty) Text(p.summary, style: T.headline()),
+      const SizedBox(height: 6),
+      Text(l.floorEditHint, style: T.small(color: T.textMuted)),
+      if (p.protectedTables.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Text(
+          l.roomProtected(p.protectedTables.length),
+          style: T.small(color: T.textMuted),
+        ),
+      ],
+      const SizedBox(height: 14),
+      for (final c in p.changes)
+        Padding(
+          key: Key('floor-change-${c.id}'),
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${l.floorChangeKind(c.kind)} · ${c.title}',
+                style: T.text(
+                  size: 15,
+                  color: c.kind.startsWith('remove')
+                      ? T.destructive
+                      : T.textPrimary,
+                ),
+              ),
+              for (final d in c.details)
+                Text(
+                  '${l.floorField(d.field)}: '
+                  '${d.before == null ? '' : '${value(d.field, d.before!)} → '}'
+                  '${value(d.field, d.after ?? '')}',
+                  style: T.small(),
+                ),
+            ],
+          ),
+        ),
+      if (p.rejected.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text(l.roomSkipped(p.rejected.length), style: T.small()),
+        for (final r in p.rejected)
+          Text('• $r', style: T.small(color: T.textMuted)),
+      ],
+    ];
   }
 
   Widget _row(String text, VoidCallback onRemove, Key key) => Row(

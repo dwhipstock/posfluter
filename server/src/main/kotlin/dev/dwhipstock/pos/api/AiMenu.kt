@@ -1,6 +1,9 @@
 package dev.dwhipstock.pos.api
 
 import dev.dwhipstock.pos.aimenu.AiCaller
+import dev.dwhipstock.pos.aimenu.AiVoice
+import dev.dwhipstock.pos.aimenu.FloorEditApplyRequest
+import dev.dwhipstock.pos.aimenu.FloorEditChatRequest
 import dev.dwhipstock.pos.aimenu.MenuAiService
 import dev.dwhipstock.pos.aimenu.MenuImage
 import dev.dwhipstock.pos.aimenu.RoomLayoutApplyRequest
@@ -38,6 +41,31 @@ private fun ApplicationCall.aiCaller(approverId: String) = sessionUser().let {
 }
 
 /**
+ * A voice request: multipart `managerPin` + one `audio` file (16 kHz mono WAV
+ * from the tablets, max ~30 s). Kept in memory for the one call, never stored.
+ */
+private suspend fun ApplicationCall.receiveVoice(): Pair<String?, MenuImage> {
+    var managerPin: String? = null
+    var audio: MenuImage? = null
+    receiveMultipart(formFieldLimit = AiVoice.MAX_BYTES.toLong()).forEachPart { part ->
+        when (part) {
+            is PartData.FormItem -> if (part.name == "managerPin") managerPin = part.value
+            is PartData.FileItem -> {
+                val type = AiVoice.normalizeType(part.contentType?.toString())
+                val bytes = part.provider().toByteArray()
+                require(type != null) { "only WAV, AAC, MP3, OGG or FLAC audio is supported" }
+                require(bytes.size <= AiVoice.MAX_BYTES) { "voice clip too long (max 30 seconds)" }
+                require(bytes.size >= 1000) { "voice clip too short" }
+                audio = MenuImage(bytes, type)
+            }
+            else -> {}
+        }
+        part.dispose()
+    }
+    return managerPin to requireNotNull(audio) { "a voice clip is required" }
+}
+
+/**
  * AI menu setup (add-on, online only). Manager session plus a manager PIN on
  * every call that spends money or changes the menu.
  *
@@ -47,6 +75,10 @@ private fun ApplicationCall.aiCaller(approverId: String) = sessionUser().let {
  *   POST /zones/{zoneId}/ai-layout  multipart 1–4 pictures + managerPin → a room layout to preview (nothing changes)
  *   POST /zones/{zoneId}/ai-layout/apply  JSON {managerPin, proposalId, mode replace|merge, tables, objects} → saved as a "room" change set
  *   POST /menu-ai/chat      JSON {managerPin, text} → a proposal (nothing changes)
+ *   POST /menu-ai/chat/voice multipart managerPin + audio → the same, with the model's `transcript`
+ *   POST /zones/{zoneId}/ai-edit        JSON {managerPin, text} → floor assistant: ops on this room to preview
+ *   POST /zones/{zoneId}/ai-edit/voice  multipart managerPin + audio → the same, with `transcript`
+ *   POST /zones/{zoneId}/ai-edit/apply  JSON {managerPin, proposalId} → applied, saved as a "room" change set
  *   POST /menu-ai/translate JSON {managerPin} → set_name proposal for missing es / de names (nothing changes)
  *   POST /menu-ai/apply     JSON {managerPin, proposalId, changeIds, confirmed?} → applied through CatalogOps, saved as a change set
  *                           (a bulk proposal needs confirmed: true, else 409 menu_ai_confirm_required)
@@ -157,6 +189,36 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
         val req = call.receive<MenuAiChatRequest>()
         val who = call.aiCaller(requireManagerApproval(auth, req.managerPin))
         call.respond(onIo { ai.chat(req.text, who) })
+    }
+
+    post("/menu-ai/chat/voice") {
+        requireManagerSession(call)
+        val (pin, audio) = call.receiveVoice()
+        val who = call.aiCaller(requireManagerApproval(auth, pin))
+        call.respond(onIo { ai.chat("", who, audio) })
+    }
+
+    // Floor-plan "Ask AI": edit the current room by text or voice (nothing changes before apply)
+    post("/zones/{zoneId}/ai-edit") {
+        requireManagerSession(call)
+        val req = call.receive<FloorEditChatRequest>()
+        val who = call.aiCaller(requireManagerApproval(auth, req.managerPin))
+        call.respond(onIo { ai.floorEdit(call.parameters["zoneId"]!!, req.text, who) })
+    }
+
+    post("/zones/{zoneId}/ai-edit/voice") {
+        requireManagerSession(call)
+        val (pin, audio) = call.receiveVoice()
+        val who = call.aiCaller(requireManagerApproval(auth, pin))
+        call.respond(onIo { ai.floorEdit(call.parameters["zoneId"]!!, null, who, audio) })
+    }
+
+    post("/zones/{zoneId}/ai-edit/apply") {
+        requireManagerSession(call)
+        val req = call.receive<FloorEditApplyRequest>()
+        val approver = requireManagerApproval(auth, req.managerPin)
+        val user = call.sessionUser().userId
+        call.respond(onIo { ai.applyFloorEdit(call.parameters["zoneId"]!!, req, user, approver) })
     }
 
     post("/menu-ai/translate") {

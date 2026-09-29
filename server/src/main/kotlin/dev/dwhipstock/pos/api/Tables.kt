@@ -237,7 +237,7 @@ fun Route.tableRoutes(auth: AuthService) {
  * concern so the sync stream stays readable: moved (x/y), resized (w/h),
  * reshaped (shape/rotation/seats). Unchanged fields emit nothing.
  */
-private fun applyGeometry(row: ResultRow, entry: LayoutTableEntry) {
+internal fun applyGeometry(row: ResultRow, entry: LayoutTableEntry) {
     validateGeometry(entry.x, entry.y, entry.width, entry.height,
         entry.rotation, entry.shape, entry.seats)
     val moved = entry.x != row[DiningTables.x] || entry.y != row[DiningTables.y]

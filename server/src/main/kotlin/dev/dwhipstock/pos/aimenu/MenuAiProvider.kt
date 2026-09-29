@@ -21,8 +21,16 @@ import java.io.IOException
 import java.net.URI
 import java.util.Base64
 
-/** A photo of a paper menu, already downscaled. */
-class MenuImage(val bytes: ByteArray, val contentType: String)
+/** A photo of a paper menu, already downscaled; or a short voice clip (an audio type, see [isAudio]). */
+class MenuImage(val bytes: ByteArray, val contentType: String) {
+    val isAudio: Boolean get() = contentType.startsWith("audio/")
+}
+
+/** Voice needs a provider that takes audio (Gemini); the others answer this. */
+private fun noAudio(provider: String, images: List<MenuImage>) {
+    if (images.any { it.isAudio }) throw ImageGenException(409, "menu_ai_voice_unsupported",
+        "$provider does not take voice input here; type the request instead")
+}
 
 /**
  * A text model behind the `menu.ai.provider` switch. [complete] blocks and
@@ -92,7 +100,10 @@ class GeminiMenuProvider(
                 put("system_instruction", system)
                 putJsonArray("input") {
                     images.forEach { img ->
-                        addJsonObject { put("type", "image"); put("mime_type", img.contentType); put("data", b64(img.bytes)) }
+                        addJsonObject {
+                            put("type", if (img.isAudio) "audio" else "image")
+                            put("mime_type", img.contentType); put("data", b64(img.bytes))
+                        }
                     }
                     addJsonObject { put("type", "text"); put("text", user) }
                 }
@@ -142,6 +153,7 @@ class OpenAiMenuProvider(
     companion object { const val DEFAULT_MODEL = "gpt-5.4-mini" }
 
     override fun complete(system: String, user: String, images: List<MenuImage>): String {
+        noAudio("OpenAI", images)
         val body = buildJsonObject {
             put("model", model)
             putJsonObject("response_format") { put("type", "json_object") }
@@ -187,6 +199,7 @@ class AnthropicMenuProvider(
     companion object { const val DEFAULT_MODEL = "claude-opus-5" }
 
     override fun complete(system: String, user: String, images: List<MenuImage>): String {
+        noAudio("Anthropic", images)
         val body = buildJsonObject {
             put("model", model)
             put("max_tokens", 16000)

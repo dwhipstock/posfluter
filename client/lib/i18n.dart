@@ -547,6 +547,111 @@ class L {
     '$n elemento(s) añadido(s) a la sala',
     '$n Element(e) zum Raum hinzugefügt',
   );
+  // voice input (menu AI chat, floor assistant): hold to talk, or tap to start / stop
+  String get micHint => _t(
+    'Maintenez pour parler, ou touchez pour commencer et encore pour arrêter',
+    'Hold to talk, or tap to start and tap again to stop',
+    'Mantén pulsado para hablar, o toca para empezar y otra vez para parar',
+    'Zum Sprechen gedrückt halten, oder antippen zum Starten und erneut zum Stoppen',
+  );
+  String get micListening => _t(
+    'J’écoute… relâchez ou touchez pour arrêter',
+    'Listening… release or tap to stop',
+    'Escuchando… suelta o toca para parar',
+    'Ich höre zu… loslassen oder antippen zum Stoppen',
+  );
+  String get micUnavailable => _t(
+    'Le micro n’est pas disponible. Vérifiez l’autorisation, ou tapez la demande.',
+    'The microphone isn’t available. Check the permission, or type the request.',
+    'El micrófono no está disponible. Revisa el permiso, o escribe la petición.',
+    'Das Mikrofon ist nicht verfügbar. Prüfen Sie die Berechtigung oder tippen Sie die Anfrage.',
+  );
+  String aiHeard(String text) => _t(
+    'Entendu : « $text »',
+    'Heard: “$text”',
+    'Oído: «$text»',
+    'Verstanden: „$text“',
+  );
+  // floor plan "Ask AI": edit the current room by text or voice
+  String get floorAskAi =>
+      _t('Demander à l’IA…', 'Ask AI…', 'Preguntar a la IA…', 'KI fragen…');
+  String get floorAskAiHint => _t(
+    'Ex. « ajoute quatre tables de 2 le long de la fenêtre », « table 5 ronde avec 6 places », « enlève le billard »',
+    'e.g. “add four 2-tops along the window”, “make table 5 round with 6 seats”, “remove the pool table”',
+    'p. ej. «añade cuatro mesas de 2 junto a la ventana», «mesa 5 redonda con 6 lugares», «quita el billar»',
+    'z. B. „vier Zweiertische am Fenster“, „Tisch 5 rund mit 6 Plätzen“, „Billardtisch entfernen“',
+  );
+  String get floorAskAiWorking => _t(
+    'L’IA prépare les changements…',
+    'AI is working on the room…',
+    'La IA prepara los cambios…',
+    'Die KI bereitet die Änderungen vor…',
+  );
+  String get floorEditHint => _t(
+    'Aperçu : rien ne change avant « Appliquer ». Les contours montrent le nouveau et le déplacé, le pâle est retiré.',
+    'Preview: nothing changes until Apply. Outlined = new or moved; faded = removed.',
+    'Vista previa: nada cambia hasta Aplicar. Con borde = nuevo o movido; pálido = quitado.',
+    'Vorschau: nichts ändert sich vor „Übernehmen“. Umrandet = neu oder verschoben; blass = entfernt.',
+  );
+  String floorEditApplied(int n) => _t(
+    'Plan de salle mis à jour : $n changement(s)',
+    'Floor plan updated: $n change(s)',
+    'Plano actualizado: $n cambio(s)',
+    'Raumplan aktualisiert: $n Änderung(en)',
+  );
+  String floorChangeKind(String kind) => switch (kind) {
+    'add_table' => _t(
+      'Nouvelle table',
+      'New table',
+      'Mesa nueva',
+      'Neuer Tisch',
+    ),
+    'update_table' => _t(
+      'Table modifiée',
+      'Table changed',
+      'Mesa cambiada',
+      'Tisch geändert',
+    ),
+    'remove_table' => _t(
+      'Table retirée',
+      'Table removed',
+      'Mesa quitada',
+      'Tisch entfernt',
+    ),
+    'add_object' => _t(
+      'Nouvel élément',
+      'New object',
+      'Elemento nuevo',
+      'Neues Element',
+    ),
+    'update_object' => _t(
+      'Élément déplacé',
+      'Object moved',
+      'Elemento movido',
+      'Element verschoben',
+    ),
+    _ => _t(
+      'Élément retiré',
+      'Object removed',
+      'Elemento quitado',
+      'Element entfernt',
+    ),
+  };
+  String floorField(String field) => switch (field) {
+    'number' => _t('Numéro', 'Number', 'Número', 'Nummer'),
+    'shape' => _t('Forme', 'Shape', 'Forma', 'Form'),
+    'seats' => seatsLabel,
+    'position' => _t('Emplacement', 'Position', 'Ubicación', 'Lage'),
+    'size' => _t('Taille', 'Size', 'Tamaño', 'Größe'),
+    _ => _t('Angle', 'Rotation', 'Giro', 'Drehung'),
+  };
+  String floorShapeName(String shape) => switch (shape) {
+    'ROUND' => _t('ronde', 'round', 'redonda', 'rund'),
+    'SQUARE' => _t('carrée', 'square', 'cuadrada', 'quadratisch'),
+    'RECT' => _t('rectangulaire', 'rectangle', 'rectangular', 'rechteckig'),
+    'BAR' => _t('haute', 'high-top', 'alta', 'Stehtisch'),
+    _ => shape,
+  };
   String get objectNameFr => _t(
     'Nom (français)',
     'Name (French)',

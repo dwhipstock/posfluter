@@ -163,7 +163,7 @@ fun Route.floorObjectRoutes(auth: AuthService) {
 // --- helpers (call inside a transaction) ---
 
 /** Write one object's geometry, emit an outbox event only if something moved. */
-private fun applyObjectGeometry(row: ResultRow, entry: LayoutObjectEntry) {
+internal fun applyObjectGeometry(row: ResultRow, entry: LayoutObjectEntry) {
     validateObjectGeometry(entry.x, entry.y, entry.width, entry.height,
         entry.rotation, row[FloorObjects.type])
     val changed = entry.x != row[FloorObjects.x] || entry.y != row[FloorObjects.y] ||

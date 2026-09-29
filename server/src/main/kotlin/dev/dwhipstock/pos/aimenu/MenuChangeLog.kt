@@ -271,6 +271,8 @@ internal object MenuChangeLog {
                 }
                 "table" to "create" -> RoomLayoutAi.removeTable(id)
                 "table" to "delete" -> RoomLayoutAi.restoreTable(id)
+                "table" to "update" -> FloorEditAi.restoreTable(id, before!!)
+                "floor_object" to "update" -> FloorEditAi.restoreObject(id, before!!)
                 "floor_object" to "create" -> RoomLayoutAi.removeObject(id)
                 "floor_object" to "delete" -> RoomLayoutAi.restoreObject(id, before!!)
                 "category_order" to "reorder" -> {
