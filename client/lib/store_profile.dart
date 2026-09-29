@@ -38,7 +38,7 @@ class StoreProfile {
     this.kind = 'restaurant',
     this.country = 'CA',
     this.currency = 'CAD',
-    this.locales = const ['fr', 'en'],
+    this.locales = const ['en', 'fr'],
     this.legalAge = 18,
     this.kitchenPrinting = false,
     this.forecourt = false,
@@ -71,7 +71,7 @@ class StoreProfile {
 
   /// From /health; missing or odd fields keep the pub defaults.
   factory StoreProfile.fromHealth(Map<String, dynamic> j) {
-    List<String> locales = const ['fr', 'en'];
+    List<String> locales = const ['en', 'fr'];
     final raw = j['locales'];
     if (raw is List) {
       final tags = raw

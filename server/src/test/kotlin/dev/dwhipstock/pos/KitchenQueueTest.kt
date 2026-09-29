@@ -89,7 +89,7 @@ class KitchenQueueTest {
         f.nowMs += 2_000
         assertEquals(2, f.kitchen.queue.processDue())
         val texts = f.transport.to("kitchen.lan").map { it.text }
-        assertTrue("Burger" in texts[0] && "Ailes" in texts[1])
+        assertTrue("Burger" in texts[0] && "Wings" in texts[1])
     }
 
     @Test

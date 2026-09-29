@@ -297,7 +297,7 @@ class KitchenConfig {
 
   factory KitchenConfig.fromJson(Map<String, dynamic> j) => KitchenConfig(
     KitchenSettings.fromJson(j['settings'] as Map<String, dynamic>),
-    _str(j['language'], 'fr'),
+    _str(j['language'], 'en'),
     ((j['stations'] as List?) ?? const [])
         .map((s) => KitchenStation.fromJson(s))
         .toList(),
@@ -421,7 +421,7 @@ class KdsBoard {
     this.lateMinutes = 20,
     this.latestTicket = 0,
     this.sound = true,
-    this.language = 'fr',
+    this.language = 'en',
   });
 
   /// The timer colour for [seconds] since the first send.
@@ -445,6 +445,6 @@ class KdsBoard {
     lateMinutes: _int(j['lateMinutes'], 20),
     latestTicket: _int(j['latestTicket']),
     sound: j['sound'] != false,
-    language: _str(j['language'], 'fr'),
+    language: _str(j['language'], 'en'),
   );
 }

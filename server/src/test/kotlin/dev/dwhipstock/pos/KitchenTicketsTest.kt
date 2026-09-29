@@ -70,17 +70,17 @@ class KitchenTicketsTest {
         assertEquals(listOf("kitchen", "bar", "sushi"), r.stations)
         f.drain()
         val kitchen = f.transport.to("kitchen.lan").single().text
-        assertTrue("Cuisine" in kitchen && "COMMANDE" in kitchen, kitchen)
-        assertTrue("2 × Burger de la Lanterne" in kitchen, kitchen)
+        assertTrue("Kitchen" in kitchen && "ORDER" in kitchen, kitchen)
+        assertTrue("2 × Copper Lantern Burger" in kitchen, kitchen)
         assertTrue("» sans oignons" in kitchen, kitchen)
         assertFalse("Ambrée" in kitchen || "Maki" in kitchen, kitchen)
         val bar = f.transport.to("bar.lan").single().text
-        assertTrue("1 × Ambrée cuivrée" in bar && "Pinte 20 oz" in bar, bar)
+        assertTrue("1 × Copper Amber Ale" in bar && "20 oz pint" in bar, bar)
         assertFalse("Burger" in bar, bar)
         val sushi = f.transport.to("sushi.lan").single().text
-        assertTrue("Maki au saumon" in sushi && "Bar à sushis" in sushi, sushi)
+        assertTrue("Salmon Maki" in sushi && "Sushi Bar" in sushi, sushi)
         // header: table, bill number, server
-        assertTrue("Table" in kitchen && "Addition n° $check" in kitchen && "Serveur : Demo Server" in kitchen, kitchen)
+        assertTrue("Table" in kitchen && "Bill #$check" in kitchen && "Server: Demo Server" in kitchen, kitchen)
     }
 
     @Test
@@ -99,8 +99,8 @@ class KitchenTicketsTest {
         val r = f.kitchen.send(check)
         assertEquals(listOf("kitchen"), r.stations, "the bar has nothing new")
         val add = f.drain().single().text
-        assertTrue("AJOUT" in add && "COMMANDE" !in add, add)
-        assertTrue("2 × Burger de la Lanterne" in add && "1 × Ailes de poulet" in add, add)
+        assertTrue("ADD" in add && "ORDER" !in add, add)
+        assertTrue("2 × Copper Lantern Burger" in add && "1 × Chicken Wings" in add, add)
         assertFalse("3 ×" in add, add)
 
         // sending again (a double tap, a retried request) changes nothing
@@ -124,14 +124,14 @@ class KitchenTicketsTest {
         f.kitchen.send(check)
         val out = f.drain()
         val kitchenVoid = out.single { it.target.startsWith("kitchen.lan") }.text
-        assertTrue("ANNULÉ" in kitchenVoid && "-2 × Burger de la Lanterne" in kitchenVoid, kitchenVoid)
+        assertTrue("VOID" in kitchenVoid && "-2 × Copper Lantern Burger" in kitchenVoid, kitchenVoid)
         val barVoid = out.single { it.target.startsWith("bar.lan") }.text
-        assertTrue("ANNULÉ" in barVoid && "-1 × Ambrée cuivrée" in barVoid, barVoid)
+        assertTrue("VOID" in barVoid && "-1 × Copper Amber Ale" in barVoid, barVoid)
 
         // voiding the whole check voids what's left, at once (no send needed)
         f.checks.voidCheck(check, "test", "manager")
         val last = f.drain().single().text
-        assertTrue("ANNULÉ" in last && "-1 × Burger de la Lanterne" in last && "-1 × Ailes de poulet" in last, last)
+        assertTrue("VOID" in last && "-1 × Copper Lantern Burger" in last && "-1 × Chicken Wings" in last, last)
     }
 
     @Test
@@ -141,7 +141,7 @@ class KitchenTicketsTest {
         val burger = f.add(check, "lantern-burger")
         f.kitchen.send(check); f.drain()
         assertEquals("CANCELLED", f.checks.removeLine(check, burger).status)
-        assertTrue("ANNULÉ" in f.drain().single().text)
+        assertTrue("VOID" in f.drain().single().text)
     }
 
     @Test
@@ -158,8 +158,8 @@ class KitchenTicketsTest {
         f.kitchen.send(check)
         val out = f.drain().map { it.text }
         assertEquals(2, out.size)
-        assertTrue("ANNULÉ" in out[0] && "saignant" in out[0])
-        assertTrue("AJOUT" in out[1] && "bien cuit" in out[1])
+        assertTrue("VOID" in out[0] && "saignant" in out[0])
+        assertTrue("ADD" in out[1] && "bien cuit" in out[1])
     }
 
     @Test
@@ -171,7 +171,7 @@ class KitchenTicketsTest {
         val r = f.kitchen.reprint(check)
         assertEquals(1, r.tickets)
         val text = f.drain().single().text
-        assertTrue("RÉIMPRESSION" in text && "2 × Burger de la Lanterne" in text, text)
+        assertTrue("REPRINT" in text && "2 × Copper Lantern Burger" in text, text)
         // a reprint is not a new order: nothing unsent, and it never shows on the screen
         assertEquals(0, f.kitchen.state(check).unsent)
         assertTrue(f.kitchen.board().cards.single().items.none { it.qty != 2 })
@@ -277,7 +277,7 @@ class KitchenTicketsTest {
         f.kitchen.setGuests(check, 4)
         f.add(check, "lantern-burger")
         f.kitchen.send(check)
-        assertTrue("Couverts : 4" in f.drain().single().text)
+        assertTrue("Guests: 4" in f.drain().single().text)
         assertEquals(4, f.kitchen.state(check).guests)
     }
 
