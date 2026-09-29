@@ -4,6 +4,7 @@
 #
 #   scripts/tablet-ai-menu.sh gemini      # or openai | anthropic: key from the repo-root .env
 #   scripts/tablet-ai-menu.sh --off       # menu.ai=off, key removed
+#   MENU_AI_MODEL=gemini-3.5-flash-lite scripts/tablet-ai-menu.sh gemini   # pick the model
 #
 # --app copperlantern|sagepoppy picks which POS app on the tablet (default
 # copperlantern; see scripts/lib/tablet-app.sh).
@@ -49,6 +50,8 @@ case "$1" in
     KEY="$(env_value "$ENV_NAME")"
     [[ -n "$KEY" ]] || { echo "ERROR: no $ENV_NAME in $REPO_ROOT/.env." >&2; exit 1; }
     LINES+=("menu.ai=on" "menu.ai.provider=$PROVIDER" "menu.ai.$PROVIDER.apiKey=$KEY")
+    # optional model override, e.g. MENU_AI_MODEL=gemini-3.5-flash-lite
+    [[ -n "${MENU_AI_MODEL:-}" ]] && LINES+=("menu.ai.model=$MENU_AI_MODEL")
     ;;
   *) usage ;;
 esac
