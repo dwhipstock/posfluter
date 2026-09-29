@@ -1,8 +1,10 @@
 package dev.dwhipstock.poscloud.menu
 
 import dev.dwhipstock.poscloud.NotFoundException
+import dev.dwhipstock.poscloud.catalog.Catalog
 import dev.dwhipstock.poscloud.catalog.CatalogFacets
 import dev.dwhipstock.poscloud.catalog.CatalogQuery
+import dev.dwhipstock.poscloud.catalog.NameIndex
 import dev.dwhipstock.poscloud.catalog.Scope
 import dev.dwhipstock.poscloud.db.CatalogCategories
 import dev.dwhipstock.poscloud.db.CatalogItems
@@ -27,7 +29,9 @@ import org.jetbrains.exposed.sql.transactions.transaction
 @Serializable
 data class MenuVariantDto(
     val id: String, val labelFr: String, val labelEn: String,
-    val priceCents: Long, val sortOrder: Int)
+    val priceCents: Long, val sortOrder: Int,
+    // names beyond fr/en the store sent (es, de, ...; 026)
+    val names: Map<String, String> = emptyMap())
 
 @Serializable
 data class MenuItemDto(
@@ -42,10 +46,14 @@ data class MenuItemDto(
     val subcategory: String? = null,
     val size: String? = null,
     // photo provenance (022): original | ai_generated | ai_enhanced; null = not sent
-    val photoSource: String? = null)
+    val photoSource: String? = null,
+    // names beyond fr/en the store sent (es, de, ...; 026)
+    val names: Map<String, String> = emptyMap())
 
 @Serializable
-data class MenuCategoryDto(val id: String, val nameFr: String, val nameEn: String, val sortOrder: Int)
+data class MenuCategoryDto(
+    val id: String, val nameFr: String, val nameEn: String, val sortOrder: Int,
+    val names: Map<String, String> = emptyMap())
 
 /**
  * [items]: every store's copy of the listed products. Paged (`limit`, `q`,
@@ -106,7 +114,7 @@ internal fun menuOf(scopes: List<Scope>, query: CatalogQuery = CatalogQuery()): 
     fun facts(copies: List<MenuItemDto>): CatalogQuery.Facts {
         val i = copies.first()
         return CatalogQuery.Facts(
-            names = copies.flatMap { listOf(it.nameEn, it.nameFr) }.distinct(),
+            names = copies.flatMap { listOf(it.nameEn, it.nameFr) + it.names.values }.distinct(),
             categoryId = i.categoryId, brand = i.brand, subcategory = i.subcategory, size = i.size,
             barcode = copies.firstNotNullOfOrNull { it.barcode },
         )
@@ -129,6 +137,7 @@ private fun fullMenuOf(scopes: List<Scope>): MenuResponse {
     val categories = linkedMapOf<String, MenuCategoryDto>()
     val items = mutableListOf<MenuItemDto>()
     for (scope in scopes) {
+        val names = Catalog.namesIn(scope.tenantId, listOf(scope.venueId), listOf("item", "variant", "category"))
         CatalogCategories.selectAll().where {
             (CatalogCategories.tenantId eq scope.tenantId) and (CatalogCategories.venueId eq scope.venueId) and
                 (CatalogCategories.deleted eq false)
@@ -136,6 +145,7 @@ private fun fullMenuOf(scopes: List<Scope>): MenuResponse {
             categories.putIfAbsent(it[CatalogCategories.id], MenuCategoryDto(
                 it[CatalogCategories.id], it[CatalogCategories.nameFr],
                 it[CatalogCategories.nameEn], it[CatalogCategories.sortOrder],
+                names.of("category", scope.venueId, it[CatalogCategories.id]),
             ))
         }
         val variants = CatalogVariants.selectAll().where {
@@ -145,12 +155,12 @@ private fun fullMenuOf(scopes: List<Scope>): MenuResponse {
         CatalogItems.selectAll().where {
             (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and
                 (CatalogItems.deleted eq false)
-        }.orderBy(CatalogItems.id).forEach { items += itemDto(scope, it, variants[it[CatalogItems.id]].orEmpty()) }
+        }.orderBy(CatalogItems.id).forEach { items += itemDto(scope, it, variants[it[CatalogItems.id]].orEmpty(), names) }
     }
     return MenuResponse(categories.values.toList(), items)
 }
 
-private fun itemDto(scope: Scope, row: ResultRow, variants: List<ResultRow>) = MenuItemDto(
+private fun itemDto(scope: Scope, row: ResultRow, variants: List<ResultRow>, names: NameIndex) = MenuItemDto(
     row[CatalogItems.id], row[CatalogItems.nameFr], row[CatalogItems.nameEn],
     row[CatalogItems.descriptionFr], row[CatalogItems.descriptionEn],
     row[CatalogItems.categoryId], row[CatalogItems.abbrev], row[CatalogItems.isAlcohol],
@@ -159,6 +169,7 @@ private fun itemDto(scope: Scope, row: ResultRow, variants: List<ResultRow>) = M
         MenuVariantDto(
             it[CatalogVariants.id], it[CatalogVariants.labelFr], it[CatalogVariants.labelEn],
             it[CatalogVariants.priceCents], it[CatalogVariants.sortOrder],
+            names.of("variant", scope.venueId, it[CatalogVariants.id]),
         )
     },
     scope.venueId,
@@ -167,4 +178,5 @@ private fun itemDto(scope: Scope, row: ResultRow, variants: List<ResultRow>) = M
     subcategory = row[CatalogItems.subcategory],
     size = row[CatalogItems.sizeLabel],
     photoSource = row[CatalogItems.photoSource],
+    names = names.of("item", scope.venueId, row[CatalogItems.id]),
 )

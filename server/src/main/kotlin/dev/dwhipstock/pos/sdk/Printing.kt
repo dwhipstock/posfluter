@@ -113,6 +113,13 @@ sealed interface PrinterAdapter {
         const val WIDTH = 42
 
         /**
+         * The widest a text line may run (48 columns of an 80mm printer's
+         * Font A): a row past it wraps at [WIDTH]; one that only passes
+         * [WIDTH] prints as it always did.
+         */
+        const val PAPER = 48
+
+        /**
          * Shared 42-col monospace rendering. NOTE: pads by codepoint count —
          * any decomposed (combining) accent would throw column math off slightly;
          * acceptable for the virtual printer. TODO(M2): proper width via ICU when thermal lands.
@@ -126,16 +133,25 @@ sealed interface PrinterAdapter {
                         appendLine(center(line.fallbackText))
                         appendLine(center("*".repeat(10)))
                     }
-                    is PrintLine.Text -> appendLine(
-                        when (line.align) {
-                            Align.LEFT -> line.text
-                            Align.CENTER -> center(line.text)
-                            Align.RIGHT -> line.text.padStart(WIDTH)
-                        },
-                    )
+                    // a line wider than the paper (a long address) wraps at spaces
+                    is PrintLine.Text -> (if (line.text.length <= PAPER) listOf(line.text) else wrapWords(line.text, WIDTH)).forEach { row ->
+                        appendLine(
+                            when (line.align) {
+                                Align.LEFT -> row
+                                Align.CENTER -> center(row)
+                                Align.RIGHT -> row.padStart(WIDTH)
+                            },
+                        )
+                    }
                     is PrintLine.KeyValue -> {
-                        val pad = (WIDTH - line.left.length - line.right.length).coerceAtLeast(1)
-                        appendLine(line.left + " ".repeat(pad) + line.right)
+                        // a label too long for the paper (a German item name) wraps at word
+                        // breaks; the amount stays right-aligned on its last row
+                        val rows = if (line.left.length + 1 + line.right.length <= PAPER) listOf(line.left)
+                            else wrapWords(line.left, WIDTH - line.right.length - 1)
+                        rows.dropLast(1).forEach { appendLine(it) }
+                        val last = rows.last()
+                        val pad = (WIDTH - last.length - line.right.length).coerceAtLeast(1)
+                        appendLine(last + " ".repeat(pad) + line.right)
                     }
                     is PrintLine.QrCode -> {
                         line.caption?.let { appendLine(center(it)) }
@@ -157,6 +173,28 @@ sealed interface PrinterAdapter {
                     PrintLine.Blank -> appendLine()
                 }
             }
+        }
+
+        /** [text] cut at spaces into rows of at most [width] (a word longer than that is split). */
+        internal fun wrapWords(text: String, width: Int): List<String> {
+            val w = width.coerceAtLeast(8)
+            if (text.length <= w) return listOf(text)
+            val rows = mutableListOf<String>()
+            var row = ""
+            for (word in text.split(' ')) {
+                var rest = word
+                while (rest.length > w) {
+                    if (row.isNotEmpty()) { rows += row; row = "" }
+                    rows += rest.take(w); rest = rest.drop(w)
+                }
+                row = when {
+                    row.isEmpty() -> rest
+                    row.length + 1 + rest.length <= w -> "$row $rest"
+                    else -> { rows += row; rest }
+                }
+            }
+            rows += row
+            return rows
         }
 
         private fun center(text: String): String {

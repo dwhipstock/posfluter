@@ -1714,16 +1714,35 @@ class Api {
   static Future<SimScreen> simReaderCancel() async =>
       SimScreen.fromJson(await _stripeCall('POST', '/terminal/ui/cancel'));
 
-  static Future<String> receiptText(int checkId) async =>
-      (await _get('/checks/$checkId/receipt'))['text'];
+  static Future<String> receiptText(int checkId, {String? lang}) async =>
+      (await _get(
+        '/checks/$checkId/receipt${lang == null ? "" : "?lang=$lang"}',
+      ))['text'];
+
+  /// Reprint a closed check's final receipt, optionally in another of the
+  /// store's languages ([lang]); returns the printed text.
+  static Future<String> reprintReceipt(int checkId, {String? lang}) async =>
+      (await _post(
+        '/checks/$checkId/receipt/print${lang == null ? "" : "?lang=$lang"}',
+      ))['text'];
 
   /// Provisional "check please" bill: render + spool the current state, return the
   /// text for preview. Non-mutating server-side — callable repeatedly after edits.
   /// [groupId] prints one bill group of a split check.
-  static Future<String> printBill(int checkId, {int? groupId}) async =>
-      (await _post(
-        '/checks/$checkId/bill${groupId == null ? "" : "?groupId=$groupId"}',
-      ))['text'];
+  /// [lang] prints this copy in another of the store's languages.
+  static Future<String> printBill(
+    int checkId, {
+    int? groupId,
+    String? lang,
+  }) async {
+    final q = [
+      if (groupId != null) 'groupId=$groupId',
+      if (lang != null) 'lang=$lang',
+    ];
+    return (await _post(
+      '/checks/$checkId/bill${q.isEmpty ? "" : "?${q.join('&')}"}',
+    ))['text'];
+  }
 
   static Future<Check> acceptPendingLine(int checkId, int lineId) async =>
       Check.fromJson(

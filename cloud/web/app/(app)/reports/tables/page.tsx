@@ -44,7 +44,7 @@ function TablesPage() {
   const zoneData = useMemo(() => {
     const byName = new Map<string, Record<string, number>>();
     for (const z of data?.byZone ?? []) {
-      const key = name(z.zoneNameFr, z.zoneNameEn) || "—";
+      const key = name(z.zoneNameFr, z.zoneNameEn, z.names) || "—";
       const values = byName.get(key) ?? {};
       const k = combined ? z.venueId : "value";
       values[k] = (values[k] ?? 0) + (combined ? m.chartValue(z.venueId, z.grossCents) : z.grossCents);
@@ -63,7 +63,7 @@ function TablesPage() {
     const zoneSection = {
       title: t("tables_by_zone"),
       columns: storeExport.withStore([
-        col.text<ZoneRow>(t("col_zone"), (z) => name(z.zoneNameFr, z.zoneNameEn)),
+        col.text<ZoneRow>(t("col_zone"), (z) => name(z.zoneNameFr, z.zoneNameEn, z.names)),
         col.int<ZoneRow>(t("col_checks"), (z) => z.checkCount),
         col.money<ZoneRow>(t("col_gross"), (z) => z.grossCents),
       ]),
@@ -73,7 +73,7 @@ function TablesPage() {
       title: t("tables_by_table"),
       columns: storeExport.withStore([
         col.text<ZoneTableRow>(t("col_table"), (r) => r.tableLabel),
-        col.text<ZoneTableRow>(t("col_zone"), (r) => r.zoneNameEn),
+        col.text<ZoneTableRow>(t("col_zone"), (r) => name(null, r.zoneNameEn, r.zoneNames)),
         col.int<ZoneTableRow>(t("col_checks"), (r) => r.checkCount),
         col.money<ZoneTableRow>(t("col_gross"), (r) => r.grossCents),
       ]),
@@ -169,7 +169,7 @@ function TablesPage() {
                       <StoreTag venueId={t.venueId} />
                     </span>
                   </TableCell>
-                  <TableCell className="text-xs text-neutral-500">{t.zoneNameEn}</TableCell>
+                  <TableCell className="text-xs text-neutral-500">{name(null, t.zoneNameEn, t.zoneNames)}</TableCell>
                   <TableCell className="text-right tabular-nums">{t.checkCount}</TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
                     {m.fmtVenue(t.venueId, t.grossCents)}

@@ -1107,6 +1107,8 @@ class L {
     'Volver a imprimir',
     'Erneut drucken',
   );
+  String get printIn =>
+      _t('Imprimer en…', 'Print in…', 'Imprimir en…', 'Drucken auf…');
 
   // shift screen
   String get noShiftOpen => _t(

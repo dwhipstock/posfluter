@@ -5,6 +5,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../widgets/print_language_picker.dart';
 import '../widgets/resume_refresh.dart';
 import 'bill_preview_screen.dart';
 import 'tender_screen.dart';
@@ -205,9 +206,13 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
     await _guarded(() => Api.moveCorkage(_check.id, target));
   }
 
-  Future<void> _printGroupBill(BillGroup group) async {
+  Future<void> _printGroupBill(BillGroup group, {String? lang}) async {
     try {
-      final text = await Api.printBill(_check.id, groupId: group.id);
+      final text = await Api.printBill(
+        _check.id,
+        groupId: group.id,
+        lang: lang,
+      );
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -561,6 +566,12 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
                         label: Text(l.printBill),
                         onPressed: _groupHasContent(split, group) && !_busy
                             ? () => _printGroupBill(group)
+                            : null,
+                        onLongPress: _groupHasContent(split, group) && !_busy
+                            ? () => printInPickedLanguage(
+                                context,
+                                (lang) => _printGroupBill(group, lang: lang),
+                              )
                             : null,
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(0, T.minTouch),

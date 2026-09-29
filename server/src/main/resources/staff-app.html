@@ -474,17 +474,33 @@ const alt = (fr, en) => (lang !== "fr" && lang !== "en") || fr === en ? "" : (la
 const iname = i => extra(i) || pick(i.nameFr, i.nameEn);
 const inameAlt = i => alt(i.nameFr, i.nameEn);
 const idesc = i => pick(i.descriptionFr, i.descriptionEn);
-const vlabel = v => pick(v.labelFr, v.labelEn);
+const vlabel = v => extra(v) || pick(v.labelFr, v.labelEn);
 const esName = en => NAMES_ES[en] || en;
 const zname = z => extra(z) || (lang === "es" ? esName(z.nameEn) : pick(z.nameFr, z.nameEn));
 const catName = c => extra(c) || (lang === "es" ? esName(c.nameEn) : pick(c.nameFr, c.nameEn));
 const roleName = r => r === "MANAGER" ? T().roleManager : r === "SERVER" ? T().roleServer : r;
 
-// line label for a served LineView (name + variant when disambiguating)
+// line label for a served LineView (name + variant when disambiguating); in
+// Spanish or German the menu's own names (`names`), when the menu is loaded
 function lineName(l) {
-  const name = pick(l.nameFr, l.nameEn);
-  const variant = pick(l.variantLabelFr, l.variantLabelEn);
+  const item = l.itemId ? items.find(i => i.id === l.itemId) : null;
+  const v = item && l.variantId ? item.variants.find(x => x.id === l.variantId) : null;
+  const name = (item && extra(item)) || pick(l.nameFr, l.nameEn);
+  const variant = l.variantLabelFr || l.variantLabelEn ? (v && extra(v)) || pick(l.variantLabelFr, l.variantLabelEn) : "";
   return esc(name + (variant ? " (" + variant + ")" : ""));
+}
+// outside French and English the check's lines read their names off the menu:
+// fetch it once (no sign-in needed), then draw again
+const extraLang = () => lang !== "fr" && lang !== "en";
+async function loadMenu() {
+  if (items.length) return;
+  [items, categories] = await Promise.all([
+    api("/items", { auth: false }), api("/categories", { auth: false }),
+  ]);
+}
+function menuThen(redraw) {
+  if (!extraLang() || items.length) return;
+  loadMenu().then(redraw).catch(() => {});
 }
 
 // ---- state -----------------------------------------------------------------
@@ -608,6 +624,7 @@ function toggleLang() {
   applyStaticLabels();
   renderView();
   renderCart();
+  menuThen(renderView);
 }
 
 function applyStaticLabels() {
@@ -892,6 +909,7 @@ async function openTable(tableId) {
     // idempotent open/resume — returns the table's live check, creating one if none
     check = await api(`/tables/${encodeURIComponent(tableId)}/checks`, { method: "POST" });
     renderCheck();
+    menuThen(() => { if (view === "check") renderCheck(); });
     startPoll(refreshCheck, 6000); // keep pending lines / totals fresh while viewing
   } catch (e) {
     goTables();
@@ -1001,11 +1019,7 @@ async function openMenu() {
     `${T().table} ${esc(tableLabelFor(check.tableId))}`;
   if (!items.length) {
     document.getElementById("mgrid").innerHTML = `<div class="spinner">${T().loading}</div>`;
-    try {
-      [items, categories] = await Promise.all([
-        api("/items", { auth: false }), api("/categories", { auth: false }),
-      ]);
-    } catch (_) { toast(T().failed, true); showCheck(); return; }
+    try { await loadMenu(); } catch (_) { toast(T().failed, true); showCheck(); return; }
   }
   cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
   renderMenu();
@@ -1046,7 +1060,7 @@ function addToCart(itemId) {
   const same = cart.find(c => c.variantId === variant.id && c.note === note);
   if (same) same.qty++;
   else cart.push({ itemId, variantId: variant.id, qty: 1, note,
-                   nameFr: item.nameFr, nameEn: item.nameEn,
+                   nameFr: item.nameFr, nameEn: item.nameEn, names: item.names,
                    multiSize: item.variants.length > 1, variant, priceCents: variant.priceCents });
   if (noteEl) noteEl.value = "";
   renderCart();
@@ -1063,7 +1077,7 @@ function renderCart() {
   document.getElementById("cart-sum").textContent = `🛒 ${count} · ${money(cartSubtotal())}`;
   document.getElementById("cart-lines").innerHTML = cart.map((b, ix) => `
     <div class="cline">
-      <span>${esc(pick(b.nameFr, b.nameEn))}${b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
+      <span>${esc(extra(b) || pick(b.nameFr, b.nameEn))}${b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
       <span class="cqty">
         <button class="step" onclick="bumpCart(${ix},-1)">−</button><b>${b.qty}</b>
         <button class="step" onclick="bumpCart(${ix},1)">＋</button>
@@ -1131,6 +1145,7 @@ async function renderPending() {
   try { checks = await Promise.all(targets.map(t => api(`/checks/${t.checkId}`).catch(() => null))); }
   catch (e) { if (e.status === 401) return; checks = []; }
   if (view !== "pending") return; // navigated away while fetching
+  if (extraLang() && !items.length) { try { await loadMenu(); } catch (_) {} }
 
   body.innerHTML = targets.map((t, ix) => {
     const c = checks[ix];

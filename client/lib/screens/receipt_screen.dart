@@ -5,6 +5,7 @@ import '../design/skin.dart';
 import '../design/tokens.dart';
 import '../retail/sp_theme.dart';
 import '../widgets/brand.dart';
+import '../widgets/print_language_picker.dart';
 import '../api.dart';
 import '../i18n.dart';
 
@@ -13,7 +14,7 @@ import '../i18n.dart';
 /// TODO: no monospace font is bundled — Noto Sans with
 /// tabular figures keeps the number column straight; label widths drift
 /// slightly. Revisit with the thermal printer work (M2).
-class ReceiptScreen extends StatelessWidget {
+class ReceiptScreen extends StatefulWidget {
   final int checkId;
   final String text;
 
@@ -28,11 +29,43 @@ class ReceiptScreen extends StatelessWidget {
   });
 
   @override
+  State<ReceiptScreen> createState() => _ReceiptScreenState();
+}
+
+class _ReceiptScreenState extends State<ReceiptScreen> {
+  late String _text = widget.text;
+  bool _printing = false;
+
+  /// Reprint the final receipt ([lang]: one copy in another store language).
+  Future<void> _printAgain({String? lang}) async {
+    setState(() => _printing = true);
+    try {
+      final text = await Api.reprintReceipt(widget.checkId, lang: lang);
+      if (mounted) setState(() => _text = text);
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    final text = _text;
+    final done = FilledButton.icon(
+      icon: const Icon(LucideIcons.checkCheck),
+      label: Text(l.done),
+      onPressed: () => Navigator.pop(context),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(T.minTouch),
+      ),
+    );
     return Scaffold(
       appBar: AppBar(
-        title: Text(title ?? '${l.receipt} — ${l.billNo(checkId)}'),
+        title: Text(
+          widget.title ?? '${l.receipt} — ${l.billNo(widget.checkId)}',
+        ),
       ),
       body: Center(
         child: Container(
@@ -63,14 +96,31 @@ class ReceiptScreen extends StatelessWidget {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            icon: const Icon(LucideIcons.checkCheck),
-            label: Text(l.done),
-            onPressed: () => Navigator.pop(context),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(T.minTouch),
-            ),
-          ),
+          // refund / till slips (a title) only get Done
+          child: widget.title != null
+              ? done
+              : Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(LucideIcons.printer),
+                        label: Text(l.printAgain),
+                        onPressed: _printing ? null : _printAgain,
+                        onLongPress: _printing
+                            ? null
+                            : () => printInPickedLanguage(
+                                context,
+                                (lang) => _printAgain(lang: lang),
+                              ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(T.minTouch),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: done),
+                  ],
+                ),
         ),
       ),
     );

@@ -28,7 +28,11 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 
 @Serializable
-data class VariantDto(val id: String, val labelFr: String, val labelEn: String, val priceCents: Long)
+data class VariantDto(
+    val id: String, val labelFr: String, val labelEn: String, val priceCents: Long,
+    /** Labels in the store's other languages (es, de…): [dev.dwhipstock.pos.base.Translations]. */
+    val names: Map<String, String> = emptyMap(),
+)
 
 @Serializable
 data class CategoryDto(
@@ -120,6 +124,9 @@ data class CustomerBillLineDto(
     val nameFr: String, val nameEn: String,
     val variantLabelFr: String? = null, val variantLabelEn: String? = null,
     val qty: Int, val lineTotalCents: Long, val note: String? = null,
+    /** The item's names in the store's other languages (es, de…), and its size label's. */
+    val names: Map<String, String> = emptyMap(),
+    val variantNames: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -501,13 +508,15 @@ fun Route.posRoutes(
             val page = query.page(matched)
             val ids = if (query.paged) page.map { it[Items.id] }.toSet() else null
             val names = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ITEM)
+            val variantNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.VARIANT)
             val variantsByItem = ItemVariants.selectAll()
                 .where { ItemVariants.deletedAt.isNull() }
                 .orderBy(ItemVariants.sortOrder)
                 .toList()
                 .let { rows -> if (ids == null) rows else rows.filter { it[ItemVariants.itemId] in ids } }
                 .groupBy({ it[ItemVariants.itemId] }) {
-                    VariantDto(it[ItemVariants.id], it[ItemVariants.labelFr], it[ItemVariants.labelEn], it[ItemVariants.priceCents])
+                    VariantDto(it[ItemVariants.id], it[ItemVariants.labelFr], it[ItemVariants.labelEn], it[ItemVariants.priceCents],
+                        variantNames[it[ItemVariants.id]].orEmpty())
                 }
             page.map {
                 itemDtoOf(
@@ -707,9 +716,17 @@ fun Route.posRoutes(
         call.respond(checkService.moveCorkage(checkId(call), req.groupId))
     }
 
+    // ?lang= renders this one copy in another of the store's languages
+    // (long-press on the tablet); without it, the check owner's language
     get("/checks/{id}/receipt") {
         val id = checkId(call)
-        call.respond(ReceiptResponse(id, checkService.receiptText(id)))
+        call.respond(ReceiptResponse(id, checkService.receiptText(id, printLang(call))))
+    }
+
+    // Reprint the final receipt of a closed check (same ?lang= as above)
+    post("/checks/{id}/receipt/print") {
+        val id = checkId(call)
+        call.respond(ReceiptResponse(id, checkService.reprintReceipt(id, printLang(call))))
     }
 
     // "Check please": render + spool a provisional customer bill. Non-mutating —
@@ -720,7 +737,7 @@ fun Route.posRoutes(
         val groupId = call.request.queryParameters["groupId"]?.let {
             it.toIntOrNull() ?: throw IllegalArgumentException("invalid groupId")
         }
-        call.respond(ReceiptResponse(id, checkService.printBill(id, groupId)))
+        call.respond(ReceiptResponse(id, checkService.printBill(id, groupId, printLang(call))))
     }
 
     // Table ops: one staff gesture — pick a destination table. Empty → move
@@ -858,10 +875,16 @@ private fun scanAtTablePage(venueName: String): String = """<!DOCTYPE html>
 /** Customer-safe projection of a CheckView; null check (no open check) → explicit empty state. */
 private fun customerBill(check: CheckView?): CustomerBillDto {
     if (check == null) return CustomerBillDto(open = false)
+    val (itemNames, variantNames) = transaction {
+        dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ITEM) to
+            dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.VARIANT)
+    }
     fun line(l: LineView) = CustomerBillLineDto(
         nameFr = l.nameFr, nameEn = l.nameEn,
         variantLabelFr = l.variantLabelFr, variantLabelEn = l.variantLabelEn,
         qty = l.qty, lineTotalCents = l.lineTotalCents, note = l.note,
+        names = l.itemId?.let { itemNames[it] }.orEmpty(),
+        variantNames = if (l.variantLabelEn == null) emptyMap() else l.variantId?.let { variantNames[it] }.orEmpty(),
     )
     return CustomerBillDto(
         open = true,
@@ -978,3 +1001,7 @@ private fun tenderType(raw: String): TenderType =
     }.also {
         require(it != TenderType.CASH) { "CASH uses POST /checks/{id}/tenders directly" }
     }
+
+/** `?lang=` on the print routes: one copy in that language (checked against the store's languages by the service). */
+private fun printLang(call: io.ktor.server.application.ApplicationCall): String? =
+    call.request.queryParameters["lang"]?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }

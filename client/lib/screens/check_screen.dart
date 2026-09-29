@@ -11,6 +11,7 @@ import '../kitchen/kitchen_banner.dart';
 import '../kitchen/kitchen_i18n.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
+import '../widgets/print_language_picker.dart';
 import '../widgets/resume_refresh.dart';
 import 'bill_preview_screen.dart';
 import 'split_screen.dart';
@@ -313,9 +314,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   /// "Check please": print a provisional bill and open its preview. Non-mutating —
   /// the check stays open, so this just shows the current state and returns here.
-  Future<void> _printBill() async {
+  Future<void> _printBill({String? lang}) async {
     try {
-      final text = await Api.printBill(widget.checkId);
+      final text = await Api.printBill(widget.checkId, lang: lang);
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -853,6 +854,13 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                             check.lines.isEmpty || check.pendingLines.isNotEmpty
                             ? null
                             : _printBill,
+                        onLongPress:
+                            check.lines.isEmpty || check.pendingLines.isNotEmpty
+                            ? null
+                            : () => printInPickedLanguage(
+                                context,
+                                (lang) => _printBill(lang: lang),
+                              ),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(0, T.minTouch),
                           padding: const EdgeInsets.symmetric(horizontal: 14),

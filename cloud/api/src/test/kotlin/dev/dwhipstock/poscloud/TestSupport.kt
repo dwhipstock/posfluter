@@ -71,7 +71,7 @@ object TestSupport {
                 "TRUNCATE tenants, venues, store_api_keys, portal_users, portal_sessions, " +
                     "portal_backup_codes, login_pending, events, checks, check_lines, check_tenders, shifts, " +
                     "refunds, cash_movements, " +
-                    "catalog_categories, catalog_items, catalog_variants, catalog_changes, " +
+                    "catalog_categories, catalog_items, catalog_variants, catalog_changes, catalog_names, " +
                     "staff, staff_venues, role_grants, staff_grants, " +
                     "pairing_codes, devices, " +
                     "item_photos, stock_movements, stock_levels, stock_counts, stock_count_lines, stock_receipts, " +

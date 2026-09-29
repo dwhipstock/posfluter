@@ -47,7 +47,7 @@ function ItemsPage() {
     const seen = new Map<string, string>();
     for (const r of data?.rows ?? []) {
       if (r.categoryId && !seen.has(r.categoryId)) {
-        seen.set(r.categoryId, name(r.categoryNameFr, r.categoryNameEn) || r.categoryId);
+        seen.set(r.categoryId, name(r.categoryNameFr, r.categoryNameEn, r.categoryNames) || r.categoryId);
       }
     }
     return [...seen.entries()];
@@ -108,8 +108,8 @@ function ItemsPage() {
         {
           title: t("items_title"),
           columns: [
-            col.text<ItemReportRow>(t("col_item"), (r) => name(r.nameFr, r.nameEn)),
-            col.text<ItemReportRow>(t("col_category"), (r) => name(r.categoryNameFr, r.categoryNameEn) || "—"),
+            col.text<ItemReportRow>(t("col_item"), (r) => name(r.nameFr, r.nameEn, r.names)),
+            col.text<ItemReportRow>(t("col_category"), (r) => name(r.categoryNameFr, r.categoryNameEn, r.categoryNames) || "—"),
             ...perStore,
             col.int<ItemReportRow>(combined ? `${t("col_qty")} · ${t("store_all")}` : t("col_qty"), (r) => r.qty),
             col.money<ItemReportRow>(combined ? `${t("col_revenue")} · ${t("store_all")}` : t("col_revenue"), (r) => r.revenueCents),
@@ -202,7 +202,7 @@ function ItemsPage() {
                   <TableCell className="text-xs font-semibold text-neutral-500">{i + 1}</TableCell>
                   <TableCell>
                     <div className="min-w-[10rem]">
-                      <div className="text-sm font-medium">{name(r.nameFr, r.nameEn)}</div>
+                      <div className="text-sm font-medium">{name(r.nameFr, r.nameEn, r.names)}</div>
                       {nameAlt(r.nameFr, r.nameEn) && (
                         <div className="text-xs text-neutral-500">{nameAlt(r.nameFr, r.nameEn)}</div>
                       )}
@@ -222,7 +222,7 @@ function ItemsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="hidden text-xs text-neutral-500 lg:table-cell">
-                    {name(r.categoryNameFr, r.categoryNameEn) || "—"}
+                    {name(r.categoryNameFr, r.categoryNameEn, r.categoryNames) || "—"}
                   </TableCell>
                   {combined &&
                     venues.map((v) => {

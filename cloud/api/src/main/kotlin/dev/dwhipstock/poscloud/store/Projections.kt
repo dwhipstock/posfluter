@@ -64,6 +64,7 @@ object Projections {
             event.eventType == "categories.reordered" -> categoriesReordered(scope, payload)
             event.eventType.startsWith("item.") -> itemEvent(scope, payload)
             event.eventType.startsWith("category.") -> categoryEvent(scope, payload)
+            event.eventType.startsWith("zone.") -> zoneEvent(scope, payload)
             // check.total_locked / check.cancelled / check.merged / unknown: stored, not projected
             else -> {}
         }
@@ -336,6 +337,15 @@ object Projections {
     private fun catalogSnapshot(scope: Scope, p: JsonObject) {
         p.arr("categories")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyCategorySnapshot(scope, it) }
         p.arr("items")?.filterIsInstance<JsonObject>()?.let { Catalog.applyItemSnapshots(scope, it) }
+        p.arr("zones")?.filterIsInstance<JsonObject>()?.forEach { zone ->
+            zone.str("id")?.let { Catalog.applyZoneNames(scope, it, zone) }
+        }
+    }
+
+    /** zone.* (e.g. zone.renamed): only the extra names are mirrored, when the payload carries them. */
+    private fun zoneEvent(scope: Scope, p: JsonObject) {
+        val zoneId = p.str("zoneId") ?: p.obj("zone")?.str("id") ?: return
+        Catalog.applyZoneNames(scope, zoneId, if ("names" in p) p else p.obj("zone") ?: p)
     }
 
     /** staff.created / staff.updated / staff.deleted carry one full `staff` snapshot. */

@@ -71,6 +71,10 @@ data class ReceiptItem(
     val note: String?,
     /** A gas station's fuel or prepay line: what the pump did. */
     val fuel: ReceiptFuel? = null,
+    /** The item's names in the store's other languages (es, de…; the translations table). */
+    val names: Map<String, String> = emptyMap(),
+    /** The same for the size label (only when it prints). */
+    val variantNames: Map<String, String> = emptyMap(),
 )
 
 /** Fuel on a receipt: "Pump 3 · 10.052 gal @ 3.299/gal", or a prepay for a pump. */
@@ -239,8 +243,10 @@ object ReceiptRenderer {
         add(PrintLine.Divider)
 
         for (item in receipt.items) {
-            val name = locale.dataText(item.nameFr, item.nameEn)
-            val variant = locale.dataTextOrNull(item.variantLabelFr, item.variantLabelEn)?.let { " ($it)" } ?: ""
+            // Spanish / German read the translations table, else English (dataText)
+            val name = item.names[locale.tag]?.takeIf { it.isNotBlank() } ?: locale.dataText(item.nameFr, item.nameEn)
+            val variant = locale.dataTextOrNull(item.variantLabelFr, item.variantLabelEn)
+                ?.let { item.variantNames[locale.tag]?.takeIf { v -> v.isNotBlank() } ?: it }?.let { " ($it)" } ?: ""
             add(PrintLine.KeyValue("$name$variant ×${item.qty}", item.lineTotal.let(policy::money)))
             if (item.qty > 1) add(PrintLine.Text("  @${item.unitPrice.let(policy::money)}"))
             item.note?.let { add(PrintLine.Text("  • $it")) }

@@ -3,6 +3,7 @@ package dev.dwhipstock.poscloud.catalog
 import dev.dwhipstock.poscloud.db.CatalogCategories
 import dev.dwhipstock.poscloud.db.CatalogChanges
 import dev.dwhipstock.poscloud.db.CatalogItems
+import dev.dwhipstock.poscloud.db.CatalogNames
 import dev.dwhipstock.poscloud.db.CatalogVariants
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -15,13 +16,30 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.batchInsert
 import org.jetbrains.exposed.sql.batchUpsert
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.upsert
 import java.time.OffsetDateTime
+
+/** Extra catalog names keyed (entity, venueId, entityId) → {lang: text}; see [Catalog.namesIn]. */
+class NameIndex(private val byKey: Map<Triple<String, String, String>, Map<String, String>>) {
+    private val anyVenue = byKey.entries.associate { (it.key.first to it.key.third) to it.value }
+
+    /** This store's names for the entity, else another in-scope store's (same id), else none. */
+    fun of(entity: String, venueId: String, id: String?): Map<String, String> =
+        if (id == null) emptyMap() else byKey[Triple(entity, venueId, id)] ?: anyVenue[entity to id] ?: emptyMap()
+
+    /** Only this store's names (zone ids like "upper" mean different rooms at different stores). */
+    fun exact(entity: String, venueId: String, id: String?): Map<String, String> =
+        if (id == null) emptyMap() else byKey[Triple(entity, venueId, id)] ?: emptyMap()
+}
 
 /** (tenant, venue) resolved from a store API key or a portal session. */
 data class Scope(val tenantId: String, val venueId: String)
@@ -95,6 +113,7 @@ object Catalog {
             this[CatalogItems.sizeLabel] = item.str("size")?.trim()?.takeIf { it.isNotEmpty() }
             this[CatalogItems.costCents] = item.long("costCents")
         }
+        replaceNames(scope, "item", byId.mapNotNull { (id, item) -> namesOf(item)?.let { id to it } }.toMap())
         val variants = LinkedHashMap<String, Pair<String, JsonObject>>()
         for ((itemId, item) in byId) {
             item.arr("variants")?.forEach { element ->
@@ -104,6 +123,8 @@ object Catalog {
             }
         }
         if (variants.isEmpty()) return
+        replaceNames(scope, "variant",
+            variants.mapNotNull { (id, pair) -> namesOf(pair.second)?.let { id to it } }.toMap())
         CatalogVariants.batchUpsert(variants.entries, shouldReturnGeneratedValues = false) { (variantId, pair) ->
             val (itemId, variant) = pair
             this[CatalogVariants.tenantId] = scope.tenantId
@@ -129,6 +150,61 @@ object Catalog {
             it[sortOrder] = category.int("sortOrder") ?: 0
             it[deleted] = category.bool("deleted") ?: false
         }
+        namesOf(category)?.let { replaceNames(scope, "category", mapOf(categoryId to it)) }
+    }
+
+    /** A zone's extra names (catalog.snapshot `zones`, zone.* events); no-op without `names`. */
+    fun applyZoneNames(scope: Scope, zoneId: String, zone: JsonObject) {
+        namesOf(zone)?.let { replaceNames(scope, "zone", mapOf(zoneId to it)) }
+    }
+
+    /**
+     * A snapshot's `names` ({lang: text}, languages beyond fr/en), or null when
+     * the key is absent (an older store: keep what is stored). Blank texts drop.
+     */
+    fun namesOf(obj: JsonObject): Map<String, String>? {
+        val names = obj["names"] as? JsonObject ?: return null
+        return names.mapNotNull { (lang, v) ->
+            val text = (v as? JsonPrimitive)?.contentOrNull?.trim()
+            val code = lang.trim().lowercase()
+            if (text.isNullOrEmpty() || code.isEmpty()) null else code to text
+        }.toMap()
+    }
+
+    /** Replace every stored name of each (entity, id) in [byId]; an empty map clears them. Batched. */
+    fun replaceNames(scope: Scope, entity: String, byId: Map<String, Map<String, String>>) {
+        if (byId.isEmpty()) return
+        byId.keys.chunked(1000).forEach { ids ->
+            CatalogNames.deleteWhere {
+                (tenantId eq scope.tenantId) and (venueId eq scope.venueId) and
+                    (CatalogNames.entity eq entity) and (entityId inList ids)
+            }
+        }
+        val rows = byId.flatMap { (id, names) -> names.map { (lang, text) -> Triple(id, lang, text) } }
+        if (rows.isEmpty()) return
+        CatalogNames.batchInsert(rows, shouldReturnGeneratedValues = false) { (id, lang, text) ->
+            this[CatalogNames.tenantId] = scope.tenantId
+            this[CatalogNames.venueId] = scope.venueId
+            this[CatalogNames.entity] = entity
+            this[CatalogNames.entityId] = id
+            this[CatalogNames.lang] = lang
+            this[CatalogNames.value] = text
+        }
+    }
+
+    /** Stored extra names of [entities] across [venueIds], in one query. */
+    fun namesIn(tenantId: String, venueIds: List<String>, entities: List<String>): NameIndex {
+        if (venueIds.isEmpty()) return NameIndex(emptyMap())
+        val out = HashMap<Triple<String, String, String>, MutableMap<String, String>>()
+        CatalogNames.selectAll().where {
+            (CatalogNames.tenantId eq tenantId) and (CatalogNames.venueId inList venueIds) and
+                (CatalogNames.entity inList entities)
+        }.forEach {
+            out.getOrPut(Triple(it[CatalogNames.entity], it[CatalogNames.venueId], it[CatalogNames.entityId])) {
+                sortedMapOf()
+            }[it[CatalogNames.lang]] = it[CatalogNames.value]
+        }
+        return NameIndex(out)
     }
 
     /**

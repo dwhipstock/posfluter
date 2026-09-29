@@ -417,6 +417,23 @@ mirror deletions.) Every `category.*` event gains
 `"category": { "id", "nameFr", "nameEn", "sortOrder", "deleted" }`;
 `categories.reordered` gains `"categories": [ …full list… ]`.
 
+**Extra names (`names`).** Every item snapshot, every variant inside its
+`variants`, and every category snapshot (in `category.*`,
+`categories.reordered` and `catalog.snapshot`) carries
+`"names": { "es": "Cerveza", "de": "Bier" }`: the store's names beyond
+`nameFr`/`nameEn` (its `translations` table). A current store always sends the
+key. When it is present it **replaces** every stored extra name of that item /
+variant / category (`{}` clears them); when it is absent (an older store) the
+cloud keeps what it has. Blank texts are ignored. Zones: the first
+`catalog.snapshot` chunk carries `"zones": [ { "id": "upper", "names": {…} } ]`,
+and a rename sends `zone.renamed` with `{ "zoneId": "upper", "names": {…} }`
+(it may also carry `nameFr`/`nameEn`; only `names` is mirrored, same replace
+rule). The cloud stores them in `catalog_names` (migration 026) and returns
+them as `names` on `/v1/menu` items, variants and categories, on the items
+report (`names`, `categoryNames`), the categories report (`names`) and the
+tables report (zones `names`, tables `zoneNames`). The portal shows the
+reader's language when present, else English, else French.
+
 ### `catalog.snapshot` (bootstrap, possibly chunked)
 Written at the store's first-ever sync (`sync_state` flag), carrying the live
 catalog. The cloud mirrors it for display; every later menu edit on the

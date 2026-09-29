@@ -121,11 +121,17 @@ class LocaleCoverageTest {
     @Test
     fun customerMenuSpeaksThePubsLanguages() {
         val tables = strTables("customer-menu.html")
-        val pub = stores.getValue("Copper Lantern").toSortedSet()
+        // the guest page speaks every language a pub offers: fr, en, and
+        // Copper Lantern's Spanish and German
+        val pub = stores.getValue("Copper Lantern (staff)").toSortedSet()
         assertEquals(pub, tables.keys.toSortedSet(), "customer menu languages")
         val keys = tables.getValue("en").keys
-        for ((tag, table) in tables) assertEquals(keys, table.keys, "customer menu '$tag' keys differ from English")
-        assertNoEnglish("customer-menu.html fr", "fr", tables.getValue("fr"), tables.getValue("en"))
+        assertTrue(keys.size > 25, "parsed only ${keys.size} customer-menu keys")
+        for ((tag, table) in tables) {
+            assertEquals(keys, table.keys, "customer menu '$tag' keys differ from English")
+            assertTrue(table.values.none { it.isBlank() }, "customer menu '$tag' has blank strings")
+        }
+        for (tag in pub - "en") assertNoEnglish("customer-menu.html $tag", tag, tables.getValue(tag), tables.getValue("en"))
         assertFrenchTypography("customer-menu.html fr", tables.getValue("fr"))
     }
 

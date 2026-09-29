@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, RotateCcw, Search } from "lucide-react";
 import { useI18n, useT } from "@/lib/i18n/context";
 import { useApi } from "@/lib/hooks";
+import { count } from "@/lib/format";
 import type { CatalogFacets, MenuResponse } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -215,7 +216,7 @@ export function useCategoryNames(): (id: string) => string {
   const { data } = useApi<MenuResponse>("/v1/menu?limit=1");
   return (id: string) => {
     const c = data?.categories.find((x) => x.id === id);
-    return c ? name(c.nameFr, c.nameEn) : id;
+    return c ? name(c.nameFr, c.nameEn, c.names) : id;
   };
 }
 
@@ -232,13 +233,14 @@ export function Pager({
   onOffset: (n: number) => void;
 }) {
   const t = useT();
+  const { locale } = useI18n();
   if (total <= pageSize && offset === 0) return null;
   const from = total === 0 ? 0 : offset + 1;
   const to = Math.min(offset + pageSize, total);
   return (
     <div className="flex items-center justify-end gap-2 border-t border-neutral-200/70 px-4 py-2.5 text-sm text-neutral-600">
       <span className="tabular-nums">
-        {t("catalog_range", { from: from.toLocaleString(), to: to.toLocaleString(), total: total.toLocaleString() })}
+        {t("catalog_range", { from: count(from, locale), to: count(to, locale), total: count(total, locale) })}
       </span>
       <Button
         variant="secondary"

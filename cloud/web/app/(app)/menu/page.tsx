@@ -16,6 +16,7 @@ import { EmptyState, ErrorState } from "@/components/states";
 import { ExportMenu } from "@/components/export-menu";
 import { CatalogFilterBar, Pager, useCatalogFilters } from "@/components/catalog-filters";
 import { get } from "@/lib/api";
+import { count } from "@/lib/format";
 import { scopeApiPath, useStoreId } from "@/lib/store";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
 import { col, type ExportDoc } from "@/lib/export/doc";
@@ -30,7 +31,7 @@ const PAGE_SIZE = 100;
  */
 export default function MenuPage() {
   const t = useT();
-  const { name, nameAlt } = useI18n();
+  const { name, nameAlt, locale } = useI18n();
   const meta = useExportMeta();
   const storeExport = useStoreExport();
   const storeId = useStoreId();
@@ -39,7 +40,7 @@ export default function MenuPage() {
   // category names from the unfiltered menu shape (every page lists them all)
   const categoryName = (id: string) => {
     const c = data?.categories.find((x) => x.id === id);
-    return c ? name(c.nameFr, c.nameEn) : id;
+    return c ? name(c.nameFr, c.nameEn, c.names) : id;
   };
 
   const groups = useMemo(() => {
@@ -66,18 +67,18 @@ export default function MenuPage() {
     );
     const catName = (id: string) => {
       const c = all.categories.find((x) => x.id === id);
-      return c ? name(c.nameFr, c.nameEn) : id;
+      return c ? name(c.nameFr, c.nameEn, c.names) : id;
     };
     return {
       ...meta("products"),
-      rangeLabel: t("catalog_products", { n: (all.total ?? all.items.length).toLocaleString() }),
+      rangeLabel: t("catalog_products", { n: count(all.total ?? all.items.length, locale) }),
       reportTitle: t("menu_title"),
-      kpis: [{ label: t("stock_kpi_products"), value: String(all.total ?? all.items.length) }],
+      kpis: [{ label: t("stock_kpi_products"), value: count(all.total ?? all.items.length, locale) }],
       sections: [
         {
           title: t("menu_title"),
           columns: storeExport.withStore<MenuItem>([
-            col.text(t("stock_col_product"), (i) => name(i.nameFr, i.nameEn), { width: 40 }),
+            col.text(t("stock_col_product"), (i) => name(i.nameFr, i.nameEn, i.names), { width: 40 }),
             col.text(t("menu_col_brand"), (i) => i.brand ?? "", { width: 18 }),
             col.text(t("menu_col_category"), (i) => catName(i.categoryId), { width: 16 }),
             col.text(t("catalog_subcategory"), (i) => i.subcategory ?? "", { width: 16 }),
@@ -110,7 +111,7 @@ export default function MenuPage() {
             searchLabel={t("menu_search")}
           >
             <span className="ml-auto text-xs tabular-nums text-neutral-500">
-              {t("catalog_products", { n: total.toLocaleString() })}
+              {t("catalog_products", { n: count(total, locale) })}
             </span>
           </CatalogFilterBar>
         </Card>
@@ -131,7 +132,7 @@ export default function MenuPage() {
           {groups.map(({ category, items }) => (
             <Card key={category.id}>
               <div className="flex items-baseline gap-2 border-b border-neutral-100 px-4 py-3">
-                <h2 className="text-sm font-semibold">{name(category.nameFr, category.nameEn)}</h2>
+                <h2 className="text-sm font-semibold">{name(category.nameFr, category.nameEn, category.names)}</h2>
                 <span className="text-xs text-neutral-500">{nameAlt(category.nameFr, category.nameEn)}</span>
                 <span className="ml-auto text-xs text-neutral-400">{items.length}</span>
               </div>
@@ -210,7 +211,7 @@ function ItemRow({ row }: { row: MergedItem }) {
       <Thumb item={item} />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-1.5">
-          <span className="truncate text-sm font-medium">{name(item.nameFr, item.nameEn)}</span>
+          <span className="truncate text-sm font-medium">{name(item.nameFr, item.nameEn, item.names)}</span>
           {item.isAlcohol && <Wine className="h-3 w-3 shrink-0 text-neutral-400" />}
           {copies.every((c) => !c.active) && <Badge variant="outline">{t("menu_off")}</Badge>}
           {storeSpecific && copies.map((c) => <StoreTag key={c.venueId} venueId={c.venueId} />)}
