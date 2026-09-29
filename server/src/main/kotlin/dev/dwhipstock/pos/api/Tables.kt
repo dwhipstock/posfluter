@@ -320,7 +320,7 @@ private fun zoneLabel(zoneId: String, prefix: String, requested: String?, exclud
  * Table ids are permanent (QR slips, check FKs), so they must stay unique
  * across live AND deleted rows. "upper" + "U-11" → "upper-u-11".
  */
-private fun uniqueTableId(zoneId: String, label: String): String {
+internal fun uniqueTableId(zoneId: String, label: String): String {
     val base = "$zoneId-$label".lowercase()
         .replace(Regex("[^a-z0-9]+"), "-").trim('-')
         .ifBlank { "table" }
@@ -333,7 +333,7 @@ private fun uniqueTableId(zoneId: String, label: String): String {
 }
 
 /** Management-view DTO: identity + geometry, no occupancy (that's /zones' job). */
-private fun tableManagementDto(tableId: String): TableDto {
+internal fun tableManagementDto(tableId: String): TableDto {
     val row = DiningTables.selectAll().where { DiningTables.id eq tableId }.first()
     return TableDto(
         row[DiningTables.id], row[DiningTables.label], row[DiningTables.parentTableId],

@@ -11,6 +11,8 @@ import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.db.utcTimestamp
 import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.restaurant.DiningTables
+import dev.dwhipstock.pos.restaurant.FloorObjects
 import dev.dwhipstock.pos.restaurant.NotFoundException
 import dev.dwhipstock.pos.sdk.VenueClock
 import kotlinx.serialization.Serializable
@@ -29,6 +31,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
@@ -40,7 +43,7 @@ object MenuChangeSets : Table("menu_change_sets") {
     val createdAt = utcTimestamp("created_at")
     val userId = varchar("user_id", 64)
     val approverId = varchar("approver_id", 64)
-    val sourceKind = varchar("source", 16) // photos | chat
+    val sourceKind = varchar("source", 16) // photos | chat | translate | room
     val summary = varchar("summary", 500)
     val revertedAt = utcTimestamp("reverted_at").nullable()
     val revertedBy = varchar("reverted_by", 64).nullable()
@@ -87,6 +90,7 @@ class MenuRevertConflictException(val titles: List<String>) : RuntimeException(
  */
 internal object MenuChangeLog {
     private val json = Json
+    const val ROOM = "room"
 
     class Row(val entity: String, val entityId: String, val action: String, val title: String, val before: JsonObject?)
 
@@ -136,7 +140,33 @@ internal object MenuChangeLog {
     private fun splitTranslationKey(key: String): Triple<String, String, String> =
         Triple(key.substringBefore(':'), key.substringAfter(':').substringBeforeLast(':'), key.substringAfterLast(':'))
 
+    /** A floor-plan table ("set up from picture"): its geometry, label and whether it is removed. */
+    fun tableState(tableId: String): JsonObject? {
+        val row = DiningTables.selectAll().where { DiningTables.id eq tableId }.firstOrNull() ?: return null
+        return buildJsonObject {
+            put("label", row[DiningTables.label]); put("x", row[DiningTables.x]); put("y", row[DiningTables.y])
+            put("width", row[DiningTables.width]); put("height", row[DiningTables.height])
+            put("rotation", row[DiningTables.rotation]); put("shape", row[DiningTables.shape])
+            put("seats", row[DiningTables.seats]); put("deleted", row[DiningTables.deletedAt] != null)
+        }
+    }
+
+    /** A floor object, every column (hard deleted, so a revert re-creates it from this). */
+    fun objectState(objectId: String): JsonObject? {
+        val row = FloorObjects.selectAll().where { FloorObjects.id eq objectId }.firstOrNull() ?: return null
+        return buildJsonObject {
+            put("zoneId", row[FloorObjects.zoneId]); put("type", row[FloorObjects.type])
+            put("x", row[FloorObjects.x]); put("y", row[FloorObjects.y])
+            put("width", row[FloorObjects.width]); put("height", row[FloorObjects.height])
+            put("rotation", row[FloorObjects.rotation])
+            put("labelFr", row[FloorObjects.labelFr]); put("labelEn", row[FloorObjects.labelEn])
+            put("icon", row[FloorObjects.icon]); put("shape", row[FloorObjects.shape])
+        }
+    }
+
     fun state(entity: String, id: String): JsonObject? = when (entity) {
+        "table" -> tableState(id)
+        "floor_object" -> objectState(id)
         "translation" -> translationState(id)
         "item" -> itemState(id)
         "variant" -> variantState(id)
@@ -172,8 +202,11 @@ internal object MenuChangeLog {
 
     // --- history ---
 
-    fun history(limit: Int = 20): List<MenuChangeSetDto> {
-        val sets = MenuChangeSets.selectAll().orderBy(MenuChangeSets.createdAt, SortOrder.DESC).limit(limit).toList()
+    /** [rooms]: the floor-plan sets ("room") only; else the menu ones only. */
+    fun history(limit: Int = 20, rooms: Boolean = false): List<MenuChangeSetDto> {
+        val sets = MenuChangeSets.selectAll()
+            .where { if (rooms) MenuChangeSets.sourceKind eq ROOM else MenuChangeSets.sourceKind neq ROOM }
+            .orderBy(MenuChangeSets.createdAt, SortOrder.DESC).limit(limit).toList()
         val names = Users.selectAll().associate { it[Users.id] to it[Users.name] }
         return sets.map { s ->
             val rows = MenuChangeRows.selectAll().where { MenuChangeRows.setId eq s[MenuChangeSets.id] }.toList()
@@ -236,6 +269,10 @@ internal object MenuChangeLog {
                     val (entity, eid, lang) = splitTranslationKey(id)
                     Translations.set(entity, eid, lang, (before!!["text"] as? JsonPrimitive)?.contentOrNull)
                 }
+                "table" to "create" -> RoomLayoutAi.removeTable(id)
+                "table" to "delete" -> RoomLayoutAi.restoreTable(id)
+                "floor_object" to "create" -> RoomLayoutAi.removeObject(id)
+                "floor_object" to "delete" -> RoomLayoutAi.restoreObject(id, before!!)
                 "category_order" to "reorder" -> {
                     val old = (before!!["order"] as JsonArray).map { it.jsonPrimitive.content }
                     val now = orderState()["order"]!!.let { it as JsonArray }.map { it.jsonPrimitive.content }
