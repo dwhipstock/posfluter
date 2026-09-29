@@ -150,7 +150,24 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWMAXIMIZED);  // a POS fills the tablet
+  // A POS fills the tablet: borderless over the whole monitor (no title bar or
+  // taskbar). POS_WINDOWED=1 in the environment keeps a normal maximized window.
+  wchar_t windowed[4] = {0};
+  if (GetEnvironmentVariableW(L"POS_WINDOWED", windowed, 4) > 0 &&
+      windowed[0] == L'1') {
+    return ShowWindow(window_handle_, SW_SHOWMAXIMIZED);
+  }
+  MONITORINFO mi = {sizeof(mi)};
+  if (!GetMonitorInfo(
+          MonitorFromWindow(window_handle_, MONITOR_DEFAULTTONEAREST), &mi)) {
+    return ShowWindow(window_handle_, SW_SHOWMAXIMIZED);
+  }
+  SetWindowLongPtr(window_handle_, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+  SetWindowPos(window_handle_, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+               mi.rcMonitor.right - mi.rcMonitor.left,
+               mi.rcMonitor.bottom - mi.rcMonitor.top,
+               SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+  return true;
 }
 
 // static

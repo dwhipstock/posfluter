@@ -35,6 +35,14 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
   static const _grid = 20; // snap step, logical units
   static const _shapes = ['ROUND', 'SQUARE', 'RECT', 'BAR'];
 
+  /// Largest side a table may be resized to, by shape (the room is 1000 units):
+  /// a table stays table-sized; round and square ones keep their shape.
+  static int _maxSide(String shape) => switch (shape) {
+    'ROUND' || 'SQUARE' => 260,
+    'BAR' => 600,
+    _ => 420,
+  };
+
   late List<TableInfo> _tables = List.of(widget.zone.tables);
   // structural props (pool/bar/pillar): geometry-editable like tables, but inert
   late List<FloorObject> _objects = List.of(widget.zone.objects);
@@ -119,6 +127,25 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       _tables = [for (final e in _tables) e.id == t.id ? fn(e) : e];
       _dirty = true;
     });
+  }
+
+  /// A resized table, kept table-sized ([_maxSide]) and inside the room;
+  /// round and square tables stay as wide as they are tall.
+  TableInfo _sized(TableInfo e, int w, int h) {
+    final max = _maxSide(e.shape);
+    if (e.shape == 'ROUND' || e.shape == 'SQUARE') {
+      final side = (w > h ? w : h)
+          .clamp(
+            40,
+            [max, 1000 - e.x, 1000 - e.y].reduce((a, b) => a < b ? a : b),
+          )
+          .toInt();
+      return e.copyWith(width: side, height: side);
+    }
+    return e.copyWith(
+      width: w.clamp(40, max < 1000 - e.x ? max : 1000 - e.x).toInt(),
+      height: h.clamp(40, max < 1000 - e.y ? max : 1000 - e.y).toInt(),
+    );
   }
 
   void _mutateObject(
@@ -1111,23 +1138,15 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                 onPanStart: (_) => _pushUndo(),
                 onPanUpdate: (d) => _mutateSelected(
                   snapshot: false,
-                  (e) => e.copyWith(
-                    width: (e.width + d.delta.dx / scale)
-                        .round()
-                        .clamp(40, 1000 - e.x)
-                        .toInt(),
-                    height: (e.height + d.delta.dy / scale)
-                        .round()
-                        .clamp(40, 1000 - e.y)
-                        .toInt(),
+                  (e) => _sized(
+                    e,
+                    (e.width + d.delta.dx / scale).round(),
+                    (e.height + d.delta.dy / scale).round(),
                   ),
                 ),
                 onPanEnd: (_) => _mutateSelected(
                   snapshot: false,
-                  (e) => e.copyWith(
-                    width: _snap(e.width).clamp(40, 1000 - e.x).toInt(),
-                    height: _snap(e.height).clamp(40, 1000 - e.y).toInt(),
-                  ),
+                  (e) => _sized(e, _snap(e.width), _snap(e.height)),
                 ),
                 child: SizedBox(
                   width: 44,
