@@ -565,41 +565,14 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   Widget _menuColumn(L l) {
     if (widget.counterOrder) return _counterMenu(l);
     final visible = _items.where((i) => i.category == _category).toList();
-    return Column(
+    final entries = <(String, String)>[
+      for (final c in _categories) (c.id, l.name(c.nameFr, c.nameEn, c.names)),
+    ];
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 72,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            children: [
-              for (final c in _categories)
-                Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: _CategoryChip(
-                    label: l.name(c.nameFr, c.nameEn, c.names),
-                    selected: c.id == _category,
-                    onTap: () => setState(() => _category = c.id),
-                  ),
-                ),
-              // off-menu line by name + price — lives with the add-item chips
-              OutlinedButton.icon(
-                icon: const Icon(LucideIcons.pencilLine, size: 18),
-                label: Text(
-                  l.openItem,
-                  style: T.text(size: 16, weight: FontWeight.w600),
-                ),
-                onPressed: _check?.status == 'OPEN' ? _addOpenItem : null,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: T.navy,
-                  minimumSize: const Size(0, 48),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                ),
-              ),
-            ],
-          ),
-        ),
+        _categoryRail(l, entries),
+        const VerticalDivider(),
         Expanded(
           child: LayoutBuilder(
             builder: (context, c) {
@@ -611,7 +584,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               final cols = ((avail + gap) / (172 + gap)).floor().clamp(2, 6);
               final tileW = (avail - gap * (cols - 1)) / cols;
               return GridView.builder(
-                padding: const EdgeInsets.fromLTRB(pad, 4, pad, pad),
+                padding: const EdgeInsets.all(pad),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: cols,
                   mainAxisSpacing: gap,
@@ -630,6 +603,57 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   /// Name (two lines) + price block under each tile's photo.
   static const _tileTextHeight = 90.0;
+
+  /// Every category at once on a left rail (no scrolling, nothing hidden),
+  /// with "Open item" pinned at the bottom. Counter and full service share it.
+  Widget _categoryRail(L l, List<(String, String)> entries) {
+    return Container(
+      width: 176,
+      color: T.surface,
+      padding: const EdgeInsets.all(6),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          // all of them fit: the buttons share the height (max 76 each)
+          const gap = 8.0, openItemH = 52.0;
+          final n = entries.length;
+          final h = ((c.maxHeight - openItemH - gap * n) / n).clamp(36.0, 76.0);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (id, label) in entries) ...[
+                SizedBox(
+                  height: h,
+                  child: _RailButton(
+                    key: Key('cat-$id'),
+                    label: label,
+                    selected: id == _category,
+                    onTap: () => setState(() => _category = id),
+                  ),
+                ),
+                const SizedBox(height: gap),
+              ],
+              const Spacer(),
+              SizedBox(
+                height: openItemH,
+                child: OutlinedButton.icon(
+                  icon: const Icon(LucideIcons.pencilLine, size: 18),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(l.openItem, maxLines: 1),
+                  ),
+                  onPressed: _check?.status == 'OPEN' ? _addOpenItem : null,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: T.navy,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   /// Counter: every category at once on a rail (no scrolling), then a dense
   /// grid of small tiles — built for speed, like a fast-food register.
@@ -651,55 +675,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: 176,
-          color: T.surface,
-          padding: const EdgeInsets.all(6),
-          child: LayoutBuilder(
-            builder: (context, c) {
-              // all of them fit: the buttons share the height (max 76 each)
-              const gap = 8.0, openItemH = 52.0;
-              final n = entries.length;
-              final h = ((c.maxHeight - openItemH - gap * n) / n).clamp(
-                36.0,
-                76.0,
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final (id, label) in entries) ...[
-                    SizedBox(
-                      height: h,
-                      child: _RailButton(
-                        key: Key('cat-$id'),
-                        label: label,
-                        selected: id == _category,
-                        onTap: () => setState(() => _category = id),
-                      ),
-                    ),
-                    const SizedBox(height: gap),
-                  ],
-                  const Spacer(),
-                  SizedBox(
-                    height: openItemH,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(LucideIcons.pencilLine, size: 18),
-                      label: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(l.openItem, maxLines: 1),
-                      ),
-                      onPressed: _check?.status == 'OPEN' ? _addOpenItem : null,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: T.navy,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
+        _categoryRail(l, entries),
         const VerticalDivider(),
         Expanded(
           child: LayoutBuilder(
@@ -1070,7 +1046,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 ),
                 // Canada has no pennies: what cash comes to, rounded by the
                 // store (the same figure Pay → Cash and the receipt use)
-                if (widget.counterOrder && check.cashRoundingCents != 0)
+                if (check.cashRoundingCents != 0)
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text(

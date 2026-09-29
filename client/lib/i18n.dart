@@ -1304,6 +1304,43 @@ class L {
     'Abrir turno: aprobación del gerente',
     'Schicht öffnen – Freigabe durch Manager',
   );
+  String get openShiftPromptTitle => _t(
+    'Aucun quart de caisse ouvert',
+    'No cash drawer shift open',
+    'No hay turno de caja abierto',
+    'Keine Kassenschicht offen',
+  );
+  String get openShiftPromptBody => _t(
+    'Aucun quart de caisse n’est ouvert. En ouvrir un maintenant ?',
+    'No cash drawer shift is open. Open one now?',
+    'No hay ningún turno de caja abierto. ¿Abrir uno ahora?',
+    'Es ist keine Kassenschicht offen. Jetzt eine öffnen?',
+  );
+  String get notNow => _t('Plus tard', 'Not now', 'Ahora no', 'Nicht jetzt');
+  String changeDue(String amount) => _t(
+    'Monnaie à rendre : $amount',
+    'Change due $amount',
+    'Cambio a devolver: $amount',
+    'Rückgeld $amount',
+  );
+  String get overDueTitle => _t(
+    'Montant plus élevé que le solde',
+    'Amount is more than the bill',
+    'El monto supera la cuenta',
+    'Betrag höher als die Rechnung',
+  );
+  String overDueBody(String amount, String due) => _t(
+    'Débiter $amount alors qu’il reste $due ?',
+    'Charge $amount when only $due is due?',
+    '¿Cobrar $amount cuando solo se deben $due?',
+    '$amount belasten, obwohl nur $due offen sind?',
+  );
+  String get chargeAnyway => _t(
+    'Débiter quand même',
+    'Charge anyway',
+    'Cobrar de todos modos',
+    'Trotzdem belasten',
+  );
   String get closeShiftApproval => _t(
     'Fermer le quart (Z) — approbation du gérant',
     'Close shift (Z) — manager approval',
@@ -3628,6 +3665,12 @@ class L {
       'The phone reader reports a problem — check the phone’s screen',
       'El teléfono lector tiene un problema: revisa su pantalla',
       'Das Telefon-Lesegerät meldet ein Problem – Anzeige am Telefon prüfen',
+    ),
+    'stripe_not_configured' || 'terminal_not_configured' => _t(
+      'Le terminal de carte n’est pas configuré — Réglages → Paiements',
+      'Card terminal isn’t set up — Settings → Payments',
+      'La terminal de tarjetas no está configurada: Ajustes → Pagos',
+      'Kartenterminal ist nicht eingerichtet – Einstellungen → Zahlungen',
     ),
     'terminal_not_paired' => _t(
       'Terminal non associé — associez-le dans Réglages',

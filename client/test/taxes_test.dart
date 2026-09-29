@@ -65,7 +65,7 @@ void main() {
       ),
     );
     expect(find.text('Subtotal'), findsOneWidget);
-    expect(find.text('\$64'), findsOneWidget);
+    expect(find.text('\$64.00'), findsOneWidget);
     expect(find.text('GST 5%'), findsOneWidget);
     expect(find.text('\$3.20'), findsOneWidget);
     expect(find.text('QST 9.975%'), findsOneWidget);

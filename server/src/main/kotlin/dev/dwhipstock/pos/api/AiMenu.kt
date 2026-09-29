@@ -116,7 +116,7 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
             }
             part.dispose()
         }
-        val who = call.aiCaller(requireManagerApproval(auth, managerPin))
+        val who = call.aiCaller(requireManagerOrPin(auth, call, managerPin))
         call.respond(onIo { ai.fromPhotos(images, note, who) })
     }
 
@@ -187,14 +187,14 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
     post("/menu-ai/chat") {
         requireManagerSession(call)
         val req = call.receive<MenuAiChatRequest>()
-        val who = call.aiCaller(requireManagerApproval(auth, req.managerPin))
+        val who = call.aiCaller(requireManagerOrPin(auth, call, req.managerPin))
         call.respond(onIo { ai.chat(req.text, who) })
     }
 
     post("/menu-ai/chat/voice") {
         requireManagerSession(call)
         val (pin, audio) = call.receiveVoice()
-        val who = call.aiCaller(requireManagerApproval(auth, pin))
+        val who = call.aiCaller(requireManagerOrPin(auth, call, pin))
         call.respond(onIo { ai.chat("", who, audio) })
     }
 
@@ -224,14 +224,14 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
     post("/menu-ai/translate") {
         requireManagerSession(call)
         val req = call.receive<MenuAiTranslateRequest>()
-        val who = call.aiCaller(requireManagerApproval(auth, req.managerPin))
+        val who = call.aiCaller(requireManagerOrPin(auth, call, req.managerPin))
         call.respond(onIo { ai.translate(who) })
     }
 
     post("/menu-ai/apply") {
         requireManagerSession(call)
         val req = call.receive<MenuAiApplyRequest>()
-        val approver = requireManagerApproval(auth, req.managerPin)
+        val approver = requireManagerOrPin(auth, call, req.managerPin)
         val user = call.sessionUser().userId
         call.respond(onIo { ai.apply(req.proposalId, req.changeIds, user, approver, req.confirmed) })
     }
@@ -249,7 +249,7 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
     post("/menu-ai/history/{setId}/revert") {
         requireManagerSession(call)
         val req = runCatching { call.receive<MenuAiRevertRequest>() }.getOrDefault(MenuAiRevertRequest())
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         val user = call.sessionUser().userId
         val n = onIo { ai.revert(call.parameters["setId"]!!, user, req.force) }
         call.respond(mapOf("reverted" to n))

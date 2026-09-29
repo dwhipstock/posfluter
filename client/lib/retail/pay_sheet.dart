@@ -5,6 +5,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
 import '../payments/terminal.dart';
+import '../widgets/open_shift_prompt.dart';
 import 'retail_i18n.dart';
 import 'sp_theme.dart';
 
@@ -143,7 +144,8 @@ class _PaySheetState extends State<PaySheet> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await op();
+      // no drawer shift yet: offer to open one right here, then carry on
+      await withOpenShift(context, op);
     } catch (e) {
       if (mounted) showApiError(context, e);
     } finally {

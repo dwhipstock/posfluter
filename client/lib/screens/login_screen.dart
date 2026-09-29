@@ -8,6 +8,7 @@ import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
 import '../widgets/brand.dart';
+import '../widgets/open_shift_prompt.dart';
 import '../widgets/pin_pad.dart';
 import '../home.dart';
 import '../retail/retail_i18n.dart';
@@ -62,6 +63,9 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await Api.login(pin);
+      if (!mounted) return;
+      // a manager signing in to a store with no drawer shift: offer one
+      if (!AppMode.isStock) await offerShiftAtSignIn(context);
       if (!mounted) return;
       Navigator.of(
         context,

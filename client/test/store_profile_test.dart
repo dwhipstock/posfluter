@@ -27,17 +27,17 @@ void main() {
     expect(money(1299), '\$12.99');
   });
 
-  test('CAD keeps the pubs\' house style, North American in every language', () {
-    expect(money(101000), '\$1,010'); // default profile: the pubs, unchanged
+  test('CAD: two decimals, North American in every language', () {
+    expect(money(101000), '\$1,010.00'); // default profile: the pubs
     expect(money(21550), '\$215.50');
     expect(cad(21550), '\$215.50');
     expect(formatMoney(1299, 'CAD', lang: 'fr-CA'), '\$12.99');
     expect(formatMoney(123450, 'CAD', lang: 'fr-CA'), '\$1,234.50');
-    expect(formatMoney(101000, 'CAD', lang: 'fr'), '\$1,010');
+    expect(formatMoney(101000, 'CAD', lang: 'fr'), '\$1,010.00');
     expect(formatMoney(-50, 'CAD', lang: 'fr'), '-\$0.50');
     // money() ignores the UI language: always symbol first, period decimal
     Prefs.instance.lang = 'fr';
-    expect(money(4000), '\$40');
+    expect(money(4000), '\$40.00');
     expect(money(1050), '\$10.50');
     expect(money(1050, lang: 'en'), '\$10.50');
     expect(money(1299, currency: 'USD'), '\$12.99');
@@ -157,7 +157,7 @@ void main() {
 
   test('German dates; money stays North American', () {
     expect(formatMoney(123456, 'CAD', lang: 'de'), '\$1,234.56');
-    expect(formatMoney(101000, 'CAD', lang: 'de'), '\$1,010');
+    expect(formatMoney(101000, 'CAD', lang: 'de'), '\$1,010.00');
     expect(formatMoney(1299, 'USD', lang: 'de'), '\$12.99');
     expect(formatMoney(-500, 'USD', lang: 'de'), '-\$5.00');
     expect(const L.forLang('de').retry, 'Erneut versuchen');

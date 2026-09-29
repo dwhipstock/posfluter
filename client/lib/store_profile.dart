@@ -104,9 +104,7 @@ class StoreProfile {
 /// Always North American style, whatever the UI language (owner's rule):
 /// symbol first, period decimal, comma thousands.
 ///
-/// - CAD (the pubs): the house style they always had — `$1,010` for whole
-///   dollars, `$10.50` otherwise.
-/// - USD: `$12.99`, `$5.00` — US shelf style, always with cents.
+/// - CAD and USD: `$12.99`, `$8.00`, `$1,010.00` — always two decimals.
 ///
 /// [lang] is kept for compatibility and ignored.
 String money(int cents, {String? currency, String? lang}) =>
@@ -119,8 +117,8 @@ String signedMoney(int cents, {String? currency}) {
   return cents < 0 ? '−$abs' : '+$abs';
 }
 
-/// North American money text: `$1,234.56`, `-$5.00` (CAD whole dollars:
-/// `$1,010`). [lang] is kept for compatibility and ignored — money never
+/// North American money text: `$1,234.56`, `-$5.00`, `$8.00` — always
+/// with cents. [lang] is kept for compatibility and ignored — money never
 /// changes shape with the UI language.
 String formatMoney(int cents, String currency, {String lang = 'en'}) {
   final sign = cents < 0 ? '-' : '';
@@ -134,7 +132,6 @@ String formatMoney(int cents, String currency, {String lang = 'en'}) {
   final cc = frac.toString().padLeft(2, '0');
   switch (currency.toUpperCase()) {
     case 'CAD':
-      return frac == 0 ? '$sign\$$grouped' : '$sign\$$grouped.$cc';
     case 'USD':
       return '$sign\$$grouped.$cc';
     default:

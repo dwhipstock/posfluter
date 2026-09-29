@@ -298,6 +298,17 @@ fun requireManagerApproval(auth: AuthService, managerPin: String?): String =
     managerPin?.let { auth.verifyManagerPin(it) } ?: throw ManagerApprovalException()
 
 /**
+ * The AI actions (menu setup, translate, AI photos): a manager's own session
+ * is the approval — no second PIN. Any other session still needs the inline
+ * manager PIN. Returns the approving manager's user id.
+ */
+fun requireManagerOrPin(auth: AuthService, call: ApplicationCall, managerPin: String?): String {
+    val actor = call.attributes.getOrNull(SessionUserKey)
+    if (actor?.role == "MANAGER") return actor.userId
+    return requireManagerApproval(auth, managerPin?.takeIf { it.isNotBlank() })
+}
+
+/**
  * Grant-based gate (CONTRACT §7): if the acting (logged-in) user already has
  * [permission], allow directly and return their id; otherwise fall back to the
  * inline manager-PIN override — a PIN of anyone who has the permission — and

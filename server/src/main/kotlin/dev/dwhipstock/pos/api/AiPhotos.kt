@@ -47,7 +47,7 @@ fun Route.aiPhotoRoutes(ai: AiPhotoService, photos: PhotoStore, auth: AuthServic
     post("/items/{itemId}/ai-photo/generate") {
         val itemId = call.parameters["itemId"]!!
         val req = runCatching { call.receive<AiGenerateRequest>() }.getOrDefault(AiGenerateRequest())
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         val facts = itemFacts(itemId)
         call.respond(onIo { ai.generate(itemId, facts, req.count) })
     }
@@ -72,7 +72,7 @@ fun Route.aiPhotoRoutes(ai: AiPhotoService, photos: PhotoStore, auth: AuthServic
             }
             part.dispose()
         }
-        requireManagerApproval(auth, managerPin)
+        requireManagerOrPin(auth, call, managerPin)
         val facts = itemFacts(itemId)
         var data = bytes ?: throw IllegalArgumentException("photo file part required")
         require(contentType in ALLOWED_TYPES) { "only JPEG or PNG photos are supported" }
@@ -87,7 +87,7 @@ fun Route.aiPhotoRoutes(ai: AiPhotoService, photos: PhotoStore, auth: AuthServic
     post("/items/{itemId}/ai-photo/choose") {
         val itemId = call.parameters["itemId"]!!
         val req = call.receive<AiChooseRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         itemFacts(itemId) // 404 for an unknown item
         val (image, source) = ai.take(itemId, req.candidateId)
             ?: throw NotFoundException("that AI photo has expired; generate again")

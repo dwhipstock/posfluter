@@ -9,6 +9,7 @@ import '../i18n.dart';
 import '../payments/card_reader.dart';
 import '../payments/terminal.dart';
 import 'receipt_screen.dart';
+import '../widgets/open_shift_prompt.dart';
 import '../widgets/tax_rows.dart';
 
 /// Split-tender payment. Three big method tiles across the top, outstanding
@@ -150,19 +151,47 @@ class _TenderScreenState extends State<TenderScreen> {
     }
   }
 
-  /// Quick strip: exact cash due, then round-ups to the next 100 / 500 / 1000.
-  List<int> get _quickAmounts {
-    int ceilTo(int unitCents) =>
-        ((_cashDue + unitCents - 1) ~/ unitCents) * unitCents;
-    return {_cashDue, ceilTo(10000), ceilTo(50000), ceilTo(100000)}.toList()
-      ..sort();
+  List<int> get _quickAmounts => quickCashAmounts(_cashDue);
+
+  /// Card-like tenders: an amount above what is due needs a yes first.
+  Future<bool> _confirmNotOverDue(int? amountCents) async {
+    if (amountCents == null || amountCents <= _due) return true;
+    final l = L.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('over-due-confirm'),
+        title: Text(l.overDueTitle),
+        content: Text(l.overDueBody(money(amountCents), money(_due))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.chargeAnyway),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  /// Why "Use card terminal" can't be used: the store has an integrated
+  /// terminal (GET /payments/terminal) and it isn't available. null = go.
+  String? get _cardBlocked {
+    final st = _terminal;
+    if (st == null || st.kind == 'external' || st.available) return null;
+    return st.reason ?? 'terminal_unavailable';
   }
 
   Future<void> _guard(Future<void> Function() op) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await op();
+      // no drawer shift yet: offer to open one right here, then carry on
+      await withOpenShift(context, op);
     } catch (e) {
       if (mounted) showApiError(context, e);
     } finally {
@@ -198,8 +227,13 @@ class _TenderScreenState extends State<TenderScreen> {
     }
   });
 
-  Future<void> _showInstructions(String type) => _guard(() async {
+  Future<void> _showInstructions(String type) async {
     final amount = _entryCAD == null ? null : _entryCAD! * 100;
+    if (!await _confirmNotOverDue(amount) || !mounted) return;
+    await _startInstructions(type, amount);
+  }
+
+  Future<void> _startInstructions(String type, int? amount) => _guard(() async {
     final instructions = await Api.initiateTender(
       _check.id,
       type,
@@ -246,6 +280,7 @@ class _TenderScreenState extends State<TenderScreen> {
     final st = _stripe;
     if (_busy || st == null || _stripeBlocked != null) return;
     final amount = _entryCAD == null ? null : _entryCAD! * 100;
+    if (!await _confirmNotOverDue(amount) || !mounted) return;
     await _runCardPayment(
       StripeCardPayment(
         locationId: st.locationId!,
@@ -261,6 +296,7 @@ class _TenderScreenState extends State<TenderScreen> {
     final st = _terminal;
     if (_busy || st == null || _terminalBlocked != null) return;
     final amount = _entryCAD == null ? null : _entryCAD! * 100;
+    if (!await _confirmNotOverDue(amount) || !mounted) return;
     await _runCardPayment(
       StoreTerminalCardPayment(
         status: st,
@@ -429,156 +465,187 @@ class _TenderScreenState extends State<TenderScreen> {
         ),
         actions: const [LangActions()],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: LayoutBuilder(
+        builder: (context, c) {
+          final summary = <Widget>[
+            // outstanding, prominent
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // outstanding, prominent
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(l.outstanding, style: T.text(weight: FontWeight.w600)),
-                    Text(
-                      money(_due),
-                      style: T.price(size: 44, weight: FontWeight.w700),
-                    ),
-                  ],
+                Text(l.outstanding, style: T.text(weight: FontWeight.w600)),
+                Text(
+                  money(_due),
+                  style: T.price(size: 44, weight: FontWeight.w700),
                 ),
-                // what the total is made of: pre-tax subtotal + GST / QST
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: TaxRows(
-                    subtotalCents:
-                        _group?.subtotalCents ?? _check.subtotalCents,
-                    taxes: _group?.taxes ?? _check.taxes,
-                    priceSize: 15,
-                  ),
-                ),
-                if ((_group?.paidCents ?? _check.paidCents) > 0)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      l.paidOf(
-                        money(_group?.paidCents ?? _check.paidCents),
-                        money(
-                          _group?.grandTotalCents ?? _check.grandTotalCents,
-                        ),
-                      ),
-                      style: T.small(),
-                    ),
-                  ),
-                // cash only: the server's nickel rounding and what to collect
-                if (_method == 'CASH' && _cashRounding != 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: PosPanel(
-                      key: const ValueKey('cash-rounding'),
-                      color: T.surfaceAlt,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Column(
-                        children: [
-                          _row(l.rounding, signedMoney(_cashRounding)),
-                          _row(l.cashTotal, money(_cashDue), bigValue: true),
-                        ],
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 16),
-                // three big method tiles
-                Row(
-                  children: [
-                    _methodTile('CASH', LucideIcons.banknote, l.cash),
-                    const SizedBox(width: 8),
-                    _methodTile('CARD', LucideIcons.creditCard, l.card),
-                    const SizedBox(width: 8),
-                    _methodTile(
-                      'BANK_TRANSFER',
-                      LucideIcons.landmark,
-                      l.bankTransfer,
-                    ),
-                    if (_stripeShown) ...[
-                      const SizedBox(width: 8),
-                      _methodTile(
-                        'STRIPE',
-                        LucideIcons.nfc,
-                        l.cardStripe,
-                        enabled: _stripeBlocked == null,
-                      ),
-                    ],
-                    if (_terminalShown) ...[
-                      const SizedBox(width: 8),
-                      _methodTile(
-                        'TERMINAL',
-                        LucideIcons.nfc,
-                        l.cardTerminalTender,
-                        enabled: _terminalBlocked == null,
-                      ),
-                    ],
-                  ],
-                ),
-                if (_terminalShown && _terminalBlocked != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          LucideIcons.wifiOff,
-                          size: 16,
-                          color: T.textMuted,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            l.terminalUnavailableHint(_terminalBlocked),
-                            key: const ValueKey('terminal-hint'),
-                            style: T.small(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (_stripeShown && _stripeBlocked != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          LucideIcons.wifiOff,
-                          size: 16,
-                          color: T.textMuted,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            l.stripeUnavailableHint(_stripeBlocked),
-                            key: const ValueKey('stripe-hint'),
-                            style: T.small(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 20),
-                if (_method == 'CASH')
-                  _cashSection(l)
-                else if (_method == 'STRIPE')
-                  _stripeSection(l)
-                else if (_method == 'TERMINAL')
-                  _terminalSection(l)
-                else
-                  _electronicSection(_method, l),
               ],
             ),
-          ),
-        ),
+            // what the total is made of: pre-tax subtotal + GST / QST
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TaxRows(
+                subtotalCents: _group?.subtotalCents ?? _check.subtotalCents,
+                taxes: _group?.taxes ?? _check.taxes,
+                priceSize: 15,
+              ),
+            ),
+            if ((_group?.paidCents ?? _check.paidCents) > 0)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  l.paidOf(
+                    money(_group?.paidCents ?? _check.paidCents),
+                    money(_group?.grandTotalCents ?? _check.grandTotalCents),
+                  ),
+                  style: T.small(),
+                ),
+              ),
+            // cash only: the server's nickel rounding and what to collect
+            if (_method == 'CASH' && _cashRounding != 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: PosPanel(
+                  key: const ValueKey('cash-rounding'),
+                  color: T.surfaceAlt,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Column(
+                    children: [
+                      _row(l.rounding, signedMoney(_cashRounding)),
+                      _row(l.cashTotal, money(_cashDue), bigValue: true),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            // three big method tiles
+            Row(
+              children: [
+                _methodTile('CASH', LucideIcons.banknote, l.cash),
+                const SizedBox(width: 8),
+                _methodTile('CARD', LucideIcons.creditCard, l.card),
+                const SizedBox(width: 8),
+                _methodTile(
+                  'BANK_TRANSFER',
+                  LucideIcons.landmark,
+                  l.bankTransfer,
+                ),
+                if (_stripeShown) ...[
+                  const SizedBox(width: 8),
+                  _methodTile(
+                    'STRIPE',
+                    LucideIcons.nfc,
+                    l.cardStripe,
+                    enabled: _stripeBlocked == null,
+                  ),
+                ],
+                if (_terminalShown) ...[
+                  const SizedBox(width: 8),
+                  _methodTile(
+                    'TERMINAL',
+                    LucideIcons.nfc,
+                    l.cardTerminalTender,
+                    enabled: _terminalBlocked == null,
+                  ),
+                ],
+              ],
+            ),
+            // on Card the same reason shows by its button instead
+            if (_terminalShown && _terminalBlocked != null && _method != 'CARD')
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.wifiOff,
+                      size: 16,
+                      color: T.textMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        l.terminalUnavailableHint(_terminalBlocked),
+                        key: const ValueKey('terminal-hint'),
+                        style: T.small(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_stripeShown && _stripeBlocked != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.wifiOff,
+                      size: 16,
+                      color: T.textMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        l.stripeUnavailableHint(_stripeBlocked),
+                        key: const ValueKey('stripe-hint'),
+                        style: T.small(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ];
+          final section = _method == 'CASH'
+              ? _cashSection(l)
+              : _method == 'STRIPE'
+              ? _stripeSection(l)
+              : _method == 'TERMINAL'
+              ? _terminalSection(l)
+              : _electronicSection(_method, l);
+          // landscape tablet / desktop: summary + tenders left, keypad and the
+          // primary button right — no scrolling to reach "Receive"
+          if (c.maxWidth >= 900) {
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1180),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: summary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        key: const Key('pay-right-column'),
+                        padding: const EdgeInsets.all(20),
+                        child: section,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [...summary, const SizedBox(height: 20), section],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -610,6 +677,8 @@ class _TenderScreenState extends State<TenderScreen> {
             borderColor: selected ? T.primary : T.border,
             onTap: enabled
                 ? () => setState(() {
+                    // an amount typed for cash must never carry over to a card
+                    if (_method != value) _entry = '';
                     _method = value;
                     _instructions = null;
                   })
@@ -739,7 +808,7 @@ class _TenderScreenState extends State<TenderScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // quick-amount strip: exact cash due + next-100/500/1000 round-ups
+        // quick-amount strip: exact cash due + the next bills up
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -768,6 +837,23 @@ class _TenderScreenState extends State<TenderScreen> {
         ),
         const SizedBox(height: 14),
         _entryDisplay(l, hint: l.cashInHint),
+        // live: what to hand back, as soon as the cash covers the total
+        if (_entryCAD != null && _entryCAD! * 100 > _cashDue)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                l.changeDue(money(_entryCAD! * 100 - _cashDue)),
+                key: const Key('change-due'),
+                style: T.price(
+                  size: 22,
+                  weight: FontWeight.w700,
+                  color: T.primary,
+                ),
+              ),
+            ),
+          ),
         const SizedBox(height: 8),
         AmountPad(onKey: _numpadKey),
         const SizedBox(height: 10),
@@ -788,6 +874,7 @@ class _TenderScreenState extends State<TenderScreen> {
   Widget _electronicSection(String type, L l) {
     final instructions = _instructions;
     if (instructions == null) {
+      final blocked = type == 'CARD' ? _cardBlocked : null;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -795,6 +882,28 @@ class _TenderScreenState extends State<TenderScreen> {
           const SizedBox(height: 8),
           AmountPad(onKey: _numpadKey),
           const SizedBox(height: 10),
+          // the terminal isn't there: say why instead of a dead button
+          if (blocked != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const Icon(
+                    LucideIcons.wifiOff,
+                    size: 16,
+                    color: T.destructive,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      l.terminalUnavailableHint(blocked),
+                      key: const ValueKey('card-blocked-hint'),
+                      style: T.small(color: T.destructive),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           SizedBox(
             height: T.minTouch,
             child: FilledButton.icon(
@@ -804,7 +913,10 @@ class _TenderScreenState extends State<TenderScreen> {
               label: Text(
                 type == 'CARD' ? l.useCardTerminal : l.showBankAccount,
               ),
-              onPressed: _busy ? null : () => _showInstructions(type),
+              key: ValueKey('electronic-start-$type'),
+              onPressed: _busy || blocked != null
+                  ? null
+                  : () => _showInstructions(type),
             ),
           ),
         ],
@@ -850,4 +962,16 @@ class _TenderScreenState extends State<TenderScreen> {
       ],
     );
   }
+}
+
+/// The quick-cash strip: the exact cash total, then the next $5, $10, $20,
+/// $50 and $100 above it — no duplicates, at most five buttons.
+List<int> quickCashAmounts(int cashDueCents) {
+  if (cashDueCents <= 0) return const [];
+  int ceilTo(int unitCents) => (cashDueCents ~/ unitCents + 1) * unitCents;
+  final amounts = <int>{
+    cashDueCents,
+    for (final bill in const [500, 1000, 2000, 5000, 10000]) ceilTo(bill),
+  }.where((a) => a > 0).toList()..sort();
+  return amounts.take(5).toList();
 }
