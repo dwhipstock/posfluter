@@ -68,7 +68,7 @@ if [[ "$STORE" == true ]]; then
     if [[ -n "$KEY" && "$KEY" != replace-* ]] && curl -fsS http://localhost:8081/health >/dev/null 2>&1; then
       SYNC_URL="http://localhost:8081"
     fi
-    echo "Starting Copper Lantern — Express on :$PORT…"
+    echo "Starting Copper Lantern — Express on :${PORT}…"
     (
       cd "$DIR"
       POS_VENUE=express POS_PORT="$PORT" POS_DB="$DIR/pos.db" \
@@ -107,7 +107,7 @@ if [[ -n "$KIOSK" ]]; then
     cp "$REPO_ROOT/client/build/app/outputs/flutter-apk/app-release.apk" "$APK"
   fi
   [[ -f "$APK" ]] || { echo "ERROR: no kiosk APK at $APK" >&2; exit 1; }
-  echo "Installing the kiosk on $KIOSK…"
+  echo "Installing the kiosk on ${KIOSK}…"
   adb -s "$KIOSK" install -r "$APK" >/dev/null
   # am start, not monkey (monkey resets the rotation)
   ACTIVITY="$(adb -s "$KIOSK" shell cmd package resolve-activity --brief dev.dwhipstock.pos_kiosk | tr -d '\r' | tail -1)"
