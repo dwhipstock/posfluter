@@ -13,8 +13,8 @@
 // Each client offers some of these (its brand pack's `locales`, e.g. fr/en for
 // a Québec pub, en/es for a California shop). Spanish (US) lives in
 // messages.es.ts, keyed by the same MsgKey — a missing Spanish key is a
-// compile error.
-export type Locale = "fr" | "en" | "es";
+// compile error. German lives in messages.de.ts, the same way.
+export type Locale = "fr" | "en" | "es" | "de";
 
 type Msg = { fr: string; en: string };
 

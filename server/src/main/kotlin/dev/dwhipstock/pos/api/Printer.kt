@@ -165,9 +165,13 @@ private val wifiPrintJson = kotlinx.serialization.json.Json { ignoreUnknownKeys 
 /** The pubs' pair; guest slips print English first, then the store's other languages. */
 internal val SLIP_LOCALES = listOf(LocaleCode.EN, LocaleCode.FR)
 
-/** A store's languages in slip order: English first (guests from anywhere), then the rest. */
+/**
+ * A store's languages in slip order: English first (guests from anywhere),
+ * then its next one. Two at most: a four-language store (Copper Lantern's
+ * staff also speak es / de) still prints the slip in English and French.
+ */
 internal fun slipLocales(config: CustomerConfig): List<LocaleCode> =
-    config.profile.locales.sortedBy { if (it == LocaleCode.EN) 0 else 1 }
+    config.profile.locales.sortedBy { if (it == LocaleCode.EN) 0 else 1 }.take(2)
 
 /** Guests read these: each message printed in every one of [locales]. */
 private fun bilingual(key: MessageKey, locales: List<LocaleCode>): List<String> =

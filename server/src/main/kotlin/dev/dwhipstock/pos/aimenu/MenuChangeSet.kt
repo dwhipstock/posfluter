@@ -36,6 +36,8 @@ sealed class MenuOp {
     data class RemoveItem(val itemId: String) : MenuOp()
     data class RenameCategory(val categoryId: String, val nameEn: String?, val nameFr: String?) : MenuOp()
     data class ReorderCategories(val order: List<String>) : MenuOp()
+    /** "Translate menu": an item's or category's name in one of the store's extra languages (es, de). */
+    data class SetName(val entity: String, val id: String, val lang: String, val name: String) : MenuOp()
 }
 
 /** What the model may refer to: the live menu when the proposal was made. */
@@ -43,6 +45,8 @@ class MenuFacts(
     val categoryIds: List<String>,
     /** item id → its live variant ids. */
     val itemVariants: Map<String, List<String>>,
+    /** The store's languages beyond fr / en, which set_name may fill. */
+    val extraLangs: Set<String> = emptySet(),
 )
 
 class ParsedChangeSet(val summary: String, val ops: List<MenuOp>, val rejected: List<String>)
@@ -168,6 +172,20 @@ object MenuChangeSetParser {
                 val fr = name("nameFr", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() }
                 require(en != null || fr != null) { "a new name is required" }
                 MenuOp.RenameCategory(id, en, fr)
+            }
+            "set_name" -> {
+                val entity = o["entity"].s()
+                val id = o["id"].s()
+                when (entity) {
+                    "item" -> require(id != null && id in facts.itemVariants) { "unknown item '$id'" }
+                    "category" -> require(id != null && id in facts.categoryIds) { "unknown category '$id'" }
+                    else -> throw IllegalArgumentException("entity must be item or category")
+                }
+                val lang = o["lang"].s()?.trim()?.lowercase()
+                require(lang != null && lang in facts.extraLangs) { "language '$lang' is not one of ${facts.extraLangs}" }
+                val text = name("name", MAX_ITEM_NAME)
+                require(!text.isNullOrEmpty()) { "a name is required" }
+                MenuOp.SetName(entity, id!!, lang, text)
             }
             "reorder_categories" -> {
                 val order = (o["order"] as? JsonArray)?.map { it.s() ?: "" }

@@ -13,6 +13,7 @@ import dev.dwhipstock.pos.api.VariantPatchRequest
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.restaurant.NotFoundException
 import dev.dwhipstock.pos.sdk.MenuAiConfig
 import dev.dwhipstock.pos.sdk.Money
@@ -114,6 +115,8 @@ class MenuAiService(
 
     val enabled: Boolean get() = config.enabled && provider != null
     private val bilingual = LocaleCode.FR in profile.locales && LocaleCode.EN in profile.locales
+    /** The store's languages beyond the fr / en catalog slots (Copper Lantern: es, de). */
+    private val extraLangs = profile.locales.map { it.tag }.filter { it !in Translations.SLOTS }.toSet()
     private val fractionDigits = runCatching { java.util.Currency.getInstance(profile.currency).defaultFractionDigits }
         .getOrDefault(2).coerceAtLeast(0)
 
@@ -180,12 +183,53 @@ class MenuAiService(
         return RoomObjectSuggest.parse(reply, bilingual, p.id, p.model)
     }
 
-    private fun propose(task: String, images: List<MenuImage>, source: String): MenuProposalDto {
+    /**
+     * "Translate menu": the names of items and categories that have no name
+     * yet in one of the store's extra languages (es, de) → a proposal of
+     * set_name changes, previewed, applied and revertable like any other.
+     * Nothing missing → an empty proposal, without calling the model.
+     */
+    fun translate(): MenuProposalDto {
+        val p = requireProvider()
+        require(extraLangs.isNotEmpty()) { "this store has no languages beyond French and English" }
+        val missing = transaction { missingNames() }
+        if (missing.isEmpty()) return MenuProposalDto("", p.id, p.model, "", emptyList(), emptyList(), 0)
+        val list = missing.joinToString("\n") { (entity, id, en, fr, langs) ->
+            "- $entity $id: en \"$en\" / fr \"$fr\" → ${langs.joinToString(", ")}"
+        }
+        val task = "Translate menu names. For each line below, propose one set_name op per language listed " +
+            "after the arrow (${extraLangs.joinToString(", ")}), using the English and French names given. " +
+            "Write natural menu names a restaurant in that language would print, short enough for a button; " +
+            "keep brand and proper names (and dish names customers know as is). Propose nothing else.\n$list"
+        return propose(task, emptyList(), "translate", includeMenu = false)
+    }
+
+    /** Items and categories lacking a name in some extra language: (entity, id, en, fr, langs). Inside a transaction. */
+    private fun missingNames(): List<Missing> {
+        val items = Translations.of(Translations.ITEM)
+        val cats = Translations.of(Translations.CATEGORY)
+        fun langs(have: Map<String, String>?) = extraLangs.filter { have?.get(it).isNullOrBlank() }
+        return Categories.selectAll().orderBy(Categories.sortOrder).mapNotNull { c ->
+            val id = c[Categories.id]
+            langs(cats[id]).takeIf { it.isNotEmpty() }
+                ?.let { Missing("category", id, c[Categories.nameEn], c[Categories.nameFr], it) }
+        } + Items.selectAll().where { Items.deletedAt.isNull() }.take(MAX_ITEMS_IN_PROMPT).mapNotNull { i ->
+            val id = i[Items.id]
+            langs(items[id]).takeIf { it.isNotEmpty() }
+                ?.let { Missing("item", id, i[Items.nameEn], i[Items.nameFr], it) }
+        }
+    }
+
+    private data class Missing(val entity: String, val id: String, val en: String, val fr: String, val langs: List<String>)
+
+    private fun propose(
+        task: String, images: List<MenuImage>, source: String, includeMenu: Boolean = true,
+    ): MenuProposalDto {
         val p = requireProvider()
         val (menuJson, facts) = transaction { menuContext() }
         val started = now()
         val reply = try {
-            p.complete(systemPrompt(), "Current menu (JSON):\n$menuJson\n\n$task", images)
+            p.complete(systemPrompt(), if (includeMenu) "Current menu (JSON):\n$menuJson\n\n$task" else task, images)
         } catch (e: ImageGenException) {
             if (e.code == ImageGenException.UNAVAILABLE) probe = false to now()
             log.info("AI menu via ${p.id} failed: ${e.code} ${e.message}")
@@ -233,6 +277,7 @@ class MenuAiService(
             {"op":"remove_item","item":"<item id>"}
             {"op":"rename_category","category":"<category id>","nameEn":"","nameFr":""}
             {"op":"reorder_categories","order":["<category id or new: ref>", ...]}
+            ${if (extraLangs.isEmpty()) "" else "{\"op\":\"set_name\",\"entity\":\"item\" or \"category\",\"id\":\"<id>\",\"lang\":\"${extraLangs.joinToString("\" or \"")}\",\"name\":\"\"}  (only when asked to translate)"}
             Rules:
             - Prices are whole numbers in the minor unit of ${profile.currency} (${fractionDigits} decimals: ${
                 "1" + "0".repeat(fractionDigits)} = 1 ${profile.currency}). Never a string, never a decimal.
@@ -275,7 +320,8 @@ class MenuAiService(
             }
         }
         val facts = MenuFacts(cats.map { it[Categories.id] },
-            items.associate { i -> i[Items.id] to variants[i[Items.id]].orEmpty().map { it[ItemVariants.id] } })
+            items.associate { i -> i[Items.id] to variants[i[Items.id]].orEmpty().map { it[ItemVariants.id] } },
+            extraLangs)
         return json.toString() to facts
     }
 
@@ -329,6 +375,11 @@ class MenuAiService(
             val row = Categories.selectAll().where { Categories.id eq op.categoryId }.first()
             MenuChangeDto(id, "rename_category", pick(row[Categories.nameEn], row[Categories.nameFr]), details = listOfNotNull(
                 changed("nameEn", row[Categories.nameEn], op.nameEn), changed("nameFr", row[Categories.nameFr], op.nameFr)))
+        }
+        is MenuOp.SetName -> {
+            val title = if (op.entity == "item") itemTitle(op.id) else categoryName(op.id, ops)
+            MenuChangeDto(id, "set_name", title, details = listOf(MenuChangeDetail("name", op.lang,
+                Translations.get(op.entity, op.id, op.lang), op.name)))
         }
         is MenuOp.ReorderCategories -> {
             val before = Categories.selectAll().orderBy(Categories.sortOrder)
@@ -434,6 +485,15 @@ class MenuAiService(
                 val title = Categories.selectAll().where { Categories.id eq op.categoryId }.first()
                     .let { pick(it[Categories.nameEn], it[Categories.nameFr]) }
                 rows += MenuChangeLog.Row("category", op.categoryId, "update", title, before)
+            }
+            is MenuOp.SetName -> {
+                val key = MenuChangeLog.translationKey(op.entity, op.id, op.lang)
+                val before = MenuChangeLog.translationState(key)
+                val title = if (op.entity == "item") itemTitle(op.id)
+                    else Categories.selectAll().where { Categories.id eq op.id }.firstOrNull()
+                        ?.let { pick(it[Categories.nameEn], it[Categories.nameFr]) } ?: op.id
+                Translations.set(op.entity, op.id, op.lang, op.name)
+                rows += MenuChangeLog.Row("translation", key, "update", "$title (${op.lang})", before)
             }
             is MenuOp.ReorderCategories -> {
                 val before = MenuChangeLog.orderState()

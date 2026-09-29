@@ -485,7 +485,11 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     'PILLAR' => l.objectPillar,
     _ =>
       l.objectTypeName(o.type) ??
-          l.name(o.labelFr ?? o.labelEn ?? '', o.labelEn ?? o.labelFr ?? ''),
+          l.name(
+            o.labelFr ?? o.labelEn ?? '',
+            o.labelEn ?? o.labelFr ?? '',
+            o.names,
+          ),
   };
 
   void _undoLast() {
@@ -541,7 +545,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            l.editLayoutTitle(l.name(widget.zone.nameFr, widget.zone.nameEn)),
+            l.editLayoutTitle(
+              l.name(widget.zone.nameFr, widget.zone.nameEn, widget.zone.names),
+            ),
           ),
           actions: [
             // independent editor controls: dot-grid dropdown (off + 3 sizes) +

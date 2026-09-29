@@ -15,6 +15,7 @@ import dev.dwhipstock.pos.sdk.StoreProfile
 import dev.dwhipstock.pos.sdk.TaxComponent
 import dev.dwhipstock.pos.sdk.TaxPolicy
 import dev.dwhipstock.pos.sdk.TenderMethod
+import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import java.math.BigDecimal
 
 /**
@@ -42,8 +43,12 @@ class CopperLanternConfig(
     override val displayName = venue.displayName
     override val venueId = venue.id
     override val brand = "copper-lantern"
-    // Montréal: Canada, CAD, French + English (StoreProfile.QUEBEC_PUB)
-    override val profile = StoreProfile.QUEBEC_PUB
+    // Montréal: Canada, CAD, French + English (StoreProfile.QUEBEC_PUB), and
+    // Spanish and German on the staff screens for visiting staff (the menu's
+    // extra names live in the translations table)
+    override val profile = StoreProfile.QUEBEC_PUB.copy(
+        locales = StoreProfile.QUEBEC_PUB.locales + listOf(LocaleCode.ES, LocaleCode.DE),
+    )
 
     // ---- policy: typed, changing these is a deploy, on purpose ----
     // Québec: menu prices are pre-tax; GST (TPS) and QST (TVQ) are added on

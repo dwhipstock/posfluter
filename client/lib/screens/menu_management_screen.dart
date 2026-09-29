@@ -150,7 +150,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
       final item = _items.where((i) => i.id == id).firstOrNull;
       if (item == null || !mounted) continue;
       await _runAiDialog(
-        title: l.aiGenerateFor(l.name(item.nameFr, item.nameEn)),
+        title: l.aiGenerateFor(l.name(item.nameFr, item.nameEn, item.names)),
         run: () =>
             Api.aiGeneratePhoto(item.id, pin, count: _aiStatus.defaultCount),
         choose: (cid) => Api.aiChoosePhoto(item.id, cid, pin),
@@ -185,7 +185,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
 
   Future<void> _toggle(Item item, bool active) async {
     final l = L.of(context);
-    final name = l.name(item.nameFr, item.nameEn);
+    final name = l.name(item.nameFr, item.nameEn, item.names);
     final approval = await requireGrant(
       context,
       Perm.editMenu,
@@ -204,7 +204,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
     final l = L.of(context);
     final pin = await askManagerPin(
       context,
-      title: l.uploadPhotoFor(l.name(item.nameFr, item.nameEn)),
+      title: l.uploadPhotoFor(l.name(item.nameFr, item.nameEn, item.names)),
     );
     if (pin == null || !mounted) return;
     final picked = await ImagePicker().pickImage(
@@ -233,7 +233,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
 
   Future<void> _aiGenerate(Item item) async {
     final l = L.of(context);
-    final name = l.name(item.nameFr, item.nameEn);
+    final name = l.name(item.nameFr, item.nameEn, item.names);
     final pin = await askManagerPin(context, title: l.aiGenerateFor(name));
     if (pin == null || !mounted) return;
     await _runAiDialog(
@@ -246,7 +246,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
 
   Future<void> _aiEnhance(Item item) async {
     final l = L.of(context);
-    final name = l.name(item.nameFr, item.nameEn);
+    final name = l.name(item.nameFr, item.nameEn, item.names);
     final pin = await askManagerPin(context, title: l.aiEnhanceFor(name));
     if (pin == null || !mounted) return;
     final picker = ImagePicker();
@@ -347,7 +347,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
     final l = L.of(context);
     String catName(String id) {
       final c = _categories.where((c) => c.id == id).firstOrNull;
-      return c == null ? id : l.name(c.nameFr, c.nameEn);
+      return c == null ? id : l.name(c.nameFr, c.nameEn, c.names);
     }
 
     return Scaffold(
@@ -438,7 +438,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
               ),
             ),
             title: Text(
-              l.name(item.nameFr, item.nameEn),
+              l.name(item.nameFr, item.nameEn, item.names),
               style: T.text(size: 16),
             ),
             subtitle: Text(
@@ -630,7 +630,9 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l.deleteItem),
-        content: Text(l.deleteItemConfirm(l.name(item.nameFr, item.nameEn))),
+        content: Text(
+          l.deleteItemConfirm(l.name(item.nameFr, item.nameEn, item.names)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -711,7 +713,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                           for (final c in widget.categories)
                             DropdownMenuItem(
                               value: c.id,
-                              child: Text(l.name(c.nameFr, c.nameEn)),
+                              child: Text(l.name(c.nameFr, c.nameEn, c.names)),
                             ),
                         ],
                         onChanged: (v) =>

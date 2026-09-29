@@ -329,11 +329,11 @@
 "use strict";
 
 // ---- i18n: the store's languages (GET /health), persisted per phone ---------
-// fr/en at the pubs, en/es at the US store. Every table carries every key
+// fr/en (+ es/de) at the pubs, en/es at the US store. Every table carries every key
 // (LocaleCoverageTest). French: vous, no-break space before : ; ! ? and ».
 let lang = localStorage.getItem("staff_lang") || "en";
 let store = { locales: ["fr", "en"], currency: "CAD", country: "CA", kitchen: false };
-const LANG_NAMES = { fr: "Français", en: "English", es: "Español" };
+const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch" };
 const STR = {
   fr: {
     whoClockingIn: "Qui commence son quart ?", enterPin: "Entrez votre NIP", pinWrong: "NIP incorrect",
@@ -401,6 +401,28 @@ const STR = {
     roleManager: "Gerente", roleServer: "Cajero",
     spKicker: "Sage & Poppy · Tienda de licores", spWelcome: "Hola de nuevo",
   },
+  de: {
+    whoClockingIn: "Wer beginnt die Schicht?", enterPin: "PIN eingeben", pinWrong: "Falsche PIN",
+    logout: "Abmelden", tabTables: "Tische", tabPending: "Zu bestätigen",
+    free: "Frei", open: "Besetzt", noZones: "Noch keine Bereiche", closed: "Geschlossen",
+    addItems: "＋ Artikel hinzufügen", onCheck: "Auf der Rechnung", pendingHd: "⏳ Gästebestellungen (zu bestätigen)",
+    rounding: "Rundung", cashTotal: "Summe bar",
+    total: "Summe", emptyCheck: "Noch keine Artikel – „Artikel hinzufügen“ tippen",
+    basket: "Warenkorb", addToCheck: "Auf die Rechnung", subtotal: "Zwischensumme", note: "Notiz (optional)",
+    add: "＋ Hinzufügen", sizes: "Größen", viewBasket: "Warenkorb ansehen", addedOne: "Hinzugefügt ✓",
+    linesAdded: "Auf die Rechnung gebucht ✓", accepted: "Bestätigt ✓", rejected: "Abgelehnt",
+    noPending: "Nichts zu bestätigen", pendingSub: "Bestellungen der Gäste per Handy erscheinen hier.",
+    billPaying: "Rechnung wird bezahlt – keine Artikel mehr möglich", failed: "Aktion fehlgeschlagen, bitte erneut versuchen",
+    zoneClosed: "Bereich geschlossen", table: "Tisch", loading: "Wird geladen…",
+    codePrompt: "6-stelligen Code aus der Authenticator-App eingeben", verify: "Bestätigen", backBtn: "‹ Zurück",
+    enrollPrompt: "QR-Code mit der Authenticator-App scannen, dann den 6-stelligen Code eingeben",
+    enrollHint: "Einmalige Einrichtung – danach 90 Tage nur die PIN", enrollManual: "Oder diesen Schlüssel manuell eingeben:",
+    codeWrong: "Falscher Code, bitte erneut versuchen", resetTitle: "Authenticator zurücksetzen", resetBtn: "Zurücksetzen",
+    resetConfirm: "Authenticator für {name} zurücksetzen?", resetDone: "Zurückgesetzt – die Person richtet ihn neu ein",
+    cantReach: "Kasse nicht erreichbar – WLAN prüfen und erneut versuchen", retry: "Erneut versuchen",
+    roleManager: "Leitung", roleServer: "Bedienung",
+    spKicker: "Sage & Poppy · Spirituosenladen", spWelcome: "Willkommen zurück",
+  },
 };
 // Department and zone names in US Spanish (the shop's catalog is English
 // only); same words as the counter app (client/lib/retail/shelf_names.dart).
@@ -435,22 +457,27 @@ function photoFallback(img) {
   img.replaceWith(d);
 }
 // Money in the store's currency, the way the language writes it: "12,99 $"
-// (fr-CA), "$12.99" (en-CA, en-US, es-US).
+// (fr-CA), "$12.99" (en-CA, en-US, es-US), "1.234,50 $" (de: German figures,
+// the store's own currency, its plain symbol).
 const money = cents => (cents / 100).toLocaleString(lang + "-" + store.country, {
   style: "currency", currency: store.currency,
+  ...(lang === "de" ? { currencyDisplay: "narrowSymbol" } : {}),
 });
-// Catalog data carries French and English only: French reads the French side,
-// English and Spanish read the English side.
+// Catalog data carries French and English: French reads the French side,
+// English, Spanish and German read the English side, unless the row carries
+// its own name in that language (`names`, e.g. { es: …, de: … }).
 const pick = (fr, en) => lang === "fr" ? fr : en;
-// the other language as a small second line (none when it says the same, or in Spanish)
-const alt = (fr, en) => lang === "es" || fr === en ? "" : (lang === "fr" ? en : fr);
-const iname = i => pick(i.nameFr, i.nameEn);
+const extra = o => (o && o.names && o.names[lang]) || "";
+// the other language as a small second line (none when it says the same, or
+// outside the fr/en pair)
+const alt = (fr, en) => (lang !== "fr" && lang !== "en") || fr === en ? "" : (lang === "fr" ? en : fr);
+const iname = i => extra(i) || pick(i.nameFr, i.nameEn);
 const inameAlt = i => alt(i.nameFr, i.nameEn);
 const idesc = i => pick(i.descriptionFr, i.descriptionEn);
 const vlabel = v => pick(v.labelFr, v.labelEn);
 const esName = en => NAMES_ES[en] || en;
-const zname = z => lang === "es" ? esName(z.nameEn) : pick(z.nameFr, z.nameEn);
-const catName = c => lang === "es" ? esName(c.nameEn) : pick(c.nameFr, c.nameEn);
+const zname = z => extra(z) || (lang === "es" ? esName(z.nameEn) : pick(z.nameFr, z.nameEn));
+const catName = c => extra(c) || (lang === "es" ? esName(c.nameEn) : pick(c.nameFr, c.nameEn));
 const roleName = r => r === "MANAGER" ? T().roleManager : r === "SERVER" ? T().roleServer : r;
 
 // line label for a served LineView (name + variant when disambiguating)
@@ -901,6 +928,8 @@ function renderCheck() {
   // prices are pre-tax: subtotal, then each tax added on top (GST / QST), from the server
   const taxLabel = t => lang === "fr"
     ? `${t.labelFr} ${String(t.ratePercent).replace(".", ",")}\u00a0%`
+    : lang === "de"
+    ? `${t.labelEn} ${String(t.ratePercent).replace(".", ",")}\u00a0%`
     : `${lang === "es" && t.labelEn === "Sales Tax" ? "Impuesto sobre las ventas" : t.labelEn} ${t.ratePercent}%`;
   const taxRows = (check.taxes || []).length ? `
     <div class="row"><span class="nm">${T().subtotal}</span><span>${money(check.subtotalCents)}</span></div>

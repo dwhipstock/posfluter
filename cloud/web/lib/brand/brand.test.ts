@@ -50,7 +50,7 @@ test("a mounted custom pack loads", () => {
 test("the two clients differ where it shows", () => {
   const cl = parseBrand(pack("copperlantern"));
   const sp = parseBrand(pack("sagepoppy"));
-  assert.deepEqual(cl.locales, { default: "en", available: ["fr", "en"] });
+  assert.deepEqual(cl.locales, { default: "en", available: ["fr", "en", "es", "de"] });
   assert.deepEqual(sp.locales, { default: "en", available: ["en", "es"] });
   assert.equal(cl.currency, "CAD");
   assert.equal(sp.currency, "USD");
@@ -101,8 +101,8 @@ test("validation names the bad field", () => {
   };
   bad((r) => (r.palette.primary = "navy"), /palette\.primary/);
   bad((r) => delete r.neutral["500"], /neutral\.500/);
-  bad((r) => (r.locales = { default: "de", available: ["en"] }), /locales\.default/);
-  bad((r) => (r.locales = { available: ["de"] }), /locales\.available/);
+  bad((r) => (r.locales = { default: "it", available: ["en"] }), /locales\.default/);
+  bad((r) => (r.locales = { available: ["it"] }), /locales\.available/);
   bad((r) => (r.layout = "floating"), /brand\.layout/);
   bad((r) => (r.assets.mark = "../../etc/passwd"), /assets\.mark/);
   bad((r) => (r.shape = { control: "1px;}body{display:none" }), /shape\.control/);
@@ -123,7 +123,8 @@ test("pickLocale honours a saved choice only when the client offers it", () => {
   const cl = parseBrand(pack("copperlantern"));
   assert.equal(pickLocale(sp, "es"), "es");
   assert.equal(pickLocale(sp, "fr"), "en", "no French at the shop");
-  assert.equal(pickLocale(cl, "es"), "en", "no Spanish at the pub");
+  assert.equal(pickLocale(cl, "de"), "de", "German at the pub");
+  assert.equal(pickLocale(sp, "de"), "en", "no German at the shop");
   assert.equal(pickLocale(cl, "fr"), "fr");
   assert.equal(pickLocale(cl, undefined), "en");
 });

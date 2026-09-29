@@ -200,7 +200,10 @@ fun Application.module(
         when {
             pronghorn -> PronghornSeed.seedIfEmpty()
             sagePoppy -> SagePoppySeed.seedIfEmpty()
-            else -> CopperLanternSeed.seedIfEmpty(venue)
+            else -> {
+                CopperLanternSeed.seedIfEmpty(venue)
+                CopperLanternSeed.seedTranslations()
+            }
         }
         // a store seeded with an older shelf adds the rest of the current
         // catalog, once, without touching anything already there

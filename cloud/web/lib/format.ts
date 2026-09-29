@@ -71,8 +71,12 @@ function frSuffix(currency: string, unambiguous: boolean): string {
   }
 }
 
-/** Money follows the UI locale; Spanish (US) writes dollars like English ("$1,234.50"). */
-export type MoneyLocale = "fr" | "en" | "es";
+/**
+ * Money follows the UI locale; Spanish (US) writes dollars like English
+ * ("$1,234.50"); German groups with a dot and puts the store's own symbol
+ * after the figure ("1.234,50 $", "12,99 CA$").
+ */
+export type MoneyLocale = "fr" | "en" | "es" | "de";
 
 /**
  * Currency-aware house style: cents only when nonzero. English puts the
@@ -90,6 +94,7 @@ export function money(
 ): string {
   const cur = currency || "CAD";
   const fr = opts?.locale === "fr";
+  const de = opts?.locale === "de";
   const unambiguous = !!opts?.unambiguous;
   if (opts?.short) {
     const b = cents / 100;
@@ -104,6 +109,7 @@ export function money(
             ? [(abs / 1000).toFixed(1), "k"]
             : [String(Math.round(abs)), ""];
     if (fr) return `${sign}${num.replace(".", ",")}${NBSP}${unit}${frSuffix(cur, unambiguous)}`;
+    if (de) return `${sign}${num.replace(".", ",")}${NBSP}${unit}${currencySymbol(cur, unambiguous).trim()}`;
     return `${sign}${currencySymbol(cur, unambiguous)}${num}${unit}`;
   }
   const neg = cents < 0;
@@ -113,6 +119,9 @@ export function money(
   const cc = String(frac).padStart(2, "0");
   if (fr) {
     return `${neg ? "-" : ""}${groupThousands(whole, NNBSP)}${frac ? "," + cc : ""}${NBSP}${frSuffix(cur, unambiguous)}`;
+  }
+  if (de) {
+    return `${neg ? "-" : ""}${groupThousands(whole, ".")}${frac ? "," + cc : ""}${NBSP}${currencySymbol(cur, unambiguous).trim()}`;
   }
   return `${neg ? "-" : ""}${currencySymbol(cur, unambiguous)}${groupThousands(whole, ",")}${frac ? "." + cc : ""}`;
 }
@@ -135,18 +144,21 @@ export function moneyCents(
   if (opts?.locale === "fr") {
     return `${neg ? "-" : ""}${groupThousands(whole, NBSP)},${cc}${NBSP}${frSuffix(cur, !!opts?.unambiguous)}`;
   }
+  if (opts?.locale === "de") {
+    return `${neg ? "-" : ""}${groupThousands(whole, ".")},${cc}${NBSP}${currencySymbol(cur, opts?.unambiguous).trim()}`;
+  }
   return `${neg ? "-" : ""}${currencySymbol(cur, opts?.unambiguous)}${groupThousands(whole, ",")}.${cc}`;
 }
 
-/** An integer count in the locale's grouping ("1,234" / "1 234"). */
+/** An integer count in the locale's grouping ("1,234" / "1 234" / "1.234"). */
 export function count(n: number, locale: MoneyLocale = "en"): string {
-  return groupThousands(Math.round(n), locale === "fr" ? NNBSP : ",");
+  return groupThousands(Math.round(n), locale === "fr" ? NNBSP : locale === "de" ? "." : ",");
 }
 
 /** A plain decimal in the locale's style ("1.25" / "1,25"). */
 export function decimal(n: number, digits: number, locale: MoneyLocale = "en"): string {
   const s = n.toFixed(digits);
-  return locale === "fr" ? s.replace(".", ",") : s;
+  return locale === "fr" || locale === "de" ? s.replace(".", ",") : s;
 }
 
 export function centsToInput(s: number): string {

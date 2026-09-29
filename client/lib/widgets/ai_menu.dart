@@ -29,12 +29,16 @@ class AiMenuBackend {
   apply;
   final Future<List<MenuChangeSet>> Function() history;
   final Future<void> Function(String setId, String pin, bool force) revert;
+
+  /// "Translate menu" (a store with languages beyond fr / en); null = no button.
+  final Future<MenuProposal> Function(String pin)? translate;
   const AiMenuBackend({
     required this.chat,
     required this.fromPhotos,
     required this.apply,
     required this.history,
     required this.revert,
+    this.translate,
   });
 
   static final AiMenuBackend store = AiMenuBackend(
@@ -43,6 +47,7 @@ class AiMenuBackend {
     apply: Api.menuAiApply,
     history: Api.menuAiHistory,
     revert: (id, pin, force) => Api.menuAiRevert(id, pin, force: force),
+    translate: Api.menuAiTranslate,
   );
 }
 
@@ -135,6 +140,17 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     final photos = await widget.pickPhotos();
     if (photos == null || photos.isEmpty || !mounted) return;
     _show(await _run((pin) => widget.backend.fromPhotos(photos, pin)));
+  }
+
+  /// The store's languages beyond the fr / en catalog slots (Copper Lantern: es, de).
+  List<String> get _extraLangs => StoreProfile.current.locales
+      .where((c) => c != 'fr' && c != 'en')
+      .toList();
+
+  Future<void> _translate() async {
+    final call = widget.backend.translate;
+    if (call == null) return;
+    _show(await _run(call));
   }
 
   Future<void> _apply() async {
@@ -324,14 +340,29 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
           ],
         ),
         const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            key: const Key('ai-menu-photos'),
-            icon: const Icon(LucideIcons.camera, size: 18),
-            label: Text(l.aiMenuFromPhotos),
-            onPressed: enabled ? _photos : null,
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              key: const Key('ai-menu-photos'),
+              icon: const Icon(LucideIcons.camera, size: 18),
+              label: Text(l.aiMenuFromPhotos),
+              onPressed: enabled ? _photos : null,
+            ),
+            if (widget.backend.translate != null && _extraLangs.isNotEmpty)
+              Tooltip(
+                message: l.aiMenuTranslateNote(
+                  _extraLangs.map(l.langName).join(', '),
+                ),
+                child: OutlinedButton.icon(
+                  key: const Key('ai-menu-translate'),
+                  icon: const Icon(LucideIcons.languages, size: 18),
+                  label: Text(l.aiMenuTranslate),
+                  onPressed: enabled ? _translate : null,
+                ),
+              ),
+          ],
         ),
         if (!_available)
           Padding(
@@ -391,7 +422,9 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
         if (p.changes.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(l.aiMenuNothing),
+            child: Text(
+              p.proposalId.isEmpty ? l.aiMenuTranslateDone : l.aiMenuNothing,
+            ),
           ),
         for (final (label, changes) in groups)
           if (changes.isNotEmpty) ...[
@@ -418,7 +451,7 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
       if (c.category != null && c.kind != 'update_item') c.category!,
       for (final d in c.details)
         if ((d.after ?? '').isNotEmpty || (d.before ?? '').isNotEmpty)
-          '${l.aiMenuField(d.field)}${d.label == null ? '' : ' (${d.label})'}: '
+          '${l.aiMenuField(d.field)}${d.label == null ? '' : ' (${d.field == 'name' ? l.langName(d.label!) : d.label})'}: '
               '${d.before == null ? '' : '${_value(l, d.field, d.before!)} → '}'
               '${_value(l, d.field, d.after ?? '')}',
     ];

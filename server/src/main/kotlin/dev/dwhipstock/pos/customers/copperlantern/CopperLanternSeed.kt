@@ -5,6 +5,7 @@ import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.VenueSettings
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.restaurant.DiningTables
 import dev.dwhipstock.pos.restaurant.FloorObjects
@@ -222,6 +223,27 @@ object CopperLanternSeed {
 
     private fun menuFor(venue: CopperLanternVenue) =
         if (venue == CopperLanternVenue.PLATEAU) menu + plateauMenu else menu
+
+    /**
+     * The demo's Spanish and German names ([CopperLanternTranslations]) for
+     * the things this store has, where none is set yet: runs on every boot,
+     * so an already-seeded demo store picks them up and a manager's own edit
+     * is never overwritten.
+     */
+    fun seedTranslations() = transaction {
+        val present = mapOf(
+            Translations.ITEM to Items.selectAll().map { it[Items.id] }.toSet(),
+            Translations.CATEGORY to Categories.selectAll().map { it[Categories.id] }.toSet(),
+            Translations.ZONE to Zones.selectAll().map { it[Zones.id] }.toSet(),
+            Translations.FLOOR_OBJECT to FloorObjects.selectAll().map { it[FloorObjects.id] }.toSet(),
+        )
+        val have = Translations.selectAll().map { Triple(it[Translations.entity], it[Translations.entityId], it[Translations.lang]) }.toSet()
+        for ((entity, id, es, de) in CopperLanternTranslations.rows.map { it.toList() }) {
+            if (id !in present[entity].orEmpty()) continue
+            if (Triple(entity, id, "es") !in have) Translations.set(entity, id, "es", es)
+            if (Triple(entity, id, "de") !in have) Translations.set(entity, id, "de", de)
+        }
+    }
 
     /** Empty-mode stores (POS_SEED=none): one manager so the owner can sign in and set up. */
     fun seedBootstrapManagerIfNoStaff() = transaction {

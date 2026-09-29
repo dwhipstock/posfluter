@@ -1,10 +1,11 @@
 // Every string the terminal can show exists in every language a store uses:
-// French and English at the pubs, English and Spanish at Sage & Poppy. The
+// French and English at the pubs (plus Spanish and German at Copper Lantern),
+// English and Spanish at Sage & Poppy. The
 // string tables are plain Dart (`_t(...)` calls with one literal per
 // language), so this test reads their source and checks each call:
 //
-//  - it has a French, an English and a Spanish text, none empty;
-//  - the French and Spanish texts are not just the English left in place,
+//  - it has a text in every language of its table, none empty;
+//  - the French, Spanish and German texts are not just the English left in place,
 //    unless every word is on the small allowlist below (proper nouns and words
 //    both languages really use);
 //  - French typography: a no-break space (U+00A0) before : ; ! ? and », and
@@ -25,7 +26,8 @@ class _Table {
 }
 
 const _tables = [
-  _Table('lib/i18n.dart', ['fr', 'en', 'es']),
+  _Table('lib/i18n.dart', ['fr', 'en', 'es', 'de']),
+  _Table('lib/kitchen/kitchen_i18n.dart', ['fr', 'en', 'es', 'de']),
   _Table('lib/retail/retail_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/stock/stock_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/forecourt/forecourt_i18n.dart', ['en', 'es', 'fr']),
@@ -45,6 +47,8 @@ const _sameWords = {
   // the same word in French (Menu, Table, Zones, Total, Bar) or Spanish (Total,
   // Subtotal)
   'Total', 'Subtotal', 'Menu', 'Table', 'Zones', 'Bar',
+  // the same word in German (and French: Stations, Port)
+  'Code', 'Chat', 'Name', 'Manager', 'Bank', 'Port', 'Simulator', 'Stations',
 };
 
 /// A string literal's text, decoded: interpolations become '§'.
@@ -193,6 +197,7 @@ class _Call {
   final String file;
   final int line;
   final int arity;
+  int get expected => texts.length;
   final Map<String, String> texts; // lang → the argument's literals, joined
   const _Call(this.file, this.line, this.arity, this.texts);
   String get where => '$file:$line';
@@ -209,7 +214,7 @@ List<_Call> _calls(_Table table) {
     final line = '\n'.allMatches(src.substring(0, m.start)).length + 1;
     calls.add(
       _Call(table.path, line, args.length, {
-        for (var k = 0; k < 3; k++)
+        for (var k = 0; k < table.order.length; k++)
           table.order[k]: k < args.length
               ? args[k].map((l) => l.text).join(' | ')
               : '',
@@ -231,10 +236,10 @@ void main() {
 
       test('has string calls', () => expect(calls, isNotEmpty));
 
-      test('every string has French, English and Spanish', () {
+      test('every string has all its languages', () {
         final arity = [
           for (final c in calls)
-            if (c.arity != 3) '${c.where} has ${c.arity} language(s)',
+            if (c.arity != c.expected) '${c.where} has ${c.arity} language(s)',
         ];
         expect(arity, isEmpty, reason: arity.join('\n'));
         final missing = [
@@ -249,8 +254,9 @@ void main() {
       test('no English left in the French or Spanish texts', () {
         final leftover = [
           for (final c in calls)
-            for (final lang in ['fr', 'es'])
-              if (c.texts[lang] == c.texts['en'] &&
+            for (final lang in ['fr', 'es', 'de'])
+              if (c.texts.containsKey(lang) &&
+                  c.texts[lang] == c.texts['en'] &&
                   !_allowedSame(c.texts['en']!))
                 '${c.where} ($lang): ${c.texts['en']}',
         ];

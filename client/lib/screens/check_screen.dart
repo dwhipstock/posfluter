@@ -541,7 +541,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 Padding(
                   padding: const EdgeInsets.only(right: 10),
                   child: _CategoryChip(
-                    label: l.name(c.nameFr, c.nameEn),
+                    label: l.name(c.nameFr, c.nameEn, c.names),
                     selected: c.id == _category,
                     onTap: () => setState(() => _category = c.id),
                   ),
@@ -621,7 +621,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                   children: [
                     Expanded(
                       child: Text(
-                        l.name(item.nameFr, item.nameEn),
+                        l.name(item.nameFr, item.nameEn, item.names),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: T
@@ -990,9 +990,13 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     );
   }
 
+  /// A line's extra-language names (es, de), from its menu item.
+  Map<String, String>? _namesOf(CheckLine line) =>
+      _items.where((i) => i.id == line.itemId).firstOrNull?.names;
+
   /// "Lantern House Lager · 20 oz pint" — the variant matters when the item has sizes.
   String _lineTitle(CheckLine line, L l) {
-    final name = l.name(line.nameFr, line.nameEn);
+    final name = l.name(line.nameFr, line.nameEn, _namesOf(line));
     if (line.variantLabelFr == null) return name;
     return '$name · ${l.name(line.variantLabelFr!, line.variantLabelEn ?? line.variantLabelFr!)}';
   }
@@ -1067,7 +1071,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             children: [
               Expanded(
                 child: Text(
-                  l.name(line.nameFr, line.nameEn),
+                  l.name(line.nameFr, line.nameEn, _namesOf(line)),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: T.text(size: 17, weight: FontWeight.w600),
@@ -1317,7 +1321,7 @@ class _VariantSheetState extends State<_VariantSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            l.name(widget.item.nameFr, widget.item.nameEn),
+            l.name(widget.item.nameFr, widget.item.nameEn, widget.item.names),
             style: T.headline(),
           ),
           Text(

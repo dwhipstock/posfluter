@@ -181,7 +181,7 @@ class _KitchenSetupScreenState extends State<KitchenSetupScreen> {
                         children: [
                           for (final i in matches)
                             ListTile(
-                              title: Text(l.name(i.nameFr, i.nameEn)),
+                              title: Text(l.name(i.nameFr, i.nameEn, i.names)),
                               onTap: () => Navigator.pop(context, i),
                             ),
                         ],
@@ -266,7 +266,7 @@ class _KitchenSetupScreenState extends State<KitchenSetupScreen> {
                 for (final c in _categories)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(l.name(c.nameFr, c.nameEn)),
+                    title: Text(l.name(c.nameFr, c.nameEn, c.names)),
                     trailing: _stationPicker(
                       config.routeFor('category', c.id),
                       (v) => _route('category', c.id, v),
@@ -283,7 +283,7 @@ class _KitchenSetupScreenState extends State<KitchenSetupScreen> {
                           .firstOrNull;
                       return item == null
                           ? r.refId
-                          : l.name(item.nameFr, item.nameEn);
+                          : l.name(item.nameFr, item.nameEn, item.names);
                     }()),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,

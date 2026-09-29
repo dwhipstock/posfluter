@@ -27,20 +27,24 @@ export interface Fmt {
   rangeLabel(r: DateRange): string;
 }
 
+/** German dates are numeric: "08.01." / "08.01.2026". */
+const p2 = (n: number) => String(n).padStart(2, "0");
+
 export function makeFmt(locale: Locale, t: (key: MsgKey, vars?: Record<string, string | number>) => string): Fmt {
+  const german = locale === "de";
   const months = locale === "fr" ? FR_MONTHS : locale === "es" ? ES_MONTHS : EN_MONTHS;
 
   const day = (date: string) => {
     const p = parts(date);
-    return `${p.d} ${months[p.m - 1]}`;
+    return german ? `${p2(p.d)}.${p2(p.m)}.` : `${p.d} ${months[p.m - 1]}`;
   };
   const dayYear = (date: string) => {
     const p = parts(date);
-    return `${p.d} ${months[p.m - 1]} ${p.y}`;
+    return german ? `${p2(p.d)}.${p2(p.m)}.${p.y}` : `${p.d} ${months[p.m - 1]} ${p.y}`;
   };
   const dateTime = (dt: string) => {
     const p = parts(dt);
-    return `${p.d} ${months[p.m - 1]} ${p.hm}`;
+    return german ? `${p2(p.d)}.${p2(p.m)}. ${p.hm}` : `${p.d} ${months[p.m - 1]} ${p.hm}`;
   };
   const time = (dt: string) => dt.slice(11, 16);
   const hour = (h: number) => `${String(h).padStart(2, "0")}:00`;

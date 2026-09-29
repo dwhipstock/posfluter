@@ -484,7 +484,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   // complete any action without a manager's PIN.
   Future<void> _manageZone(Zone zone, List<Zone> zones) async {
     final l = L.of(context);
-    final zoneName = l.name(zone.nameFr, zone.nameEn);
+    final zoneName = l.name(zone.nameFr, zone.nameEn, zone.names);
     final idx = zones.indexWhere((z) => z.id == zone.id);
     final willClose = !zone.isClosed;
     final action = await showModalBottomSheet<String>(
@@ -567,7 +567,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     final l = L.of(context);
     final willClose = !zone.isClosed;
     final action = willClose ? l.zoneCloseAction : l.zoneReopenAction;
-    final zoneName = l.name(zone.nameFr, zone.nameEn);
+    final zoneName = l.name(zone.nameFr, zone.nameEn, zone.names);
     final approval = await requireGrant(
       context,
       Perm.zoneOpenClose,
@@ -668,7 +668,8 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     if (names == null || !mounted) return;
     final pin = await askManagerPin(
       context,
-      title: '${l.renameRoom} · ${l.name(zone.nameFr, zone.nameEn)}',
+      title:
+          '${l.renameRoom} · ${l.name(zone.nameFr, zone.nameEn, zone.names)}',
     );
     if (pin == null || !mounted) return;
     try {
@@ -707,7 +708,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
 
   Future<void> _deleteZone(Zone zone) async {
     final l = L.of(context);
-    final zoneName = l.name(zone.nameFr, zone.nameEn);
+    final zoneName = l.name(zone.nameFr, zone.nameEn, zone.names);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -776,7 +777,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
         children: [
           Expanded(
             child: Text(
-              l.name(zone.nameFr, zone.nameEn),
+              l.name(zone.nameFr, zone.nameEn, zone.names),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: T.text(
@@ -902,7 +903,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       (z) => z.id == _zoneId,
       orElse: () => zones.first,
     );
-    final zoneName = l.name(zone.nameFr, zone.nameEn);
+    final zoneName = l.name(zone.nameFr, zone.nameEn, zone.names);
     final pin = await askManagerPin(
       context,
       title: '${l.editLayout} · $zoneName',

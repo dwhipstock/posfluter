@@ -131,7 +131,7 @@ class _TablePickerScreenState extends State<TablePickerScreen> {
                     child: Row(
                       children: [
                         Text(
-                          l.name(zone.nameFr, zone.nameEn),
+                          l.name(zone.nameFr, zone.nameEn, zone.names),
                           style: T.text(
                             weight: FontWeight.w600,
                             color: zone.isClosed ? T.textMuted : T.textPrimary,

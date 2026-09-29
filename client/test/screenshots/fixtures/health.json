@@ -1,5 +1,11 @@
 {
  "status": "ok",
  "pairingRequired": false,
- "venue": "Copper Lantern — Vieux-Port"
+ "venue": "Copper Lantern — Vieux-Port",
+ "locales": [
+  "fr",
+  "en",
+  "es",
+  "de"
+ ]
 }

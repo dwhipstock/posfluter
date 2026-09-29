@@ -56,7 +56,7 @@ class PreferencesTest {
         // invalid values rejected
         assertEquals(HttpStatusCode.BadRequest, manager.patch("/me/preferences") {
             contentType(ContentType.Application.Json)
-            setBody("""{"languageCode":"de"}""")
+            setBody("""{"languageCode":"it"}""")
         }.status)
 
         // tendering needs an open shift
