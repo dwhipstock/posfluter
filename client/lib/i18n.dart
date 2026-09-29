@@ -2649,6 +2649,12 @@ class L {
       _t('Salle supprimée', 'Room deleted', 'Salón eliminado', 'Raum gelöscht');
   String get roomCreated =>
       _t('Salle créée', 'Room created', 'Salón creado', 'Raum angelegt');
+  String get roomNameRequired => _t(
+    'Entrez un nom pour la salle',
+    'Enter a name for the room',
+    'Escriba un nombre para el salón',
+    'Bitte einen Namen für den Raum eingeben',
+  );
   String get moveRoomLeft => _t(
     'Déplacer à gauche',
     'Move left',
