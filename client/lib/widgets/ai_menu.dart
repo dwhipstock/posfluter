@@ -25,6 +25,7 @@ class AiMenuBackend {
     String proposalId,
     List<String> changeIds,
     String pin,
+    bool confirmed,
   )
   apply;
   final Future<List<MenuChangeSet>> Function() history;
@@ -158,7 +159,36 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     if (p == null || _ticked.isEmpty) return;
     final l = L.of(context);
     final ids = p.changes.map((c) => c.id).where(_ticked.contains).toList();
-    final r = await _run((pin) => widget.backend.apply(p.proposalId, ids, pin));
+    // "remove all" / "everything 20% off": one more explicit yes
+    final picked = p.changes.where((c) => _ticked.contains(c.id));
+    final removes = picked.where((c) => c.isRemoved).length;
+    final prices = picked
+        .where((c) => c.details.any((d) => d.field == 'price') && !c.isNew)
+        .length;
+    final bulk = p.bulk && (removes > 10 || prices > 10);
+    if (bulk) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          content: Text(l.aiMenuBulkConfirm(removes, prices)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l.cancel),
+            ),
+            FilledButton(
+              key: const Key('ai-menu-bulk-confirm'),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l.aiMenuApply(ids.length)),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    final r = await _run(
+      (pin) => widget.backend.apply(p.proposalId, ids, pin, bulk),
+    );
     if (r == null || !mounted) return;
     setState(() {
       _created.addAll(r.createdItemIds);
@@ -407,6 +437,18 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
       ),
       (l.aiMenuRemoved, p.changes.where((c) => c.isRemoved).toList()),
     ];
+    final refusal = p.refusal;
+    if (refusal != null) {
+      // a normal assistant message, not an error
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: Text(
+          l.aiMenuRefusal(refusal),
+          key: const Key('ai-menu-refusal'),
+          style: T.text(size: 15),
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

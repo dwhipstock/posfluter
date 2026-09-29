@@ -1,10 +1,12 @@
 package dev.dwhipstock.pos.api
 
+import dev.dwhipstock.pos.aimenu.AiCaller
 import dev.dwhipstock.pos.aimenu.MenuAiService
 import dev.dwhipstock.pos.aimenu.MenuImage
 import dev.dwhipstock.pos.base.AuthService
 import dev.dwhipstock.pos.sdk.Images
 import io.ktor.http.content.*
+import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -18,12 +20,21 @@ data class MenuAiChatRequest(val managerPin: String? = null, val text: String)
 data class MenuAiTranslateRequest(val managerPin: String? = null)
 
 @Serializable
-data class MenuAiApplyRequest(val managerPin: String? = null, val proposalId: String, val changeIds: List<String>)
+data class MenuAiApplyRequest(
+    val managerPin: String? = null, val proposalId: String, val changeIds: List<String>,
+    /** The manager confirmed a bulk change (more than 10 removals or price changes). */
+    val confirmed: Boolean = false,
+)
 
 @Serializable
 data class MenuAiRevertRequest(val managerPin: String? = null, val force: Boolean = false)
 
 private const val MAX_MENU_PHOTO_BYTES = 12 * 1024 * 1024
+
+/** The session's user and device and the approving manager: rate limit key and AI log line. */
+private fun ApplicationCall.aiCaller(approverId: String) = sessionUser().let {
+    AiCaller(it.userId, approverId, it.deviceId, it.languageCode)
+}
 
 /**
  * AI menu setup (add-on, online only). Manager session plus a manager PIN on
@@ -34,7 +45,9 @@ private const val MAX_MENU_PHOTO_BYTES = 12 * 1024 * 1024
  *   POST /floor-objects/ai-suggest  multipart one photo + managerPin → a CUSTOM floor-object suggestion
  *   POST /menu-ai/chat      JSON {managerPin, text} → a proposal (nothing changes)
  *   POST /menu-ai/translate JSON {managerPin} → set_name proposal for missing es / de names (nothing changes)
- *   POST /menu-ai/apply     JSON {managerPin, proposalId, changeIds} → applied through CatalogOps, saved as a change set
+ *   POST /menu-ai/apply     JSON {managerPin, proposalId, changeIds, confirmed?} → applied through CatalogOps, saved as a change set
+ *                           (a bulk proposal needs confirmed: true, else 409 menu_ai_confirm_required)
+ *   GET  /menu-ai/requests  the manager's AI log: who, device, when, kind, outcome (no prompts, photos or keys)
  *   GET  /menu-ai/history   the last 20 applied change sets (who, when, source, reverted?)
  *   POST /menu-ai/history/{setId}/revert   JSON {managerPin, force?} → the before state put back;
  *                           409 menu_ai_revert_conflict {titles} when a later edit touched the same things (resend with force)
@@ -68,8 +81,8 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
             }
             part.dispose()
         }
-        requireManagerApproval(auth, managerPin)
-        call.respond(onIo { ai.fromPhotos(images, note) })
+        val who = call.aiCaller(requireManagerApproval(auth, managerPin))
+        call.respond(onIo { ai.fromPhotos(images, note, who) })
     }
 
     // Floor-plan "Add from photo": one photo → a CUSTOM object suggestion
@@ -94,23 +107,23 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
             }
             part.dispose()
         }
-        requireManagerApproval(auth, managerPin)
+        val who = call.aiCaller(requireManagerApproval(auth, managerPin))
         val photo = requireNotNull(image) { "a photo is required" }
-        call.respond(onIo { ai.suggestRoomObject(photo) })
+        call.respond(onIo { ai.suggestRoomObject(photo, who) })
     }
 
     post("/menu-ai/chat") {
         requireManagerSession(call)
         val req = call.receive<MenuAiChatRequest>()
-        requireManagerApproval(auth, req.managerPin)
-        call.respond(onIo { ai.chat(req.text) })
+        val who = call.aiCaller(requireManagerApproval(auth, req.managerPin))
+        call.respond(onIo { ai.chat(req.text, who) })
     }
 
     post("/menu-ai/translate") {
         requireManagerSession(call)
         val req = call.receive<MenuAiTranslateRequest>()
-        requireManagerApproval(auth, req.managerPin)
-        call.respond(onIo { ai.translate() })
+        val who = call.aiCaller(requireManagerApproval(auth, req.managerPin))
+        call.respond(onIo { ai.translate(who) })
     }
 
     post("/menu-ai/apply") {
@@ -118,7 +131,12 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
         val req = call.receive<MenuAiApplyRequest>()
         val approver = requireManagerApproval(auth, req.managerPin)
         val user = call.sessionUser().userId
-        call.respond(onIo { ai.apply(req.proposalId, req.changeIds, user, approver) })
+        call.respond(onIo { ai.apply(req.proposalId, req.changeIds, user, approver, req.confirmed) })
+    }
+
+    get("/menu-ai/requests") {
+        requireManagerSession(call)
+        call.respond(onIo { ai.requests() })
     }
 
     get("/menu-ai/history") {

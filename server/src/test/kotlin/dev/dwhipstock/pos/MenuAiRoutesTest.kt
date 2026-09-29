@@ -263,7 +263,7 @@ class MenuAiRoutesTest {
     }
 
     @Test
-    fun badReplyIsAnErrorAndPhotosGoToTheModel() = testApplication {
+    fun badReplyIsTheFixedReplyAndPhotosGoToTheModel() = testApplication {
         val fake = FakeMenuProvider("Sure! Here is your menu: ...")
         store(fake)
         val manager = loginClient()
@@ -276,8 +276,10 @@ class MenuAiRoutesTest {
                 })
             }))
         }
-        assertEquals(HttpStatusCode.BadGateway, res.status)
-        assertEquals("menu_ai_bad_reply", obj(res.bodyAsText()).s("code"))
+        // prose instead of a change set: the fixed reply, never the model's text
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals("off_topic", obj(res.bodyAsText()).s("refusal"))
+        assertFalse(res.bodyAsText().contains("Sure!"))
         assertEquals(1, fake.images.size)
         assertTrue(fake.prompts.single().contains("paper menu"))
     }

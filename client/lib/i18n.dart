@@ -1839,6 +1839,28 @@ class L {
     'Propone los nombres que faltan en $langs. Nada cambia hasta que apliques.',
     'Schlägt fehlende Namen auf $langs vor. Erst „Übernehmen“ ändert etwas.',
   );
+
+  /// The assistant's fixed reply when there is no change set (the server's
+  /// `refusal` code): never the model's own words.
+  String aiMenuRefusal(String code) => code == 'no_change'
+      ? _t(
+          'Je n’ai trouvé aucun changement de menu à faire. Nommez le produit et ce qu’il faut changer, par exemple « poutine 14 ».',
+          'I couldn’t find a menu change to make from that. Name the item and what to change, for example “poutine 14”.',
+          'No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «poutine 14».',
+          'Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Poutine 14“.',
+        )
+      : _t(
+          'Je peux seulement vous aider à configurer et modifier votre menu. Essayez par exemple « ajoute une salade César à 14 dans Salades ».',
+          'I can only help set up and edit your menu. Try something like “add a Caesar salad for 14 under Salads”.',
+          'Solo puedo ayudarte a configurar y editar tu menú. Prueba algo como «añade una ensalada César a 14 en Ensaladas».',
+          'Ich kann nur beim Einrichten und Bearbeiten Ihrer Speisekarte helfen. Versuchen Sie zum Beispiel „Caesar Salad für 14 unter Salate hinzufügen“.',
+        );
+  String aiMenuBulkConfirm(int removes, int prices) => _t(
+    'C’est un gros changement : $removes produit(s) retiré(s) et $prices prix modifié(s). Appliquer quand même ?',
+    'This is a big change: $removes item(s) removed and $prices price(s) changed. Apply anyway?',
+    'Es un cambio grande: $removes producto(s) eliminado(s) y $prices precio(s) cambiado(s). ¿Aplicar de todos modos?',
+    'Das ist eine große Änderung: $removes Artikel entfernt und $prices Preis(e) geändert. Trotzdem übernehmen?',
+  );
   String get aiMenuTranslateDone => _t(
     'Tous les noms sont déjà traduits.',
     'Every name is already translated.',
@@ -2636,6 +2658,18 @@ class L {
       'The AI service is busy or slow. Try again in a minute.',
       'El servicio de IA está ocupado o lento. Inténtalo en un minuto.',
       'Der KI-Dienst ist ausgelastet oder langsam. In einer Minute erneut versuchen.',
+    ),
+    'menu_ai_too_many' => _t(
+      'Trop de demandes IA (20 par 10 minutes). Réessayez dans quelques minutes.',
+      'Too many AI requests (20 every 10 minutes). Try again in a few minutes.',
+      'Demasiadas solicitudes de IA (20 cada 10 minutos). Inténtalo en unos minutos.',
+      'Zu viele KI-Anfragen (20 pro 10 Minuten). In ein paar Minuten erneut versuchen.',
+    ),
+    'menu_ai_confirm_required' => _t(
+      'Ce gros changement doit être confirmé. Touchez « Appliquer » de nouveau.',
+      'This big change needs a confirm. Tap Apply again.',
+      'Este cambio grande necesita confirmación. Toca Aplicar de nuevo.',
+      'Diese große Änderung muss bestätigt werden. Erneut auf Übernehmen tippen.',
     ),
     'menu_ai_quota' => _t(
       'Le compte IA n’a plus de crédits.',

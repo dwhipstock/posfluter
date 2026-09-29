@@ -47,9 +47,17 @@ class MenuFacts(
     val itemVariants: Map<String, List<String>>,
     /** The store's languages beyond fr / en, which set_name may fill. */
     val extraLangs: Set<String> = emptySet(),
+    /** variant id → its live price: a size may stay at 0 only if it already is. */
+    val variantPrices: Map<String, Long> = emptyMap(),
+    /** The highest price the AI may set (1000 in the store currency). */
+    val maxPriceMinor: Long = 100_000,
 )
 
-class ParsedChangeSet(val summary: String, val ops: List<MenuOp>, val rejected: List<String>)
+class ParsedChangeSet(
+    val summary: String, val ops: List<MenuOp>, val rejected: List<String>,
+    /** The model said this is not a menu request (its `refusal` field). */
+    val refused: Boolean = false,
+)
 
 /**
  * Strict reader of the model's reply. The reply must be one JSON object
@@ -60,10 +68,14 @@ class ParsedChangeSet(val summary: String, val ops: List<MenuOp>, val rejected: 
  */
 object MenuChangeSetParser {
     const val MAX_OPS = 300
-    const val MAX_PRICE_MINOR = 10_000_000L
-    private const val MAX_ITEM_NAME = 200
-    private const val MAX_CATEGORY_NAME = 100
-    private const val MAX_DESCRIPTION = 500
+    /** New items and categories per request. */
+    const val MAX_ADDS = 150
+    /** Removals per request: more and every removal is rejected (no "delete everything"). */
+    const val MAX_REMOVES = 25
+    const val MAX_ITEM_NAME = 80
+    const val MAX_CATEGORY_NAME = 40
+    const val MAX_DESCRIPTION = 300
+    private const val MAX_LABEL = 30
     private const val MAX_VARIANTS = 8
 
     private val json = Json { isLenient = false }
@@ -74,7 +86,12 @@ object MenuChangeSetParser {
             ?: throw MenuAiReplyException("the AI reply was not a JSON object")
         val rawOps = root["ops"] as? JsonArray ?: throw MenuAiReplyException("the AI reply has no \"ops\" list")
         if (rawOps.size > MAX_OPS) throw MenuAiReplyException("the AI proposed too many changes (${rawOps.size})")
-        val summary = root["summary"].s()?.take(500) ?: ""
+        val refused = (root["refusal"] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.contentOrNull?.isNotBlank() } == true
+        if (refused) return ParsedChangeSet("", emptyList(), emptyList(), refused = true)
+        // the model's own words reach the screen only when they are plain menu text
+        val summary = root["summary"].s()?.trim()?.take(200)?.takeIf { AiGuard.checkText(it) == null } ?: ""
+        val removes = rawOps.count { (it as? JsonObject)?.get("op").s() == "remove_item" }
+        var adds = 0
 
         val newRefs = mutableSetOf<String>()
         val ops = mutableListOf<MenuOp>()
@@ -83,11 +100,18 @@ object MenuChangeSetParser {
             val o = el as? JsonObject
             if (o == null) { rejected += "#${i + 1}: not an object"; return@forEachIndexed }
             try {
+                val kind = o["op"].s()
+                if (kind == "remove_item") require(removes <= MAX_REMOVES) {
+                    "too many removals at once ($removes); at most $MAX_REMOVES per request"
+                }
+                if (kind == "add_item" || kind == "add_category") require(++adds <= MAX_ADDS) {
+                    "too many new items at once; at most $MAX_ADDS per request"
+                }
                 val op = one(o, facts, newRefs)
                 if (op is MenuOp.AddCategory) newRefs += op.ref
                 ops += op
             } catch (e: IllegalArgumentException) {
-                rejected += "#${i + 1} (${o["op"].s() ?: "?"}): ${e.message}"
+                rejected += AiGuard.quote("#${i + 1} (${o["op"].s()?.take(20) ?: "?"}): ${e.message}", 160)
             }
         }
         return ParsedChangeSet(summary, ops, rejected)
@@ -96,17 +120,21 @@ object MenuChangeSetParser {
     private fun one(o: JsonObject, facts: MenuFacts, newRefs: Set<String>): MenuOp {
         fun category(raw: String?): String {
             require(!raw.isNullOrBlank()) { "category missing" }
-            require(raw in facts.categoryIds || raw in newRefs) { "unknown category '$raw'" }
+            require(raw in facts.categoryIds || raw in newRefs) { "unknown category '${raw.take(40)}'" }
             return raw
         }
         fun item(): String {
             val id = o["item"].s()
             require(!id.isNullOrBlank()) { "item missing" }
-            require(id in facts.itemVariants) { "unknown item '$id'" }
+            require(id in facts.itemVariants) { "unknown item '${id.take(40)}'" }
             return id
         }
         fun name(key: String, max: Int): String? = o[key].s()?.trim()?.also {
             require(it.length <= max) { "$key longer than $max characters" }
+            AiGuard.checkText(it)?.let { why -> throw IllegalArgumentException("$key: $why") }
+        }
+        fun text(key: String, max: Int): String? = o[key].s()?.trim()?.take(max)?.also {
+            AiGuard.checkText(it)?.let { why -> throw IllegalArgumentException("$key: $why") }
         }
         return when (val kind = o["op"].s()) {
             "add_category" -> {
@@ -124,15 +152,19 @@ object MenuChangeSetParser {
                 require(en.isNotEmpty() || fr.isNotEmpty()) { "a name is required" }
                 val variants = (o["variants"] as? JsonArray)?.map { v ->
                     val vo = v as? JsonObject ?: throw IllegalArgumentException("a variant is not an object")
-                    NewVariant(vo["labelEn"].s()?.trim()?.take(60).orEmpty(), vo["labelFr"].s()?.trim()?.take(60).orEmpty(),
-                        price(vo["priceMinor"]))
-                } ?: o["priceMinor"]?.let { listOf(NewVariant("", "", price(it))) }
+                    val labels = listOf("labelEn", "labelFr").map { k ->
+                        vo[k].s()?.trim()?.take(MAX_LABEL).orEmpty().also {
+                            AiGuard.checkText(it)?.let { why -> throw IllegalArgumentException("$k: $why") }
+                        }
+                    }
+                    NewVariant(labels[0], labels[1], price(vo["priceMinor"], facts))
+                } ?: o["priceMinor"]?.let { listOf(NewVariant("", "", price(it, facts))) }
                 require(!variants.isNullOrEmpty()) { "a price is required" }
                 require(variants.size <= MAX_VARIANTS) { "too many sizes" }
                 MenuOp.AddItem(
                     category = category(o["category"].s()), nameEn = en, nameFr = fr,
-                    descriptionEn = o["descriptionEn"].s()?.trim()?.take(MAX_DESCRIPTION).orEmpty(),
-                    descriptionFr = o["descriptionFr"].s()?.trim()?.take(MAX_DESCRIPTION).orEmpty(),
+                    descriptionEn = text("descriptionEn", MAX_DESCRIPTION).orEmpty(),
+                    descriptionFr = text("descriptionFr", MAX_DESCRIPTION).orEmpty(),
                     isAlcohol = (o["isAlcohol"] as? JsonPrimitive)?.booleanOrNull ?: false,
                     variants = variants,
                 )
@@ -144,19 +176,19 @@ object MenuChangeSetParser {
                 (o["prices"] as? JsonArray)?.forEach { p ->
                     val po = p as? JsonObject ?: throw IllegalArgumentException("a price is not an object")
                     val variant = po["variant"].s()
-                    require(variant != null && variant in live) { "unknown size '$variant' of $id" }
-                    prices[variant] = price(po["priceMinor"])
+                    require(variant != null && variant in live) { "unknown size '${variant?.take(40)}' of $id" }
+                    prices[variant] = price(po["priceMinor"], facts, facts.variantPrices[variant] == 0L)
                 }
                 o["priceMinor"]?.takeUnless { it is JsonNull }?.let {
                     require(live.size == 1) { "$id has several sizes; give a price per size" }
-                    prices[live.single()] = price(it)
+                    prices[live.single()] = price(it, facts, facts.variantPrices[live.single()] == 0L)
                 }
                 val op = MenuOp.UpdateItem(
                     itemId = id,
                     nameEn = name("nameEn", MAX_ITEM_NAME)?.takeIf { it.isNotEmpty() },
                     nameFr = name("nameFr", MAX_ITEM_NAME)?.takeIf { it.isNotEmpty() },
-                    descriptionEn = o["descriptionEn"].s()?.trim()?.take(MAX_DESCRIPTION),
-                    descriptionFr = o["descriptionFr"].s()?.trim()?.take(MAX_DESCRIPTION),
+                    descriptionEn = text("descriptionEn", MAX_DESCRIPTION),
+                    descriptionFr = text("descriptionFr", MAX_DESCRIPTION),
                     category = o["category"].s()?.let { category(it) },
                     active = (o["active"] as? JsonPrimitive)?.booleanOrNull,
                     prices = prices,
@@ -167,7 +199,7 @@ object MenuChangeSetParser {
             "remove_item" -> MenuOp.RemoveItem(item())
             "rename_category" -> {
                 val id = o["category"].s()
-                require(id != null && id in facts.categoryIds) { "unknown category '$id'" }
+                require(id != null && id in facts.categoryIds) { "unknown category '${id?.take(40)}'" }
                 val en = name("nameEn", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() }
                 val fr = name("nameFr", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() }
                 require(en != null || fr != null) { "a new name is required" }
@@ -177,12 +209,12 @@ object MenuChangeSetParser {
                 val entity = o["entity"].s()
                 val id = o["id"].s()
                 when (entity) {
-                    "item" -> require(id != null && id in facts.itemVariants) { "unknown item '$id'" }
-                    "category" -> require(id != null && id in facts.categoryIds) { "unknown category '$id'" }
+                    "item" -> require(id != null && id in facts.itemVariants) { "unknown item '${id?.take(40)}'" }
+                    "category" -> require(id != null && id in facts.categoryIds) { "unknown category '${id?.take(40)}'" }
                     else -> throw IllegalArgumentException("entity must be item or category")
                 }
                 val lang = o["lang"].s()?.trim()?.lowercase()
-                require(lang != null && lang in facts.extraLangs) { "language '$lang' is not one of ${facts.extraLangs}" }
+                require(lang != null && lang in facts.extraLangs) { "language '${lang?.take(8)}' is not one of ${facts.extraLangs}" }
                 val text = name("name", MAX_ITEM_NAME)
                 require(!text.isNullOrEmpty()) { "a name is required" }
                 MenuOp.SetName(entity, id!!, lang, text)
@@ -194,15 +226,17 @@ object MenuChangeSetParser {
                 order.forEach { category(it) }
                 MenuOp.ReorderCategories(order)
             }
-            else -> throw IllegalArgumentException("unknown op '$kind'")
+            else -> throw IllegalArgumentException("unknown op '${kind?.take(20)}'")
         }
     }
 
-    private fun price(el: JsonElement?): Long {
+    /** 0 < price <= [MenuFacts.maxPriceMinor]; 0 only for a size that is already free ([zeroOk]). */
+    private fun price(el: JsonElement?, facts: MenuFacts, zeroOk: Boolean = false): Long {
         val p = el as? JsonPrimitive
         require(p != null && !p.isString) { "priceMinor must be a whole number" }
         val v = p.longOrNull ?: throw IllegalArgumentException("priceMinor must be a whole number (minor units)")
-        require(v in 0..MAX_PRICE_MINOR) { "price out of range" }
+        require(v >= 0 && v <= facts.maxPriceMinor) { "price out of range" }
+        require(v > 0 || zeroOk) { "a price of 0 is not allowed" }
         return v
     }
 
