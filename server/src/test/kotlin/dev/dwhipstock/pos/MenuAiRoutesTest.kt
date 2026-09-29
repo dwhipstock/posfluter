@@ -276,9 +276,9 @@ class MenuAiRoutesTest {
                 })
             }))
         }
-        // prose instead of a change set: the fixed reply, never the model's text
+        // prose instead of a change set: a retryable "incomplete" reply, never the model's text
         assertEquals(HttpStatusCode.OK, res.status)
-        assertEquals("off_topic", obj(res.bodyAsText()).s("refusal"))
+        assertEquals("menu_ai_incomplete", obj(res.bodyAsText()).s("refusal"))
         assertFalse(res.bodyAsText().contains("Sure!"))
         assertEquals(1, fake.images.size)
         assertTrue(fake.prompts.single().contains("paper menu"))

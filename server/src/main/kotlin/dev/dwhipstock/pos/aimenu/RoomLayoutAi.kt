@@ -413,9 +413,12 @@ internal object RoomLayoutAi {
     fun box(r: org.jetbrains.exposed.sql.ResultRow) = Box.of(r[DiningTables.x], r[DiningTables.y],
         r[DiningTables.width], r[DiningTables.height], r[DiningTables.rotation])
 
-    /** Numbers in use by live tables anywhere in the store, except [except]. */
-    fun usedNumbers(except: Set<String> = emptySet()): Set<Int> =
-        DiningTables.selectAll().where { DiningTables.deletedAt.isNull() }
+    /** Numbers in use by this room's live tables, except [except] — numbering
+     *  is per-room, same as a manually added table ([zoneLabel] in Tables.kt):
+     *  an empty room's first AI table must start at 1, not carry on from
+     *  whatever number another zone last used. */
+    fun usedNumbers(zoneId: String, except: Set<String> = emptySet()): Set<Int> =
+        DiningTables.selectAll().where { (DiningTables.zoneId eq zoneId) and DiningTables.deletedAt.isNull() }
             .filter { it[DiningTables.id] !in except }
             .mapNotNull { Regex("(\\d+)$").find(it[DiningTables.label].trim())?.value?.toIntOrNull() }.toSet()
 
@@ -430,7 +433,7 @@ internal object RoomLayoutAi {
         val removing = if (replace) room.tables.filter { it[DiningTables.id] !in room.protectedIds } else emptyList()
         val removingIds = removing.map { it[DiningTables.id] }.toSet()
         val fixed = room.tables.filter { it[DiningTables.id] !in removingIds }.map(::box)
-        val plan = RoomLayoutRules.validate(tables, objects, fixed, usedNumbers(removingIds), room.prefix)
+        val plan = RoomLayoutRules.validate(tables, objects, fixed, usedNumbers(zoneId, removingIds), room.prefix)
         require(plan.tables.isNotEmpty() || plan.objects.isNotEmpty()) { "nothing to apply: the layout is empty" }
 
         val oldObjects = if (replace) FloorObjects.selectAll().where { FloorObjects.zoneId eq zoneId }.toList() else emptyList()

@@ -171,14 +171,20 @@ internal object FloorEditAi {
         {"op":"update_object","object":"<object id>", then only what changes: "x","y","w","h","rotation"}
         {"op":"remove_object","object":"<object id>"}
         Rules:
-        - List only what changes: never repeat tables or objects that stay as they are.
+        - Change ONLY what the manager asked for. Never renumber, resize or move a table or object the
+          manager did not mention, even to "tidy up" or make room — work around what's already there instead.
+        - In every op, include only the fields that actually change for that table or object; never repeat a
+          value that stays the same, and never repeat tables or objects that stay as they are.
+        - At most $MAX_OPS ops in one reply — no real request needs more than a handful.
         - Refer to existing tables and objects only by the ids in <current_room>. "Table 5" is the table whose
           number is 5. "Move" = update with the new x and y; keep sizes unless asked.
         - Tables never overlap: leave a walkway (about 50) between tables, and keep them inside the room.
         - Sizes: a 2-seat table (a "2-top") is about 70 x 70, a 4-seat about 100 x 100, a 6-seat rect about
           180 x 110, a 6-seat round about 130 x 130. Seats 1 to 20.
-        - Renumbering: give each table concerned its new "number", in reading order (top to bottom, left to
-          right). Leave "number" out otherwise; new tables get null unless a number is asked for.
+        - Renumbering: never renumber a table unless the manager asked to. When they do, give each table
+          concerned its new "number", in reading order (top to bottom, left to right). Leave "number" out of
+          every other op, including one that only moves, reshapes or reseats a table; new tables get null
+          unless a number is asked for.
         - Tables with "openBill": true have guests: never move, reshape, renumber or remove them.
         - Object types: BAR_FRONT (the bar counter), POOL (pool table), PILLAR, ENTRANCE, HOST_STAND, KITCHEN,
           RESTROOMS, STAGE. Anything else (a jukebox, a piano, a window) is CUSTOM with a short name (1 to 3 words)
@@ -254,7 +260,7 @@ internal object FloorEditAi {
             ?: throw MenuAiReplyException("the AI reply was not a JSON object")
         if ((root["refusal"] as? JsonPrimitive)?.booleanOrNull == true) return Parsed(emptyList(), "", true, emptyList())
         val raw = (root["ops"] as? JsonArray) ?: throw MenuAiReplyException("the AI reply has no ops")
-        if (raw.size > MAX_OPS) throw MenuAiReplyException("too many ops (${raw.size})")
+        if (raw.size > MAX_OPS) throw MenuAiReplyException("too many ops (${raw.size})", tooMany = true)
         fun JsonObject.s(k: String) = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
         fun JsonObject.n(vararg keys: String): Int? = keys.firstNotNullOfOrNull { k ->
             (this[k] as? JsonPrimitive)?.let { it.doubleOrNull ?: it.content.toDoubleOrNull() }
@@ -336,10 +342,13 @@ internal object FloorEditAi {
             else -> {}
         }
 
-        // 2. table updates, in order; numbers freed by the tables being renumbered or removed
+        // 2. table updates, in order; numbers freed by the tables being renumbered or removed.
+        // A model often echoes a table's own (unchanged) number even when nobody asked to renumber
+        // it; that is not a renumber request, so it does not free the number or count as one below.
         val updates = ops.filterIsInstance<FloorOp.UpdateTable>()
-        val renumbering = updates.filter { it.number != null && it.id in cur && it.id !in locked }.map { it.id }.toSet()
-        val used = RoomLayoutAi.usedNumbers(except = removedT + renumbering).toMutableSet()
+        val renumbering = updates.filter { it.number != null && it.id in cur && it.id !in locked &&
+            it.number != cur.getValue(it.id).number }.map { it.id }.toSet()
+        val used = RoomLayoutAi.usedNumbers(zoneId, except = removedT + renumbering).toMutableSet()
         val updatedT = LinkedHashMap<String, RoomTableDto>()
         for (op0 in updates) {
             val old = updatedT[op0.id] ?: cur[op0.id] ?: run { rejected += "unknown table '${op0.id.take(40)}'"; null } ?: continue
@@ -364,18 +373,31 @@ internal object FloorEditAi {
             }
             var next = t.copy(id = op.id, label = old.label, number = old.number)
             val wanted = op.number
-            if (wanted != null && wanted != old.number) {
-                if (wanted in 1..9999 && used.add(wanted)) next = next.copy(number = wanted, label = relabel(old.label, wanted, room.prefix))
-                else rejected += "table ${old.label}: number $wanted is taken"
+            // a number that matches what's already there, or that collides and nobody asked to
+            // renumber this table, is dropped silently — the rest of the op still applies
+            if (wanted != null && wanted != old.number && wanted in 1..9999 && used.add(wanted)) {
+                next = next.copy(number = wanted, label = relabel(old.label, wanted, room.prefix))
+            } else if (op.id in renumbering) {
+                // this table's renumber was dropped, so it keeps old.number — reserve that
+                // number again (it was freed above, for the renumber) so a table later in
+                // this same loop can't also claim it and leave two tables sharing a number
+                used.add(old.number ?: -1)
             }
             updatedT[op.id] = next
         }
-        // a renumber that did not happen keeps its number: two tables may never share one
-        val numbers = (cur.keys - removedT).mapNotNull { (updatedT[it] ?: cur.getValue(it)).number }
-        val clash = updatedT.values.any { it.id in renumbering } && numbers.size != numbers.toSet().size
-        if (clash) {
+        // Belt and braces: a genuine clash (two renumbers landing on the same number) rolls
+        // back only the tables that actually collide, not every renumber in the batch.
+        val counts = (cur.keys - removedT).mapNotNull { (updatedT[it] ?: cur.getValue(it)).number }
+            .groupingBy { it }.eachCount()
+        val clashing = counts.filterValues { it > 1 }.keys
+        if (clashing.isNotEmpty()) {
             rejected += "renumbering skipped: two tables would share a number"
-            updatedT.replaceAll { id, t -> cur.getValue(id).let { o -> t.copy(number = o.number, label = o.label) } }
+            for (id in renumbering) {
+                val t = updatedT[id] ?: continue
+                if (t.number !in clashing) continue
+                val o = cur.getValue(id)
+                updatedT[id] = t.copy(number = o.number, label = o.label)
+            }
         }
         updatedT.entries.removeIf { (id, t) -> t == cur[id] }
 

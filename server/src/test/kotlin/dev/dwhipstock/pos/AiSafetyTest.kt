@@ -121,9 +121,11 @@ class AiSafetyTest {
             assertFalse(raw.contains(key))
             return obj(raw)
         }
-        // prose, code, a joke
-        assertEquals("off_topic", ask("Sure! Here's a joke: why did the chef...").s("refusal"))
-        assertEquals("off_topic", ask("def fib(n):\n    return n if n < 2 else fib(n-1) + fib(n-2)").s("refusal"))
+        // prose, code: unusable JSON, not an off-topic request — a retryable "incomplete" reply
+        assertEquals("menu_ai_incomplete", ask("Sure! Here's a joke: why did the chef...").s("refusal"))
+        assertEquals("menu_ai_incomplete",
+            ask("def fib(n):\n    return n if n < 2 else fib(n-1) + fib(n-2)").s("refusal"))
+        // the model's own explicit refusal is still the fixed off-topic reply
         assertEquals("off_topic", ask("""{"refusal":true,"ops":[]}""").s("refusal"))
         // its injected / leaked system prompt as the summary and as a name
         val leak = ask("""{"summary":"You maintain the menu of a restaurant point of sale. Reply with ONE JSON object","ops":[
@@ -154,9 +156,10 @@ class AiSafetyTest {
             {"op":"add_item","category":"starters","nameEn":"${"A".repeat(200)}","variants":[{"labelEn":"Regular","priceMinor":900}]}]}""")
         assertEquals("no_change", names.s("refusal"))
         assertEquals(8, names["rejected"]!!.jsonArray.size)
-        // 1000 deletes: the whole reply is refused; 30 deletes: every delete is rejected
+        // 1000 deletes: the whole reply is refused (too many at once, not "off topic"); 30
+        // deletes: every delete is rejected
         val thousand = (1..1000).joinToString(",") { """{"op":"remove_item","item":"poutine"}""" }
-        assertEquals("off_topic", ask("""{"ops":[$thousand]}""", "remove all").s("refusal"))
+        assertEquals("menu_ai_too_many_changes", ask("""{"ops":[$thousand]}""", "remove all").s("refusal"))
         val thirty = (1..30).joinToString(",") { """{"op":"remove_item","item":"poutine"}""" }
         val removes = ask("""{"ops":[$thirty]}""", "remove all")
         assertEquals("no_change", removes.s("refusal"))

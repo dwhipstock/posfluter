@@ -143,12 +143,15 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
   Future<void> _ask() async {
     final text = _text.text.trim();
     if (text.isEmpty) return;
+    // sent: drop focus so a touch keyboard doesn't sit over the dialog
+    FocusManager.instance.primaryFocus?.unfocus();
     _show(await _run((pin) => widget.backend.chat(text, pin)));
   }
 
   Future<void> _voice(VoiceClip clip) async {
     final call = widget.backend.chatVoice;
     if (call == null) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     _show(await _run((pin) => call(clip, pin)));
   }
 

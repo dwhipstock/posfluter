@@ -113,12 +113,23 @@ class MenuAiService(
 ) {
     private val log = LoggerFactory.getLogger(MenuAiService::class.java)
 
-    private class RoomProposal(val zoneId: String, val at: Long)
+    private class RoomProposal(
+        val zoneId: String, val at: Long,
+        /** ids the AI actually proposed (e.g. "new-t1"); an apply may drop some (the manager
+         *  removed a ghost) but never add one that wasn't offered. */
+        val tableIds: Set<String> = emptySet(), val objectIds: Set<String> = emptySet(),
+    )
     private val roomProposals = ConcurrentHashMap<String, RoomProposal>()
     private class Proposal(val ops: Map<String, MenuOp>, val source: String, val summary: String, val at: Long)
     private class FloorProposal(val zoneId: String, val ops: List<FloorOp>, val summary: String, val at: Long)
     private val floorProposals = ConcurrentHashMap<String, FloorProposal>()
     private val proposals = ConcurrentHashMap<String, Proposal>()
+    // Applying a proposal atomically removes it from its map first (a concurrent
+    // second Apply — a retry, a double tap the client-side guard missed — then
+    // finds nothing and fails immediately, instead of the transaction running
+    // twice). This just remembers which ids that already happened to, so that
+    // second Apply can say "already applied" instead of "expired".
+    private val appliedProposals = ConcurrentHashMap<String, Long>()
     @Volatile private var probe: Pair<Boolean, Long>? = null
     private val limiter = RateLimiter(now = now)
 
@@ -131,6 +142,18 @@ class MenuAiService(
         private const val MAX_PROPOSALS = 20
         private const val PROBE_TTL_MS = 20_000L
         private const val MAX_ITEMS_IN_PROMPT = 600
+    }
+
+    /** "expired" once it's really gone; "already applied" if this id got there first. */
+    private fun expiredOrApplied(id: String, expiredMessage: String) = NotFoundException(
+        if (appliedProposals.containsKey(id)) "that was already applied" else expiredMessage,
+        if (appliedProposals.containsKey(id)) "already_applied" else "not_found",
+    )
+
+    private fun markApplied(id: String) {
+        appliedProposals[id] = now()
+        val cutoff = now() - PROPOSAL_TTL_MS
+        appliedProposals.entries.removeIf { it.value < cutoff }
     }
 
     init { Scrub.register(config.apiKey) }
@@ -288,17 +311,19 @@ class MenuAiService(
                 return@tracked refuse(AiGuard.Refusal.ROOM_OFF_TOPIC)
             }
             if (parsed.refused) return@tracked refuse(AiGuard.Refusal.ROOM_OFF_TOPIC)
-            // checked against the tables an apply keeps whatever the mode (open bills), numbers against the whole store
+            // checked against the tables an apply keeps whatever the mode (open bills); numbers are per-room,
+            // same as a manually added table — an empty room's first AI table must start at 1
             val plan = transaction {
                 RoomLayoutRules.validate(parsed.tables, parsed.objects,
                     room.tables.filter { it[dev.dwhipstock.pos.restaurant.DiningTables.id] in room.protectedIds }.map(RoomLayoutAi::box),
-                    RoomLayoutAi.usedNumbers(), room.prefix, spread = true)
+                    RoomLayoutAi.usedNumbers(zoneId), room.prefix, spread = true)
             }
             if (plan.tables.isEmpty() && plan.objects.isEmpty()) return@tracked refuse(AiGuard.Refusal.ROOM_NO_LAYOUT, plan.rejected)
             val cutoff = now() - PROPOSAL_TTL_MS
             roomProposals.entries.removeIf { it.value.at < cutoff }
             val id = UUID.randomUUID().toString()
-            roomProposals[id] = RoomProposal(zoneId, now())
+            roomProposals[id] = RoomProposal(zoneId, now(),
+                plan.tables.map { it.id }.toSet(), plan.objects.map { it.id }.toSet())
             log.info("AI room layout via ${p.id}/${p.model}: ${plan.tables.size} table(s), ${plan.objects.size} object(s), " +
                 "${plan.rejected.size} rejected")
             RoomLayoutProposalDto(id, zoneId, p.id, p.model, plan.tables, plan.objects, parsed.notes, plan.rejected,
@@ -312,23 +337,39 @@ class MenuAiService(
      * merge adds to it. Validated again, all or nothing, saved as a "room"
      * change set that [revert] puts back.
      */
-    fun applyRoom(req: RoomLayoutApplyRequest, userId: String, approverId: String): RoomLayoutApplyResult {
-        val proposal = roomProposals[req.proposalId] ?: throw NotFoundException("that layout has expired; ask again")
+    fun applyRoom(zoneId: String, req: RoomLayoutApplyRequest, userId: String, approverId: String): RoomLayoutApplyResult {
         require(req.mode == "replace" || req.mode == "merge") { "mode must be replace or merge" }
+        val expired = { expiredOrApplied(req.proposalId, "that layout has expired; ask again") }
+        val existing = roomProposals[req.proposalId]?.takeIf { it.zoneId == zoneId } ?: throw expired()
+        // claimed here, atomically (remove only if it's still the SAME proposal we just peeked
+        // at, so a zone mismatch above never removes another zone's still-good proposal): a
+        // concurrent second Apply of the same proposal (a retry, a double tap) then finds
+        // nothing and fails at once instead of saving twice
+        if (!roomProposals.remove(req.proposalId, existing)) throw expired()
+        val proposal = existing
+        // only ids the AI actually offered — the manager may have dropped some ghosts, but the
+        // request must not smuggle in a table or object the proposal never proposed
+        val tables = req.tables.filter { it.id in proposal.tableIds }
+        val objects = req.objects.filter { it.id in proposal.objectIds }
         val setId = UUID.randomUUID().toString()
-        val result = transaction {
-            val rows = mutableListOf<MenuChangeLog.Row>()
-            val (plan, removed) = RoomLayoutAi.apply(proposal.zoneId, req.mode == "replace", req.tables, req.objects, rows)
-            val room = RoomLayoutAi.room(proposal.zoneId)
-            val summary = "${room.name}: ${plan.tables.size} table(s), ${plan.tables.sumOf { it.seats }} seat(s), " +
-                "${plan.objects.size} object(s) from a picture" + if (removed > 0) " (replaced $removed)" else ""
-            MenuChangeLog.record(setId, userId, approverId, MenuChangeLog.ROOM, summary, rows)
-            val (tables, objects) = RoomLayoutAi.roomNow(proposal.zoneId)
-            RoomLayoutApplyResult(setId, plan.tables.size + plan.objects.size, removed, tables, objects, plan.rejected)
+        try {
+            val result = transaction {
+                val rows = mutableListOf<MenuChangeLog.Row>()
+                val (plan, removed) = RoomLayoutAi.apply(proposal.zoneId, req.mode == "replace", tables, objects, rows)
+                val room = RoomLayoutAi.room(proposal.zoneId)
+                val summary = "${room.name}: ${plan.tables.size} table(s), ${plan.tables.sumOf { it.seats }} seat(s), " +
+                    "${plan.objects.size} object(s) from a picture" + if (removed > 0) " (replaced $removed)" else ""
+                MenuChangeLog.record(setId, userId, approverId, MenuChangeLog.ROOM, summary, rows)
+                val (tables, objects) = RoomLayoutAi.roomNow(proposal.zoneId)
+                RoomLayoutApplyResult(setId, plan.tables.size + plan.objects.size, removed, tables, objects, plan.rejected)
+            }
+            markApplied(req.proposalId)
+            log.info("AI room layout: applied ${result.added} item(s) to ${proposal.zoneId} as $setId (${req.mode})")
+            return result
+        } catch (e: Exception) {
+            roomProposals[req.proposalId] = proposal // the save failed: let a retry reuse this proposal
+            throw e
         }
-        roomProposals.remove(req.proposalId)
-        log.info("AI room layout: applied ${result.added} item(s) to ${proposal.zoneId} as $setId (${req.mode})")
-        return result
     }
 
     /**
@@ -366,7 +407,7 @@ class MenuAiService(
             if (heard != null && !AiVoice.safe(heard)) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC, heard)
             val parsed = try { FloorEditAi.parse(reply) } catch (e: MenuAiReplyException) {
                 log.info("AI floor edit via ${p.id}: unusable reply (${e.message})")
-                return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC, heard)
+                return@tracked refuse(if (e.tooMany) AiGuard.Refusal.TOO_MANY_CHANGES else AiGuard.Refusal.INCOMPLETE, heard)
             }
             if (parsed.refused) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC, heard)
             val plan = transaction { FloorEditAi.plan(zoneId, parsed.ops) }
@@ -384,20 +425,29 @@ class MenuAiService(
 
     /** Apply a floor assistant proposal (checked again against the room now), saved as a "room" change set. */
     fun applyFloorEdit(zoneId: String, req: FloorEditApplyRequest, userId: String, approverId: String): FloorEditApplyResult {
-        val proposal = floorProposals[req.proposalId]?.takeIf { it.zoneId == zoneId }
-            ?: throw NotFoundException("that change has expired; ask again")
+        val expired = { expiredOrApplied(req.proposalId, "that change has expired; ask again") }
+        val existing = floorProposals[req.proposalId]?.takeIf { it.zoneId == zoneId } ?: throw expired()
+        // claimed atomically (only if still the same proposal just peeked at — a zone mismatch
+        // above must never remove another zone's still-good proposal) — see applyRoom
+        if (!floorProposals.remove(req.proposalId, existing)) throw expired()
+        val proposal = existing
         val setId = UUID.randomUUID().toString()
-        val result = transaction {
-            val rows = mutableListOf<MenuChangeLog.Row>()
-            val plan = FloorEditAi.apply(zoneId, proposal.ops, rows)
-            val what = proposal.summary.ifBlank { "${plan.changes.size} change(s)" }
-            MenuChangeLog.record(setId, userId, approverId, MenuChangeLog.ROOM, "${plan.roomName}: $what (AI assistant)", rows)
-            val (tables, objects) = RoomLayoutAi.roomNow(zoneId)
-            FloorEditApplyResult(setId, plan.changes.size, tables, objects, plan.rejected)
+        try {
+            val result = transaction {
+                val rows = mutableListOf<MenuChangeLog.Row>()
+                val plan = FloorEditAi.apply(zoneId, proposal.ops, rows)
+                val what = proposal.summary.ifBlank { "${plan.changes.size} change(s)" }
+                MenuChangeLog.record(setId, userId, approverId, MenuChangeLog.ROOM, "${plan.roomName}: $what (AI assistant)", rows)
+                val (tables, objects) = RoomLayoutAi.roomNow(zoneId)
+                FloorEditApplyResult(setId, plan.changes.size, tables, objects, plan.rejected)
+            }
+            markApplied(req.proposalId)
+            log.info("AI floor edit: applied ${result.applied} change(s) to $zoneId as $setId")
+            return result
+        } catch (e: Exception) {
+            floorProposals[req.proposalId] = proposal
+            throw e
         }
-        floorProposals.remove(req.proposalId)
-        log.info("AI floor edit: applied ${result.applied} change(s) to $zoneId as $setId")
-        return result
     }
 
     /**
@@ -467,9 +517,11 @@ class MenuAiService(
         val parsed = try {
             MenuChangeSetParser.parse(reply, facts)
         } catch (e: MenuAiReplyException) {
-            // prose, code, a leaked prompt, 1000 changes...: the fixed reply, never the model's text
+            // prose or code: a truncated/unparseable reply, or too many changes at once — never
+            // the model's own text, but a technical retry message rather than "that's off topic"
             log.info("AI menu via ${p.id}: unusable reply (${e.message})")
-            return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard)
+            return refusal(if (e.tooMany) AiGuard.Refusal.TOO_MANY_CHANGES else AiGuard.Refusal.INCOMPLETE,
+                who, elapsed = elapsed, heard = heard)
         }
         if (parsed.refused) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard)
         if (parsed.ops.isEmpty()) return refusal(AiGuard.Refusal.NO_CHANGE, who, parsed.rejected, elapsed, heard)
@@ -647,11 +699,15 @@ class MenuAiService(
     fun apply(
         proposalId: String, changeIds: List<String>, userId: String, approverId: String, confirmed: Boolean = false,
     ): MenuApplyResult {
-        val proposal = proposals[proposalId] ?: throw NotFoundException("that AI proposal has expired; ask again")
+        val proposal = proposals[proposalId] ?: throw expiredOrApplied(proposalId, "that AI proposal has expired; ask again")
         require(changeIds.isNotEmpty()) { "tick at least one change" }
         changeIds.forEach { require(it in proposal.ops) { "unknown change '${it.take(40)}'" } }
         if (!confirmed && isBulk(changeIds.map { proposal.ops.getValue(it) })) throw ImageGenException(409,
             "menu_ai_confirm_required", "more than $BULK_CONFIRM removals or price changes: confirm to apply")
+        // claimed atomically now that the pre-checks passed — see applyRoom.
+        // A confirm-required 409 above must NOT have removed it: the client
+        // resubmits the same proposalId with confirmed=true right after.
+        if (proposals.remove(proposalId) == null) throw expiredOrApplied(proposalId, "that AI proposal has expired; ask again")
         val wanted = changeIds.toMutableSet()
         proposal.ops.forEach { (id, op) ->
             val needs = when (op) { is MenuOp.AddItem -> op.category; is MenuOp.UpdateItem -> op.category; else -> null }
@@ -665,13 +721,18 @@ class MenuAiService(
             selected.filterIsInstance<MenuOp.ReorderCategories>()
         val created = mutableListOf<String>()
         val setId = UUID.randomUUID().toString()
-        transaction {
-            val refs = mutableMapOf<String, String>()
-            val rows = mutableListOf<MenuChangeLog.Row>()
-            for (op in ordered) applyOne(op, refs, rows, created)
-            MenuChangeLog.record(setId, userId, approverId, proposal.source, proposal.summary, rows)
+        try {
+            transaction {
+                val refs = mutableMapOf<String, String>()
+                val rows = mutableListOf<MenuChangeLog.Row>()
+                for (op in ordered) applyOne(op, refs, rows, created)
+                MenuChangeLog.record(setId, userId, approverId, proposal.source, proposal.summary, rows)
+            }
+            markApplied(proposalId)
+        } catch (e: Exception) {
+            proposals[proposalId] = proposal
+            throw e
         }
-        proposals.remove(proposalId)
         log.info("AI menu: applied ${ordered.size} change(s) as $setId, ${created.size} new item(s)")
         return MenuApplyResult(ordered.size, created, setId)
     }

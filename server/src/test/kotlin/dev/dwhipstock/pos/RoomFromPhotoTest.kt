@@ -5,9 +5,12 @@ import dev.dwhipstock.pos.aimenu.RoomLayoutAi
 import dev.dwhipstock.pos.aimenu.RoomLayoutRules
 import dev.dwhipstock.pos.aimenu.RoomObjectDto
 import dev.dwhipstock.pos.aimenu.RoomTableDto
+import dev.dwhipstock.pos.restaurant.Checks
 import dev.dwhipstock.pos.restaurant.DiningTables
 import dev.dwhipstock.pos.restaurant.FloorObjects
+import dev.dwhipstock.pos.restaurant.Zones
 import dev.dwhipstock.pos.sdk.MenuAiConfig
+import dev.dwhipstock.pos.sdk.VenueClock
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
@@ -24,6 +27,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.nio.file.Files
@@ -112,8 +116,9 @@ class RoomFromPhotoTest {
         val p = obj(res.bodyAsText())
         val tables = p["tables"]!!.jsonArray.map { it.jsonObject }
         assertEquals(listOf("ROUND", "RECT", "SQUARE"), tables.map { it.s("shape") })
-        // 1 is taken in the store (U-1, L-1…): the lowest free numbers; 50 is free and kept
-        assertEquals(listOf("L-18", "L-19", "L-50"), tables.map { it.s("label") })
+        // numbers are per-room: 1-8 are taken in "lower" itself (not elsewhere in the store),
+        // so 9 and 10 are the lowest free ones there; 50 is free and kept
+        assertEquals(listOf("L-9", "L-10", "L-50"), tables.map { it.s("label") })
         assertEquals("Juke-box", p["objects"]!!.jsonArray[1].jsonObject.s("labelFr"))
         assertEquals("Could not tell if the corner table is a booth.", p.s("notes"))
         assertEquals(2, fake.images.size)
@@ -125,7 +130,7 @@ class RoomFromPhotoTest {
         assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
         val r = obj(applied.bodyAsText())
         assertEquals(before.size, r["removed"]!!.jsonPrimitive.int)
-        assertEquals(setOf("L-18", "L-19", "L-50"), liveTables("lower").values.toSet())
+        assertEquals(setOf("L-9", "L-10", "L-50"), liveTables("lower").values.toSet())
         assertEquals(listOf("BAR_FRONT", "CUSTOM"), objects("lower"))
         // the proposal is used up
         assertEquals(HttpStatusCode.NotFound, manager.apply(p, "replace").status)
@@ -188,6 +193,80 @@ class RoomFromPhotoTest {
         val after = liveTables("outside")
         assertTrue(after.keys.containsAll(before.keys))
         assertEquals(before.size + 2, after.size)
+    }
+
+    @Test
+    fun anEmptyRoomsFirstAiTableStartsAtOneNotSomeOtherZonesNumber() = testApplication {
+        val fake = FakeMenuProvider(
+            """{"tables":[{"shape":"round","seats":2,"x":100,"y":100,"w":70,"h":70}],"objects":[]}""")
+        store(fake)
+        val manager = loginClient()
+        // a brand-new zone with no tables at all — every other zone in the store already has a "1"
+        transaction {
+            Zones.insert {
+                it[id] = "patio2"; it[nameEn] = "Patio 2"; it[nameFr] = "Terrasse 2"; it[labelPrefix] = "P"
+            }
+        }
+        assertTrue(transaction { RoomLayoutAi.usedNumbers("patio2") }.isEmpty())
+
+        val p = obj(manager.propose("patio2").bodyAsText())
+        assertEquals(listOf("P-1"), p["tables"]!!.jsonArray.map { it.jsonObject.s("label") })
+        assertEquals(HttpStatusCode.OK, manager.apply(p, "replace").status)
+        assertEquals(setOf("P-1"), liveTables("patio2").values.toSet())
+    }
+
+    @Test
+    fun doubleApplyGivesOneChangeSetNotTwo() = testApplication {
+        val fake = FakeMenuProvider(
+            """{"tables":[{"shape":"round","seats":2,"x":500,"y":500,"w":70,"h":70}],"objects":[]}""")
+        store(fake)
+        val manager = loginClient()
+        val p = obj(manager.propose("outside").bodyAsText())
+
+        // two "Apply" calls for the same proposal, as a slow network retry or a missed
+        // double-tap guard could produce: only the first must go through
+        val first = manager.apply(p, "merge")
+        val second = manager.apply(p, "merge")
+        assertEquals(HttpStatusCode.OK, first.status, first.bodyAsText())
+        assertEquals(HttpStatusCode.NotFound, second.status, second.bodyAsText())
+        assertTrue(obj(second.bodyAsText()).s("error").contains("already applied"), second.bodyAsText())
+
+        val sets = Json.parseToJsonElement(manager.get("/menu-ai/history?source=room").bodyAsText()).jsonArray
+        assertEquals(1, sets.size, sets.toString())
+        // the table the AI proposed was only added once
+        assertEquals(1, liveTables("outside").values.count { it == "O-5" })
+    }
+
+    @Test
+    fun applyRejectsAZoneMismatchAndTablesNotInTheProposal() = testApplication {
+        val fake = FakeMenuProvider(
+            """{"tables":[{"shape":"round","seats":2,"x":500,"y":500,"w":70,"h":70}],"objects":[]}""")
+        store(fake)
+        val manager = loginClient()
+        val p = obj(manager.propose("outside").bodyAsText())
+
+        // the URL zone must match the proposal's own zone
+        val wrongZone = manager.post("/zones/lower/ai-layout/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                put("managerPin", "1234"); put("proposalId", p.s("proposalId")); put("mode", "merge")
+                put("tables", p["tables"]!!); put("objects", p["objects"]!!)
+            }.toString())
+        }
+        assertEquals(HttpStatusCode.NotFound, wrongZone.status, wrongZone.bodyAsText())
+
+        // a table id the AI never proposed must not sneak into an apply
+        val proposed = p["tables"]!!.jsonArray.single().jsonObject
+        val smuggled = JsonArray(listOf(
+            proposed,
+            JsonObject(proposed + ("id" to kotlinx.serialization.json.JsonPrimitive("smuggled-table")) +
+                ("x" to kotlinx.serialization.json.JsonPrimitive(700))),
+        ))
+        val before = liveTables("outside").size
+        val r = manager.apply(p, "merge", smuggled)
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        // only the one id the proposal actually offered was applied
+        assertEquals(before + 1, liveTables("outside").size)
     }
 
     @Test
