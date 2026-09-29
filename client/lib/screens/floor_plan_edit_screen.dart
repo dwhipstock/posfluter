@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -1002,9 +1003,13 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
           ),
           if (isSelected)
             Positioned(
-              right: -8,
-              bottom: -8,
+              // inside the corner: a child's part outside its parent can't be
+              // hit, so the old off-corner handle was a tiny target for a finger
+              right: 0,
+              bottom: 0,
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                dragStartBehavior: DragStartBehavior.down,
                 onPanStart: (_) => _pushUndo(),
                 onPanUpdate: (d) => _mutateObject(
                   snapshot: false,
@@ -1026,18 +1031,25 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                     height: _snap(e.height).clamp(40, 1000 - e.y).toInt(),
                   ),
                 ),
-                child: Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: T.surfaceAlt,
-                    borderRadius: T.radiusSmall,
-                    border: Border.all(color: T.textPrimary, width: 2),
-                  ),
-                  child: const Icon(
-                    LucideIcons.moveDiagonal2,
-                    size: 14,
-                    color: T.textPrimary,
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: T.surfaceAlt,
+                        borderRadius: T.radiusSmall,
+                        border: Border.all(color: T.textPrimary, width: 2),
+                      ),
+                      child: const Icon(
+                        LucideIcons.moveDiagonal2,
+                        size: 16,
+                        color: T.textPrimary,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1089,9 +1101,13 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
           // TODO: deltas are screen-axis, so resizing a rotated table drifts.
           if (isSelected)
             Positioned(
-              right: -8,
-              bottom: -8,
+              // inside the corner: a child's part outside its parent can't be
+              // hit, so the old off-corner handle was a tiny target for a finger
+              right: 0,
+              bottom: 0,
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                dragStartBehavior: DragStartBehavior.down,
                 onPanStart: (_) => _pushUndo(),
                 onPanUpdate: (d) => _mutateSelected(
                   snapshot: false,
@@ -1113,18 +1129,25 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                     height: _snap(e.height).clamp(40, 1000 - e.y).toInt(),
                   ),
                 ),
-                child: Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: T.surfaceAlt,
-                    borderRadius: T.radiusSmall,
-                    border: Border.all(color: T.textPrimary, width: 2),
-                  ),
-                  child: const Icon(
-                    LucideIcons.moveDiagonal2,
-                    size: 14,
-                    color: T.textPrimary,
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: T.surfaceAlt,
+                        borderRadius: T.radiusSmall,
+                        border: Border.all(color: T.textPrimary, width: 2),
+                      ),
+                      child: const Icon(
+                        LucideIcons.moveDiagonal2,
+                        size: 16,
+                        color: T.textPrimary,
+                      ),
+                    ),
                   ),
                 ),
               ),
