@@ -157,6 +157,8 @@ data class FloorObjectDto(
     val rotation: Int,
     /** Optional caption in each catalog language ("Billard" / "Pool"). */
     val labelFr: String? = null, val labelEn: String? = null,
+    /** CUSTOM objects only: an icon key from [FLOOR_OBJECT_ICONS], and RECT | ROUND. */
+    val icon: String? = null, val shape: String? = null,
 )
 
 @Serializable
@@ -549,6 +551,7 @@ fun Route.posRoutes(
                         o[FloorObjects.x], o[FloorObjects.y],
                         o[FloorObjects.width], o[FloorObjects.height],
                         o[FloorObjects.rotation], o[FloorObjects.labelFr], o[FloorObjects.labelEn],
+                        o[FloorObjects.icon], o[FloorObjects.shape],
                     )
                 }
             Zones.selectAll().orderBy(Zones.sortOrder).map {

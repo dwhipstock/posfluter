@@ -732,7 +732,7 @@ class Api {
     }),
   );
 
-  // --- floor objects (pool / bar front / pillar), same manager-PIN gate ---
+  // --- floor objects (pool / bar / entrance / … / custom), same manager-PIN gate ---
 
   /// Drop a structural prop on the plan. [body] carries type + geometry.
   static Future<FloorObject> addObject(
@@ -742,6 +742,39 @@ class Api {
   ) async => FloorObject.fromJson(
     await _post('/zones/$zoneId/objects', {...body, 'managerPin': managerPin}),
   );
+
+  /// "Add from photo": one photo of a thing in the room → a suggested CUSTOM
+  /// object (name, icon key, shape, size). Nothing is created; the store
+  /// drops the photo after the call. Uses the AI menu add-on ([menuAiStatus]).
+  static Future<RoomObjectSuggestion> suggestRoomObject(
+    List<int> bytes,
+    String contentType,
+    String managerPin,
+  ) async {
+    final req =
+        http.MultipartRequest(
+            'POST',
+            Uri.parse('$baseUrl/floor-objects/ai-suggest'),
+          )
+          ..headers['Authorization'] = 'Bearer $_token'
+          ..fields['managerPin'] = managerPin
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'photo',
+              bytes,
+              filename: 'object',
+              contentType: http_parser.MediaType.parse(contentType),
+            ),
+          );
+    if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
+    final res = await http.Response.fromStream(
+      await req.send(),
+    ).timeout(_aiTimeout);
+    _throwOnError(res);
+    return RoomObjectSuggestion.fromJson(
+      jsonDecode(utf8.decode(res.bodyBytes)),
+    );
+  }
 
   /// Hard delete — nothing references a floor object.
   static Future<void> deleteObject(String objectId, String managerPin) async =>
@@ -2113,11 +2146,17 @@ class Zone {
 /// tappable in service mode. Same logical 0–1000 canvas as [TableInfo].
 class FloorObject {
   final String id;
-  final String type; // POOL | BAR_FRONT | PILLAR
+
+  /// POOL | BAR_FRONT | PILLAR | ENTRANCE | HOST_STAND | KITCHEN | RESTROOMS |
+  /// STAGE | CUSTOM
+  final String type;
   final int x, y, width, height, rotation;
 
   /// Optional caption per catalog language ("Billard" / "Pool").
   final String? labelFr, labelEn;
+
+  /// CUSTOM only: an icon key (floorObjectIcons) and RECT | ROUND.
+  final String? icon, shape;
   FloorObject(
     this.id,
     this.type,
@@ -2127,8 +2166,10 @@ class FloorObject {
     this.height,
     this.rotation,
     this.labelFr,
-    this.labelEn,
-  );
+    this.labelEn, {
+    this.icon,
+    this.shape,
+  });
   factory FloorObject.fromJson(Map<String, dynamic> j) => FloorObject(
     j['id'],
     j['type'],
@@ -2140,6 +2181,8 @@ class FloorObject {
     // an older store sends one `label` for both languages
     j['labelFr'] ?? j['label'],
     j['labelEn'] ?? j['label'],
+    icon: j['icon'],
+    shape: j['shape'],
   );
 
   /// Editor-local geometry mutation (drag/resize/rotate); identity carries over.
@@ -2159,6 +2202,8 @@ class FloorObject {
     rotation ?? this.rotation,
     labelFr,
     labelEn,
+    icon: icon,
+    shape: shape,
   );
 
   /// The geometry slice the batch "objects layout" endpoint expects.
@@ -2170,6 +2215,29 @@ class FloorObject {
     'height': height,
     'rotation': rotation,
   };
+}
+
+/// What the AI thinks the photographed thing is; the manager edits it first.
+class RoomObjectSuggestion {
+  final String labelEn, labelFr, icon, shape;
+  final int width, height;
+  const RoomObjectSuggestion({
+    required this.labelEn,
+    required this.labelFr,
+    required this.icon,
+    required this.shape,
+    required this.width,
+    required this.height,
+  });
+  factory RoomObjectSuggestion.fromJson(Map<String, dynamic> j) =>
+      RoomObjectSuggestion(
+        labelEn: j['labelEn'] ?? '',
+        labelFr: j['labelFr'] ?? '',
+        icon: j['icon'] ?? 'star',
+        shape: j['shape'] ?? 'RECT',
+        width: (j['width'] as num?)?.toInt() ?? 100,
+        height: (j['height'] as num?)?.toInt() ?? 100,
+      );
 }
 
 class TableInfo {

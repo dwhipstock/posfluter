@@ -7,6 +7,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import 'floor_object_icons.dart';
 
 /// Geometry is stored server-side in LOGICAL units on a square canvas —
 /// the client scales to its viewport, so one layout fits every screen.
@@ -156,7 +157,9 @@ Widget placedObject(FloorObject o, double scale, {required Widget child}) =>
           : Transform.rotate(angle: o.rotation * math.pi / 180, child: child),
     );
 
-/// A non-orderable structural prop — pool table, bar front, pillar. Rendered
+/// A non-orderable structural prop — pool table, bar front, pillar, entrance,
+/// host stand, kitchen, restrooms, stage, or a manager-made CUSTOM one (its
+/// icon from the fixed list, rect or round). Rendered
 /// deliberately quiet (mono/muted, no accent, no status color) so it reads as
 /// background context and the real tables stay the eye's focus. Drawn beneath
 /// the tables. Inert in service mode — no gestures, no navigation.
@@ -173,9 +176,10 @@ class FloorObjectShape extends StatelessWidget {
 
   bool get _isPillar => object.type == 'PILLAR';
 
-  // pillar reads as a round column; pool/bar are plain slabs
-  BorderRadius get _radius =>
-      _isPillar ? BorderRadius.circular(999) : T.radiusSmall;
+  // pillar / a ROUND custom object read as round; the rest are plain slabs
+  BorderRadius get _radius => _isPillar || object.shape == 'ROUND'
+      ? BorderRadius.circular(999)
+      : T.radiusSmall;
 
   /// Caption drawn on the slab: its label in the current language, else a
   /// type default. Pillars stay unlabeled — a small block needs no word.
@@ -186,7 +190,8 @@ class FloorObjectShape extends StatelessWidget {
     return switch (object.type) {
       'POOL' => l.objectPoolCaption,
       'BAR_FRONT' => l.objectBarCaption,
-      _ => null, // PILLAR
+      'PILLAR' => null,
+      _ => l.objectTypeName(object.type),
     };
   }
 
@@ -197,7 +202,21 @@ class FloorObjectShape extends StatelessWidget {
     // pillar: a solid muted block. pool/bar: a faint outlined slab.
     final fill = _isPillar ? T.border : T.surfaceAlt.withValues(alpha: .5);
     final caption = _caption(L.of(context));
+    final icon = floorObjectTypeIcon(object.type, object.icon);
     final labelSize = (math.min(w, h) * .24).clamp(9.0, 16.0);
+    final iconSize = (math.min(w, h) * .4).clamp(12.0, 28.0);
+    // icon beside the caption on a long slab, above it on a squarer one
+    final content = icon == null
+        ? (caption == null ? null : _label(caption, labelSize))
+        : Flex(
+            direction: w > h * 1.8 ? Axis.horizontal : Axis.vertical,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: iconSize, color: T.textMuted),
+              if (caption != null && math.min(w, h) >= 36)
+                Flexible(child: _label(caption, labelSize)),
+            ],
+          );
     return Container(
       decoration: BoxDecoration(
         color: fill,
@@ -207,17 +226,17 @@ class FloorObjectShape extends StatelessWidget {
           width: selected ? 2 : 1,
         ),
       ),
-      child: caption == null
+      child: content == null
           ? null
           : Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 // counter-rotate so the caption stays upright on rotated slabs
                 child: object.rotation == 0
-                    ? _label(caption, labelSize)
+                    ? content
                     : Transform.rotate(
                         angle: -object.rotation * math.pi / 180,
-                        child: _label(caption, labelSize),
+                        child: content,
                       ),
               ),
             ),

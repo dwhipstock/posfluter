@@ -56,7 +56,8 @@ object DiningTables : Table("dining_tables") {
 object FloorObjects : Table("floor_objects") {
     val id = varchar("id", 64)
     val zoneId = varchar("zone_id", 64).references(Zones.id)
-    val type = varchar("type", 12) // POOL | BAR_FRONT | PILLAR
+    // POOL | BAR_FRONT | PILLAR | ENTRANCE | HOST_STAND | KITCHEN | RESTROOMS | STAGE | CUSTOM
+    val type = varchar("type", 16)
     val x = integer("x").default(0)
     val y = integer("y").default(0)
     val width = integer("width").default(100)
@@ -65,6 +66,9 @@ object FloorObjects : Table("floor_objects") {
     // optional caption, per language like zone names (043); the type drives the shape
     val labelFr = varchar("label_fr", 64).nullable()
     val labelEn = varchar("label_en", 64).nullable()
+    // CUSTOM only (052): a key from FLOOR_OBJECT_ICONS, and RECT | ROUND
+    val icon = varchar("icon", 32).nullable()
+    val shape = varchar("shape", 8).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
