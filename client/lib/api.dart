@@ -19,6 +19,7 @@ export 'store_profile.dart';
 
 part 'kitchen/kitchen_api.dart';
 part 'forecourt/forecourt_api.dart';
+part 'quickserve/quick_serve_api.dart';
 
 /// Thin API client for the store server. The client owns NO money logic —
 /// pricing, tax, rounding all live server-side (architecture principle #2).
@@ -32,7 +33,8 @@ class Api {
   static bool get usesEmbeddedStore =>
       !kIsWeb &&
       (Platform.isAndroid || DesktopStore.enabled) &&
-      !AppMode.isStock;
+      !AppMode.isStock &&
+      !AppMode.isKiosk;
 
   /// This app's own embedded store (the port differs per brand app, so two
   /// brands can run side by side on one tablet; see [AppMode.brand]).

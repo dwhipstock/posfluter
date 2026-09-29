@@ -49,10 +49,11 @@ services:
       ADMIN_EMAIL: "${ADMIN_EMAIL:?set ADMIN_EMAIL in .env.local}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env.local}"
       # one key per store: STORE_API_KEY → vieux-port (tablet), then plateau,
-      # sage-poppy and pronghorn (desktop stores on this Mac)
+      # express (the quick-serve counter), sage-poppy and pronghorn (desktop
+      # stores on this Mac)
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env.local}"
-      STORE_API_KEYS: "plateau=${STORE_API_KEY_PLATEAU:-},sage-poppy=${STORE_API_KEY_SAGE_POPPY:-},pronghorn=${STORE_API_KEY_PRONGHORN:-}"
-      STORES: "vieux-port=Copper Lantern — Vieux-Port,plateau=Copper Lantern — Plateau,sage-poppy=Sage & Poppy Bottle Shop,pronghorn=Pronghorn Fuel & Market"
+      STORE_API_KEYS: "plateau=${STORE_API_KEY_PLATEAU:-},express=${STORE_API_KEY_EXPRESS:-},sage-poppy=${STORE_API_KEY_SAGE_POPPY:-},pronghorn=${STORE_API_KEY_PRONGHORN:-}"
+      STORES: "vieux-port=Copper Lantern — Vieux-Port,plateau=Copper Lantern — Plateau,express=Copper Lantern — Express,sage-poppy=Sage & Poppy Bottle Shop,pronghorn=Pronghorn Fuel & Market"
       # the US shops (the bottle shop, the gas station): their own zone, currency,
       # country and kind (cloud migration 017)
       STORE_ZONES: "sage-poppy=America/Los_Angeles,pronghorn=America/Chicago"

@@ -5,6 +5,7 @@ import dev.dwhipstock.poscloud.db.Migrations
 import dev.dwhipstock.poscloud.db.StoreApiKeys
 import dev.dwhipstock.poscloud.db.Venues
 import io.ktor.client.request.*
+import kotlinx.serialization.json.buildJsonObject
 import io.ktor.http.*
 import io.ktor.server.testing.*
 import org.jetbrains.exposed.sql.and
@@ -120,6 +121,38 @@ class StoreProvisioningTest {
         // each key lands in its own store
         ingest("key-pl", event("check.closed", checkClosedPayload(1, 5000, storeTax(5000)), seq = 1))
         transaction { assertEquals("plateau", Checks.selectAll().single()[Checks.venueId]) }
+    }
+
+    @Test
+    fun theExpressCounterIsOneMoreCopperLanternStoreInTheSamePortal() = testApplication {
+        // Copper Lantern Express (the quick-serve counter) is a third venue of the
+        // same brand: same tenant, its own key, its sales under its own id
+        val config = TestSupport.config.copy(
+            storeApiKey = "key-vp",
+            storeApiKeys = mapOf("plateau" to "key-pl", "express" to "key-ex"),
+            stores = listOf(
+                StoreSeed("vieux-port", "Copper Lantern — Vieux-Port"),
+                StoreSeed("plateau", "Copper Lantern — Plateau"),
+                StoreSeed("express", "Copper Lantern — Express"),
+            ),
+        )
+        application { module(config) }
+        startApplication()
+        // a counter order: no floor plan, the store's one counter "table"
+        ingest("key-ex", event("check.closed",
+            buildJsonObject {
+                qcCheckClosedPayload(7, 1195, "2026-10-08T12:05:00").forEach { (k, v) -> put(k, v) }
+                put("tableLabel", kotlinx.serialization.json.JsonPrimitive("1"))
+                put("zoneId", kotlinx.serialization.json.JsonPrimitive("counter"))
+            }, seq = 1))
+        ingest("key-vp", event("check.closed", checkClosedPayload(1, 5000, storeTax(5000)), seq = 1))
+        transaction {
+            val ex = Venues.selectAll().where { (Venues.tenantId eq Bootstrap.TENANT) and (Venues.id eq "express") }.single()
+            assertEquals("Copper Lantern — Express", ex[Venues.name])
+            assertEquals("CAD", ex[Venues.currency])
+            val byVenue = Checks.selectAll().associate { it[Checks.venueId] to it[Checks.tenantId] }
+            assertEquals(mapOf("express" to Bootstrap.TENANT, "vieux-port" to Bootstrap.TENANT), byVenue)
+        }
     }
 
     @Test

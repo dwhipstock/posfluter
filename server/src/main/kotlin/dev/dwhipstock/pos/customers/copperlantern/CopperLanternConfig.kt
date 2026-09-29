@@ -46,8 +46,10 @@ class CopperLanternConfig(
     // Montréal: Canada, CAD, French + English (StoreProfile.QUEBEC_PUB), and
     // Spanish and German on the staff screens for visiting staff (the menu's
     // extra names live in the translations table)
+    // Express is the quick-serve counter (no floor plan, numbered orders)
     override val profile = StoreProfile.QUEBEC_PUB.copy(
         locales = StoreProfile.QUEBEC_PUB.locales + listOf(LocaleCode.ES, LocaleCode.DE),
+        kind = if (venue.quickServe) StoreProfile.Kind.QUICK_SERVE else StoreProfile.Kind.RESTAURANT,
     )
 
     // ---- policy: typed, changing these is a deploy, on purpose ----

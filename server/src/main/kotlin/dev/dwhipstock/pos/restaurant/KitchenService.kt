@@ -207,6 +207,12 @@ class KitchenService(
 
     val queue = KitchenPrintQueue(transport, ::targetFor, clockMs, render)
 
+    /** Quick-serve: the order's number ("#101 · Take out") instead of a table on tickets and the screen. */
+    var ticketLabel: ((checkId: Int, language: KitchenLanguage) -> String?)? = null
+
+    /** Quick-serve: told (after commit) when the last open card of a check is bumped — the order is ready. */
+    var onCheckDone: ((checkId: Int) -> Unit)? = null
+
     companion object {
         val OUTPUTS = setOf("printer", "screen", "both")
         val DRINK_CATEGORIES = listOf("beer-cider", "wine", "cocktails")
@@ -557,7 +563,8 @@ class KitchenService(
     private fun header(checkId: Int, senderName: String?): Header {
         val check = requireCheckRow(checkId)
         val table = DiningTables.selectAll().where { DiningTables.id eq check[Checks.tableId] }.firstOrNull()
-        val label = table?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] } ?: check[Checks.tableId]
+        val label = ticketLabel?.invoke(checkId, language())
+            ?: table?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] } ?: check[Checks.tableId]
         val opener = Users.selectAll().where { Users.id eq check[Checks.openedBy] }.firstOrNull()?.get(Users.name)
         return Header(label, opener ?: senderName ?: "—", guestsOf(checkId))
     }
@@ -841,17 +848,26 @@ class KitchenService(
     }
 
     /** Done: the card (a check at a station) leaves the screen. Returns the bump id for Recall. */
-    fun bump(checkId: Int, stationId: String): String = transaction {
-        val id = "kb-" + UUID.randomUUID().toString()
-        val n = KitchenTickets.update({
-            (KitchenTickets.checkId eq checkId) and (KitchenTickets.stationId eq stationId) and
-                (KitchenTickets.onScreen eq 1) and KitchenTickets.bumpedAt.isNull()
-        }) {
-            it[bumpedAt] = now()
-            it[bumpId] = id
+    fun bump(checkId: Int, stationId: String): String {
+        val (id, done) = transaction {
+            val id = "kb-" + UUID.randomUUID().toString()
+            val n = KitchenTickets.update({
+                (KitchenTickets.checkId eq checkId) and (KitchenTickets.stationId eq stationId) and
+                    (KitchenTickets.onScreen eq 1) and KitchenTickets.bumpedAt.isNull()
+            }) {
+                it[bumpedAt] = now()
+                it[bumpId] = id
+            }
+            if (n == 0) throw NotFoundException("no open card for check $checkId at $stationId", "card_not_found")
+            val left = KitchenTickets.selectAll().where {
+                (KitchenTickets.checkId eq checkId) and (KitchenTickets.onScreen eq 1) and KitchenTickets.bumpedAt.isNull()
+            }.count()
+            id to (left == 0L)
         }
-        if (n == 0) throw NotFoundException("no open card for check $checkId at $stationId", "card_not_found")
-        id
+        if (done) onCheckDone?.let { hook ->
+            try { hook(checkId) } catch (e: Exception) { log.warn("order-ready hook failed: ${e.message}") }
+        }
+        return id
     }
 
     /** Undo a bump ([bumpId], or the latest when null): the card comes back. */

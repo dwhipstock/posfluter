@@ -55,6 +55,7 @@ import dev.dwhipstock.pos.payments.taptopay.tapToPayRoutes
 import dev.dwhipstock.pos.payments.simulator.simulatorRoutes
 import dev.dwhipstock.pos.api.printerRoutes
 import dev.dwhipstock.pos.api.kitchenRoutes
+import dev.dwhipstock.pos.api.quickServeRoutes
 import dev.dwhipstock.pos.api.forecourtRoutes
 import dev.dwhipstock.pos.restaurant.BadRequestException
 import dev.dwhipstock.pos.restaurant.ConflictException
@@ -95,7 +96,7 @@ fun Application.module(
     requireDeviceTokenOverride: Boolean? = null,
     pairingTransport: dev.dwhipstock.pos.sync.CloudTransport? = null,
     seedMode: String = System.getenv("POS_SEED") ?: "copperlantern",
-    // which store this is (POS_VENUE=vieux-port|plateau|sage-poppy): its config,
+    // which store this is (POS_VENUE=vieux-port|plateau|express|sage-poppy): its config,
     // display name and first-boot seed. sage-poppy is the US retail store.
     venueId: String? = System.getenv("POS_VENUE"),
     venue: CopperLanternVenue = if (SagePoppy.matches(venueId) || Pronghorn.matches(venueId)) CopperLanternVenue.VIEUX_PORT
@@ -200,6 +201,10 @@ fun Application.module(
         when {
             pronghorn -> PronghornSeed.seedIfEmpty()
             sagePoppy -> SagePoppySeed.seedIfEmpty()
+            venue.quickServe -> {
+                dev.dwhipstock.pos.customers.copperlantern.CopperLanternExpressSeed.seedIfEmpty()
+                CopperLanternSeed.seedTranslations()
+            }
             else -> {
                 CopperLanternSeed.seedIfEmpty(venue)
                 CopperLanternSeed.seedTranslations()
@@ -367,6 +372,16 @@ fun Application.module(
     val retailService = dev.dwhipstock.pos.retail.RetailService(
         config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup(), ageCheckMode)
     if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
+    // quick-serve (Copper Lantern Express): numbered counter orders, kiosks, the pickup board
+    val quickServe = if (config.profile.kind != StoreProfile.Kind.QUICK_SERVE) null
+        else dev.dwhipstock.pos.restaurant.QuickServeService(config, checkService).also { qs ->
+            qs.ensureCounter()
+            kitchenService?.let { k ->
+                qs.kitchen = k
+                k.ticketLabel = qs::ticketLabel
+                k.onCheckDone = qs::kitchenDone
+            }
+        }
     // stock counting / receiving in the store (retail); on hand stays the cloud's
     val stockService = dev.dwhipstock.pos.retail.StockService(config)
     val shiftService = ShiftService(config)
@@ -565,6 +580,10 @@ fun Application.module(
         settingsRoutes(settingsRepo)
         printerRoutes(thermalPrinter, config, settingsRepo)
         kitchenRoutes(kitchenService)
+        quickServe?.let {
+            quickServeRoutes(it, config.displayName, config.venueId, config.profile.currency,
+                config.profile.locales.map { l -> l.tag })
+        }
         forecourtRoutes(forecourt, authService)
         // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in
         // production, where Caddy fronts the sync API and the Next.js portal on one
@@ -621,7 +640,7 @@ data class HealthResponse(
     val venue: String = "",
     val venueId: String = "",
     val brand: String = "",
-    /** restaurant | retail */
+    /** restaurant | retail | quick-serve */
     val kind: String = StoreProfile.Kind.RESTAURANT.wire,
     val country: String = "CA",
     val currency: String = "CAD",

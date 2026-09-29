@@ -12,6 +12,7 @@ import 'connection_monitor.dart';
 import 'design/tokens.dart';
 import 'desktop_store.dart';
 import 'home.dart';
+import 'kiosk/kiosk_app.dart';
 import 'i18n.dart';
 import 'reader/reader_app.dart';
 import 'retail/sp_theme.dart';
@@ -49,6 +50,17 @@ Future<void> main() async {
     ]);
     await WakelockPlus.enable();
     runApp(const ReaderApp());
+    return;
+  }
+  if (AppMode.isKiosk) {
+    // The self-order kiosk: portrait, full screen (no system bars), never
+    // sleeps — customers walk up to it all day (lib/kiosk/).
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    await SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+    ]);
+    await WakelockPlus.enable();
+    runApp(const KioskApp());
     return;
   }
   if (AppMode.isStock) {

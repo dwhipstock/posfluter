@@ -56,6 +56,9 @@ class ServerDiscovery {
     int concurrency = 48,
     void Function(String subnet)? onStatus,
     List<int>? ports,
+    // which answering store to take (default: any POS store); the kiosk
+    // takes only a quick-serve store
+    Future<bool> Function(String base)? accept,
   }) async {
     final order =
         ports ?? portOrder(Api.savedServerUrl, AppMode.discoveryPorts());
@@ -79,7 +82,7 @@ class ServerDiscovery {
         // Phase 2: confirm each open-port host is actually the POS store.
         for (final h in open) {
           final base = 'http://$h:$port';
-          if (await Api.probeHealth(base)) return base;
+          if (await (accept ?? Api.probeHealth)(base)) return base;
         }
       }
     }

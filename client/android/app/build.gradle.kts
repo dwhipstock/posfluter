@@ -36,7 +36,10 @@ val stockApp = dartDefines["POS_APP"] == "stock"
 // The card reader (a phone that takes cards with Stripe Tap to Pay for the
 // store, --dart-define=POS_APP=reader): like the stock app, a LAN client.
 val readerApp = dartDefines["POS_APP"] == "reader"
-val phoneApp = stockApp || readerApp
+// The self-order kiosk (a portrait tablet customers order on at a quick-serve
+// store, --dart-define=POS_APP=kiosk): a LAN client like the others.
+val kioskApp = dartDefines["POS_APP"] == "kiosk"
+val phoneApp = stockApp || readerApp || kioskApp
 
 // Which store brand this counter-tablet build is (--dart-define=POS_BRAND=…,
 // read in Dart by lib/app_mode.dart). Each brand is its own Android app so both
@@ -100,6 +103,7 @@ android {
         applicationId = when {
             readerApp -> "dev.dwhipstock.pos_reader"
             stockApp -> "dev.dwhipstock.pos_stock"
+            kioskApp -> "dev.dwhipstock.pos_kiosk"
             else -> brand.applicationId
         }
         // The counter tablet hosts the store; the stock app and the card reader are LAN clients.
@@ -125,6 +129,7 @@ android {
             manifestPlaceholders["appLabel"] = when {
                 readerApp -> "Card Reader Test"
                 stockApp -> "Stock Test"
+                kioskApp -> "Kiosk Test"
                 else -> brand.label.replace(" POS", " Test")
             }
         }
@@ -141,6 +146,7 @@ android {
             manifestPlaceholders["appLabel"] = when {
                 readerApp -> "Card Reader"
                 stockApp -> "Stock"
+                kioskApp -> "Self-Order Kiosk"
                 else -> brand.label
             }
         }

@@ -24,7 +24,7 @@ interface CustomerConfig {
     val electronicTenders: List<TenderMethod>
     /** Base URL customer phones can reach — printed into table QR codes (M3). */
     val publicBaseUrl: String
-    /** Which store this is (POS_VENUE): "vieux-port", "plateau", "sage-poppy". */
+    /** Which store this is (POS_VENUE): "vieux-port", "plateau", "express", "sage-poppy". */
     val venueId: String get() = customerId
     /** Which look the terminal and receipts wear: "copper-lantern" or "sage-poppy". */
     val brand: String get() = customerId
