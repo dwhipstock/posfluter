@@ -131,8 +131,8 @@ class AiPhotoRoutesTest {
             imageGenConfig = on(), imageProvider = fake, imageReachable = { true }) }
         val manager = loginClient()
 
-        // manager PIN required (it spends money)
-        assertEquals(HttpStatusCode.Forbidden, manager.post("/items/poutine/ai-photo/generate") {
+        // it spends money: a non-manager session needs the manager PIN
+        assertEquals(HttpStatusCode.Forbidden, loginClient("9999").post("/items/poutine/ai-photo/generate") {
             contentType(ContentType.Application.Json); setBody("""{"count":3}""")
         }.status)
         assertEquals(HttpStatusCode.NotFound, manager.post("/items/nope/ai-photo/generate") {

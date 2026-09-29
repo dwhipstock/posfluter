@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'design/tokens.dart';
+import 'desktop_store.dart';
 import 'i18n.dart';
 
 /// Global "is the store server reachable?" state, fed by [Api]'s HTTP layer.
@@ -330,7 +331,13 @@ class _ReconnectingBarrierState extends State<_ReconnectingBarrier> {
                 // auto-probes run every 3s anyway, but staff need a button to
                 // press — a barrier with no affordance reads as a hang
                 FilledButton(
-                  onPressed: () => ConnectionMonitor.instance.probeNow(),
+                  onPressed: () async {
+                    // Windows: the app's own store may have died — bring it back
+                    if (DesktopStore.enabled) {
+                      await DesktopStore.ensureRunning();
+                    }
+                    await ConnectionMonitor.instance.probeNow();
+                  },
                   child: Text(l.retry),
                 ),
                 if (_showEscape) ...[

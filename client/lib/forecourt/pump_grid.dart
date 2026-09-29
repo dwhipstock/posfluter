@@ -936,7 +936,7 @@ class _PrepayDialogState extends State<PrepayDialog> {
                       }),
                       child: Center(
                         child: Text(
-                          '\$${p ~/ 100}',
+                          money(p),
                           style: TextStyle(
                             fontFamily: 'BarlowCondensed',
                             fontSize: 26,

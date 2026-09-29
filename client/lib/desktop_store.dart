@@ -119,7 +119,16 @@ print.receipts=digital
         if (props['legal.age']?.isNotEmpty ?? false)
           'POS_LEGAL_AGE': props['legal.age']!,
       };
-      final log = File('${dir.path}\\store.log').openWrite();
+      // a fresh log per app run; a restart appends, so the crash stays readable
+      final log = File(
+        '${dir.path}\\store.log',
+      ).openWrite(mode: _logStarted ? FileMode.append : FileMode.write);
+      _logStarted = true;
+      final note = _pendingLogNote;
+      _pendingLogNote = null;
+      if (note != null) {
+        log.writeln('[pos-app ${_now().toIso8601String()}] $note');
+      }
       final p = await Process.start(
         _java.path,
         ['-Xmx768m', '-jar', _jar.path],
@@ -127,6 +136,8 @@ print.receipts=digital
         environment: env,
       );
       _process = p;
+      _answered = false;
+      _watch();
       void capture(List<int> bytes) {
         log.add(bytes);
         final text = String.fromCharCodes(bytes);
@@ -138,13 +149,13 @@ print.receipts=digital
       p.stderr.listen(capture);
       unawaited(
         p.exitCode.then((code) async {
-          if (identical(_process, p)) {
-            _process = null;
-            _failure =
-                'store exited ($code): '
-                '${_tail.isEmpty ? 'see store.log' : _tail.last.trim()}';
-          }
           await log.close();
+          if (!identical(_process, p)) return; // stopped on purpose
+          _process = null;
+          final why =
+              'store exited ($code): '
+              '${_tail.isEmpty ? 'see store.log' : _tail.last.trim()}';
+          if (!_scheduleRestart(why)) _failure = why;
         }),
       );
     } catch (e) {
@@ -159,6 +170,8 @@ print.receipts=digital
   static Future<void> stop() async {
     final p = _process;
     _process = null;
+    _restartTimer?.cancel();
+    _restartTimer = null;
     p?.kill();
     await p?.exitCode.timeout(const Duration(seconds: 5), onTimeout: () => -1);
   }
@@ -166,5 +179,143 @@ print.receipts=digital
   static Future<void> restart() async {
     await stop();
     await start();
+  }
+
+  /// The reconnect screen's Retry: bring the store back if it is not running
+  /// (or has stopped answering). A person asked, so no rate limit.
+  static Future<void> ensureRunning() async {
+    if (!enabled) return;
+    if (_process == null) {
+      _restartTimer?.cancel();
+      _restartTimer = null;
+      _pendingLogNote =
+          'restarting the store (Retry pressed; it was not running)';
+      await start();
+    } else if (_policy.consecutiveHealthFailures > 0) {
+      _pendingLogNote = 'restarting the store (Retry pressed; not answering)';
+      await restart();
+    }
+  }
+
+  // --- self-restart: the app keeps its own store alive -----------------------
+
+  static final StoreRestartPolicy _policy = StoreRestartPolicy();
+  static Timer? _restartTimer;
+  static Timer? _healthTimer;
+  static bool _checking = false;
+  static bool _answered = false; // /health answered since this start
+  static bool _logStarted = false;
+  static String? _pendingLogNote;
+  static DateTime _now() => DateTime.now();
+
+  /// Queue a restart with backoff; false when the policy gives up (too many
+  /// restarts in the last minute) — then the failure shows as before.
+  static bool _scheduleRestart(String why) {
+    final delay = _policy.nextRestartDelay(_now());
+    if (delay == null) {
+      _appendLog(
+        'store keeps failing ($why); not restarting again this minute',
+      );
+      return false;
+    }
+    _pendingLogNote =
+        'restarting the store in ${delay.inSeconds}s '
+        '(attempt ${_policy.recentRestarts}): $why';
+    debugPrint('[desktop-store] $_pendingLogNote');
+    _restartTimer?.cancel();
+    _restartTimer = Timer(delay, () {
+      _restartTimer = null;
+      start();
+    });
+    return true;
+  }
+
+  /// Every 5 s: GET /health. Three misses in a row (after it has answered
+  /// once — the JVM start is slow) → kill it and let the exit handler restart.
+  static void _watch() {
+    _healthTimer ??= Timer.periodic(const Duration(seconds: 5), (_) async {
+      final p = _process;
+      if (p == null || _checking) return;
+      _checking = true;
+      try {
+        final ok = await _healthy();
+        if (!identical(p, _process)) return;
+        if (ok) _answered = true;
+        if (!_answered) return;
+        if (_policy.recordHealth(ok)) {
+          _appendLog('store stopped answering /health; killing it to restart');
+          p.kill(ProcessSignal.sigkill);
+        }
+      } finally {
+        _checking = false;
+      }
+    });
+  }
+
+  static Future<bool> _healthy() async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+    try {
+      final req = await client
+          .getUrl(
+            Uri.parse('http://127.0.0.1:${AppMode.embeddedStorePort}/health'),
+          )
+          .timeout(const Duration(seconds: 3));
+      final res = await req.close().timeout(const Duration(seconds: 3));
+      await res.drain<void>();
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  static void _appendLog(String line) {
+    debugPrint('[desktop-store] $line');
+    try {
+      File('${dataDir.path}\\store.log').writeAsStringSync(
+        '[pos-app ${_now().toIso8601String()}] $line\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {}
+  }
+}
+
+/// When the Windows app restarts its own store: after it exits, or after
+/// [healthFailureLimit] missed health checks in a row; with a growing delay
+/// (1 s, 2 s, 4 s…), and at most [maxPerMinute] restarts in any minute.
+class StoreRestartPolicy {
+  StoreRestartPolicy({this.maxPerMinute = 5, this.healthFailureLimit = 3});
+
+  final int maxPerMinute;
+  final int healthFailureLimit;
+  final List<DateTime> _restarts = [];
+  int consecutiveHealthFailures = 0;
+
+  int get recentRestarts => _restarts.length;
+
+  /// A health check result; true when it is time to restart the store.
+  bool recordHealth(bool ok) {
+    if (ok) {
+      consecutiveHealthFailures = 0;
+      return false;
+    }
+    consecutiveHealthFailures++;
+    if (consecutiveHealthFailures < healthFailureLimit) return false;
+    consecutiveHealthFailures = 0;
+    return true;
+  }
+
+  /// The wait before the next restart, or null when the store has already
+  /// been restarted [maxPerMinute] times in the last minute.
+  Duration? nextRestartDelay(DateTime now) {
+    _restarts.removeWhere(
+      (t) => now.difference(t) >= const Duration(minutes: 1),
+    );
+    if (_restarts.length >= maxPerMinute) return null;
+    final delay = Duration(seconds: 1 << _restarts.length); // 1, 2, 4, 8, 16
+    _restarts.add(now);
+    consecutiveHealthFailures = 0;
+    return delay;
   }
 }

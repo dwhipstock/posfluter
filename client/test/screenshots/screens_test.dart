@@ -127,9 +127,11 @@ Future<void> _shoot(
   MockClient? store,
   String? expectText,
   Future<void> Function(WidgetTester tester)? act,
+  Size physical = _physical,
+  double dpr = _dpr,
 }) async {
-  tester.view.physicalSize = _physical;
-  tester.view.devicePixelRatio = _dpr;
+  tester.view.physicalSize = physical;
+  tester.view.devicePixelRatio = dpr;
   addTearDown(tester.view.reset);
   // the floor's alert chime opens audio event streams, which have no host
   // implementation under test; everything else still fails the test
@@ -280,6 +282,41 @@ void main() {
       expectText: 'Mushroom Swiss Burger',
     );
   });
+
+  // full service: every category on the left rail, none hidden, no overflow
+  for (final (label, size, dpr) in [
+    ('1920x1200 at 100%', const Size(1920, 1200), 1.0),
+    ('2560x1600 tablet', const Size(2560, 1600), 2.0),
+    ('2736x1824 Surface', const Size(2736, 1824), 2.0),
+  ]) {
+    testWidgets('check at $label: every category visible', (tester) async {
+      await _shoot(
+        tester,
+        'check-${size.width.toInt()}',
+        const CheckScreen(checkId: 1, tableLabel: 'U-1'),
+        physical: size,
+        dpr: dpr,
+        // cash rounds to the nickel: the "Cash:" line under the total
+        store: _store(
+          check: {..._check(), 'cashDueCents': 7360, 'cashRoundingCents': 2},
+        ),
+        act: (t) async {
+          final screen = Offset.zero & (size / dpr);
+          final rail = find.byWidgetPredicate(
+            (w) =>
+                w.key is ValueKey<String> &&
+                (w.key! as ValueKey<String>).value.startsWith('cat-'),
+          );
+          expect(rail, findsAtLeastNWidgets(3));
+          for (final e in rail.evaluate()) {
+            final r = t.getRect(find.byWidget(e.widget));
+            expect(screen.contains(r.bottomRight - const Offset(1, 1)), isTrue);
+          }
+          expect(find.text('Cash: \$73.60'), findsOneWidget);
+        },
+      );
+    });
+  }
 
   testWidgets('check (French)', (tester) async {
     Prefs.instance.lang = 'fr';

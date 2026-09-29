@@ -2163,7 +2163,7 @@ class Perm {
   static const manageStaff = 'manage_staff';
 }
 
-/// The pubs' CAD house style: $1,010 for whole dollars, $10.50 otherwise.
+/// CAD money text: $1,010.00, $10.50.
 /// Screens call [money], which follows the store's own currency.
 String cad(int cents) => formatMoney(cents, 'CAD');
 

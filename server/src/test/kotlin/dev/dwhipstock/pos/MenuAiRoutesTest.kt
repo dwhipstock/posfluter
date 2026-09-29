@@ -116,8 +116,8 @@ class MenuAiRoutesTest {
         val manager = loginClient()
         val before = price("lantern-burger:regular")
 
-        // PIN required; proposing changes nothing
-        assertEquals(HttpStatusCode.Forbidden, manager.post("/menu-ai/chat") {
+        // a manager's own session is the approval; anyone else is refused
+        assertEquals(HttpStatusCode.Forbidden, loginClient("9999").post("/menu-ai/chat") {
             contentType(ContentType.Application.Json); setBody("""{"text":"raise burgers"}""")
         }.status)
         val outboxBefore = outbox().size
@@ -173,8 +173,8 @@ class MenuAiRoutesTest {
         assertEquals("chat", entry.s("source"))
         assertEquals("false", entry.s("reverted"))
 
-        // revert: PIN required, then everything is back, through the same menu code (outbox events)
-        assertEquals(HttpStatusCode.Forbidden, manager.post("/menu-ai/history/$setId/revert") {
+        // revert: manager only, then everything is back, through the same menu code (outbox events)
+        assertEquals(HttpStatusCode.Forbidden, loginClient("9999").post("/menu-ai/history/$setId/revert") {
             contentType(ContentType.Application.Json); setBody("""{}""")
         }.status)
         val outboxBeforeRevert = outbox().size
@@ -305,11 +305,12 @@ class MenuAiRoutesTest {
             Translations.set(Translations.ITEM, "poutine", "de", null)
             Translations.set(Translations.CATEGORY, "starters", "es", null)
         }
-        assertEquals(HttpStatusCode.Forbidden, manager.post("/menu-ai/translate") {
+        assertEquals(HttpStatusCode.Forbidden, loginClient("9999").post("/menu-ai/translate") {
             contentType(ContentType.Application.Json); setBody("""{}""")
         }.status)
+        // the signed-in manager needs no second PIN
         val res = manager.post("/menu-ai/translate") {
-            contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234"}""")
+            contentType(ContentType.Application.Json); setBody("""{}""")
         }
         assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
         val proposal = obj(res.bodyAsText())
