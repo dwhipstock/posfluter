@@ -631,9 +631,19 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       ),
     );
     if (ok != true) return null;
-    final fr = frCtl.text.trim();
-    final en = enCtl.text.trim();
-    if (fr.isEmpty || en.isEmpty) return null;
+    // one name is enough: an empty language takes the other's name
+    var fr = frCtl.text.trim();
+    var en = enCtl.text.trim();
+    if (fr.isEmpty && en.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(L.of(context).roomNameRequired)));
+      }
+      return null;
+    }
+    if (fr.isEmpty) fr = en;
+    if (en.isEmpty) en = fr;
     return (fr, en);
   }
 
