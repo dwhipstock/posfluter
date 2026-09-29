@@ -90,12 +90,13 @@ class GeminiMenuProvider(
                     }
                     addJsonObject { put("type", "text"); put("text", user) }
                 }
+                // JSON mode without a schema: an empty {"type":"object"} schema makes the model answer "{}"
                 putJsonObject("response_format") {
                     put("type", "text")
                     put("mime_type", "application/json")
-                    putJsonObject("schema") { put("type", "object") }
                 }
-                putJsonObject("generation_config") { put("temperature", 0) }
+                // low thinking: a menu edit needs no long reasoning, and full thinking took minutes
+                putJsonObject("generation_config") { put("temperature", 0); put("thinking_level", "low") }
             }.toString().toByteArray()
         }
         val post = { m: String ->
