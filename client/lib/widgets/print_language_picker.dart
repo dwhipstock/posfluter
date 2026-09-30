@@ -5,7 +5,7 @@ import '../i18n.dart';
 
 /// Long-press on a print button: print this one copy in another of the
 /// store's languages. Each language is shown in its own name (Français,
-/// English, Español, Deutsch). With one store language it just prints; the
+/// English, Español, Deutsch, Afrikaans). With one store language it just prints; the
 /// owner's language preference is never changed.
 Future<void> printInPickedLanguage(
   BuildContext context,

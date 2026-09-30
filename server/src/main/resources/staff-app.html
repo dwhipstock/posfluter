@@ -329,11 +329,11 @@
 "use strict";
 
 // ---- i18n: the store's languages (GET /health), persisted per phone ---------
-// fr/en (+ es/de) at the pubs, en/es at the US store. Every table carries every key
+// fr/en (+ es/de/af) at the pubs, en/es at the US store. Every table carries every key
 // (LocaleCoverageTest). French: vous, no-break space before : ; ! ? and ».
 let lang = localStorage.getItem("staff_lang") || "en";
 let store = { locales: ["fr", "en"], currency: "CAD", country: "CA", kitchen: false };
-const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch" };
+const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans" };
 const STR = {
   fr: {
     whoClockingIn: "Qui commence son quart ?", enterPin: "Entrez votre NIP", pinWrong: "NIP incorrect",
@@ -423,6 +423,28 @@ const STR = {
     roleManager: "Leitung", roleServer: "Bedienung",
     spKicker: "Sage & Poppy · Spirituosenladen", spWelcome: "Willkommen zurück",
   },
+  af: {
+    whoClockingIn: "Wie begin die skof?", enterPin: "Tik jou PIN in", pinWrong: "Verkeerde PIN",
+    logout: "Teken uit", tabTables: "Tafels", tabPending: "Om te bevestig",
+    free: "Vry", open: "Beset", noZones: "Nog geen areas nie", closed: "Gesluit",
+    addItems: "＋ Voeg items by", onCheck: "Op die rekening", pendingHd: "⏳ Gastebestellings (om te bevestig)",
+    rounding: "Afronding", cashTotal: "Totaal kontant",
+    total: "Totaal", emptyCheck: "Nog geen items nie – tik “Voeg items by” om te begin",
+    basket: "Mandjie", addToCheck: "Voeg by rekening", subtotal: "Subtotaal", note: "Nota (opsioneel)",
+    add: "＋ Voeg by", sizes: "groottes", viewBasket: "Bekyk mandjie", addedOne: "Bygevoeg ✓",
+    linesAdded: "By rekening gevoeg ✓", accepted: "Bevestig ✓", rejected: "Afgekeur",
+    noPending: "Niks om te bevestig nie", pendingSub: "Bestellings wat gaste op hul foon plaas, verskyn hier.",
+    billPaying: "Rekening word betaal – kan nie items byvoeg nie", failed: "Aksie het misluk, probeer weer",
+    zoneClosed: "Area gesluit", table: "Tafel", loading: "Laai tans…",
+    codePrompt: "Tik die 6-syferkode van jou verifikasie-app in", verify: "Verifieer", backBtn: "‹ Terug",
+    enrollPrompt: "Skandeer die QR-kode met jou verifikasie-app en tik dan die 6-syferkode in",
+    enrollHint: "Eenmalige opstelling – daarna net jou PIN vir 90 dae", enrollManual: "Of tik hierdie sleutel self in:",
+    codeWrong: "Verkeerde kode, probeer weer", resetTitle: "Stel verifikasie terug", resetBtn: "Stel terug",
+    resetConfirm: "Stel die verifikasie vir {name} terug?", resetDone: "Teruggestel – die personeellid stel dit weer op",
+    cantReach: "Kan nie die winkel bereik nie – kyk die Wi-Fi na en probeer weer", retry: "Probeer weer",
+    roleManager: "Bestuurder", roleServer: "Kelner",
+    spKicker: "Sage & Poppy · Drankwinkel", spWelcome: "Welkom terug",
+  },
 };
 // Department and zone names in US Spanish (the shop's catalog is English
 // only); same words as the counter app (client/lib/retail/shelf_names.dart).
@@ -438,7 +460,7 @@ function supportedLang(l) {
   if (store.locales.includes(l)) return l;
   return store.locales.includes("en") ? "en" : store.locales[0];
 }
-const T = () => STR[lang];
+const T = () => STR[lang] || STR.en;
 const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 // Embed an untrusted string as a JS string literal inside an inline-handler
 // attribute (onclick="fn(...)"). HTML entities are decoded BEFORE a handler
@@ -462,8 +484,8 @@ const money = cents => (cents / 100).toLocaleString("en-US", {
   style: "currency", currency: store.currency, currencyDisplay: "narrowSymbol",
 });
 // Catalog data carries French and English: French reads the French side,
-// English, Spanish and German read the English side, unless the row carries
-// its own name in that language (`names`, e.g. { es: …, de: … }).
+// English, Spanish, German and Afrikaans read the English side, unless the row carries
+// its own name in that language (`names`, e.g. { es: …, de: …, af: … }).
 const pick = (fr, en) => lang === "fr" ? fr : en;
 const extra = o => (o && o.names && o.names[lang]) || "";
 // the other language as a small second line (none when it says the same, or
@@ -479,7 +501,7 @@ const catName = c => extra(c) || (lang === "es" ? esName(c.nameEn) : pick(c.name
 const roleName = r => r === "MANAGER" ? T().roleManager : r === "SERVER" ? T().roleServer : r;
 
 // line label for a served LineView (name + variant when disambiguating); in
-// Spanish or German the menu's own names (`names`), when the menu is loaded
+// Spanish, German or Afrikaans the menu's own names (`names`), when the menu is loaded
 function lineName(l) {
   const item = l.itemId ? items.find(i => i.id === l.itemId) : null;
   const v = item && l.variantId ? item.variants.find(x => x.id === l.variantId) : null;
@@ -864,7 +886,7 @@ function elapsed(iso) {
   if (isNaN(mins)) return "";
   if (mins < 60) return `${mins} min`;
   const h = Math.floor(mins / 60), m = mins % 60;
-  // "1 h 05" in French and Spanish, "1h 5m" in English
+  // "1 h 05" in French, Spanish, German and Afrikaans, "1h 5m" in English
   return lang === "en" ? `${h}h ${m}m` : `${h} h ${String(m).padStart(2, "0")}`;
 }
 
@@ -941,7 +963,8 @@ function renderCheck() {
   const feeRow = f => `
     <div class="row"><span class="nm">${esc(pick(f.labelFr, f.labelEn))}</span><span>${money(f.amountCents)}</span></div>`;
 
-  // prices are pre-tax: subtotal, then each tax added on top (GST / QST), from the server
+  // prices are pre-tax: subtotal, then each tax added on top (GST / QST), from the server;
+  // rates in French and German take a decimal comma, English/Spanish/Afrikaans "9.975%"
   const taxLabel = t => lang === "fr"
     ? `${t.labelFr} ${String(t.ratePercent).replace(".", ",")}\u00a0%`
     : lang === "de"

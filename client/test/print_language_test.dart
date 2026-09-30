@@ -63,7 +63,7 @@ void main() {
     bills.clear();
     Prefs.instance.lang = 'en';
     StoreProfile.current = const StoreProfile(
-      locales: ['fr', 'en', 'es', 'de'],
+      locales: ['fr', 'en', 'es', 'de', 'af'],
     );
   });
   tearDown(() => StoreProfile.current = StoreProfile.pub);
@@ -97,7 +97,13 @@ void main() {
       await tester.longPress(find.text('Print bill'));
       await tester.pumpAndSettle();
       expect(find.text('Print in…'), findsOneWidget);
-      for (final n in ['Français', 'English', 'Español', 'Deutsch']) {
+      for (final n in [
+        'Français',
+        'English',
+        'Español',
+        'Deutsch',
+        'Afrikaans',
+      ]) {
         expect(find.text(n), findsOneWidget);
       }
       await tester.tap(find.text('Deutsch'));
@@ -106,6 +112,19 @@ void main() {
       expect(bills.single.queryParameters, {'lang': 'de'});
       expect(Prefs.instance.lang, 'en', reason: 'owner keeps their language');
       expect(find.text('BILL lang=de'), findsOneWidget);
+      await unmount(tester);
+    }, store);
+  });
+
+  testWidgets('long-press: Afrikaans prints with lang=af', (tester) async {
+    await http.runWithClient(() async {
+      await pump(tester);
+      await tester.longPress(find.text('Print bill'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Afrikaans'));
+      await tester.pumpAndSettle();
+      expect(bills.single.queryParameters, {'lang': 'af'});
+      expect(Prefs.instance.lang, 'en', reason: 'owner keeps their language');
       await unmount(tester);
     }, store);
   });

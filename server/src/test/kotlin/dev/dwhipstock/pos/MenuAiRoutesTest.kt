@@ -382,6 +382,7 @@ class MenuAiRoutesTest {
 
         transaction {
             Translations.set(Translations.ITEM, "poutine", "de", null)
+            Translations.set(Translations.ITEM, "poutine", "af", null)
             Translations.set(Translations.CATEGORY, "starters", "es", null)
         }
         assertEquals(HttpStatusCode.Forbidden, loginClient("9999").post("/menu-ai/translate") {
@@ -395,7 +396,9 @@ class MenuAiRoutesTest {
         val proposal = obj(res.bodyAsText())
         // only the missing ones were sent, with the languages they lack
         val prompt = fake.prompts.single()
-        assertTrue(prompt.contains("item poutine") && prompt.contains("→ de"))
+        assertTrue(prompt.contains("item poutine") && prompt.contains("→ de, af"))
+        // the model is told which language each code is (af alone is easy to misread)
+        assertTrue(prompt.contains("af (Afrikaans (South African))"), prompt)
         assertTrue(prompt.contains("category starters") && prompt.contains("→ es"))
         assertFalse(prompt.contains("item wings"))
         val changes = proposal["changes"]!!.jsonArray.map { it.jsonObject }

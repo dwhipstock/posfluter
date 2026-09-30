@@ -7,7 +7,7 @@
 // This module is isomorphic and pure (no fs): parsing, validation, defaults
 // and the CSS custom properties the Tailwind theme reads (tailwind.config.ts).
 
-export const SUPPORTED_LOCALES = ["en", "fr", "es", "de"] as const;
+export const SUPPORTED_LOCALES = ["en", "fr", "es", "de", "af"] as const;
 export type BrandLocale = (typeof SUPPORTED_LOCALES)[number];
 
 /** The shell: a dark sidebar (desktop) + dark bottom bar, or a light top bar + light bottom bar. */

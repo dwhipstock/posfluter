@@ -203,7 +203,7 @@ fun Application.module(
             sagePoppy -> SagePoppySeed.seedIfEmpty()
             venue.quickServe -> {
                 dev.dwhipstock.pos.customers.copperlantern.CopperLanternExpressSeed.seedIfEmpty()
-                CopperLanternSeed.seedTranslations()
+                CopperLanternSeed.seedTranslations(express = true)
             }
             else -> {
                 CopperLanternSeed.seedIfEmpty(venue)

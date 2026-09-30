@@ -50,7 +50,7 @@ test("a mounted custom pack loads", () => {
 test("the two clients differ where it shows", () => {
   const cl = parseBrand(pack("copperlantern"));
   const sp = parseBrand(pack("sagepoppy"));
-  assert.deepEqual(cl.locales, { default: "en", available: ["fr", "en", "es", "de"] });
+  assert.deepEqual(cl.locales, { default: "en", available: ["fr", "en", "es", "de", "af"] });
   assert.deepEqual(sp.locales, { default: "en", available: ["en", "es"] });
   assert.equal(cl.currency, "CAD");
   assert.equal(sp.currency, "USD");
@@ -125,8 +125,16 @@ test("pickLocale honours a saved choice only when the client offers it", () => {
   assert.equal(pickLocale(sp, "fr"), "en", "no French at the shop");
   assert.equal(pickLocale(cl, "de"), "de", "German at the pub");
   assert.equal(pickLocale(sp, "de"), "en", "no German at the shop");
+  assert.equal(pickLocale(cl, "af"), "af", "Afrikaans at the pub");
+  assert.equal(pickLocale(sp, "af"), "en", "no Afrikaans at the shop");
   assert.equal(pickLocale(cl, "fr"), "fr");
   assert.equal(pickLocale(cl, undefined), "en");
+});
+
+test("Afrikaans is offered by Copper Lantern only", () => {
+  const ids = fs.readdirSync(path.join(WEB, "brands")).filter((d) => fs.existsSync(path.join(WEB, "brands", d, "brand.json")));
+  const withAf = ids.filter((id) => (parseBrand(pack(id)).locales.available as string[]).includes("af"));
+  assert.deepEqual(withAf, ["copperlantern"]);
 });
 
 test("the gas station wears its own look: dark sidebar, Barlow, English + Spanish, USD, the Fuel report on", () => {

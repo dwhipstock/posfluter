@@ -162,14 +162,14 @@
 const TABLE_TOKEN = "{{TABLE_TOKEN}}";
 const TABLE_LABEL = "{{TABLE_LABEL}}";
 
-// The store's languages (GET /health): fr + en at the pubs, + es and de at
+// The store's languages (GET /health): fr + en at the pubs, + es, de and af at
 // Copper Lantern. The guest's pick is kept per phone; the first visit takes
 // the phone's own language when the store speaks it. French: vous, and a
-// no-break space before : ; ! ?; German: Sie; Spanish: usted
+// no-break space before : ; ! ?; German: Sie; Spanish: usted; Afrikaans: u
 // (LocaleCoverageTest reads these tables).
 const savedLang = (() => { try { return localStorage.getItem("menu_lang"); } catch (_) { return null; } })();
 let lang = savedLang || "en";
-const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch" };
+const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans" };
 const STR = {
   fr: {
     orderFromPhone: "Table " + TABLE_LABEL + " — commandez de votre téléphone",
@@ -235,10 +235,26 @@ const STR = {
     billLoading: "Ihre Rechnung wird geladen…",
     menuLoading: "Speisekarte wird geladen…", menuUnavailable: "Die Speisekarte ist gerade nicht verfügbar. Bitte versuchen Sie es erneut.",
   },
+  af: {
+    orderFromPhone: "Tafel " + TABLE_LABEL + " – bestel met u foon",
+    langLabel: "Taal",
+    basket: "Mandjie", send: "Stuur bestelling", note: "Nota (opsioneel)",
+    addToBasket: "＋ Voeg by mandjie", sizes: "groottes",
+    doneTitle: "Bestelling gestuur!", doneText: "Ons personeel sal u bestelling binnekort bevestig.",
+    orderMore: "Bestel nog", failed: "Kon nie stuur nie. Probeer asseblief weer.",
+    billLocked: "U rekening word tans betaal – vra asseblief die personeel.",
+    viewCart: "Bekyk mandjie", addedToast: "Bygevoeg ✓", subtotal: "Subtotaal (belasting uitgesluit)", billSubtotal: "Subtotaal",
+    tabMenu: "Spyskaart", tabBill: "U rekening", seeBill: "Bekyk rekening",
+    onBill: "Op u rekening", beingConfirmed: "Word bevestig", total: "Totaal",
+    rounding: "Afronding", cashTotal: "Totaal kontant",
+    noOrders: "Nog geen bestellings nie – blaai deur die spyskaart om te begin.", billPaying: "Rekening word betaal",
+    billLoading: "U rekening laai tans…",
+    menuLoading: "Spyskaart laai tans…", menuUnavailable: "Die spyskaart is tans nie beskikbaar nie. Probeer asseblief weer.",
+  },
 };
 const T = () => STR[lang] || STR.en;
 // A name in the guest's language: French and English are the catalog's own
-// two; Spanish and German read the row's `names` (the translations table),
+// two; Spanish, German and Afrikaans read the row's `names` (the translations table),
 // else English, else French.
 const nm = (o, fr, en) => lang === "fr" ? (fr || en || "")
   : lang === "en" ? (en || fr || "")
@@ -491,8 +507,9 @@ const lineName = l => {
   return esc(name + (variant ? " (" + variant + ")" : ""));
 };
 // "GST 5%" / "TVQ 9,975 %" / "GST 9,975 %" (es, de: the comma, the English
-// label) — the rate is the server's decimal string
-const taxLabel = t => lang === "en"
+// label); Afrikaans writes it the English way, "GST 9.975%" (North American
+// figures) — the rate is the server's decimal string
+const taxLabel = t => lang === "en" || lang === "af"
   ? `${t.labelEn} ${t.ratePercent}%`
   : `${lang === "fr" ? t.labelFr : t.labelEn} ${String(t.ratePercent).replace(".", ",")}\u00a0%`;
 const billRow = l => `

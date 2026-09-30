@@ -14,6 +14,9 @@ const EN_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"
 // Spanish abbreviated months (lowercase, with a period, as US Spanish writes them).
 const ES_MONTHS = ["ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sept.", "oct.", "nov.", "dic."];
 const FR_MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juill.", "août", "sept.", "oct.", "nov.", "déc."];
+// Afrikaans abbreviated months (CLDR "af": "8 Jan. 2026", "8 Mrt. 2026"),
+// written out here so Node and every browser print the same thing.
+const AF_MONTHS = ["Jan.", "Feb.", "Mrt.", "Apr.", "Mei", "Jun.", "Jul.", "Aug.", "Sep.", "Okt.", "Nov.", "Des."];
 
 export interface Fmt {
   /** "8 Jan." / "8 Jan" — no year */
@@ -32,7 +35,7 @@ const p2 = (n: number) => String(n).padStart(2, "0");
 
 export function makeFmt(locale: Locale, t: (key: MsgKey, vars?: Record<string, string | number>) => string): Fmt {
   const german = locale === "de";
-  const months = locale === "fr" ? FR_MONTHS : locale === "es" ? ES_MONTHS : EN_MONTHS;
+  const months = locale === "fr" ? FR_MONTHS : locale === "es" ? ES_MONTHS : locale === "af" ? AF_MONTHS : EN_MONTHS;
 
   const day = (date: string) => {
     const p = parts(date);

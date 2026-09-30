@@ -21,9 +21,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Copper Lantern's extra languages: the tablet offers en, fr, es, de; names
+ * Copper Lantern's extra languages: the tablet offers en, fr, es, de, af; names
  * beyond the en / fr catalog slots come from the translations table (seeded
- * for the demo in es and de) and fall back to English, then French.
+ * for the demo in es, de and af) and fall back to English, then French.
  */
 class TranslationsTest {
     private fun tempDir(prefix: String) = Files.createTempDirectory(prefix).toString()
@@ -46,10 +46,10 @@ class TranslationsTest {
     }
 
     @Test
-    fun copperLanternSpeaksFourLanguagesButSlipsStayTwo() = testApplication {
+    fun copperLanternSpeaksFiveLanguagesButSlipsStayTwo() = testApplication {
         store()
         val health = Json.parseToJsonElement(client.get("/health").bodyAsText()).jsonObject
-        assertEquals(listOf("en", "fr", "es", "de"), health["locales"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("en", "fr", "es", "de", "af"), health["locales"]!!.jsonArray.map { it.jsonPrimitive.content })
         val config = CopperLanternConfig(
             settings = dev.dwhipstock.pos.base.SettingsRepository(),
             printer = dev.dwhipstock.pos.sdk.PrinterAdapter.VirtualPrinter(tempDir("r"), tempDir("b")),
@@ -66,7 +66,7 @@ class TranslationsTest {
         val manager = loginClient()
         val poutine = arr(manager.get("/items").bodyAsText()).first { it["id"]!!.jsonPrimitive.content == "poutine" }
         assertEquals("Klassische Poutine", poutine.names()["de"])
-        assertEquals(setOf("es", "de"), poutine.names().keys)
+        assertEquals(setOf("es", "de", "af"), poutine.names().keys)
         val starters = arr(manager.get("/categories").bodyAsText()).first { it["id"]!!.jsonPrimitive.content == "starters" }
         assertEquals("Vorspeisen", starters.names()["de"])
         val zones = arr(manager.get("/zones").bodyAsText())

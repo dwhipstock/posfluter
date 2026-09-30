@@ -34,7 +34,7 @@ class ApplicationTest {
         assertEquals(
             """{"status":"ok","pairingRequired":false,"venue":"Copper Lantern — Vieux-Port",""" +
                 """"venueId":"vieux-port","brand":"copper-lantern","kind":"restaurant","country":"CA",""" +
-                """"currency":"CAD","locales":["en","fr","es","de"],"legalAge":18,"cashRounding":"nickel"}""",
+                """"currency":"CAD","locales":["en","fr","es","de","af"],"legalAge":18,"cashRounding":"nickel"}""",
             response.bodyAsText(),
         )
     }

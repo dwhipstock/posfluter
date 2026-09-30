@@ -73,7 +73,7 @@ class KioskController extends ChangeNotifier {
   String? storeUrl, message;
   String storeName = '';
   String currency = 'CAD';
-  List<String> locales = const ['en', 'fr', 'es', 'de'];
+  List<String> locales = const ['en', 'fr', 'es', 'de', 'af'];
   String lang = 'en';
   bool busy = false, offline = false;
 

@@ -33,6 +33,7 @@ class _FakeStore extends KioskApi {
       'en',
       'es',
       'de',
+      'af',
     ]);
   }
 
@@ -229,6 +230,40 @@ void main() {
       expect(c.lang, 'fr');
     },
   );
+
+  testWidgets('Afrikaans: its own button, its words, English menu names', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'kiosk.storeUrl': 'http://10.0.0.5:8080',
+      'kiosk.token': 'kiosk-token',
+    });
+    final c = controller();
+    await pump(tester, c);
+    expect(find.text('Afrikaans'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('kiosk-lang-af')));
+    await tester.pumpAndSettle();
+    expect(find.text('Raak om te bestel'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('kiosk-welcome')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('kiosk-take-out')));
+    await tester.pumpAndSettle();
+    // no Afrikaans name in the menu: the English one
+    expect(find.text('Copper Lantern Burger'), findsOneWidget);
+    // money stays North American
+    expect(find.textContaining('\$11.95'), findsWidgets);
+    await tester.tap(find.byKey(const Key('kiosk-item-lantern-burger')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('kiosk-view-order')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('kiosk-place-order')));
+    await tester.pumpAndSettle();
+    expect(_FakeStore.placed.single['lang'], 'af');
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('an idle customer\'s cart is cleared', (tester) async {
     SharedPreferences.setMockInitialValues({

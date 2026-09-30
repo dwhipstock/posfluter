@@ -97,25 +97,50 @@ void main() {
     kind: 'restaurant',
     country: 'CA',
     currency: 'CAD',
-    locales: ['fr', 'en', 'es', 'de'],
+    locales: ['fr', 'en', 'es', 'de', 'af'],
     legalAge: 18,
   );
 
-  test('Copper Lantern: the toggle offers all four languages', () {
+  test('Copper Lantern: the toggle offers all five languages', () {
     Prefs.instance.lang = 'fr';
     Prefs.instance.useStore(copperLantern);
     expect(Prefs.instance.lang, 'fr'); // the default stays
     final seen = <String>[];
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 5; i++) {
       seen.add(Prefs.instance.lang);
       Prefs.instance.lang = Prefs.instance.nextLang;
     }
-    expect(seen, ['fr', 'en', 'es', 'de']);
+    expect(seen, ['fr', 'en', 'es', 'de', 'af']);
     expect(Prefs.instance.lang, 'fr');
     // German elsewhere falls back
     Prefs.instance.lang = 'de';
     Prefs.instance.useStore(StoreProfile.pub);
     expect(Prefs.instance.lang, 'en');
+    // and so does Afrikaans (only Copper Lantern speaks it)
+    Prefs.instance.useStore(copperLantern);
+    Prefs.instance.lang = 'af';
+    Prefs.instance.useStore(StoreProfile.pub);
+    expect(Prefs.instance.lang, 'en');
+    Prefs.instance.useStore(us);
+    expect(Prefs.instance.lang, 'en');
+  });
+
+  test('switching to Afrikaans: the strings follow', () {
+    Prefs.instance.useStore(copperLantern);
+    // the pill after German
+    Prefs.instance.lang = 'de';
+    expect(Prefs.instance.nextLang, 'af');
+    // a stored " AF " reads as Afrikaans at Copper Lantern
+    Prefs.instance.lang = ' AF ';
+    Prefs.instance.useStore(copperLantern);
+    expect(Prefs.instance.lang, 'af');
+    expect(L.current.af, isTrue);
+    expect(L.current.retry, 'Probeer weer');
+    expect(L.current.cancel, 'Kanselleer');
+    expect(L.current.bill, 'Rekening');
+    expect(L.current.langName('af'), 'Afrikaans');
+    expect(const L.forLang('fr').langName('af'), 'afrikaans');
+    Prefs.instance.useStore(StoreProfile.pub);
   });
 
   test('names beyond fr / en: the language, then English, then French', () {
@@ -137,6 +162,19 @@ void main() {
       'Classic Poutine',
     );
     expect(pickName('de', 'Poutine classique', '', null), 'Poutine classique');
+    // Afrikaans: its own name when there is one, else English
+    expect(
+      pickName('af', 'Poutine classique', 'Classic Poutine', const {
+        'af': 'Klassieke poutine',
+      }),
+      'Klassieke poutine',
+    );
+    expect(
+      pickName('af', 'Poutine classique', 'Classic Poutine', extra),
+      'Classic Poutine',
+    );
+    expect(const L.forLang('af').name('Bière', 'Beer'), 'Beer');
+    expect(const L.forLang('af').nameAlt('Bière', 'Beer'), '');
     const de = L.forLang('de');
     expect(de.name('Bière', 'Beer', const {'de': 'Bier'}), 'Bier');
     expect(de.name('Bière', 'Beer'), 'Beer');
@@ -165,6 +203,19 @@ void main() {
     expect(Prefs.instance.fmtDate(DateTime(2026, 10, 8)), '08.10.2026');
     Prefs.instance.lang = 'en';
     expect(Prefs.instance.fmtDate(DateTime(2026, 10, 8)), '08/10/2026');
+  });
+
+  test('Afrikaans: money stays North American (not South African)', () {
+    expect(formatMoney(123456, 'CAD', lang: 'af'), '\$1,234.56');
+    expect(formatMoney(101000, 'CAD', lang: 'af'), '\$1,010.00');
+    expect(formatMoney(-500, 'CAD', lang: 'af'), '-\$5.00');
+    Prefs.instance.useStore(copperLantern);
+    Prefs.instance.lang = 'af';
+    expect(money(123456), '\$1,234.56');
+    expect(signedMoney(-2), '−\$0.02');
+    expect(Prefs.instance.fmtDate(DateTime(2026, 10, 8)), '08/10/2026');
+    Prefs.instance.lang = 'en';
+    Prefs.instance.useStore(StoreProfile.pub);
   });
 
   test('a language the store does not offer falls back', () {

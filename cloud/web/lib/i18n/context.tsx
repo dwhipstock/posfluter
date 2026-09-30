@@ -18,8 +18,8 @@ interface I18n {
   t: (key: MsgKey, vars?: Vars) => string;
   fmt: Fmt;
   /**
-   * Data-driven names (items, categories, zones): locale first. Spanish and
-   * German read the store's own name in that language ([names]) when it sent
+   * Data-driven names (items, categories, zones): locale first. Spanish,
+   * German and Afrikaans read the store’s own name in that language ([names]) when it sent
    * one, else the English name.
    */
   name: (fr?: string | null, en?: string | null, names?: Record<string, string> | null) => string;
@@ -70,7 +70,7 @@ export function LocaleProvider({
     (fr?: string | null, en?: string | null) => {
       // the second line is the pub's other official language; a Spanish
       // reader (or a client without French) gets no French subtitle
-      if (locale === "es" || locale === "de" || !available.includes("fr")) return "";
+      if (locale === "es" || locale === "de" || locale === "af" || !available.includes("fr")) return "";
       const primary = locale === "en" ? en : fr;
       const alt = locale === "en" ? fr : en;
       return alt && alt !== primary ? alt : "";

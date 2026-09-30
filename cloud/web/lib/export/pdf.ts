@@ -129,6 +129,7 @@ export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
   HEADER_FILL = c.headerFill;
   LINE = c.rule;
   RULE = c.rule;
+  // Spanish and Afrikaans print counts the English way ("1,234")
   docLocale = doc.locale === "fr" || doc.locale === "de" ? doc.locale : "en";
   const content: Content[] = [
     { text: doc.venue || " ", style: "venue" },
