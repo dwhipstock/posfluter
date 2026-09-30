@@ -3289,6 +3289,9 @@ class ShiftReport {
 
   /// Net cash nickel rounding over the shift (signed; 0 on older servers).
   final int cashRoundingCents;
+
+  /// Quick-serve: paid counter orders eaten in / taken out (0 elsewhere).
+  final int dineInCount, takeOutCount;
   ShiftReport(
     this.shiftId,
     this.shiftStatus,
@@ -3310,6 +3313,8 @@ class ShiftReport {
     this.closingCountCents,
     this.overShortCents, {
     this.cashRoundingCents = 0,
+    this.dineInCount = 0,
+    this.takeOutCount = 0,
   });
   factory ShiftReport.fromJson(Map<String, dynamic> j) => ShiftReport(
     j['shiftId'],
@@ -3334,6 +3339,8 @@ class ShiftReport {
     j['closingCountCents'],
     j['overShortCents'],
     cashRoundingCents: j['cashRoundingCents'] ?? 0,
+    dineInCount: j['dineInCount'] ?? 0,
+    takeOutCount: j['takeOutCount'] ?? 0,
   );
 }
 

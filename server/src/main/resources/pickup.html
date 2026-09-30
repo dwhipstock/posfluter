@@ -22,6 +22,8 @@
   .n { font-size:9vh; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.1; min-width:4ch; text-align:center; }
   #preparing .n { color:var(--muted); font-size:7vh; }
   #ready .n { color:var(--ink); background:rgba(63,179,127,.18); border-radius:1.5vh; padding:0 1vw; }
+  .n small { display:block; font-size:2.2vh; font-weight:600; color:var(--muted); line-height:1.2; }
+  #ready .n small { color:inherit; opacity:.8; }
   #ready .n.fresh { animation: pop 1.2s ease-out 3; background:var(--ready); color:#07140d; }
   @keyframes pop { 0% { transform:scale(1); } 30% { transform:scale(1.15); } 100% { transform:scale(1); } }
   #sound { position:fixed; right:2vw; bottom:2vh; background:transparent; border:1px solid var(--muted);
@@ -61,13 +63,17 @@
       o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + 0.65);
     });
   }
-  function fill(id, nums, fresh) {
+  // dine in / take out under each number: a tray or a bag at the counter
+  function fill(id, nums, fresh, takeOut) {
     var box = document.querySelector('#' + id + ' .nums');
     box.innerHTML = '';
     nums.forEach(function (n) {
       var d = document.createElement('div');
       d.className = 'n' + (fresh && fresh.indexOf(n) >= 0 ? ' fresh' : '');
       d.textContent = n;
+      var mode = document.createElement('small');
+      mode.textContent = takeOut.indexOf(n) >= 0 ? 'Pour emporter · Take out' : 'Sur place · Dine in';
+      d.appendChild(mode);
       box.appendChild(d);
     });
   }
@@ -86,8 +92,9 @@
       }
       known = b.ready.slice();
       var fresh = b.ready.filter(function (n) { return (freshUntil[n] || 0) > now; });
-      fill('preparing', b.preparing, null);
-      fill('ready', b.ready, fresh);
+      var takeOut = b.takeOut || [];
+      fill('preparing', b.preparing, null, takeOut);
+      fill('ready', b.ready, fresh, takeOut);
     }).catch(function () {
       document.getElementById('offline').style.display = 'block';
     });

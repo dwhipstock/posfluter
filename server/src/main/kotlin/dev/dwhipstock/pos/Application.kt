@@ -376,8 +376,10 @@ fun Application.module(
     val quickServe = if (config.profile.kind != StoreProfile.Kind.QUICK_SERVE) null
         else dev.dwhipstock.pos.restaurant.QuickServeService(config, checkService).also { qs ->
             qs.ensureCounter()
+            qs.cleanupLegacy()
             kitchenService?.let { k ->
                 qs.kitchen = k
+                k.holdSend = qs::holdKitchen
                 k.ticketLabel = qs::ticketLabel
                 k.onCheckDone = qs::kitchenDone
             }

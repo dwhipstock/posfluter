@@ -5,20 +5,28 @@ import 'package:http/http.dart' as http;
 
 import '../api.dart' show Item, Category;
 
-/// What a kiosk order came back as: the number the customer is called by.
+/// What a kiosk order came back as: the kiosk number the guest pays with at
+/// the counter (K12). The order gets its pickup number once it is paid.
 class KioskOrderResult {
   final int orderNumber, totalCents;
   final bool idCheckAtCounter;
+
+  /// What the kiosk shows ("K12"); older stores send none.
+  final String? displayNumber;
   const KioskOrderResult(
     this.orderNumber,
     this.totalCents,
-    this.idCheckAtCounter,
-  );
+    this.idCheckAtCounter, {
+    this.displayNumber,
+  });
   factory KioskOrderResult.fromJson(Map<String, dynamic> j) => KioskOrderResult(
     (j['orderNumber'] as num).toInt(),
     (j['totalCents'] as num? ?? 0).toInt(),
     j['idCheckAtCounter'] == true,
+    displayNumber: j['displayNumber'] as String?,
   );
+
+  String get label => displayNumber ?? '$orderNumber';
 }
 
 class KioskConfig {

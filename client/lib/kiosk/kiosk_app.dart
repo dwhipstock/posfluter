@@ -881,7 +881,7 @@ class _DoneScreen extends StatelessWidget {
                     style: const TextStyle(color: Colors.white, fontSize: 34),
                   ),
                   Text(
-                    '${r?.orderNumber ?? ''}',
+                    r?.label ?? '',
                     key: const Key('kiosk-order-number'),
                     style: const TextStyle(
                       color: Colors.white,

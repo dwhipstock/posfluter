@@ -261,6 +261,8 @@ class ShiftService(private val config: CustomerConfig) {
             voids = voids,
             corkageCents = agg.corkage,
             cashRoundingCents = agg.cashRounding,
+            dineInCount = agg.modes["DINE_IN"] ?: 0,
+            takeOutCount = agg.modes["TAKE_OUT"] ?: 0,
         )
     }
 
@@ -270,6 +272,8 @@ class ShiftService(private val config: CustomerConfig) {
         val cashIn: Long, val changeOut: Long,
         /** Nickel rounding on the cash tenders (signed). */
         val cashRounding: Long,
+        /** Quick-serve orders by service mode (DINE_IN / TAKE_OUT). */
+        val modes: Map<String, Int> = emptyMap(),
     )
 
     /**
@@ -346,8 +350,16 @@ class ShiftService(private val config: CustomerConfig) {
             }
         }
 
+        // quick-serve: how many were eaten in and taken out (no counter orders elsewhere)
+        val modeCount = CounterOrders.checkId.count()
+        val modes = CounterOrders.select(CounterOrders.serviceMode, modeCount)
+            .where { CounterOrders.checkId inSubQuery ids }
+            .groupBy(CounterOrders.serviceMode)
+            .associate { it[CounterOrders.serviceMode] to it[modeCount].toInt() }
+
         val cashRows = tenderRows.filter { it[Tenders.type] == "CASH" }
         return Aggregates(
+            modes = modes,
             revenue = revenue,
             count = head[checkCount].toInt(),
             tenderBreakdown = tenderBreakdown,
@@ -408,6 +420,8 @@ class ShiftService(private val config: CustomerConfig) {
             expectedCashCents = expected,
             closingCountCents = closingCountCents,
             overShortCents = closingCountCents?.let { it - expected },
+            dineInCount = agg.modes["DINE_IN"] ?: 0,
+            takeOutCount = agg.modes["TAKE_OUT"] ?: 0,
         )
     }
 
@@ -472,6 +486,9 @@ data class ShiftReport(
     // Z-only fields (null on X-report)
     val closingCountCents: Long? = null,
     val overShortCents: Long? = null,
+    /** Quick-serve: paid counter orders eaten in / taken out (both 0 elsewhere). */
+    val dineInCount: Int = 0,
+    val takeOutCount: Int = 0,
 )
 
 @Serializable

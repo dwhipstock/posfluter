@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../api.dart';
+import '../quickserve/counter_screen.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
@@ -689,6 +690,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
+                    // quick-serve: a new counter order starts as take out or dine in
+                    if (QuickServeApi.enabled) const CounterModeSetting(),
                     // the card terminal (simulator / J.P. Morgan): pair a LAN one
                     const CardTerminalSettings(),
                     ..._guestWifiSection(l),

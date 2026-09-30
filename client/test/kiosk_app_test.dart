@@ -7,12 +7,12 @@ import 'package:pos_client/kiosk/kiosk_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// A quick-serve store in memory: pairs with 123456, serves a tiny menu and
-/// numbers orders from 101.
+/// numbers orders K1, K2... (the pickup number comes when they are paid).
 class _FakeStore extends KioskApi {
   _FakeStore(super.baseUrl, {super.token});
 
   static final placed = <Map<String, dynamic>>[];
-  static int next = 101;
+  static int next = 12;
 
   @override
   Future<String> pair(String code, {String deviceName = ''}) async {
@@ -92,14 +92,15 @@ class _FakeStore extends KioskApi {
   ) async {
     placed.add({'mode': mode, 'lines': lines});
     final alcohol = lines.any((l) => l['itemId'] == 'north-ipa');
-    return KioskOrderResult(next++, 0, alcohol);
+    final n = next++;
+    return KioskOrderResult(n, 0, alcohol, displayNumber: 'K$n');
   }
 }
 
 void main() {
   setUp(() {
     _FakeStore.placed.clear();
-    _FakeStore.next = 101;
+    _FakeStore.next = 12;
   });
 
   KioskController controller({Duration idle = const Duration(seconds: 90)}) =>
@@ -180,7 +181,7 @@ void main() {
       expect(_FakeStore.placed.single['mode'], 'TAKE_OUT');
       expect((_FakeStore.placed.single['lines'] as List).length, 3);
       expect(c.stage, KioskStage.done);
-      expect(find.text('101'), findsOneWidget);
+      expect(find.text('K12'), findsOneWidget);
       expect(find.text('Por favor pague en el mostrador.'), findsOneWidget);
 
       // back to welcome on its own, in the store's language, the cart empty

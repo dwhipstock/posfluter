@@ -54,6 +54,8 @@ data class Receipt(
     val cashRounding: Money = Money.ZERO,
     /** Promotions taken off before tax, one line each (a c-store's deals). */
     val discounts: List<ReceiptDiscount> = emptyList(),
+    /** Quick-serve: the customer's order number and dine in / take out ("#101 · Take out"). */
+    val orderLabel: String? = null,
 ) {
     /** Pre-tax subtotal: the total less the taxes added on top. */
     val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
@@ -230,6 +232,7 @@ object ReceiptRenderer {
         } else {
             add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
         }
+        receipt.orderLabel?.let { add(PrintLine.Large(it)) }
         add(PrintLine.KeyValue(msg(RECEIPT_OPEN), policy.formatDate(receipt.openedAt)))
         // provisional: "Printed at" (this snapshot); final: the close/paid time
         add(PrintLine.KeyValue(

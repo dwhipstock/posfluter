@@ -8,6 +8,7 @@ import '../design/widgets.dart';
 import '../i18n.dart';
 import '../payments/card_reader.dart';
 import '../payments/terminal.dart';
+import '../quickserve/quick_serve_i18n.dart';
 import 'receipt_screen.dart';
 import '../widgets/open_shift_prompt.dart';
 import '../widgets/tax_rows.dart';
@@ -35,10 +36,16 @@ class TenderScreen extends StatefulWidget {
   final Future<TerminalStatus> Function()? terminalStatus;
   final TerminalClient terminalClient;
   final SimReaderClient simReader;
+
+  /// A quick-serve counter order: paying commits it (the store gives it its
+  /// number and sends it to the kitchen); the receipt shows the number big
+  /// and closes itself so the next order opens.
+  final bool counterOrder;
   const TenderScreen({
     super.key,
     required this.check,
     this.groupId,
+    this.counterOrder = false,
     this.stripeStatus,
     this.cardReader,
     this.cardReaderSupported,
@@ -359,9 +366,29 @@ class _TenderScreenState extends State<TenderScreen> {
     // Best-effort heads-up: the receipt printed server-side (async, never blocks
     // the sale), so surface a toast if the printer looks offline.
     _warnIfPrinterOffline();
+    // counter: the number the customer is called by, given as it was paid
+    String? headline;
+    if (widget.counterOrder) {
+      try {
+        final o = await QuickServeApi.order(_check.id);
+        if (o.orderNumber != null && mounted) {
+          final q = Q.of(context);
+          headline =
+              '${q.orderNo(o.orderNumber!)} · ${o.takeOut ? q.takeOut : q.dineIn}';
+        }
+      } catch (_) {} // the receipt carries it too
+    }
+    if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ReceiptScreen(checkId: _check.id, text: receipt),
+        builder: (_) => ReceiptScreen(
+          checkId: _check.id,
+          text: receipt,
+          headline: headline,
+          autoDismiss: widget.counterOrder
+              ? const Duration(seconds: 8)
+              : null,
+        ),
       ),
     );
     if (mounted) Navigator.pop(context, true); // true → check closed
