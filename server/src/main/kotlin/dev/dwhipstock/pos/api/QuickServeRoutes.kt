@@ -1,7 +1,7 @@
 package dev.dwhipstock.pos.api
 
 import dev.dwhipstock.pos.StoreAssets
-import dev.dwhipstock.pos.restaurant.CounterSettings
+import dev.dwhipstock.pos.restaurant.CounterSettingsUpdate
 import dev.dwhipstock.pos.restaurant.KioskOrderLine
 import dev.dwhipstock.pos.restaurant.KioskOrderRequest
 import dev.dwhipstock.pos.restaurant.KioskUpsellRequest
@@ -88,7 +88,7 @@ fun Route.quickServeRoutes(qs: QuickServeService, storeName: String, venueId: St
     get("/counter/settings") { call.respond(qs.settings()) }
     put("/counter/settings") {
         requireManagerSession(call)
-        call.respond(qs.updateSettings(call.receive<CounterSettings>()))
+        call.respond(qs.updateSettings(call.receive<CounterSettingsUpdate>()))
     }
     post("/counter/orders/{id}/status") {
         call.respond(qs.setStatus(orderId(call), call.receive<CounterOrderStatusRequest>().status))

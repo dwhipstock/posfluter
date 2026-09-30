@@ -46,6 +46,8 @@ object ThermalLayout {
         /** Kitchen-ticket items: big enough to read from the pass. */
         LARGE(36f, true),
         TITLE(40f, true),
+        /** The kiosk ticket's order number: read across the counter. */
+        HUGE(110f, true),
     }
 
     fun interface TextMeasurer {
@@ -74,6 +76,7 @@ object ThermalLayout {
             is PrintLine.KeyValue -> pair(line.left, line.right, if (line.emphasized) Style.BOLD else Style.BODY, m, content)
             is PrintLine.QrCode -> line.caption?.let { fit(it, Style.BODY, Align.CENTER, m, content) }.orEmpty() + Row.Qr(line.data)
             is PrintLine.Large -> fit(line.text, Style.LARGE, line.align, m, content)
+            is PrintLine.Huge -> fit(line.text, Style.HUGE, Align.CENTER, m, content)
             // the bar's text sits inside the margins like any other line
             is PrintLine.Banner -> fit(line.text, Style.TITLE, Align.CENTER, m, content)
                 .map { r -> (r as Row.Text).let { Row.Banner(it.text, it.size) } }

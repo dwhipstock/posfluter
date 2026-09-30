@@ -80,6 +80,18 @@ class Q {
     'Quiosco $n · por pagar',
     'Terminal $n · zu zahlen',
   );
+  String get kioskTicket => _t(
+    'Imprimer un billet pour les commandes de borne',
+    'Print a ticket for kiosk orders',
+    'Imprimir un ticket para los pedidos del quiosco',
+    'Bon für Terminal-Bestellungen drucken',
+  );
+  String get kioskTicketHelp => _t(
+    'Le client reçoit son numéro, ses articles et le total sur l’imprimante à reçus.',
+    'The guest gets their number, items and total on the receipt printer.',
+    'El cliente recibe su número, sus artículos y el total en la impresora de recibos.',
+    'Der Gast erhält Nummer, Artikel und Summe auf dem Bondrucker.',
+  );
   String get noKioskOrders => _t(
     'Aucune commande de borne en attente',
     'No kiosk orders waiting',

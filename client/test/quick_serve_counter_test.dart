@@ -51,18 +51,17 @@ class _Store {
   int _nextCheck = 1;
   int _nextNumber = 101;
 
-  /// A kiosk order waiting to pay: K12 with a brownie and a cheesecake.
-  void kioskOrder({int kiosk = 12}) {
+  /// A kiosk order waiting to pay: #112 (numbered at the kiosk) with a
+  /// brownie and a cheesecake.
+  void kioskOrder({int number = 112}) {
     final id = _nextCheck++;
     modes[id] = 'DINE_IN';
     sources[id] = 'KIOSK';
     statuses[id] = 'WAITING';
-    kioskNumbers[id] = kiosk;
+    numbers[id] = number;
     _addLine(id, 'brownie', 'brownie:regular', 1);
     _addLine(id, 'cheesecake', 'cheesecake:regular', 1);
   }
-
-  final kioskNumbers = <int, int>{};
 
   List<dynamic> get items => [
     ...(_fx('items') as List),
@@ -130,7 +129,6 @@ class _Store {
   Map<String, dynamic> order(int id) => {
     'checkId': id,
     'orderNumber': numbers[id],
-    'kioskNumber': kioskNumbers[id],
     'serviceMode': modes[id],
     'source': sources[id] ?? 'POS',
     'status': statuses[id],
@@ -186,7 +184,9 @@ class _Store {
     }
     if (p == '/counter/orders' && req.method == 'GET') {
       return _json([
-        for (final id in numbers.keys.toList().reversed) order(id),
+        // today's paid orders (a kiosk order has its number before that)
+        for (final id in numbers.keys.toList().reversed)
+          if (closed.contains(id)) order(id),
       ]);
     }
     if (p == '/counter/orders' && req.method == 'POST') {
@@ -241,9 +241,10 @@ class _Store {
             'check': check(id, status: 'TOTAL_LOCKED'),
           }, 201);
         case '/finalize':
-          // the store commits the order as it closes: its number, preparing
+          // the store commits the order as it closes: preparing, and a
+          // counter order's number (a kiosk order keeps the one it has)
           closed.add(id);
-          numbers[id] = _nextNumber++;
+          numbers[id] ??= _nextNumber++;
           statuses[id] = 'PREPARING';
           return _json(check(id));
         case '/receipt':
@@ -367,8 +368,8 @@ void main() {
         '@$dpr, $lang)', (tester) async {
       Prefs.instance.lang = lang;
       final store = _Store()
-        ..kioskOrder(kiosk: 12)
-        ..kioskOrder(kiosk: 13);
+        ..kioskOrder(number: 112)
+        ..kioskOrder(number: 113);
       await http.runWithClient(() async {
         await pumpApp(tester, counter, size, dpr);
         expect(tester.takeException(), isNull, reason: 'no overflow');
@@ -540,14 +541,14 @@ void main() {
 
   testWidgets('a kiosk order: tap it in the strip, pay, then it is gone and '
       'a new order opens', (tester) async {
-    final store = _Store()..kioskOrder(kiosk: 12);
+    final store = _Store()..kioskOrder(number: 112);
     await http.runWithClient(() async {
       await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
-      expect(find.text('K12'), findsOneWidget);
-      expect(find.text(r'$16.50'), findsOneWidget);
+      expect(find.text('#112'), findsOneWidget);
+      expect(find.text(r'$16.50 · to pay'), findsOneWidget);
       await tester.tap(find.byKey(const Key('kiosk-1')));
       await settle(tester);
-      expect(find.text('Kiosk K12 · to pay'), findsOneWidget);
+      expect(find.text('Kiosk #112 · to pay'), findsOneWidget);
       expect(modeOn(tester, 'DINE_IN'), isTrue, reason: 'as the guest chose');
       expect(find.byKey(const Key('badge-brownie')), findsNothing);
       await tester.tap(find.byKey(const Key('cat-desserts')));
@@ -555,11 +556,15 @@ void main() {
       expect(find.byKey(const Key('badge-brownie')), findsOneWidget);
 
       await payCash(tester, r'$16.51');
-      expect(find.text('Order #101 · Dine in'), findsOneWidget);
+      expect(
+        find.text('Order #112 · Dine in'),
+        findsOneWidget,
+        reason: 'the number on the guest\'s ticket',
+      );
       await tester.tap(find.text('Done'));
       await settle(tester);
       expect(find.text('New order'), findsOneWidget);
-      expect(find.text('K12'), findsNothing, reason: 'paid: off the queue');
+      expect(find.text('#112'), findsNothing, reason: 'paid: off the queue');
       expect(find.text('No kiosk orders waiting'), findsOneWidget);
       expect(store.created, isEmpty);
       await tester.pumpWidget(const SizedBox());
@@ -569,7 +574,7 @@ void main() {
   testWidgets('taking a kiosk order while ringing one: asked, then cleared', (
     tester,
   ) async {
-    final store = _Store()..kioskOrder(kiosk: 12);
+    final store = _Store()..kioskOrder(number: 112);
     await http.runWithClient(() async {
       await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
       await tapTile(tester, 'desserts', 'brownie');
@@ -579,7 +584,7 @@ void main() {
       await tester.tap(find.byKey(const Key('switch-confirm')));
       await settle(tester);
       expect(store.discarded, [posOrder]);
-      expect(find.text('Kiosk K12 · to pay'), findsOneWidget);
+      expect(find.text('Kiosk #112 · to pay'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     }, () => store.client);
   });
@@ -611,7 +616,7 @@ void main() {
   testWidgets('the Orders panel: paid orders only, ready, picked up, recall', (
     tester,
   ) async {
-    final store = _Store()..kioskOrder(kiosk: 12);
+    final store = _Store()..kioskOrder(number: 112);
     await http.runWithClient(() async {
       await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
       await tapTile(tester, 'desserts', 'brownie');
@@ -622,7 +627,7 @@ void main() {
       await tester.tap(find.byKey(const Key('orders-button')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('order-101')), findsOneWidget);
-      expect(find.text('K12'), findsOneWidget, reason: 'only in the strip');
+      expect(find.text('#112'), findsOneWidget, reason: 'only in the strip');
       await tester.tap(find.byKey(const Key('ready-101')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('pickedup-101')));

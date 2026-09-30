@@ -26,7 +26,7 @@ enum KioskStage {
   /// What is in the order, and Place order.
   cart,
 
-  /// "Your order number is 123. Please pay at the counter."
+  /// "Your order number is #101. Take your ticket to the counter."
   done,
 }
 
@@ -388,7 +388,7 @@ class KioskController extends ChangeNotifier {
     message = null;
     _changed();
     try {
-      result = await api.placeOrder(mode ?? 'TAKE_OUT', _lines);
+      result = await api.placeOrder(mode ?? 'TAKE_OUT', _lines, lang: lang);
       busy = false;
       _idle?.cancel();
       cart.clear();

@@ -1015,7 +1015,7 @@ class _DoneScreen extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    t.payAtCounter,
+                    (r?.ticket ?? false) ? t.takeTicket : t.payAtCounter,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,

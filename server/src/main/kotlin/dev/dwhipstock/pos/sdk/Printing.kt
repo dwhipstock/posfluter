@@ -49,6 +49,10 @@ sealed interface PrintLine {
     @Serializable
     data class Large(val text: String, val align: Align = Align.LEFT) : PrintLine
 
+    /** A kiosk ticket's order number, centered, as big as the paper allows. */
+    @Serializable
+    data class Huge(val text: String) : PrintLine
+
     /** White on a black bar across the paper (a kitchen station name, VOID). */
     @Serializable
     data class Banner(val text: String) : PrintLine
@@ -78,6 +82,12 @@ sealed interface PrinterAdapter {
      * only it knows the line count and total. Returns the rendered text for preview.
      */
     fun printProvisional(job: PrintJob): String
+
+    /**
+     * A slip the guest needs on paper (the kiosk's order ticket): spooled like
+     * a bill, no event, and on paper even when receipts are digital only.
+     */
+    fun printTicket(job: PrintJob): String = printProvisional(job)
 
     /**
      * Dev/M1 printer: renders 42-column text (80mm thermal width) into a spool dir
@@ -164,6 +174,7 @@ sealed interface PrinterAdapter {
                             Align.RIGHT -> line.text.padStart(WIDTH)
                         },
                     )
+                    is PrintLine.Huge -> appendLine(center(line.text))
                     is PrintLine.Banner -> {
                         appendLine("#".repeat(WIDTH))
                         appendLine(center(line.text))

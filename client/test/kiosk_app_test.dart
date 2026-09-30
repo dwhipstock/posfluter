@@ -7,12 +7,12 @@ import 'package:pos_client/kiosk/kiosk_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// A quick-serve store in memory: pairs with 123456, serves a tiny menu and
-/// numbers orders K1, K2... (the pickup number comes when they are paid).
+/// numbers orders #101, #102... (the guest keeps that number through payment).
 class _FakeStore extends KioskApi {
   _FakeStore(super.baseUrl, {super.token});
 
   static final placed = <Map<String, dynamic>>[];
-  static int next = 12;
+  static int next = 101;
 
   @override
   Future<String> pair(String code, {String deviceName = ''}) async {
@@ -108,19 +108,21 @@ class _FakeStore extends KioskApi {
   @override
   Future<KioskOrderResult> placeOrder(
     String mode,
-    List<Map<String, dynamic>> lines,
-  ) async {
-    placed.add({'mode': mode, 'lines': lines});
+    List<Map<String, dynamic>> lines, {
+    String? lang,
+  }) async {
+    placed.add({'mode': mode, 'lines': lines, 'lang': lang});
     final alcohol = lines.any((l) => l['itemId'] == 'north-ipa');
     final n = next++;
-    return KioskOrderResult(n, 0, alcohol, displayNumber: 'K$n');
+    // the store prints the guest's ticket, numbered #101...
+    return KioskOrderResult(n, 0, alcohol, displayNumber: '#$n', ticket: true);
   }
 }
 
 void main() {
   setUp(() {
     _FakeStore.placed.clear();
-    _FakeStore.next = 12;
+    _FakeStore.next = 101;
     _FakeStore.offers = const [];
     _FakeStore.asked.clear();
     _FakeStore.upsellFails = false;
@@ -208,8 +210,16 @@ void main() {
       expect(_FakeStore.placed.single['mode'], 'TAKE_OUT');
       expect((_FakeStore.placed.single['lines'] as List).length, 3);
       expect(c.stage, KioskStage.done);
-      expect(find.text('K12'), findsOneWidget);
-      expect(find.text('Por favor pague en el mostrador.'), findsOneWidget);
+      expect(find.text('#101'), findsOneWidget);
+      expect(
+        _FakeStore.placed.single['lang'],
+        'es',
+        reason: 'the ticket prints in Spanish',
+      );
+      expect(
+        find.text('Lleve su ticket al mostrador para pagar.'),
+        findsOneWidget,
+      );
 
       // back to welcome on its own, in the store's language, the cart empty
       await tester.pump(const Duration(seconds: 6));
@@ -338,7 +348,7 @@ void main() {
         lang: 'fr',
         size: const Size(1280, 800),
       );
-      expect(find.text('Ajouter une boisson ?'), findsOneWidget);
+      expect(find.text('Ajouter une boisson\u00a0?'), findsOneWidget);
       expect(find.text('Non merci, continuer'), findsOneWidget);
       await tester.tap(find.byKey(const Key('kiosk-item-fountain-soda')));
       await tester.pumpAndSettle();
@@ -364,9 +374,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('the store away: straight to the cart', (
-      tester,
-    ) async {
+    testWidgets('the store away: straight to the cart', (tester) async {
       SharedPreferences.setMockInitialValues({
         'kiosk.storeUrl': 'http://10.0.0.5:8080',
         'kiosk.token': 'kiosk-token',

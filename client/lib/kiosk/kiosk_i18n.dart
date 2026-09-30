@@ -74,19 +74,19 @@ class KioskText {
     'Ihr Menü vervollständigen',
   );
   String get addDrink => _t(
-    'Ajouter une boisson ?',
+    'Ajouter une boisson ?',
     'Add a drink?',
     '¿Agregar una bebida?',
     'Ein Getränk dazu?',
   );
   String get addFries => _t(
-    'Ajouter des frites ?',
+    'Ajouter des frites ?',
     'Add fries?',
     '¿Agregar papas fritas?',
     'Pommes dazu?',
   );
   String get addDessert => _t(
-    'Un petit dessert ?',
+    'Un petit dessert ?',
     'Something sweet?',
     '¿Algo dulce?',
     'Etwas Süßes?',
@@ -149,6 +149,12 @@ class KioskText {
     'Please pay at the counter.',
     'Por favor pague en el mostrador.',
     'Bitte an der Kasse bezahlen.',
+  );
+  String get takeTicket => _t(
+    'Apportez votre billet au comptoir pour payer.',
+    'Take your ticket to the counter to pay.',
+    'Lleve su ticket al mostrador para pagar.',
+    'Bringen Sie Ihren Bon zum Bezahlen an die Kasse.',
   );
   String get thanks => _t('Merci', 'Thank you', 'Gracias', 'Danke');
 

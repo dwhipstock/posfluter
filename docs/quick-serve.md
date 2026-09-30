@@ -12,7 +12,7 @@ Plateau. Sync is one-way, store to portal, as for every store.
 | Store | `POS_VENUE=express` (desktop), or `store.venue=express` in the Copper Lantern POS app's `store.properties` (tablet) |
 | Kind | `quick-serve` (`GET /health` → `"kind":"quick-serve"`) |
 | Country, money, languages | Canada, CAD, GST + QST added on top; fr / en / es / de |
-| Menu | 20 items: burgers, chicken, fries and sides, salads, desserts, soft drinks, and beer and wine only (no cocktails). Sizes on fries, soft drinks, wings and tenders |
+| Menu | 22 items: burgers, chicken, fries and sides, salads, desserts, soft drinks, and beer and wine only (no cocktails). Sizes on fries, soft drinks, wings and tenders |
 | Staff | manager PIN 1234, cashier 9999 |
 
 ## How an order moves
@@ -30,21 +30,25 @@ a bag.
    shows on the receipt, the kitchen ticket and screen, the pickup board and
    the shift report (*Dine in: 12 · Take out: 30*).
 3. **Pay**: the usual pay screen (cash or card, the shift prompt, change due).
-   Only when the order is paid in full is it an order: it gets its number
-   (101, 102 and so on, again from 101 each business day), goes to the kitchen
-   (tickets and the kitchen screen, when kitchen tickets are on) and shows on
-   the pickup board as *preparing*. An unpaid order never goes to the kitchen.
+   Only when the order is paid in full is it an order: a counter order gets
+   its number then (101, 102 and so on, again from 101 each business day), it
+   goes to the kitchen (tickets and the kitchen screen, when kitchen tickets
+   are on) and shows on the pickup board as *preparing*. An unpaid order never
+   goes to the kitchen.
 4. **The receipt** shows the number big (*Order #101 · Take out*). It closes
    after 8 seconds, or on *Done*, and the next new order opens.
 5. **Clear order** (the bin on the left): drops an unpaid order. Nothing was
    paid and nothing went to the kitchen, so no manager is needed.
-6. **Kiosk orders** arrive unpaid, as *waiting to pay*, with a kiosk number
-   (K1, K2... each day) that the kiosk shows the guest. They wait in the strip
-   at the top of the counter (*Kiosk  K12 $14.50*). The cashier taps one, it
-   loads on the order panel, Pay, and from there it is like any order: its
-   number (101...), the kitchen, the board. A kiosk order not paid within 30
-   minutes is dropped. Tapping one while ringing another order asks first,
-   then clears that order.
+6. **Kiosk orders** arrive unpaid, as *waiting to pay*, already with their
+   order number (the next one of the day, like any order: 101, 102...). It is
+   the guest's one number, like at a burger chain: on the kiosk's last screen,
+   on the ticket the store prints for them, and the same at the counter, the
+   kitchen, the board and the receipt. They wait in the strip at the top of
+   the counter (*#112 $14.50 · to pay*). The cashier taps one, it loads on the
+   order panel, Pay, and from there it is like any order: the kitchen, the
+   board. A kiosk order not paid within 30 minutes is dropped, and its number
+   is not given again (a gap in the day's numbers). Tapping one while ringing
+   another order asks first, then clears that order.
 7. **Ready**: when the kitchen screen bumps the order's last card (kitchen and
    bar both, if it has both), or *Mark ready* on the **Orders** panel. The
    number moves to the *Ready* column with a chime.
@@ -82,11 +86,37 @@ and never runs a store of its own.
 - **Dine in / Take out**, then **categories and big photo tiles**. Items with
   more than one size open a size picker. Alcohol shows *Staff will check ID at
   the counter*. This is a note only; nothing is blocked.
+- **Add a drink?** On the way to the cart, once per order: when the order has
+  a main (a burger, chicken or a salad) but no drink, a full-width step
+  offers up to four soft drinks, with photos and prices. If there is no side
+  either, a second row offers fries and sides; with a drink and a side but no
+  dessert, desserts. Two rows at most, a drink first. One tap adds an item
+  (sizes open the usual size picker) and goes on to the cart; the big *No
+  thanks, continue* goes to the cart too. The step never shows again in that
+  order, and alcohol is never suggested (a beer or wine already counts as the
+  drink). The store picks the rows (`POST /kiosk/upsell` with the cart): only
+  items on sale, best sellers of the last 7 days first, then the menu's
+  order. Which categories are mains, drinks, sides and desserts is set per
+  venue (`CopperLanternExpressSeed.upsell`, or `CustomerConfig.upsell` for
+  another brand; a quick-serve store's default uses the same category ids).
 - **Cart** (quantities, subtotal, "taxes added at the counter"), then **Place
-  order**. There is no review or confirmation step after that. The last
-  screen says *Your order number is K12. Please pay at the counter.* and goes
-  back to Welcome after 10 seconds, or sooner on a tap. The guest pays with
-  K12 at the counter and is called by the number on the receipt (101...).
+  order**. There is no review or confirmation step after that. The store
+  prints the guest's ticket on the receipt printer (see below). The last
+  screen says *Your order number is #101. Take your ticket to the counter to
+  pay.* and goes back to Welcome after 10 seconds, or sooner on a tap. The
+  guest pays with #101 at the counter and is called by #101 at pickup.
+
+**The kiosk ticket.** The kiosk has no printer; the store prints the ticket on
+its receipt printer (the POS's ESC/POS network printer) the moment a kiosk
+order is placed: the brand, the order number big, dine in / take out, the
+items with prices, the subtotal and taxes, the total, and the cash total (to
+the nickel), then *Please pay at the counter*, all in the language the guest
+chose at the kiosk, money as $1,234.56 in every language. It goes through the
+receipt printer's queue: an offline printer is logged and never stops the
+order. It prints on paper even when receipts are digital only. To turn it
+off: *Settings → Print a ticket for kiosk orders* (on by default; `kioskTicket`
+in `GET` / `PUT /counter/settings`). With it off, the kiosk says *Please pay at
+the counter.* instead.
 - **Idle timeout**: after 90 seconds with no touch mid-order, the cart is
   cleared and the kiosk goes back to Welcome.
 
@@ -96,7 +126,8 @@ a 6-digit code (one use, 10 minutes). The kiosk finds the Express store on
 the Wi-Fi (it skips the pubs and the shops); if it can't find it, type the
 store's address. Then enter the code. The kiosk keeps its own device token
 and sends it as `X-Device-Token`. Store routes: `POST /kiosk/pair`,
-`GET /kiosk/config`, `POST /kiosk/orders`. The menu comes from the open
+`GET /kiosk/config`, `POST /kiosk/upsell`, `POST /kiosk/orders` (with `lang`,
+the guest's language, for the ticket). The menu comes from the open
 `GET /items` and `GET /categories`.
 
 ## The pickup board
@@ -120,7 +151,9 @@ the pubs' pictures at no cost:
     python3 scripts/ai-menu-photos.py --store http://<pub>:8080 --copy-to http://<express>:8098
 
 The new items (double cheeseburger, tenders, maple sundae, fountain soda,
-lemonade) start without photos and show their letter badges.
+lemonade, iced tea, sparkling water) start without photos and show their
+letter badges. Iced tea and sparkling water are new in the seed: an Express
+store seeded before them has only the two drinks until its data is reset.
 
 ## Demo walkthrough (about 5 minutes)
 
@@ -137,10 +170,14 @@ lemonade) start without photos and show their letter badges.
 4. **Kiosk**: `scripts/kiosk-setup.sh --kiosk <adb serial>` installs and
    starts it. On the POS, tap *Pair a kiosk* and type the code on the kiosk.
 5. **Order at the kiosk**: pick Español, *Para llevar*, a burger, large fries
-   and an IPA. The ID note appears. Tap *Hacer el pedido*. The kiosk shows
-   **K1**. At the same moment, *K1* appears in the kiosk strip on the POS.
-   Nothing is in the kitchen or on the board yet: it is not paid.
-6. **Pay the kiosk order**: tap *K1*, Pay, cash. The receipt says
+   and an IPA. The ID note appears. Tap *Mi pedido*: the kiosk offers a
+   dessert (*¿Algo dulce?*; the IPA counts as the drink, the fries as the
+   side). Tap *No, gracias, continuar*, then *Hacer el pedido*. The kiosk
+   shows **#101** and the receipt printer prints the guest's ticket in
+   Spanish. At the same moment, *#101* appears in the kiosk strip on the POS.
+   Nothing is in the kitchen or on the board yet: it is not paid. (For the
+   drink step: order just a burger.)
+6. **Pay the kiosk order**: tap *#101*, Pay, cash. The receipt says
    *Order #101 · Take out*; #101 appears on the kitchen screen and under
    *Preparing* on the board. The receipt closes and a new order opens.
 7. **Order at the counter**: tap *Dine in*, ring two items, Pay. #102 goes to
