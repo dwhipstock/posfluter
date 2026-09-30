@@ -653,7 +653,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     final l = L.of(context);
     final names = await _zoneNameDialog(title: l.addRoom);
     if (names == null || !mounted) return;
-    final pin = await askManagerPin(context, title: l.addRoom);
+    final pin = await managerOrPin(context, title: l.addRoom);
     if (pin == null || !mounted) return;
     try {
       final created = await Api.createZone(names.$1, names.$2, pin);
@@ -676,7 +676,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       nameEn: zone.nameEn,
     );
     if (names == null || !mounted) return;
-    final pin = await askManagerPin(
+    final pin = await managerOrPin(
       context,
       title:
           '${l.renameRoom} · ${l.name(zone.nameFr, zone.nameEn, zone.names)}',
@@ -706,7 +706,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     final tmp = ids[idx];
     ids[idx] = ids[target];
     ids[target] = tmp;
-    final pin = await askManagerPin(context, title: l.manageRoom);
+    final pin = await managerOrPin(context, title: l.manageRoom);
     if (pin == null || !mounted) return;
     try {
       await Api.reorderZones(ids, pin);
@@ -741,7 +741,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       ),
     );
     if (ok != true || !mounted) return;
-    final pin = await askManagerPin(
+    final pin = await managerOrPin(
       context,
       title: '${l.deleteRoom} · $zoneName',
     );
@@ -914,7 +914,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       orElse: () => zones.first,
     );
     final zoneName = l.name(zone.nameFr, zone.nameEn, zone.names);
-    final pin = await askManagerPin(
+    final pin = await managerOrPin(
       context,
       title: '${l.editLayout} · $zoneName',
     );

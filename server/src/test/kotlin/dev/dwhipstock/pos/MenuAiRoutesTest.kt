@@ -197,6 +197,85 @@ class MenuAiRoutesTest {
     }
 
     @Test
+    fun `a rename in one language never bleeds into the other`() = testApplication {
+        // "rename Giant Pub Pretzel to Big Pretzel": the model (wrongly) proposes the same
+        // new text for nameFr too, even though the pretzel's French name ("Bretzel géant")
+        // has always differed from its English one — the guard must drop the French copy.
+        val fake = FakeMenuProvider("""
+            {"summary":"Renamed the pretzel.","ops":[
+              {"op":"update_item","item":"pretzel","nameEn":"Big Pretzel","nameFr":"Big Pretzel"}
+            ]}
+        """.trimIndent())
+        store(fake)
+        val manager = loginClient() // Demo Manager, languageCode "en" — the request language
+
+        val res = manager.post("/menu-ai/chat") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"text":"rename Giant Pub Pretzel to Big Pretzel"}""")
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val proposal = obj(res.bodyAsText())
+        val change = proposal["changes"]!!.jsonArray.single().jsonObject
+        val details = change["details"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("nameEn"), details.map { it.s("field") })
+        assertEquals("Big Pretzel", details.single().s("after"))
+
+        val applied = manager.post("/menu-ai/apply") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"proposalId":"${proposal.s("proposalId")}","changeIds":["${change.s("id")}"]}""")
+        }
+        assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
+        val row = item("pretzel")!!
+        assertEquals("Big Pretzel", row[Items.nameEn])
+        assertEquals("Bretzel géant", row[Items.nameFr]) // French left alone
+    }
+
+    @Test
+    fun `renaming in both languages at once still works when the two names really differ`() = testApplication {
+        val fake = FakeMenuProvider("""
+            {"summary":"Renamed the pretzel in both languages.","ops":[
+              {"op":"update_item","item":"pretzel","nameEn":"Big Pretzel","nameFr":"Petit Bretzel"}
+            ]}
+        """.trimIndent())
+        store(fake)
+        val manager = loginClient()
+        val res = manager.post("/menu-ai/chat") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"text":"rename the pretzel to Big Pretzel in English and Petit Bretzel in French"}""")
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val proposal = obj(res.bodyAsText())
+        val change = proposal["changes"]!!.jsonArray.single().jsonObject
+        val details = change["details"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(setOf("nameEn", "nameFr"), details.map { it.s("field") }.toSet())
+    }
+
+    @Test
+    fun `the language-bleed guard also protects an existing es de translation`() = testApplication {
+        val fake = FakeMenuProvider("""
+            {"summary":"Renamed the pretzel.","ops":[
+              {"op":"update_item","item":"pretzel","nameEn":"Big Pretzel","nameFr":"Big Pretzel"},
+              {"op":"set_name","entity":"item","id":"pretzel","lang":"es","name":"Big Pretzel"}
+            ]}
+        """.trimIndent())
+        store(fake)
+        val manager = loginClient()
+        transaction { Translations.set(Translations.ITEM, "pretzel", "es", "Pretzel gigante") }
+
+        val res = manager.post("/menu-ai/chat") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"text":"rename Giant Pub Pretzel to Big Pretzel"}""")
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val proposal = obj(res.bodyAsText())
+        val changes = proposal["changes"]!!.jsonArray.map { it.jsonObject }
+        // the set_name copy is dropped as not-a-translation; only the English rename remains
+        assertEquals(listOf("update_item"), changes.map { it.s("kind") })
+        assertEquals(1, proposal["rejected"]!!.jsonArray.size)
+        assertTrue(proposal["rejected"]!!.jsonArray.single().jsonPrimitive.content.contains("copy"))
+    }
+
+    @Test
     fun revertUndeletesASoftDeletedItemAndWarnsAboutLaterEdits() = testApplication {
         val fake = FakeMenuProvider("""{"summary":"Removed the salmon, poutine 14.","ops":[
             {"op":"remove_item","item":"salmon"},

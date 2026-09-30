@@ -175,7 +175,7 @@ class CashRoundingTest {
         assertTrue("Total | 10.07" in text, text.joinToString("\n")) // the sale stays exact
         assertTrue("Rounding | -0.02" in text, text.joinToString("\n"))
         assertTrue("Cash total | 10.05" in text, text.joinToString("\n"))
-        assertTrue("Cash | 20" in text && "Change | 9.95" in text, text.joinToString("\n"))
+        assertTrue("Cash | 20.00" in text && "Change | 9.95" in text, text.joinToString("\n"))
         // French and Spanish name it too; a positive adjustment carries its sign
         val up = ReceiptTender("Espèces", "Cash", Money(1010), Money(1008), Money(2), Money.ZERO, "CASH")
         val fr = kv(ReceiptRenderer.render(receipt(listOf(up)), policy.withLocale(dev.dwhipstock.pos.sdk.i18n.LocaleCode.FR)))

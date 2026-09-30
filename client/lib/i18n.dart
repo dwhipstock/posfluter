@@ -1323,10 +1323,10 @@ class L {
     'Keine Kassenschicht offen',
   );
   String get openShiftPromptBody => _t(
-    'Aucun quart de caisse n’est ouvert. En ouvrir un maintenant ?',
-    'No cash drawer shift is open. Open one now?',
-    'No hay ningún turno de caja abierto. ¿Abrir uno ahora?',
-    'Es ist keine Kassenschicht offen. Jetzt eine öffnen?',
+    'Ouvrir un maintenant pour prendre des espèces ?',
+    'Open one now to take cash?',
+    '¿Abrir uno ahora para cobrar en efectivo?',
+    'Jetzt eine öffnen, um Bargeld anzunehmen?',
   );
   String get notNow => _t('Plus tard', 'Not now', 'Ahora no', 'Nicht jetzt');
   String changeDue(String amount) => _t(

@@ -84,7 +84,7 @@ fun Route.tableRoutes(auth: AuthService) {
     patch("/tables/{tableId}/geometry") {
         val tableId = call.parameters["tableId"]!!
         val req = call.receive<TableGeometryRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         val dto = transaction {
             val row = requireLiveTable(tableId)
             val entry = LayoutTableEntry(
@@ -106,7 +106,7 @@ fun Route.tableRoutes(auth: AuthService) {
     put("/zones/{zoneId}/layout") {
         val zoneId = call.parameters["zoneId"]!!
         val req = call.receive<SaveLayoutRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         val updated = transaction {
             requireZone(zoneId)
             req.tables.map { entry ->
@@ -123,7 +123,7 @@ fun Route.tableRoutes(auth: AuthService) {
     post("/zones/{zoneId}/tables") {
         val zoneId = call.parameters["zoneId"]!!
         val req = call.receive<TableCreateRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         validateGeometry(req.x, req.y, req.width, req.height, req.rotation, req.shape, req.seats)
         val dto = transaction {
             val zone = requireZone(zoneId)
@@ -171,7 +171,7 @@ fun Route.tableRoutes(auth: AuthService) {
     post("/tables/{tableId}/delete") {
         val tableId = call.parameters["tableId"]!!
         val req = call.receive<TableDeleteRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         transaction {
             val row = requireLiveTable(tableId)
             val open = Checks.selectAll().where {
@@ -199,7 +199,7 @@ fun Route.tableRoutes(auth: AuthService) {
     patch("/tables/{tableId}") {
         val tableId = call.parameters["tableId"]!!
         val req = call.receive<TableRenameRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         req.label?.let { require(it.isNotBlank()) { "label must not be blank" } }
         val dto = transaction {
             val row = requireLiveTable(tableId)

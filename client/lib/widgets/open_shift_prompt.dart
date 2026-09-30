@@ -66,12 +66,17 @@ Future<void> offerShiftAtSignIn(BuildContext context) async {
   if (user == null || !user.isManager || _offeredForToken == user.token) {
     return;
   }
-  _offeredForToken = user.token;
   try {
-    if (await Api.currentShift() != null) return;
+    if (await Api.currentShift() != null) {
+      _offeredForToken = user.token; // a shift is already open: nothing to offer
+      return;
+    }
   } catch (_) {
-    return; // advisory only — never block the sign-in
+    return; // advisory only — never block the sign-in; a transient failure
+    // here must not burn this session's one-time offer, so the flag is only
+    // set once we actually know whether a shift is open.
   }
+  _offeredForToken = user.token;
   if (context.mounted) await promptOpenShift(context);
 }
 
@@ -116,7 +121,6 @@ class _OpenShiftDialogState extends State<_OpenShiftDialog> {
             TextField(
               key: const Key('open-shift-float'),
               controller: _float,
-              autofocus: true,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               style: T.price(),

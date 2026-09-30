@@ -116,7 +116,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
       barrierDismissible: false,
       builder: (context) => AiMenuDialog(
         status: _menuAiStatus,
-        askPin: () => aiManagerPin(context, title: l.aiMenuTitle),
+        askPin: () => managerOrPin(context, title: l.aiMenuTitle),
         pickPhotos: _pickMenuPhotos,
         backend: AiMenuBackend.store,
       ),
@@ -234,7 +234,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
   Future<void> _aiGenerate(Item item) async {
     final l = L.of(context);
     final name = l.name(item.nameFr, item.nameEn, item.names);
-    final pin = await aiManagerPin(context, title: l.aiGenerateFor(name));
+    final pin = await managerOrPin(context, title: l.aiGenerateFor(name));
     if (pin == null || !mounted) return;
     await _runAiDialog(
       title: l.aiGenerateFor(name),
@@ -247,7 +247,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
   Future<void> _aiEnhance(Item item) async {
     final l = L.of(context);
     final name = l.name(item.nameFr, item.nameEn, item.names);
-    final pin = await aiManagerPin(context, title: l.aiEnhanceFor(name));
+    final pin = await managerOrPin(context, title: l.aiEnhanceFor(name));
     if (pin == null || !mounted) return;
     final picker = ImagePicker();
     final canCamera = picker.supportsImageSource(ImageSource.camera);

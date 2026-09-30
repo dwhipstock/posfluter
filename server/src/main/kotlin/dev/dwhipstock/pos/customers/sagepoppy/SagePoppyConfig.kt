@@ -107,7 +107,6 @@ class SagePoppyConfig(
                 showTax = false,
                 locale = LocaleCode.EN,
                 retail = true,
-                alwaysCents = true,
                 usDates = true,
             )
         }

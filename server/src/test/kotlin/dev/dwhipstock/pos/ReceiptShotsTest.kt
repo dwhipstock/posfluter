@@ -76,7 +76,7 @@ class ReceiptShotsTest {
         "SAGE & POPPY — BOTTLE SHOP",
         listOf(SagePoppy.ADDRESS),
         "Thank you! · ¡Gracias! · 21+ for alcohol / 21+ para alcohol",
-        showTax = false, locale = LocaleCode.ES, retail = true, alwaysCents = true, usDates = true, headerRule = true,
+        showTax = false, locale = LocaleCode.ES, retail = true, usDates = true, headerRule = true,
         phone = SagePoppy.PHONE,
     )
 
@@ -92,7 +92,7 @@ class ReceiptShotsTest {
         val receipt = ReceiptRenderer.render(pubReceipt, pubPolicy, ReceiptKind.FINAL)
         val bill = ReceiptRenderer.render(pubReceipt, pubPolicy, ReceiptKind.PROVISIONAL)
         val kv = receipt.filterIsInstance<PrintLine.KeyValue>().associate { it.left to it.right }
-        assertEquals("73", kv["Sous-total"])
+        assertEquals("73.00", kv["Sous-total"])
         assertEquals("3.65", kv["TPS/GST 5 %"])
         assertEquals("7.28", kv["TVQ/QST 9,975 %"])
         assertEquals("83.93", kv["Total"])

@@ -161,14 +161,12 @@ sealed interface ReceiptPolicy {
     /** A rule under the store's name and address block (a brand's letterhead). */
     val headerRule: Boolean get() = false
 
-    /** Always print the cents ("40.00"), US shelf style; the pubs print "40". */
-    val alwaysCents: Boolean get() = false
-
     /**
      * Money on the receipt, in this policy's style: bare figures, no symbol,
-     * always North American ("10.50", "1,010") whatever the receipt language.
+     * always North American, always two decimals ("10.50", "1,010.00")
+     * whatever the receipt language — so amount columns always line up.
      */
-    fun money(m: Money): String = if (alwaysCents) m.formatCents() else m.format()
+    fun money(m: Money): String = m.formatCents()
 
     /**
      * The printed block under the store's name: [headerLines], then the phone
@@ -189,7 +187,6 @@ sealed interface ReceiptPolicy {
         override val showTax: Boolean,
         override val locale: LocaleCode = LocaleCode.EN,
         override val retail: Boolean = false,
-        override val alwaysCents: Boolean = false,
         /** US receipts: "09/25/2026 5:57 PM" (month first, 12-hour clock). */
         val usDates: Boolean = false,
         override val headerRule: Boolean = false,

@@ -61,7 +61,7 @@ fun Route.zoneManagementRoutes(auth: AuthService) {
     /** Create an empty room; the floor-plan editor fills it with tables/objects. */
     post("/zones") {
         val req = call.receive<ZoneCreateRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         require(req.nameFr.isNotBlank() && req.nameEn.isNotBlank()) { "zone names must not be blank" }
         val dto = transaction {
             val zoneId = uniqueZoneId(req.nameEn)
@@ -90,7 +90,7 @@ fun Route.zoneManagementRoutes(auth: AuthService) {
     patch("/zones/{zoneId}") {
         val zoneId = call.parameters["zoneId"]!!
         val req = call.receive<ZoneRenameRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         req.nameFr?.let { require(it.isNotBlank()) { "nameFr must not be blank" } }
         req.nameEn?.let { require(it.isNotBlank()) { "nameEn must not be blank" } }
         val dto = transaction {
@@ -117,7 +117,7 @@ fun Route.zoneManagementRoutes(auth: AuthService) {
     post("/zones/{zoneId}/delete") {
         val zoneId = call.parameters["zoneId"]!!
         val req = call.receive<ZoneDeleteRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         transaction {
             requireZone(zoneId)
             val liveTables = DiningTables.selectAll().where {
@@ -137,7 +137,7 @@ fun Route.zoneManagementRoutes(auth: AuthService) {
     /** Drag-reorder the room switcher: index in the list becomes sort_order. */
     patch("/zones/order") {
         val req = call.receive<ZoneReorderRequest>()
-        requireManagerApproval(auth, req.managerPin)
+        requireManagerOrPin(auth, call, req.managerPin)
         require(req.orderedIds.isNotEmpty()) { "orderedIds must not be empty" }
         transaction {
             req.orderedIds.forEachIndexed { index, id ->
