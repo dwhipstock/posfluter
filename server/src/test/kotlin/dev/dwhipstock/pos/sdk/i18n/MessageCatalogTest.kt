@@ -126,10 +126,11 @@ class MessageCatalogTest {
         // anyone at the table must be able to tell a provisional bill from a
         // receipt — a locale pack overriding these must keep both of its
         // store's languages: French + English at the pubs, Spanish + English
-        // at the US store (es), German + English (de)
+        // at the US store (es), German + English (de), Afrikaans + English (af)
         val second = mapOf(
             "es" to ("NO ES UN RECIBO" to "CUENTA"),
             "de" to ("KEIN BELEG" to "RECHNUNG"),
+            "af" to ("NIE ’N KWITANSIE NIE" to "REKENING"),
         )
         for (tag in Messages.supportedTags()) {
             val locale = LocaleCode(tag)

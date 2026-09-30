@@ -27,8 +27,8 @@ class LocaleCoverageTest {
     private val stores = mapOf(
         "Copper Lantern" to StoreProfile.QUEBEC_PUB.locales.map { it.tag },
         "Sage & Poppy" to SagePoppy.PROFILE.locales.map { it.tag },
-        // the Copper Lantern staff can also switch to Spanish and German
-        "Copper Lantern (staff)" to listOf("fr", "en", "es", "de"),
+        // the Copper Lantern staff can also switch to Spanish, German and Afrikaans
+        "Copper Lantern (staff)" to listOf("fr", "en", "es", "de", "af"),
     )
     private val allLocales = stores.values.flatten().toSortedSet()
 
@@ -122,7 +122,7 @@ class LocaleCoverageTest {
     fun customerMenuSpeaksThePubsLanguages() {
         val tables = strTables("customer-menu.html")
         // the guest page speaks every language a pub offers: fr, en, and
-        // Copper Lantern's Spanish and German
+        // Copper Lantern's Spanish, German and Afrikaans
         val pub = stores.getValue("Copper Lantern (staff)").toSortedSet()
         assertEquals(pub, tables.keys.toSortedSet(), "customer menu languages")
         val keys = tables.getValue("en").keys

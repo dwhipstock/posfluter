@@ -11,7 +11,7 @@ import org.jetbrains.exposed.sql.update
 /**
  * Names beyond the two catalog slots (name_fr / name_en), migration 053: one
  * row per thing and extra language. A store that speaks more than French and
- * English (Copper Lantern: + es, de) keeps its Spanish and German names here;
+ * English (Copper Lantern: + es, de, af) keeps its other names here;
  * the API adds them to each item / category / zone / floor object as a
  * `names` map, and the screens fall back to English, then French, when a
  * language has no row ([pick]). Item, variant, category and zone names ride

@@ -3,6 +3,7 @@
 import { messages, type Locale, type MsgKey } from "./messages";
 import { es } from "./messages.es";
 import { de } from "./messages.de";
+import { af } from "./messages.af";
 
 type Vars = Record<string, string | number>;
 
@@ -11,6 +12,7 @@ export function translate(locale: Locale, key: MsgKey, vars?: Vars): string {
   let s: string;
   if (locale === "es") s = es[key] ?? messages[key]?.en ?? key;
   else if (locale === "de") s = de[key] ?? messages[key]?.en ?? key;
+  else if (locale === "af") s = af[key] ?? messages[key]?.en ?? key;
   else s = messages[key]?.[locale] ?? key;
   if (vars) s = s.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? `{${k}}`));
   return s;

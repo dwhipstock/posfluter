@@ -1,11 +1,13 @@
 // Every string the terminal can show exists in every language a store uses:
-// French and English at the pubs (plus Spanish and German at Copper Lantern),
+// French and English at the pubs (plus Spanish, German and Afrikaans at
+// Copper Lantern),
 // English and Spanish at Sage & Poppy. The
 // string tables are plain Dart (`_t(...)` calls with one literal per
 // language), so this test reads their source and checks each call:
 //
 //  - it has a text in every language of its table, none empty;
-//  - the French, Spanish and German texts are not just the English left in place,
+//  - the French, Spanish, German and Afrikaans texts are not just the English
+//    left in place,
 //    unless every word is on the small allowlist below (proper nouns and words
 //    both languages really use);
 //  - French typography: a no-break space (U+00A0) before : ; ! ? and », and
@@ -26,10 +28,16 @@ class _Table {
 }
 
 const _tables = [
-  _Table('lib/i18n.dart', ['fr', 'en', 'es', 'de']),
-  _Table('lib/kitchen/kitchen_i18n.dart', ['fr', 'en', 'es', 'de']),
-  _Table('lib/quickserve/quick_serve_i18n.dart', ['fr', 'en', 'es', 'de']),
-  _Table('lib/kiosk/kiosk_i18n.dart', ['fr', 'en', 'es', 'de']),
+  _Table('lib/i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
+  _Table('lib/kitchen/kitchen_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
+  _Table('lib/quickserve/quick_serve_i18n.dart', [
+    'fr',
+    'en',
+    'es',
+    'de',
+    'af',
+  ]),
+  _Table('lib/kiosk/kiosk_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
   _Table('lib/retail/retail_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/stock/stock_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/forecourt/forecourt_i18n.dart', ['en', 'es', 'fr']),
@@ -51,6 +59,8 @@ const _sameWords = {
   'Total', 'Subtotal', 'Menu', 'Table', 'Zones', 'Bar',
   // the same word in German (and French: Stations, Port)
   'Code', 'Chat', 'Name', 'Manager', 'Bank', 'Port', 'Simulator', 'Stations',
+  // the same word in Afrikaans
+  'item', 'items', 'Kiosk', 'Afrikaans',
 };
 
 /// A string literal's text, decoded: interpolations become '§'.
@@ -256,7 +266,7 @@ void main() {
       test('no English left in the French or Spanish texts', () {
         final leftover = [
           for (final c in calls)
-            for (final lang in ['fr', 'es', 'de'])
+            for (final lang in ['fr', 'es', 'de', 'af'])
               if (c.texts.containsKey(lang) &&
                   c.texts[lang] == c.texts['en'] &&
                   !_allowedSame(c.texts['en']!))
@@ -264,6 +274,19 @@ void main() {
         ];
         expect(leftover, isEmpty, reason: leftover.join('\n'));
       });
+
+      test(
+        'Afrikaans: ’n with a typographic apostrophe, no French spacing',
+        () {
+          final bad = [
+            for (final c in calls)
+              if (c.texts['af'] case final af?)
+                if (af.contains("'") || af.contains('\u00A0'))
+                  '${c.where}: $af',
+          ];
+          expect(bad, isEmpty, reason: bad.join('\n'));
+        },
+      );
 
       test('French typography: no-break spaces around : ; ! ? « »', () {
         final bad = <String>[];

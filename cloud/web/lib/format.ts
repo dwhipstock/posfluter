@@ -57,7 +57,7 @@ function groupThousands(n: number, sep: string): string {
 }
 
 /** UI locales. Money ignores them: it is North American in every language. */
-export type MoneyLocale = "fr" | "en" | "es" | "de";
+export type MoneyLocale = "fr" | "en" | "es" | "de" | "af";
 
 /**
  * Currency-aware house style: cents only when nonzero, symbol first, comma

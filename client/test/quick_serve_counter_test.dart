@@ -296,7 +296,7 @@ void main() {
     Prefs.instance.lang = 'en';
     StoreProfile.current = const StoreProfile(
       kind: 'quick-serve',
-      locales: ['en', 'fr', 'es', 'de'],
+      locales: ['en', 'fr', 'es', 'de', 'af'],
     );
   });
   tearDown(() => StoreProfile.current = StoreProfile.pub);
@@ -362,6 +362,8 @@ void main() {
     (const Size(2736, 1824), 2.0, 'fr'),
     (const Size(2736, 1824), 1.5, 'en'),
     (const Size(2736, 1824), 2.0, 'de'),
+    (const Size(1920, 1200), 1.5, 'af'),
+    (const Size(2736, 1824), 2.0, 'af'),
   ]) {
     testWidgets('the counter opens on a new order: rail, grid, toggle and '
         'kiosk strip fit (${size.width.toInt()}x${size.height.toInt()} '

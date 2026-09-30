@@ -100,7 +100,7 @@ class LanguagesEverywhereTest {
         val poutine = snap["items"]!!.jsonArray.map { it.jsonObject }.first { it.str("id") == "poutine" }
         assertEquals("Poutine clásica", poutine.names()["es"])
         val wings = snap["items"]!!.jsonArray.map { it.jsonObject }.first { it.str("id") == "wings" }
-        assertEquals(setOf("es", "de"), wings.names().keys)
+        assertEquals(setOf("es", "de", "af"), wings.names().keys)
         assertEquals("Vorspeisen", snap["categories"]!!.jsonArray.map { it.jsonObject }.first { it.str("id") == "starters" }.names()["de"])
         assertEquals("Untergeschoss", snap["zones"]!!.jsonArray.map { it.jsonObject }.first { it.str("id") == "lower" }.names()["de"])
     }

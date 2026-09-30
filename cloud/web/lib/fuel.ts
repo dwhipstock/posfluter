@@ -11,7 +11,7 @@ import type { InStoreCategoryRow } from "./types";
 // sends basis points). A null ratio means no cost was known: shown as "—",
 // never as 0 or 100%.
 
-const NUMBER_LOCALE: Record<Locale, string> = { en: "en-US", fr: "fr-CA", es: "es-US", de: "de-DE" };
+const NUMBER_LOCALE: Record<Locale, string> = { en: "en-US", fr: "fr-CA", es: "es-US", de: "de-DE", af: "en-US" };
 
 /** A gas station's category ids (CONTRACT §2, Fuel) with portal names in every language. */
 const STORE_CATEGORIES = new Set([

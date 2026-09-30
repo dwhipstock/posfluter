@@ -28,6 +28,8 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -66,14 +68,14 @@ class QuickServeTest {
     }
 
     @Test
-    fun `the Express store is a quick-serve counter with a short beer-and-wine menu in four languages`() {
+    fun `the Express store is a quick-serve counter with a short beer-and-wine menu in five languages`() {
         val (_, _) = service { LocalDate.of(2026, 10, 8) }
         val config = CopperLanternConfig(venue = CopperLanternVenue.EXPRESS, settings = SettingsRepository(),
             printer = PrinterAdapter.VirtualPrinter("r", "b"), publicBaseUrl = "http://x")
         assertEquals(StoreProfile.Kind.QUICK_SERVE, config.profile.kind)
         assertEquals("express", config.venueId)
         assertEquals("copper-lantern", config.brand)
-        assertEquals(listOf("en", "fr", "es", "de"), config.profile.locales.map { it.tag })
+        assertEquals(listOf("en", "fr", "es", "de", "af"), config.profile.locales.map { it.tag })
         assertEquals(StoreProfile.Kind.RESTAURANT,
             CopperLanternConfig(venue = CopperLanternVenue.PLATEAU, settings = SettingsRepository(),
                 printer = PrinterAdapter.VirtualPrinter("r", "b"), publicBaseUrl = "http://x").profile.kind)
@@ -84,11 +86,27 @@ class QuickServeTest {
             // no floor plan: just the counter
             assertEquals(listOf(QuickServeService.COUNTER_TABLE),
                 dev.dwhipstock.pos.restaurant.DiningTables.selectAll().map { it[dev.dwhipstock.pos.restaurant.DiningTables.id] })
-            for (id in CopperLanternExpressSeed.menuItemIds) for (lang in listOf("es", "de"))
+            for (id in CopperLanternExpressSeed.menuItemIds) for (lang in listOf("es", "de", "af"))
                 assertTrue(dev.dwhipstock.pos.base.Translations.get("item", id, lang) != null, "$id has no $lang name")
         }
         // the dishes the pubs also serve keep the pub ids (their photos copy over as they are)
         assertTrue(CopperLanternExpressSeed.menuItemIds.containsAll(listOf("lantern-burger", "poutine", "late-fries", "wings")))
+    }
+
+    @Test
+    fun `an Express counter seeded before Afrikaans gets the counter's own Afrikaans names on boot`() {
+        service { LocalDate.of(2026, 10, 8) }
+        transaction { dev.dwhipstock.pos.base.Translations.deleteWhere { lang eq "af" } }
+        dev.dwhipstock.pos.customers.copperlantern.CopperLanternSeed.seedTranslations(express = true)
+        transaction {
+            val t = dev.dwhipstock.pos.base.Translations
+            // the counter's fries, not the pubs' "Midnight fries"
+            assertEquals("Slaptjips", t.get(t.ITEM, "late-fries", "af"))
+            assertEquals("Koeldrank", t.get(t.CATEGORY, "soft-drinks", "af"))
+            assertEquals("Groot", t.get(t.VARIANT, "late-fries:large", "af"))
+            for (id in CopperLanternExpressSeed.menuItemIds)
+                assertTrue(t.get(t.ITEM, id, "af") != null, "$id has no af name")
+        }
     }
 
     private data class Store(val qs: QuickServeService, val checks: CheckService, val config: CopperLanternConfig, val dir: File) {

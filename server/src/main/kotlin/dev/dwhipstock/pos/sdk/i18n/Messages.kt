@@ -21,6 +21,7 @@ value class LocaleCode(val tag: String) {
         val EN = LocaleCode("en")
         val ES = LocaleCode("es")
         val DE = LocaleCode("de")
+        val AF = LocaleCode("af")
 
         /** Normalize a stored/user-supplied code ("EN ", "Fr") to a lowercase tag. */
         fun of(raw: String) = LocaleCode(raw.trim().lowercase())

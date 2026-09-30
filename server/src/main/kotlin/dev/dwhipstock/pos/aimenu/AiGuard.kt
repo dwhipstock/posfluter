@@ -54,48 +54,56 @@ object AiGuard {
             "fr" to "Je peux seulement vous aider à configurer et modifier votre menu. Essayez par exemple « ajoute une salade César à 14 dans Salades ».",
             "es" to "Solo puedo ayudarte a configurar y editar tu menú. Prueba algo como «añade una ensalada César a 14 en Ensaladas».",
             "de" to "Ich kann nur beim Einrichten und Bearbeiten Ihrer Speisekarte helfen. Versuchen Sie zum Beispiel „Caesar Salad für 14 unter Salate hinzufügen“.",
+            "af" to "Ek kan net help om jou spyskaart op te stel en te wysig. Probeer iets soos “voeg ’n Caesar-slaai vir 14 by onder Slaaie”.",
         ),
         Refusal.NO_CHANGE to mapOf(
             "en" to "I couldn't find a menu change to make from that. Name the item and what to change, for example \"poutine 14\".",
             "fr" to "Je n'ai trouvé aucun changement de menu à faire. Nommez le produit et ce qu'il faut changer, par exemple « poutine 14 ».",
             "es" to "No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «poutine 14».",
             "de" to "Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Poutine 14“.",
+            "af" to "Ek kon nie ’n spyskaartverandering daarin vind nie. Noem die item en wat moet verander, byvoorbeeld “poutine 14”.",
         ),
         Refusal.ROOM_OFF_TOPIC to mapOf(
             "en" to "I can only set up a floor plan from pictures of a room, a sketch or a printed plan.",
             "fr" to "Je peux seulement créer un plan de salle à partir de photos d'une salle, d'un croquis ou d'un plan imprimé.",
             "es" to "Solo puedo crear un plano a partir de fotos de una sala, un boceto o un plano impreso.",
             "de" to "Ich kann nur aus Fotos eines Raums, einer Skizze oder eines gedruckten Plans einen Raumplan erstellen.",
+            "af" to "Ek kan net ’n vloerplan opstel uit foto’s van ’n vertrek, ’n skets of ’n gedrukte plan.",
         ),
         Refusal.ROOM_NO_LAYOUT to mapOf(
             "en" to "I couldn't find any tables in those pictures. Try a clearer photo taken from higher up, or a sketch.",
             "fr" to "Je n'ai trouvé aucune table sur ces images. Essayez une photo plus nette prise de plus haut, ou un croquis.",
             "es" to "No encontré ninguna mesa en esas imágenes. Prueba una foto más nítida tomada desde más arriba, o un boceto.",
             "de" to "Ich habe auf diesen Bildern keine Tische gefunden. Versuchen Sie ein schärferes Foto von weiter oben oder eine Skizze.",
+            "af" to "Ek kon geen tafels in daardie prente vind nie. Probeer ’n duideliker foto van hoër af geneem, of ’n skets.",
         ),
         Refusal.FLOOR_OFF_TOPIC to mapOf(
             "en" to "I can only help edit this room's floor plan. Try something like \"add four 2-tops along the window\".",
             "fr" to "Je peux seulement vous aider à modifier le plan de cette salle. Essayez par exemple « ajoute quatre tables de 2 le long de la fenêtre ».",
             "es" to "Solo puedo ayudarte a editar el plano de esta sala. Prueba algo como «añade cuatro mesas de 2 junto a la ventana».",
             "de" to "Ich kann nur beim Bearbeiten des Raumplans helfen. Versuchen Sie zum Beispiel „vier Zweiertische am Fenster hinzufügen“.",
+            "af" to "Ek kan net help om hierdie vertrek se vloerplan te wysig. Probeer iets soos “voeg vier tweepersoonstafels langs die venster by”.",
         ),
         Refusal.FLOOR_NO_CHANGE to mapOf(
             "en" to "I couldn't find a change to make to this room from that. Name the table or object and what to change, for example \"make table 5 round\".",
             "fr" to "Je n'ai trouvé aucun changement à faire dans cette salle. Nommez la table ou l'élément et ce qu'il faut changer, par exemple « rends la table 5 ronde ».",
             "es" to "No encontré ningún cambio que hacer en esta sala. Indica la mesa o el elemento y qué cambiar, por ejemplo «haz redonda la mesa 5».",
             "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 5 rund machen“.",
+            "af" to "Ek kon nie ’n verandering vir hierdie vertrek daarin vind nie. Noem die tafel of voorwerp en wat moet verander, byvoorbeeld “maak tafel 5 rond”.",
         ),
         Refusal.INCOMPLETE to mapOf(
             "en" to "The AI's answer was cut off. Please try again.",
             "fr" to "La réponse de l'IA a été coupée. Veuillez réessayer.",
             "es" to "La respuesta de la IA se cortó. Vuelve a intentarlo.",
             "de" to "Die Antwort der KI wurde abgeschnitten. Bitte versuchen Sie es erneut.",
+            "af" to "Die KI se antwoord is afgesny. Probeer asseblief weer.",
         ),
         Refusal.TOO_MANY_CHANGES to mapOf(
             "en" to "That's too many changes at once. Try asking for fewer things, or in smaller batches.",
             "fr" to "C'est trop de changements à la fois. Essayez de demander moins de choses, ou en plus petits lots.",
             "es" to "Son demasiados cambios a la vez. Pide menos cosas, o en tandas más pequeñas.",
             "de" to "Das sind zu viele Änderungen auf einmal. Fragen Sie nach weniger Dingen oder in kleineren Schritten.",
+            "af" to "Dis te veel veranderinge op een slag. Vra vir minder dinge, of in kleiner groepe.",
         ),
     )
 
@@ -119,9 +127,9 @@ object AiGuard {
         """\b(tell|say)\s+(me\s+)?(a\s+)?(joke|poem|story|riddle)\b""",
         """\b(write|compose)\s+(me\s+)?(a\s+)?(poem|song|story|essay|haiku)\b""",
         """\bwho (are|made|built|created) you\b|\bwhat (model|llm) are you\b""",
-        // same in French / Spanish / German (the store's other languages)
-        """\b(ignore|oublie|oubliez|olvida|ignora|vergiss|ignoriere)\b.{0,40}\b(instructions?|consignes?|instrucciones|anweisungen|regeln)\b""",
-        """\b(blague|chiste|witz|poème|poema|gedicht)\b""",
+        // same in French / Spanish / German / Afrikaans (the store's other languages)
+        """\b(ignore|oublie|oubliez|olvida|ignora|vergiss|ignoriere|vergeet|ignoreer)\b.{0,40}\b(instructions?|consignes?|instrucciones|anweisungen|regeln|instruksies|reëls)\b""",
+        """\b(blague|chiste|witz|grap|poème|poema|gedicht)\b""",
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     /** True when [text] is plainly not a menu request (answered with the fixed reply, no model call). */

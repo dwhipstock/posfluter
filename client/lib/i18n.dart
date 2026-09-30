@@ -15,10 +15,10 @@ class Prefs extends ChangeNotifier {
   static const _storage = FlutterSecureStorage();
 
   String lang =
-      'en'; // one of the store's languages: en | fr (pubs, + es | de at Copper Lantern), en | es (US store)
+      'en'; // one of the store's languages: en | fr (pubs, + es | de | af at Copper Lantern), en | es (US store)
 
   /// Every language the terminal has strings for; a store offers a subset.
-  static const known = {'en', 'fr', 'es', 'de'};
+  static const known = {'en', 'fr', 'es', 'de', 'af'};
 
   /// The store's languages (from its profile), default first.
   List<String> get storeLocales => StoreProfile.current.locales;
@@ -151,13 +151,15 @@ Widget prefsScope({required Widget child}) => PrefsScope(child: child);
 /// All UI strings, every locale inline — compile-checked, no key typos.
 /// `L.of(context)` subscribes the caller to language changes.
 ///
-/// Every string is written four times: Québec French (the pubs; vous, and
+/// Every string is written five times: Québec French (the pubs; vous, and
 /// French typography — a no-break space before : ; ! ? and inside « »),
-/// English, US Spanish (the Sage & Poppy counter; tú) and German (Copper
-/// Lantern's extra language; staff screens neutral, Sie where addressed).
+/// English, US Spanish (the Sage & Poppy counter; tú), German (Copper
+/// Lantern's extra language; staff screens neutral, Sie where addressed) and
+/// Afrikaans (Copper Lantern too; staff screens neutral, jy where addressed,
+/// u for guests; ’n with a typographic apostrophe).
 /// test/locale_coverage_test.dart checks that no `_t` call misses a language.
 class L {
-  /// en | fr | es | de
+  /// en | fr | es | de | af
   final String lang;
 
   /// English (true) or French (false) — the pubs' pair.
@@ -175,14 +177,17 @@ class L {
   bool get en => lang != 'fr';
   bool get es => lang == 'es';
   bool get de => lang == 'de';
+  bool get af => lang == 'af';
 
-  /// French, English, US Spanish and German, in that order.
-  String _t(String fr, String enS, String esS, String deS) => switch (lang) {
-    'fr' => fr,
-    'es' => esS,
-    'de' => deS,
-    _ => enS,
-  };
+  /// French, English, US Spanish, German and Afrikaans, in that order.
+  String _t(String fr, String enS, String esS, String deS, String afS) =>
+      switch (lang) {
+        'fr' => fr,
+        'es' => esS,
+        'de' => deS,
+        'af' => afS,
+        _ => enS,
+      };
 
   /// Data-driven names (items, zones, variants): user's language first.
   /// The catalog carries French and English; any other language reads its
@@ -201,17 +206,24 @@ class L {
   String get cur => StoreProfile.current.currency;
 
   // common
-  String get retry =>
-      _t('Réessayer', 'Retry', 'Reintentar', 'Erneut versuchen');
-  String get cancel => _t('Annuler', 'Cancel', 'Cancelar', 'Abbrechen');
-  String get ok => _t('OK', 'OK', 'OK', 'OK');
-  String get done => _t('Terminé', 'Done', 'Listo', 'Fertig');
-  String get close => _t('Fermer', 'Close', 'Cerrar', 'Schließen');
+  String get retry => _t(
+    'Réessayer',
+    'Retry',
+    'Reintentar',
+    'Erneut versuchen',
+    'Probeer weer',
+  );
+  String get cancel =>
+      _t('Annuler', 'Cancel', 'Cancelar', 'Abbrechen', 'Kanselleer');
+  String get ok => _t('OK', 'OK', 'OK', 'OK', 'OK');
+  String get done => _t('Terminé', 'Done', 'Listo', 'Fertig', 'Klaar');
+  String get close => _t('Fermer', 'Close', 'Cerrar', 'Schließen', 'Maak toe');
   String get cannotReachServer => _t(
     'Restaurant temporairement injoignable',
     'Restaurant temporarily unavailable',
     'La tienda no está disponible por el momento',
     'Restaurant vorübergehend nicht erreichbar',
+    'Restaurant tydelik onbeskikbaar',
   );
 
   // login
@@ -220,63 +232,84 @@ class L {
     'Enter your PIN to sign in',
     'Ingresa tu PIN para iniciar sesión',
     'PIN eingeben zum Anmelden',
+    'Voer jou PIN in om aan te meld',
   );
   String get loginInterrupted => _t(
     'Connexion interrompue — entrez votre NIP de nouveau',
     'Connection interrupted — enter your PIN again',
     'Se interrumpió la conexión: ingresa tu PIN otra vez',
     'Verbindung unterbrochen – bitte PIN erneut eingeben',
+    'Verbinding onderbreek — voer jou PIN weer in',
   );
   String get whoClockingIn => _t(
     'Qui commence son quart ?',
     "Who's clocking in?",
     '¿Quién empieza su turno?',
     'Wer stempelt sich ein?',
+    'Wie teken in?',
   );
   String get switchLanguage => _t(
     'Changer de langue',
     'Switch language',
     'Cambiar idioma',
     'Sprache wechseln',
+    'Verander taal',
   );
   String get staffTerminal => _t(
     'Terminal du personnel',
     'Staff terminal',
     'Terminal del personal',
     'Personal-Terminal',
+    'Personeelterminaal',
   );
 
   // floor header: short labels under the action icons
-  String get navMenu => _t('Menu', 'Menu', 'Menú', 'Speisekarte');
-  String get navReports => _t('Rapports', 'Reports', 'Reportes', 'Berichte');
-  String get navRefunds =>
-      _t('Remboursements', 'Refunds', 'Reembolsos', 'Erstattungen');
-  String get navLayout => _t('Plan de salle', 'Layout', 'Plano', 'Tischplan');
+  String get navMenu => _t('Menu', 'Menu', 'Menú', 'Speisekarte', 'Spyskaart');
+  String get navReports =>
+      _t('Rapports', 'Reports', 'Reportes', 'Berichte', 'Verslae');
+  String get navRefunds => _t(
+    'Remboursements',
+    'Refunds',
+    'Reembolsos',
+    'Erstattungen',
+    'Terugbetalings',
+  );
+  String get navLayout =>
+      _t('Plan de salle', 'Layout', 'Plano', 'Tischplan', 'Vloerplan');
   String get navRefresh =>
-      _t('Actualiser', 'Refresh', 'Actualizar', 'Aktualisieren');
-  String get navMore => _t('Plus', 'More', 'Más', 'Mehr');
+      _t('Actualiser', 'Refresh', 'Actualizar', 'Aktualisieren', 'Verfris');
+  String get navMore => _t('Plus', 'More', 'Más', 'Mehr', 'Meer');
 
   // floor legend + room list
-  String get rooms => _t('Salles', 'Rooms', 'Salones', 'Räume');
-  String get legendFree => _t('Libre', 'Free', 'Libre', 'Frei');
-  String get legendOccupied => _t('Occupée', 'Occupied', 'Ocupada', 'Besetzt');
+  String get rooms => _t('Salles', 'Rooms', 'Salones', 'Räume', 'Vertrekke');
+  String get legendFree => _t('Libre', 'Free', 'Libre', 'Frei', 'Vry');
+  String get legendOccupied =>
+      _t('Occupée', 'Occupied', 'Ocupada', 'Besetzt', 'Beset');
   String get legendPending => _t(
     'Commande en attente',
     'Order waiting',
     'Pedido en espera',
     'Bestellung wartet',
+    'Bestelling wag',
   );
   String tablesOccupied(int open, int total) => _t(
     '$open sur $total occupées',
     '$open of $total occupied',
     '$open de $total ocupadas',
     '$open von $total besetzt',
+    '$open van $total beset',
   );
 
   /// How long a check has been open, e.g. "25 min", "1 h 05".
   String openFor(Duration d) {
     if (d.inMinutes < 1) {
-      return _t('à l’instant', 'just now', 'ahora mismo', 'gerade eben');
+      return _t(
+        'à l’instant',
+        'just now',
+        'ahora mismo',
+        'gerade eben',
+        'so pas',
+      );
     }
     if (d.inHours < 1) return '${d.inMinutes} min';
     final m = (d.inMinutes % 60).toString().padLeft(2, '0');
@@ -285,9 +318,19 @@ class L {
 
   // check screen cart
   String itemCount(int n) {
-    if (n == 1) return _t('1 article', '1 item', '1 artículo', '1 Artikel');
-    if (n == 0) return _t('0 article', '0 items', '0 artículos', '0 Artikel');
-    return _t('$n articles', '$n items', '$n artículos', '$n Artikel');
+    if (n == 1) {
+      return _t('1 article', '1 item', '1 artículo', '1 Artikel', '1 item');
+    }
+    if (n == 0) {
+      return _t('0 article', '0 items', '0 artículos', '0 Artikel', '0 items');
+    }
+    return _t(
+      '$n articles',
+      '$n items',
+      '$n artículos',
+      '$n Artikel',
+      '$n items',
+    );
   }
 
   String get emptyBill => _t(
@@ -295,41 +338,56 @@ class L {
     'Nothing on this bill yet',
     'Todavía no hay nada en esta cuenta',
     'Noch nichts auf dieser Rechnung',
+    'Nog niks op hierdie rekening nie',
   );
-  String get each => _t('l’unité', 'each', 'c/u', 'je');
+  String get each => _t('l’unité', 'each', 'c/u', 'je', 'elk');
   String get tapToAdd => _t(
     'Touchez un article du menu pour l’ajouter.',
     'Tap a menu item to add it.',
     'Toca un artículo del menú para agregarlo.',
     'Artikel in der Karte antippen, um ihn hinzuzufügen.',
+    'Tik op ’n spyskaartitem om dit by te voeg.',
   );
 
   // zones
-  String get zones => _t('Zones', 'Zones', 'Zonas', 'Bereiche');
+  String get zones => _t('Zones', 'Zones', 'Zonas', 'Bereiche', 'Areas');
   String get manageMenu => _t(
     'Gérer le menu (86)',
     'Manage menu (86)',
     'Administrar menú (86)',
     'Karte verwalten (86)',
+    'Bestuur spyskaart (86)',
   );
   String get shiftReports => _t(
     'Quart / Rapports',
     'Shift / Reports',
     'Turno / Reportes',
     'Schicht / Berichte',
+    'Skof / verslae',
   );
   String get logout =>
-      _t('Se déconnecter', 'Log out', 'Cerrar sesión', 'Abmelden');
+      _t('Se déconnecter', 'Log out', 'Cerrar sesión', 'Abmelden', 'Meld af');
 
   // tables
-  String get subTable => _t('Sous-table', 'Sub-table', 'Submesa', 'Untertisch');
-  String get free => _t('Libre', 'Free', 'Libre', 'Frei');
+  String get subTable =>
+      _t('Sous-table', 'Sub-table', 'Submesa', 'Untertisch', 'Subtafel');
+  String get free => _t('Libre', 'Free', 'Libre', 'Frei', 'Vry');
 
   // floor plan
   String seatsShort(int n) {
-    if (n == 1) return _t('1 place', '1 seat', '1 lugar', '1 Platz');
-    if (n == 0) return _t('0 place', '0 seats', '0 lugares', '0 Plätze');
-    return _t('$n places', '$n seats', '$n lugares', '$n Plätze');
+    if (n == 1) {
+      return _t('1 place', '1 seat', '1 lugar', '1 Platz', '1 sitplek');
+    }
+    if (n == 0) {
+      return _t('0 place', '0 seats', '0 lugares', '0 Plätze', '0 sitplekke');
+    }
+    return _t(
+      '$n places',
+      '$n seats',
+      '$n lugares',
+      '$n Plätze',
+      '$n sitplekke',
+    );
   }
 
   String get emptyZoneOnboarding => _t(
@@ -337,6 +395,7 @@ class L {
     'No tables in this zone yet.\nTap the pencil to build the layout.',
     'Todavía no hay mesas en esta zona.\nToca el lápiz para armar el plano.',
     'In diesem Bereich gibt es noch keine Tische.\nTippen Sie auf den Stift, um den Tischplan anzulegen.',
+    'Nog geen tafels in hierdie area nie.\nTik op die potlood om die vloerplan te bou.',
   );
 
   // floor plan editor (manager)
@@ -345,48 +404,70 @@ class L {
     'Edit layout',
     'Editar plano',
     'Tischplan bearbeiten',
+    'Wysig vloerplan',
   );
   String editLayoutTitle(String zone) => _t(
     'Modifier le plan de salle · $zone',
     'Edit layout · $zone',
     'Editar plano · $zone',
     'Tischplan bearbeiten · $zone',
+    'Wysig vloerplan · $zone',
   );
   String get saveLayout => _t(
     'Enregistrer le plan',
     'Save layout',
     'Guardar plano',
     'Tischplan speichern',
+    'Stoor vloerplan',
   );
   String get layoutSaved => _t(
     'Plan de salle enregistré',
     'Layout saved',
     'Plano guardado',
     'Tischplan gespeichert',
+    'Vloerplan gestoor',
   );
-  String get addTable =>
-      _t('Ajouter une table', 'Add table', 'Agregar mesa', 'Tisch hinzufügen');
-  String get deleteTable =>
-      _t('Retirer la table', 'Remove table', 'Quitar mesa', 'Tisch entfernen');
+  String get addTable => _t(
+    'Ajouter une table',
+    'Add table',
+    'Agregar mesa',
+    'Tisch hinzufügen',
+    'Voeg tafel by',
+  );
+  String get deleteTable => _t(
+    'Retirer la table',
+    'Remove table',
+    'Quitar mesa',
+    'Tisch entfernen',
+    'Verwyder tafel',
+  );
   String deleteTableConfirm(String label) => _t(
     'Retirer la table « $label » du plan ? Les anciennes additions la conservent, mais elle disparaît de tous les écrans.',
     'Remove table "$label" from the plan? Old bills keep it; it disappears from every screen.',
     '¿Quitar la mesa "$label" del plano? Las cuentas anteriores la conservan, pero desaparece de todas las pantallas.',
     'Tisch „$label“ aus dem Plan entfernen? Alte Rechnungen behalten ihn, auf allen Bildschirmen verschwindet er.',
+    'Verwyder tafel “$label” van die plan? Ou rekeninge behou dit; dit verdwyn van elke skerm.',
   );
-  String get tableDeleted =>
-      _t('Table retirée', 'Table removed', 'Mesa quitada', 'Tisch entfernt');
+  String get tableDeleted => _t(
+    'Table retirée',
+    'Table removed',
+    'Mesa quitada',
+    'Tisch entfernt',
+    'Tafel verwyder',
+  );
   String get renameTable => _t(
     'Renommer la table',
     'Rename table',
     'Cambiar nombre de la mesa',
     'Tisch umbenennen',
+    'Hernoem tafel',
   );
   String get tableLabelField => _t(
     'Nom de la table (ex. : L-5)',
     'Table label (e.g. L-5)',
     'Nombre de la mesa (p. ej., L-5)',
     'Tischname (z. B. L-5)',
+    'Tafelnaam (bv. L-5)',
   );
 
   /// Add-table dialog helper: labels are auto-assigned to the zone prefix.
@@ -395,41 +476,55 @@ class L {
     'Leave blank for the next number ($prefix-…)',
     'Déjalo vacío para el siguiente número ($prefix-…)',
     'Leer lassen für die nächste Nummer ($prefix-…)',
+    'Laat leeg vir die volgende nommer ($prefix-…)',
   );
   String get vipNameField => _t(
     'Nom VIP (vide = aucun)',
     'VIP name (blank = none)',
     'Nombre VIP (vacío = ninguno)',
     'VIP-Name (leer = keiner)',
+    'VIP-naam (leeg = geen)',
   );
-  String get rotate => _t('Pivoter', 'Rotate', 'Girar', 'Drehen');
-  String get undo => _t('Annuler', 'Undo', 'Deshacer', 'Rückgängig');
-  String get editorGrid => _t('Grille', 'Grid', 'Cuadrícula', 'Raster');
-  String get editorSnap => _t('Magnétisme', 'Snap', 'Ajustar', 'Einrasten');
-  String get gridOff => _t('Désactivée', 'Off', 'Desactivada', 'Aus');
-  String get gridLarge => _t('Grande', 'Large', 'Grande', 'Groß');
-  String get gridMedium => _t('Moyenne', 'Medium', 'Mediana', 'Mittel');
-  String get gridSmall => _t('Petite', 'Small', 'Pequeña', 'Klein');
-  String get seatsLabel => _t('Places', 'Seats', 'Lugares', 'Plätze');
+  String get rotate => _t('Pivoter', 'Rotate', 'Girar', 'Drehen', 'Draai');
+  String get undo => _t('Annuler', 'Undo', 'Deshacer', 'Rückgängig', 'Ontdoen');
+  String get editorGrid =>
+      _t('Grille', 'Grid', 'Cuadrícula', 'Raster', 'Rooster');
+  String get editorSnap =>
+      _t('Magnétisme', 'Snap', 'Ajustar', 'Einrasten', 'Belyn');
+  String get gridOff => _t('Désactivée', 'Off', 'Desactivada', 'Aus', 'Af');
+  String get gridLarge => _t('Grande', 'Large', 'Grande', 'Groß', 'Groot');
+  String get gridMedium =>
+      _t('Moyenne', 'Medium', 'Mediana', 'Mittel', 'Middel');
+  String get gridSmall => _t('Petite', 'Small', 'Pequeña', 'Klein', 'Klein');
+  String get seatsLabel =>
+      _t('Places', 'Seats', 'Lugares', 'Plätze', 'Sitplekke');
   String get unsavedLayoutTitle => _t(
     'Plan non enregistré',
     'Layout not saved',
     'Plano sin guardar',
     'Tischplan nicht gespeichert',
+    'Vloerplan nie gestoor nie',
   );
   String get unsavedLayoutBody => _t(
     'Les tables déplacées reprendront leur place si vous quittez maintenant.',
     'Table positions you moved will be lost if you leave now.',
     'Si sales ahora, se perderán las posiciones de las mesas que moviste.',
     'Verschobene Tische gehen verloren, wenn Sie jetzt verlassen.',
+    'Tafelposisies wat jy geskuif het, sal verlore gaan as jy nou uitgaan.',
   );
-  String get discard =>
-      _t('Quitter sans enregistrer', 'Discard', 'Descartar', 'Verwerfen');
+  String get discard => _t(
+    'Quitter sans enregistrer',
+    'Discard',
+    'Descartar',
+    'Verwerfen',
+    'Gooi weg',
+  );
   String get tapTableToEditHint => _t(
     'Touchez une table pour la sélectionner · glissez pour la déplacer',
     'Tap a table to select · drag to move',
     'Toca una mesa para seleccionarla · arrastra para moverla',
     'Tisch antippen zum Auswählen · ziehen zum Verschieben',
+    'Tik op ’n tafel om te kies · sleep om te skuif',
   );
 
   // floor plan editor — structural objects (pool / bar front / pillar)
@@ -438,22 +533,42 @@ class L {
     'Add object',
     'Agregar elemento',
     'Element hinzufügen',
+    'Voeg voorwerp by',
   );
-  String get objectPool =>
-      _t('Table de billard', 'Pool table', 'Mesa de billar', 'Billardtisch');
+  String get objectPool => _t(
+    'Table de billard',
+    'Pool table',
+    'Mesa de billar',
+    'Billardtisch',
+    'Biljarttafel',
+  );
   String get objectBarFront =>
-      _t('Comptoir du bar', 'Bar front', 'Barra', 'Tresen');
-  String get objectPillar => _t('Colonne', 'Pillar', 'Columna', 'Säule');
+      _t('Comptoir du bar', 'Bar front', 'Barra', 'Tresen', 'Kroegtoonbank');
+  String get objectPillar =>
+      _t('Colonne', 'Pillar', 'Columna', 'Säule', 'Pilaar');
   // the short caption on an unlabelled pool table / bar front on the plan
-  String get objectPoolCaption => _t('Billard', 'Pool', 'Billar', 'Billard');
-  String get objectBarCaption => _t('Bar', 'Bar', 'Barra', 'Bar');
+  String get objectPoolCaption =>
+      _t('Billard', 'Pool', 'Billar', 'Billard', 'Biljart');
+  String get objectBarCaption => _t('Bar', 'Bar', 'Barra', 'Bar', 'Kroeg');
   // the room's built-in landmarks: palette name and default caption
   String? objectTypeName(String type) => switch (type) {
-    'ENTRANCE' => _t('Entrée', 'Entrance', 'Entrada', 'Eingang'),
-    'HOST_STAND' => _t('Accueil', 'Host stand', 'Recepción', 'Empfang'),
-    'KITCHEN' => _t('Cuisine', 'Kitchen', 'Cocina', 'Küche'),
-    'RESTROOMS' => _t('Toilettes', 'Restrooms', 'Baños', 'Toiletten'),
-    'STAGE' => _t('Scène', 'Stage', 'Escenario', 'Bühne'),
+    'ENTRANCE' => _t('Entrée', 'Entrance', 'Entrada', 'Eingang', 'Ingang'),
+    'HOST_STAND' => _t(
+      'Accueil',
+      'Host stand',
+      'Recepción',
+      'Empfang',
+      'Ontvangs',
+    ),
+    'KITCHEN' => _t('Cuisine', 'Kitchen', 'Cocina', 'Küche', 'Kombuis'),
+    'RESTROOMS' => _t(
+      'Toilettes',
+      'Restrooms',
+      'Baños',
+      'Toiletten',
+      'Toilette',
+    ),
+    'STAGE' => _t('Scène', 'Stage', 'Escenario', 'Bühne', 'Verhoog'),
     _ => null,
   };
   // a manager-made object: by hand, or suggested by the AI from a photo
@@ -462,24 +577,28 @@ class L {
     'Custom object…',
     'Elemento personalizado…',
     'Eigenes Element…',
+    'Eie voorwerp…',
   );
   String get objectFromPhoto => _t(
     'Ajouter depuis une photo…',
     'Add from photo…',
     'Agregar desde foto…',
     'Aus Foto hinzufügen…',
+    'Voeg by uit foto…',
   );
   String get objectFromPhotoOffNote => _t(
     'Photo IA : Internet et le menu IA requis. L’élément personnalisé fonctionne toujours.',
     'Add from photo needs AI menu setup and internet. Custom object still works.',
     'Foto con IA: requiere el menú con IA e internet. El elemento personalizado sigue funcionando.',
     '„Aus Foto“ braucht die KI-Kartenerstellung und Internet. Eigene Elemente gehen weiterhin.',
+    '“Voeg by uit foto” het KI-spyskaartopstelling en internet nodig. Eie voorwerpe werk steeds.',
   );
   String get objectFromPhotoWorking => _t(
     'L’IA regarde la photo…',
     'AI is looking at the photo…',
     'La IA mira la foto…',
     'Die KI sieht sich das Foto an…',
+    'KI kyk na die foto…',
   );
   // "Set up from picture": the AI drafts the whole room from 1–4 pictures
   String get roomFromPicture => _t(
@@ -487,61 +606,76 @@ class L {
     'Set up from picture…',
     'Crear desde una imagen…',
     'Aus Bild einrichten…',
+    'Stel op uit prent…',
   );
   String get roomFromPictureOffNote => _t(
     'Nécessite le menu IA et Internet.',
     'Needs AI menu setup and internet.',
     'Requiere el menú con IA e internet.',
     'Braucht die KI-Kartenerstellung und Internet.',
+    'Het KI-spyskaartopstelling en internet nodig.',
   );
   String get roomLayoutHistory => _t(
     'Salles créées par l’IA',
     'Rooms set up by AI',
     'Salas creadas con IA',
     'Von der KI eingerichtete Räume',
+    'Vertrekke deur KI opgestel',
   );
   String roomPreviewSummary(int tables, int seats, int objects) => _t(
     '$tables table(s), $seats place(s), $objects élément(s)',
     '$tables table(s), $seats seat(s), $objects object(s)',
     '$tables mesa(s), $seats lugar(es), $objects elemento(s)',
     '$tables Tisch(e), $seats Platz/Plätze, $objects Element(e)',
+    '$tables tafel(s), $seats sitplek(ke), $objects voorwerp(e)',
   );
   String get roomPreviewHint => _t(
     'Aperçu : rien ne change avant « Appliquer ». Glissez pour déplacer, × pour retirer.',
     'Preview: nothing changes until Apply. Drag to move, × to remove.',
     'Vista previa: nada cambia hasta Aplicar. Arrastra para mover, × para quitar.',
     'Vorschau: nichts ändert sich vor „Übernehmen“. Ziehen zum Verschieben, × zum Entfernen.',
+    'Voorskou: niks verander voor “Pas toe” nie. Sleep om te skuif, × om te verwyder.',
   );
   String get roomModeReplace =>
-      _t('Remplacer', 'Replace', 'Reemplazar', 'Ersetzen');
+      _t('Remplacer', 'Replace', 'Reemplazar', 'Ersetzen', 'Vervang');
   String get roomModeMerge =>
-      _t('Ajouter', 'Add to room', 'Añadir', 'Hinzufügen');
+      _t('Ajouter', 'Add to room', 'Añadir', 'Hinzufügen', 'Voeg by vertrek');
   String roomExisting(int n) => _t(
     'La salle a déjà $n table(s).',
     'This room already has $n table(s).',
     'La sala ya tiene $n mesa(s).',
     'Der Raum hat schon $n Tisch(e).',
+    'Hierdie vertrek het reeds $n tafel(s).',
   );
   String roomProtected(int n) => _t(
     '$n table(s) avec une addition ouverte restent en place.',
     '$n table(s) with an open bill stay where they are.',
     '$n mesa(s) con cuenta abierta se quedan donde están.',
     '$n Tisch(e) mit offener Rechnung bleiben, wo sie sind.',
+    '$n tafel(s) met ’n oop rekening bly waar hulle is.',
   );
-  String get roomNotSure =>
-      _t('Pas certain :', 'Not sure:', 'No está seguro:', 'Unsicher:');
+  String get roomNotSure => _t(
+    'Pas certain :',
+    'Not sure:',
+    'No está seguro:',
+    'Unsicher:',
+    'Onseker:',
+  );
   String roomSkipped(int n) => _t(
     '$n élément(s) ignoré(s) ou corrigé(s) :',
     '$n thing(s) skipped or fixed:',
     '$n elemento(s) omitido(s) o corregido(s):',
     '$n Element(e) übersprungen oder korrigiert:',
+    '$n ding(e) oorgeslaan of reggemaak:',
   );
-  String get roomApply => _t('Appliquer', 'Apply', 'Aplicar', 'Übernehmen');
+  String get roomApply =>
+      _t('Appliquer', 'Apply', 'Aplicar', 'Übernehmen', 'Pas toe');
   String roomApplied(int n) => _t(
     '$n élément(s) ajouté(s) à la salle',
     '$n thing(s) added to the room',
     '$n elemento(s) añadido(s) a la sala',
     '$n Element(e) zum Raum hinzugefügt',
+    '$n ding(e) by die vertrek gevoeg',
   );
   // voice input (menu AI chat, floor assistant): hold to talk, or tap to start / stop
   String get micHint => _t(
@@ -549,67 +683,86 @@ class L {
     'Hold to talk, or tap to start and tap again to stop',
     'Mantén pulsado para hablar, o toca para empezar y otra vez para parar',
     'Zum Sprechen gedrückt halten, oder antippen zum Starten und erneut zum Stoppen',
+    'Hou in om te praat, of tik om te begin en tik weer om te stop',
   );
   String get micListening => _t(
     'J’écoute… relâchez ou touchez pour arrêter',
     'Listening… release or tap to stop',
     'Escuchando… suelta o toca para parar',
     'Ich höre zu… loslassen oder antippen zum Stoppen',
+    'Luister… los of tik om te stop',
   );
   String get micUnavailable => _t(
     'Le micro n’est pas disponible. Vérifiez l’autorisation, ou tapez la demande.',
     'The microphone isn’t available. Check the permission, or type the request.',
     'El micrófono no está disponible. Revisa el permiso, o escribe la petición.',
     'Das Mikrofon ist nicht verfügbar. Prüfen Sie die Berechtigung oder tippen Sie die Anfrage.',
+    'Die mikrofoon is nie beskikbaar nie. Kontroleer die toestemming, of tik die versoek.',
   );
   String aiHeard(String text) => _t(
     'Entendu : « $text »',
     'Heard: “$text”',
     'Oído: «$text»',
     'Verstanden: „$text“',
+    'Gehoor: “$text”',
   );
   // floor plan "Ask AI": edit the current room by text or voice
-  String get floorAskAi =>
-      _t('Demander à l’IA…', 'Ask AI…', 'Preguntar a la IA…', 'KI fragen…');
+  String get floorAskAi => _t(
+    'Demander à l’IA…',
+    'Ask AI…',
+    'Preguntar a la IA…',
+    'KI fragen…',
+    'Vra KI…',
+  );
   String get floorAskAiHint => _t(
     'Ex. « ajoute quatre tables de 2 le long de la fenêtre », « table 5 ronde avec 6 places », « enlève le billard »',
     'e.g. “add four 2-tops along the window”, “make table 5 round with 6 seats”, “remove the pool table”',
     'p. ej. «añade cuatro mesas de 2 junto a la ventana», «mesa 5 redonda con 6 lugares», «quita el billar»',
     'z. B. „vier Zweiertische am Fenster“, „Tisch 5 rund mit 6 Plätzen“, „Billardtisch entfernen“',
+    'bv. “voeg vier 2-tafels langs die venster by”, “maak tafel 5 rond met 6 sitplekke”, “verwyder die biljarttafel”',
   );
   // AI working card: a request can take 5-60s, so it gets a step label, a
   // live elapsed count and an estimated progress bar instead of a banner
   // that would otherwise look stuck.
   String get aiStepListening =>
-      _t('Écoute…', 'Listening…', 'Escuchando…', 'Ich höre zu…');
+      _t('Écoute…', 'Listening…', 'Escuchando…', 'Ich höre zu…', 'Luister…');
   String get aiStepSending =>
-      _t('Envoi…', 'Sending…', 'Enviando…', 'Wird gesendet…');
+      _t('Envoi…', 'Sending…', 'Enviando…', 'Wird gesendet…', 'Stuur tans…');
   String aiStepThinking(bool slow) => slow
       ? _t(
           'Réflexion… habituellement 20 à 60 secondes',
           'Thinking… usually 20–60 seconds',
           'Pensando… habitualmente 20 a 60 segundos',
           'Überlegt… meist 20 bis 60 Sekunden',
+          'Dink… gewoonlik 20–60 sekondes',
         )
       : _t(
           'Réflexion… habituellement 5 à 15 secondes',
           'Thinking… usually 5–15 seconds',
           'Pensando… habitualmente 5 a 15 segundos',
           'Überlegt… meist 5 bis 15 Sekunden',
+          'Dink… gewoonlik 5–15 sekondes',
         );
-  String get aiStepAlmostDone =>
-      _t('Presque fini…', 'Almost done…', 'Casi listo…', 'Fast fertig…');
+  String get aiStepAlmostDone => _t(
+    'Presque fini…',
+    'Almost done…',
+    'Casi listo…',
+    'Fast fertig…',
+    'Amper klaar…',
+  );
   String get floorEditHint => _t(
     'Aperçu : rien ne change avant « Appliquer ». Les contours montrent le nouveau et le déplacé, le pâle est retiré.',
     'Preview: nothing changes until Apply. Outlined = new or moved; faded = removed.',
     'Vista previa: nada cambia hasta Aplicar. Con borde = nuevo o movido; pálido = quitado.',
     'Vorschau: nichts ändert sich vor „Übernehmen“. Umrandet = neu oder verschoben; blass = entfernt.',
+    'Voorskou: niks verander voor “Pas toe” nie. Omlyn = nuut of geskuif; verbleik = verwyder.',
   );
   String floorEditApplied(int n) => _t(
     'Plan de salle mis à jour : $n changement(s)',
     'Floor plan updated: $n change(s)',
     'Plano actualizado: $n cambio(s)',
     'Raumplan aktualisiert: $n Änderung(en)',
+    'Vloerplan bygewerk: $n verandering(e)',
   );
   String floorChangeKind(String kind) => switch (kind) {
     'add_table' => _t(
@@ -617,51 +770,63 @@ class L {
       'New table',
       'Mesa nueva',
       'Neuer Tisch',
+      'Nuwe tafel',
     ),
     'update_table' => _t(
       'Table modifiée',
       'Table changed',
       'Mesa cambiada',
       'Tisch geändert',
+      'Tafel verander',
     ),
     'remove_table' => _t(
       'Table retirée',
       'Table removed',
       'Mesa quitada',
       'Tisch entfernt',
+      'Tafel verwyder',
     ),
     'add_object' => _t(
       'Nouvel élément',
       'New object',
       'Elemento nuevo',
       'Neues Element',
+      'Nuwe voorwerp',
     ),
     'update_object' => _t(
       'Élément déplacé',
       'Object moved',
       'Elemento movido',
       'Element verschoben',
+      'Voorwerp geskuif',
     ),
     _ => _t(
       'Élément retiré',
       'Object removed',
       'Elemento quitado',
       'Element entfernt',
+      'Voorwerp verwyder',
     ),
   };
   String floorField(String field) => switch (field) {
-    'number' => _t('Numéro', 'Number', 'Número', 'Nummer'),
-    'shape' => _t('Forme', 'Shape', 'Forma', 'Form'),
+    'number' => _t('Numéro', 'Number', 'Número', 'Nummer', 'Nommer'),
+    'shape' => _t('Forme', 'Shape', 'Forma', 'Form', 'Vorm'),
     'seats' => seatsLabel,
-    'position' => _t('Emplacement', 'Position', 'Ubicación', 'Lage'),
-    'size' => _t('Taille', 'Size', 'Tamaño', 'Größe'),
-    _ => _t('Angle', 'Rotation', 'Giro', 'Drehung'),
+    'position' => _t('Emplacement', 'Position', 'Ubicación', 'Lage', 'Posisie'),
+    'size' => _t('Taille', 'Size', 'Tamaño', 'Größe', 'Grootte'),
+    _ => _t('Angle', 'Rotation', 'Giro', 'Drehung', 'Draaiing'),
   };
   String floorShapeName(String shape) => switch (shape) {
-    'ROUND' => _t('ronde', 'round', 'redonda', 'rund'),
-    'SQUARE' => _t('carrée', 'square', 'cuadrada', 'quadratisch'),
-    'RECT' => _t('rectangulaire', 'rectangle', 'rectangular', 'rechteckig'),
-    'BAR' => _t('haute', 'high-top', 'alta', 'Stehtisch'),
+    'ROUND' => _t('ronde', 'round', 'redonda', 'rund', 'rond'),
+    'SQUARE' => _t('carrée', 'square', 'cuadrada', 'quadratisch', 'vierkantig'),
+    'RECT' => _t(
+      'rectangulaire',
+      'rectangle',
+      'rectangular',
+      'rechteckig',
+      'reghoekig',
+    ),
+    'BAR' => _t('haute', 'high-top', 'alta', 'Stehtisch', 'hoë tafel'),
     _ => shape,
   };
   String get objectNameFr => _t(
@@ -669,79 +834,92 @@ class L {
     'Name (French)',
     'Nombre (francés)',
     'Name (Französisch)',
+    'Naam (Frans)',
   );
   String get objectNameEn => _t(
     'Nom (anglais)',
     'Name (English)',
     'Nombre (inglés)',
     'Name (Englisch)',
+    'Naam (Engels)',
   );
-  String get objectIcon => _t('Icône', 'Icon', 'Ícono', 'Symbol');
+  String get objectIcon => _t('Icône', 'Icon', 'Ícono', 'Symbol', 'Ikoon');
   String get objectShapeRect =>
-      _t('Rectangulaire', 'Rectangle', 'Rectangular', 'Eckig');
-  String get objectShapeRound => _t('Rond', 'Round', 'Redondo', 'Rund');
-  String get objectSize => _t('Taille', 'Size', 'Tamaño', 'Größe');
-  String get placeObject => _t('Placer', 'Place', 'Colocar', 'Platzieren');
+      _t('Rectangulaire', 'Rectangle', 'Rectangular', 'Eckig', 'Reghoekig');
+  String get objectShapeRound => _t('Rond', 'Round', 'Redondo', 'Rund', 'Rond');
+  String get objectSize => _t('Taille', 'Size', 'Tamaño', 'Größe', 'Grootte');
+  String get placeObject =>
+      _t('Placer', 'Place', 'Colocar', 'Platzieren', 'Plaas');
   String get deleteObject => _t(
     'Retirer l’élément',
     'Remove object',
     'Quitar elemento',
     'Element entfernen',
+    'Verwyder voorwerp',
   );
   String deleteObjectConfirm(String name) => _t(
     'Retirer « $name » du plan ?',
     'Remove "$name" from the plan?',
     '¿Quitar "$name" del plano?',
     '„$name“ aus dem Plan entfernen?',
+    'Verwyder “$name” van die plan?',
   );
   String get objectDeleted => _t(
     'Élément retiré',
     'Object removed',
     'Elemento quitado',
     'Element entfernt',
+    'Voorwerp verwyder',
   );
 
   // check screen
-  String get table => _t('Table', 'Table', 'Mesa', 'Tisch');
-  String get bill => _t('Addition', 'Bill', 'Cuenta', 'Rechnung');
+  String get table => _t('Table', 'Table', 'Mesa', 'Tisch', 'Tafel');
+  String get bill => _t('Addition', 'Bill', 'Cuenta', 'Rechnung', 'Rekening');
 
   /// A document number: "n° 12" in French, "#12" in English and US Spanish.
-  String numbered(int n) => _t('n°\u00A0$n', '#$n', '#$n', '#$n');
+  String numbered(int n) => _t('n°\u00A0$n', '#$n', '#$n', '#$n', '#$n');
 
   /// "Addition n° 12" / "Bill #12" / "Cuenta #12".
   String billNo(int id) => '$bill ${numbered(id)}';
   String get corkage =>
-      _t('Droit de bouchon', 'Corkage', 'Descorche', 'Korkgeld');
+      _t('Droit de bouchon', 'Corkage', 'Descorche', 'Korkgeld', 'Kurkgeld');
   String get voidBillManager => _t(
     'Annuler l’addition (gérant)',
     'Void bill (manager)',
     'Anular cuenta (gerente)',
     'Rechnung stornieren (Manager)',
+    'Kanselleer rekening (bestuurder)',
   );
   String get noItemsYet => _t(
     'Aucun article pour l’instant — touchez le menu pour en ajouter',
     'No items yet — tap the menu to add',
     'Todavía no hay artículos: toca el menú para agregar',
     'Noch keine Artikel – zum Hinzufügen Karte antippen',
+    'Nog geen items nie — tik op die spyskaart om by te voeg',
   );
   String pendingFromPhone(int n) => _t(
     'Commandé par téléphone — à confirmer ($n)',
     'Ordered from phone — awaiting confirm ($n)',
     'Pedido desde el celular: por confirmar ($n)',
     'Per Handy bestellt – Bestätigung ausstehend ($n)',
+    'Per foon bestel — wag vir bevestiging ($n)',
   );
-  String get acceptOrder => _t('Accepter', 'Accept', 'Aceptar', 'Annehmen');
-  String get rejectOrder => _t('Refuser', 'Reject', 'Rechazar', 'Ablehnen');
-  String get deleteLine => _t('Retirer', 'Remove', 'Quitar', 'Entfernen');
+  String get acceptOrder =>
+      _t('Accepter', 'Accept', 'Aceptar', 'Annehmen', 'Aanvaar');
+  String get rejectOrder =>
+      _t('Refuser', 'Reject', 'Rechazar', 'Ablehnen', 'Weier');
+  String get deleteLine =>
+      _t('Retirer', 'Remove', 'Quitar', 'Entfernen', 'Verwyder');
   String get emptyBillClosed => _t(
     'Addition vide fermée',
     'Empty bill closed',
     'Se cerró la cuenta vacía',
     'Leere Rechnung geschlossen',
+    'Leë rekening toegemaak',
   );
-  String get total => _t('Total', 'Total', 'Total', 'Gesamt');
+  String get total => _t('Total', 'Total', 'Total', 'Gesamt', 'Totaal');
   String get subtotal =>
-      _t('Sous-total', 'Subtotal', 'Subtotal', 'Zwischensumme');
+      _t('Sous-total', 'Subtotal', 'Subtotal', 'Zwischensumme', 'Subtotaal');
 
   /// A tax added on top, e.g. "GST 5%" / "TPS 5 %" (rate is a decimal string).
   /// Data, not a string table: the tax names come from the store.
@@ -750,31 +928,35 @@ class L {
     'de' => '${tax.labelEn} ${tax.ratePercent.replaceAll('.', ',')} %',
     _ => '${tax.labelEn} ${tax.ratePercent}%',
   };
-  String get pay => _t('Payer', 'Pay', 'Cobrar', 'Bezahlen');
+  String get pay => _t('Payer', 'Pay', 'Cobrar', 'Bezahlen', 'Betaal');
   String get ordersAwaiting => _t(
     'Commandes à confirmer',
     'Orders awaiting confirm',
     'Pedidos por confirmar',
     'Bestellungen zur Bestätigung',
+    'Bestellings wat wag vir bevestiging',
   );
   String sizesFrom(int n, String price) => _t(
     '$n formats, dès $price',
     '$n sizes $price+',
     '$n tamaños desde $price',
     '$n Größen ab $price',
+    '$n groottes $price+',
   );
-  String get qty => _t('Qté', 'Qty', 'Cant.', 'Menge');
+  String get qty => _t('Qté', 'Qty', 'Cant.', 'Menge', 'Aantal');
   String get noteHint => _t(
     'Note (ex. : sans glace)',
     'Note (e.g. no ice)',
     'Nota (p. ej., sin hielo)',
     'Notiz (z. B. ohne Eis)',
+    'Nota (bv. geen ys nie)',
   );
   String addToBill(String price) => _t(
     'Ajouter à l’addition · $price',
     'Add to bill $price',
     'Agregar a la cuenta · $price',
     'Auf Rechnung $price',
+    'Voeg by rekening $price',
   );
 
   // void flow
@@ -783,109 +965,160 @@ class L {
     'Void bill — manager approval',
     'Anular cuenta: aprobación del gerente',
     'Rechnung stornieren – Freigabe durch Manager',
+    'Kanselleer rekening — bestuurder se goedkeuring',
   );
   String get voidReasonTitle => _t(
     'Motif de l’annulation',
     'Void reason',
     'Motivo de la anulación',
     'Stornogrund',
+    'Rede vir kansellasie',
   );
   List<String> get voidReasons => [
-    _t('Mauvaise table', 'Wrong table', 'Mesa equivocada', 'Falscher Tisch'),
+    _t(
+      'Mauvaise table',
+      'Wrong table',
+      'Mesa equivocada',
+      'Falscher Tisch',
+      'Verkeerde tafel',
+    ),
     _t(
       'Le client a changé d’idée',
       'Customer changed mind',
       'El cliente cambió de opinión',
       'Gast hat es sich anders überlegt',
+      'Klant het van plan verander',
     ),
-    _t('Mauvais prix', 'Wrong price', 'Precio equivocado', 'Falscher Preis'),
-    _t('Test du système', 'System test', 'Prueba del sistema', 'Systemtest'),
+    _t(
+      'Mauvais prix',
+      'Wrong price',
+      'Precio equivocado',
+      'Falscher Preis',
+      'Verkeerde prys',
+    ),
+    _t(
+      'Test du système',
+      'System test',
+      'Prueba del sistema',
+      'Systemtest',
+      'Stelseltoets',
+    ),
   ];
-  String get otherReason =>
-      _t('Autre motif', 'Other reason', 'Otro motivo', 'Anderer Grund');
+  String get otherReason => _t(
+    'Autre motif',
+    'Other reason',
+    'Otro motivo',
+    'Anderer Grund',
+    'Ander rede',
+  );
   String voidedBill(int id) => _t(
     'Addition n° $id annulée',
     'Bill #$id voided',
     'Cuenta #$id anulada',
     'Rechnung #$id storniert',
+    'Rekening #$id gekanselleer',
   );
 
   // corkage dialog
   String get corkageTitle =>
-      _t('Droit de bouchon', 'Corkage', 'Descorche', 'Korkgeld');
+      _t('Droit de bouchon', 'Corkage', 'Descorche', 'Korkgeld', 'Kurkgeld');
   String get bottlesBrought => _t(
     'Bouteilles apportées par le client',
     'Bottles brought by customer',
     'Botellas que trajo el cliente',
     'Vom Gast mitgebrachte Flaschen',
+    'Bottels deur klant saamgebring',
   );
 
   // tender screen
-  String get outstanding => _t('À payer', 'Due', 'Por pagar', 'Offen');
+  String get outstanding =>
+      _t('À payer', 'Due', 'Por pagar', 'Offen', 'Verskuldig');
   String paidOf(String paid, String total) => _t(
     'Payé $paid sur $total',
     'Paid $paid / $total',
     'Pagado $paid de $total',
     'Bezahlt $paid / $total',
+    'Betaal $paid / $total',
   );
-  String get cash => _t('Comptant', 'Cash', 'Efectivo', 'Bar');
-  String get card => _t('Carte', 'Card', 'Tarjeta', 'Karte');
+  String get cash => _t('Comptant', 'Cash', 'Efectivo', 'Bar', 'Kontant');
+  String get card => _t('Carte', 'Card', 'Tarjeta', 'Karte', 'Kaart');
   String get bankTransfer =>
-      _t('Virement', 'Transfer', 'Transferencia', 'Überweisung');
+      _t('Virement', 'Transfer', 'Transferencia', 'Überweisung', 'Oorplasing');
   String get cashInHint => _t(
     'Comptant reçu ($cur) — paiement partiel accepté',
     'Cash received ($cur) — partial OK',
     'Efectivo recibido ($cur): se acepta pago parcial',
     'Bar erhalten ($cur) – Teilbetrag möglich',
+    'Kontant ontvang ($cur) — gedeeltelik OK',
   );
-  String get receive => _t('Encaisser', 'Receive', 'Cobrar', 'Kassieren');
+  String get receive =>
+      _t('Encaisser', 'Receive', 'Cobrar', 'Kassieren', 'Ontvang');
   String amountHint(String due) => _t(
     'Montant ($cur) — vide = la totalité, $due',
     'Amount ($cur) — blank = full $due',
     'Monto ($cur): vacío = el total, $due',
     'Betrag ($cur) – leer = voller Betrag $due',
+    'Bedrag ($cur) — leeg = volle $due',
   );
   String get useCardTerminal => _t(
     'Utiliser le terminal de paiement',
     'Use card terminal',
     'Usar la terminal de tarjetas',
     'Kartenterminal verwenden',
+    'Gebruik kaartterminaal',
   );
   String get showBankAccount => _t(
     'Afficher les coordonnées bancaires',
     'Show account details',
     'Mostrar datos de la cuenta',
     'Kontodaten anzeigen',
+    'Wys rekeningbesonderhede',
   );
   String amountToPay(String amount) => _t(
     'Montant à payer : $amount',
     'Amount due $amount',
     'Monto a pagar: $amount',
     'Offener Betrag $amount',
+    'Bedrag verskuldig $amount',
   );
   String get confirmMoneyIn => _t(
     'Confirmer — paiement reçu',
     'Confirm — money received',
     'Confirmar: dinero recibido',
     'Bestätigen – Geld erhalten',
+    'Bevestig — geld ontvang',
   );
   String get cashReceivedTitle => _t(
     'Comptant reçu ✓',
     'Cash received ✓',
     'Efectivo recibido ✓',
     'Bar erhalten ✓',
+    'Kontant ontvang ✓',
   );
-  String get cashReceived =>
-      _t('Comptant reçu', 'Cash received', 'Efectivo recibido', 'Bar erhalten');
-  String get rounding => _t('Arrondi', 'Rounding', 'Redondeo', 'Rundung');
-  String get cashTotal =>
-      _t('Total comptant', 'Cash total', 'Total en efectivo', 'Barbetrag');
-  String get change => _t('Monnaie', 'Change', 'Cambio', 'Rückgeld');
+  String get cashReceived => _t(
+    'Comptant reçu',
+    'Cash received',
+    'Efectivo recibido',
+    'Bar erhalten',
+    'Kontant ontvang',
+  );
+  String get rounding =>
+      _t('Arrondi', 'Rounding', 'Redondeo', 'Rundung', 'Afronding');
+  String get cashTotal => _t(
+    'Total comptant',
+    'Cash total',
+    'Total en efectivo',
+    'Barbetrag',
+    'Kontanttotaal',
+  );
+  String get change =>
+      _t('Monnaie', 'Change', 'Cambio', 'Rückgeld', 'Kleingeld');
   String receivedToast(String amount, String due) => _t(
     '$amount reçu — reste $due à payer',
     'Received $amount — $due outstanding',
     'Recibido $amount: faltan $due',
     '$amount erhalten – $due offen',
+    '$amount ontvang — $due uitstaande',
   );
 
   // Card (Stripe) — optional tender, test mode, simulated reader
@@ -894,93 +1127,109 @@ class L {
     'Card (Stripe)',
     'Tarjeta (Stripe)',
     'Karte (Stripe)',
+    'Kaart (Stripe)',
   );
   String get chargeCardStripe => _t(
     'Payer par carte (Stripe)',
     'Charge card (Stripe)',
     'Cobrar con tarjeta (Stripe)',
     'Karte belasten (Stripe)',
+    'Belas kaart (Stripe)',
   );
   String get simulatedCardLabel => _t(
     'Carte simulée (mode test)',
     'Simulated card (test mode)',
     'Tarjeta simulada (modo de prueba)',
     'Simulierte Karte (Testmodus)',
+    'Gesimuleerde kaart (toetsmodus)',
   );
   String get simApproved =>
-      _t('Approuvée', 'Approved', 'Aprobada', 'Genehmigt');
-  String get simDeclined => _t('Refusée', 'Declined', 'Rechazada', 'Abgelehnt');
+      _t('Approuvée', 'Approved', 'Aprobada', 'Genehmigt', 'Goedgekeur');
+  String get simDeclined =>
+      _t('Refusée', 'Declined', 'Rechazada', 'Abgelehnt', 'Geweier');
   String get simInsufficient => _t(
     'Fonds insuffisants',
     'Insufficient funds',
     'Fondos insuficientes',
     'Deckung nicht ausreichend',
+    'Onvoldoende fondse',
   );
   String get stripeTitle => _t(
     'Paiement par carte (Stripe)',
     'Card payment (Stripe)',
     'Pago con tarjeta (Stripe)',
     'Kartenzahlung (Stripe)',
+    'Kaartbetaling (Stripe)',
   );
   String get stripeTestMode => _t(
     'MODE TEST — lecteur simulé, aucun argent réel',
     'TEST MODE — simulated reader, no real money',
     'MODO DE PRUEBA: lector simulado, sin dinero real',
     'TESTMODUS – simuliertes Lesegerät, kein echtes Geld',
+    'TOETSMODUS — gesimuleerde leser, geen regte geld nie',
   );
   String get stripePreparing => _t(
     'Préparation du paiement…',
     'Preparing the payment…',
     'Preparando el pago…',
     'Zahlung wird vorbereitet…',
+    'Berei die betaling voor…',
   );
   String get stripePermissions => _t(
     'Vérification des autorisations Bluetooth et de localisation…',
     'Checking Bluetooth and location permission…',
     'Revisando los permisos de Bluetooth y ubicación…',
     'Bluetooth- und Standortberechtigung wird geprüft…',
+    'Kontroleer Bluetooth- en liggingtoestemming…',
   );
   String get stripeConnecting => _t(
     'Connexion au lecteur de carte (simulé)…',
     'Connecting to the card reader (simulated)…',
     'Conectando con el lector de tarjetas (simulado)…',
     'Verbindung zum Kartenleser (simuliert)…',
+    'Koppel aan die kaartleser (gesimuleer)…',
   );
   String get stripeTapCard => _t(
     'Présentez, insérez ou glissez la carte (simulé)',
     'Tap, insert or swipe the card (simulated)',
     'Acerca, inserta o desliza la tarjeta (simulado)',
     'Karte auflegen, einstecken oder durchziehen (simuliert)',
+    'Tik, steek in of swiep die kaart (gesimuleer)',
   );
   String get stripeProcessing => _t(
     'Traitement du paiement…',
     'Processing…',
     'Procesando…',
     'Wird verarbeitet…',
+    'Verwerk…',
   );
   String get stripeApproved => _t(
     'Paiement approuvé',
     'Payment approved',
     'Pago aprobado',
     'Zahlung genehmigt',
+    'Betaling goedgekeur',
   );
   String get stripeDeclinedTitle => _t(
     'Carte refusée',
     'Card declined',
     'Tarjeta rechazada',
     'Karte abgelehnt',
+    'Kaart geweier',
   );
   String get stripeErrorTitle => _t(
     'Échec du paiement par carte',
     'Card payment failed',
     'Falló el pago con tarjeta',
     'Kartenzahlung fehlgeschlagen',
+    'Kaartbetaling het misluk',
   );
   String get nothingCharged => _t(
     'Rien n’a été débité. L’addition peut être réglée autrement.',
     'Nothing was charged. The bill can be paid another way.',
     'No se cobró nada. La cuenta se puede pagar de otra forma.',
     'Es wurde nichts belastet. Die Rechnung kann anders bezahlt werden.',
+    'Niks is gehef nie. Die rekening kan op ’n ander manier betaal word.',
   );
 
   /// Why "Card (Stripe)" is greyed out (hint under the tender tiles).
@@ -990,42 +1239,49 @@ class L {
       'No internet — Card (Stripe) is unavailable',
       'Sin internet: la tarjeta (Stripe) no está disponible',
       'Kein Internet – Karte (Stripe) nicht verfügbar',
+      'Geen internet nie — Kaart (Stripe) is nie beskikbaar nie',
     ),
     'stripe_live_key_refused' => _t(
       'Stripe désactivé : seules les clés de test (sk_test_) sont acceptées',
       'Stripe is off: only test keys (sk_test_) are accepted',
       'Stripe está desactivado: solo se aceptan claves de prueba (sk_test_)',
       'Stripe ist aus: nur Testschlüssel (sk_test_) werden akzeptiert',
+      'Stripe is af: slegs toetssleutels (sk_test_) word aanvaar',
     ),
     'stripe_permission_denied' => _t(
       'Autorisation Bluetooth ou localisation refusée — carte (Stripe) désactivée',
       'Bluetooth/location permission denied — Card (Stripe) disabled',
       'Se negó el permiso de Bluetooth o ubicación: tarjeta (Stripe) desactivada',
       'Bluetooth-/Standortberechtigung verweigert – Karte (Stripe) deaktiviert',
+      'Bluetooth-/liggingtoestemming geweier — Kaart (Stripe) gedeaktiveer',
     ),
     'stripe_unsupported' => _t(
       'La carte (Stripe) fonctionne seulement sur la tablette Android',
       'Card (Stripe) works on the Android tablet only',
       'La tarjeta (Stripe) solo funciona en la tableta Android',
       'Karte (Stripe) funktioniert nur auf dem Android-Tablet',
+      'Kaart (Stripe) werk slegs op die Android-tablet',
     ),
     'stripe_location_required' => _t(
       'Stripe : aucun emplacement Terminal (définissez STRIPE_LOCATION_ID)',
       'Stripe: no Terminal location (set STRIPE_LOCATION_ID)',
       'Stripe: no hay ubicación de Terminal (configura STRIPE_LOCATION_ID)',
       'Stripe: kein Terminal-Standort (STRIPE_LOCATION_ID setzen)',
+      'Stripe: geen Terminal-ligging nie (stel STRIPE_LOCATION_ID)',
     ),
     'stripe_currency_mismatch' => _t(
       'Stripe désactivé : le compte Stripe n’est pas en CAD',
       'Stripe is off: the Stripe account is not in CAD',
       'Stripe está desactivado: la cuenta de Stripe no está en CAD',
       'Stripe ist aus: das Stripe-Konto ist nicht in CAD',
+      'Stripe is af: die Stripe-rekening is nie in CAD nie',
     ),
     _ => _t(
       'La carte (Stripe) est indisponible pour le moment',
       'Card (Stripe) is unavailable right now',
       'La tarjeta (Stripe) no está disponible por ahora',
       'Karte (Stripe) ist gerade nicht verfügbar',
+      'Kaart (Stripe) is nou nie beskikbaar nie',
     ),
   };
 
@@ -1036,30 +1292,35 @@ class L {
       'Insufficient funds. Try another card or another way to pay.',
       'Fondos insuficientes. Prueba con otra tarjeta u otra forma de pago.',
       'Deckung nicht ausreichend. Andere Karte oder Zahlungsart versuchen.',
+      'Onvoldoende fondse. Probeer ’n ander kaart of betaalmetode.',
     ),
     'expired_card' => _t(
       'Carte expirée. Essayez une autre carte.',
       'The card has expired. Try another card.',
       'La tarjeta está vencida. Prueba con otra tarjeta.',
       'Die Karte ist abgelaufen. Andere Karte versuchen.',
+      'Die kaart het verval. Probeer ’n ander kaart.',
     ),
     'incorrect_pin' || 'incorrect_cvc' || 'invalid_pin' => _t(
       'NIP incorrect. Réessayez ou utilisez une autre carte.',
       'Incorrect PIN. Try again or use another card.',
       'PIN incorrecto. Inténtalo de nuevo o usa otra tarjeta.',
       'Falsche PIN. Erneut versuchen oder andere Karte verwenden.',
+      'Verkeerde PIN. Probeer weer of gebruik ’n ander kaart.',
     ),
     'pin_try_exceeded' => _t(
       'Trop d’essais de NIP. Utilisez une autre carte.',
       'Too many PIN attempts. Use another card.',
       'Demasiados intentos de PIN. Usa otra tarjeta.',
       'Zu viele PIN-Versuche. Andere Karte verwenden.',
+      'Te veel PIN-pogings. Gebruik ’n ander kaart.',
     ),
     _ => _t(
       'La carte a été refusée. Essayez une autre carte ou un autre mode de paiement.',
       'The card was declined. Try another card or another way to pay.',
       'La tarjeta fue rechazada. Prueba con otra tarjeta u otra forma de pago.',
       'Die Karte wurde abgelehnt. Andere Karte oder Zahlungsart versuchen.',
+      'Die kaart is geweier. Probeer ’n ander kaart of betaalmetode.',
     ),
   };
 
@@ -1070,48 +1331,56 @@ class L {
       'The tablet can\'t reach Stripe (network).',
       'La tableta no puede conectarse con Stripe (red).',
       'Das Tablet erreicht Stripe nicht (Netzwerk).',
+      'Die tablet kan Stripe nie bereik nie (netwerk).',
     ),
     'tokenFailed' => _t(
       'Le magasin n’a pas pu obtenir de jeton de connexion Stripe.',
       'The store couldn\'t get a Stripe connection token.',
       'La tienda no pudo obtener un token de conexión de Stripe.',
       'Die Kasse hat kein Stripe-Verbindungstoken erhalten.',
+      'Die winkel kon nie ’n Stripe-verbindingstoken kry nie.',
     ),
     'stripeApi' => _t(
       'Stripe a refusé la demande du lecteur.',
       'Stripe refused the reader request.',
       'Stripe rechazó la solicitud del lector.',
       'Stripe hat die Anfrage des Lesegeräts abgelehnt.',
+      'Stripe het die leser se versoek geweier.',
     ),
     'permissionDenied' => _t(
       'L’autorisation « Position » ou « Appareils à proximité » a été refusée à l’application.',
       'The app\'s Location or Nearby devices permission was denied.',
       'Se negó el permiso de Ubicación o Dispositivos cercanos de la app.',
       'Die Berechtigung für Standort oder Geräte in der Nähe wurde verweigert.',
+      'Die toep se toestemming vir ligging of nabygeleë toestelle is geweier.',
     ),
     'locationOff' => _t(
       'La localisation de l’appareil est désactivée. Activez-la, puis réessayez.',
       'Device Location is off. Turn it on, then try again.',
       'La ubicación del dispositivo está desactivada. Actívala e inténtalo de nuevo.',
       'Der Gerätestandort ist aus. Bitte einschalten und erneut versuchen.',
+      'Toestelligging is af. Skakel dit aan en probeer dan weer.',
     ),
     'bluetoothOff' => _t(
       'Le Bluetooth est désactivé. Activez-le, puis réessayez.',
       'Bluetooth is off. Turn it on, then try again.',
       'El Bluetooth está desactivado. Actívalo e inténtalo de nuevo.',
       'Bluetooth ist aus. Bitte einschalten und erneut versuchen.',
+      'Bluetooth is af. Skakel dit aan en probeer dan weer.',
     ),
     'unsupported' => _t(
       'La carte (Stripe) fonctionne seulement sur la tablette Android.',
       'Card (Stripe) works on the Android tablet only.',
       'La tarjeta (Stripe) solo funciona en la tableta Android.',
       'Karte (Stripe) funktioniert nur auf dem Android-Tablet.',
+      'Kaart (Stripe) werk slegs op die Android-tablet.',
     ),
     _ => _t(
       'Le lecteur de carte (simulé) a échoué.',
       'The card reader (simulated) failed.',
       'Falló el lector de tarjetas (simulado).',
       'Der Kartenleser (simuliert) ist fehlgeschlagen.',
+      'Die kaartleser (gesimuleer) het misluk.',
     ),
   };
   String get openLocationSettings => _t(
@@ -1119,21 +1388,29 @@ class L {
     'Open Location settings',
     'Abrir la configuración de ubicación',
     'Standorteinstellungen öffnen',
+    'Maak ligginginstellings oop',
   );
   String get openBluetoothSettings => _t(
     'Ouvrir les paramètres Bluetooth',
     'Open Bluetooth settings',
     'Abrir la configuración de Bluetooth',
     'Bluetooth-Einstellungen öffnen',
+    'Maak Bluetooth-instellings oop',
   );
   String get openAppSettings => _t(
     'Ouvrir les autorisations de l’application',
     'Open app permissions',
     'Abrir los permisos de la app',
     'App-Berechtigungen öffnen',
+    'Maak toeptoestemmings oop',
   );
-  String errorCode(String code) =>
-      _t('Code : $code', 'Code: $code', 'Código: $code', 'Code: $code');
+  String errorCode(String code) => _t(
+    'Code : $code',
+    'Code: $code',
+    'Código: $code',
+    'Code: $code',
+    'Kode: $code',
+  );
 
   // table ops: move / merge
   String get moveMerge => _t(
@@ -1141,50 +1418,82 @@ class L {
     'Move / merge',
     'Mover / combinar',
     'Umsetzen / zusammenlegen',
+    'Skuif / voeg saam',
   );
   String moveMergeTitle(int billId) => _t(
     'Déplacer l’addition n° $billId vers…',
     'Move Bill #$billId to…',
     'Mover la cuenta #$billId a…',
     'Rechnung #$billId umsetzen nach…',
+    'Skuif rekening #$billId na…',
   );
-  String get thisBill =>
-      _t('Cette addition', 'This bill', 'Esta cuenta', 'Diese Rechnung');
-  String get beingPaid =>
-      _t('Paiement en cours', 'Being paid', 'Pago en curso', 'Wird bezahlt');
+  String get thisBill => _t(
+    'Cette addition',
+    'This bill',
+    'Esta cuenta',
+    'Diese Rechnung',
+    'Hierdie rekening',
+  );
+  String get beingPaid => _t(
+    'Paiement en cours',
+    'Being paid',
+    'Pago en curso',
+    'Wird bezahlt',
+    'Word betaal',
+  );
   String get mergeConfirmTitle => _t(
     'Fusionner les additions',
     'Merge bills',
     'Combinar cuentas',
     'Rechnungen zusammenlegen',
+    'Voeg rekenings saam',
   );
   String mergeConfirmBody(int src, int dest, String destLabel) => _t(
     'Fusionner l’addition n° $src avec l’addition n° $dest (table $destLabel) ? Tous les articles passent sur l’addition de destination.',
     'Merge Bill #$src into Bill #$dest (table $destLabel)? All items move to the destination bill.',
     '¿Combinar la cuenta #$src con la cuenta #$dest (mesa $destLabel)? Todos los artículos pasan a la cuenta de destino.',
     'Rechnung #$src mit Rechnung #$dest (Tisch $destLabel) zusammenlegen? Alle Artikel wandern auf die Zielrechnung.',
+    'Voeg rekening #$src by rekening #$dest (tafel $destLabel) saam? Alle items skuif na die bestemmingsrekening.',
   );
-  String get merge => _t('Fusionner', 'Merge', 'Combinar', 'Zusammenlegen');
+  String get merge =>
+      _t('Fusionner', 'Merge', 'Combinar', 'Zusammenlegen', 'Voeg saam');
   String movedToast(String label) => _t(
     'Déplacée à la table $label',
     'Moved to table $label',
     'Se movió a la mesa $label',
     'Auf Tisch $label umgesetzt',
+    'Geskuif na tafel $label',
   );
   String mergedToast(int dest) => _t(
     'Fusionnée avec l’addition n° $dest',
     'Merged into Bill #$dest',
     'Se combinó con la cuenta #$dest',
     'Mit Rechnung #$dest zusammengelegt',
+    'Saamgevoeg by rekening #$dest',
   );
 
   // open / misc item
-  String get openItem =>
-      _t('Article libre', 'Open item', 'Artículo libre', 'Freier Artikel');
-  String get openItemName =>
-      _t('Nom de l’article', 'Item name', 'Nombre del artículo', 'Artikelname');
-  String get openItemPrice =>
-      _t('Prix ($cur)', 'Price ($cur)', 'Precio ($cur)', 'Preis ($cur)');
+  String get openItem => _t(
+    'Article libre',
+    'Open item',
+    'Artículo libre',
+    'Freier Artikel',
+    'Oop item',
+  );
+  String get openItemName => _t(
+    'Nom de l’article',
+    'Item name',
+    'Nombre del artículo',
+    'Artikelname',
+    'Itemnaam',
+  );
+  String get openItemPrice => _t(
+    'Prix ($cur)',
+    'Price ($cur)',
+    'Precio ($cur)',
+    'Preis ($cur)',
+    'Prys ($cur)',
+  );
 
   // split checks (settlement-time bill groups)
   String get splitBill => _t(
@@ -1192,78 +1501,95 @@ class L {
     'Split bill',
     'Dividir la cuenta',
     'Rechnung teilen',
+    'Verdeel rekening',
   );
   String get splitByItems =>
-      _t('Par article', 'By item', 'Por artículo', 'Nach Artikel');
+      _t('Par article', 'By item', 'Por artículo', 'Nach Artikel', 'Per item');
   String get splitEvenly => _t(
     'Parts égales',
     'Split evenly',
     'Partes iguales',
     'Gleichmäßig teilen',
+    'Verdeel gelykop',
   );
   String get splitHowManyWays => _t(
     'En combien de parts ?',
     'Split how many ways?',
     '¿En cuántas partes?',
     'In wie viele Teile?',
+    'In hoeveel dele verdeel?',
   );
   String groupTitle(int n) =>
-      _t('Addition $n', 'Bill $n', 'Cuenta $n', 'Rechnung $n');
+      _t('Addition $n', 'Bill $n', 'Cuenta $n', 'Rechnung $n', 'Rekening $n');
   String get addGroup => _t(
     'Ajouter une addition',
     'Add bill',
     'Agregar cuenta',
     'Rechnung hinzufügen',
+    'Voeg rekening by',
   );
-  String get unassignedItems =>
-      _t('Non attribués', 'Unassigned', 'Sin asignar', 'Nicht zugeordnet');
+  String get unassignedItems => _t(
+    'Non attribués',
+    'Unassigned',
+    'Sin asignar',
+    'Nicht zugeordnet',
+    'Nie toegewys nie',
+  );
   String get allItemsAssigned => _t(
     'Tous les articles sont attribués',
     'All items assigned',
     'Todos los artículos están asignados',
     'Alle Artikel zugeordnet',
+    'Alle items toegewys',
   );
   String get tapToAssignHint => _t(
     'Touchez un article pour le déplacer vers l’addition sélectionnée',
     'Tap an item to move it to the selected bill',
     'Toca un artículo para pasarlo a la cuenta seleccionada',
     'Artikel antippen, um ihn auf die gewählte Rechnung zu verschieben',
+    'Tik op ’n item om dit na die gekose rekening te skuif',
   );
-  String get paid => _t('Payée ✓', 'Paid ✓', 'Pagada ✓', 'Bezahlt ✓');
+  String get paid =>
+      _t('Payée ✓', 'Paid ✓', 'Pagada ✓', 'Bezahlt ✓', 'Betaal ✓');
   String get clearSplit => _t(
     'Annuler la séparation',
     'Clear split',
     'Deshacer la división',
     'Teilung aufheben',
+    'Hef verdeling op',
   );
   String get clearSplitConfirm => _t(
     'Tout regrouper sur une seule addition ?',
     'Merge everything back into one bill?',
     '¿Juntar todo otra vez en una sola cuenta?',
     'Alles wieder zu einer Rechnung zusammenlegen?',
+    'Voeg alles weer saam in een rekening?',
   );
   String groupPaidToast(int n) => _t(
     'Addition $n payée',
     'Bill $n paid',
     'Cuenta $n pagada',
     'Rechnung $n bezahlt',
+    'Rekening $n betaal',
   );
   String get moveCorkageTitle => _t(
     'Déplacer le droit de bouchon vers…',
     'Move corkage to…',
     'Mover el descorche a…',
     'Korkgeld verschieben nach…',
+    'Skuif kurkgeld na…',
   );
   String get deleteGroup => _t(
     'Retirer cette addition',
     'Remove this bill',
     'Quitar esta cuenta',
     'Diese Rechnung entfernen',
+    'Verwyder hierdie rekening',
   );
-  String get peelOne => _t('Un seul', '1 only', 'Solo 1', 'Nur 1');
+  String get peelOne => _t('Un seul', '1 only', 'Solo 1', 'Nur 1', 'Slegs 1');
 
   // receipt
-  String get receipt => _t('Reçu', 'Receipt', 'Recibo', 'Beleg');
+  String get receipt => _t('Reçu', 'Receipt', 'Recibo', 'Beleg', 'Kwitansie');
 
   // provisional bill ("check please")
   String get printBill => _t(
@@ -1271,29 +1597,43 @@ class L {
     'Print bill',
     'Imprimir la cuenta',
     'Rechnung drucken',
+    'Druk rekening',
   );
   String get customerBill => _t(
     'Addition du client',
     'Customer bill',
     'Cuenta del cliente',
     'Gästerechnung',
+    'Klantrekening',
   );
   String get notAReceipt => _t(
     'Ceci n’est pas un reçu',
     'Not a receipt',
     'No es un recibo',
     'Kein Beleg',
+    'Nie ’n kwitansie nie',
   );
-  String get printedAt =>
-      _t('Imprimée à', 'Printed at', 'Impresa a las', 'Gedruckt am');
+  String get printedAt => _t(
+    'Imprimée à',
+    'Printed at',
+    'Impresa a las',
+    'Gedruckt am',
+    'Gedruk om',
+  );
   String get printAgain => _t(
     'Imprimer de nouveau',
     'Print again',
     'Volver a imprimir',
     'Erneut drucken',
+    'Druk weer',
   );
-  String get printIn =>
-      _t('Imprimer en…', 'Print in…', 'Imprimir en…', 'Drucken auf…');
+  String get printIn => _t(
+    'Imprimer en…',
+    'Print in…',
+    'Imprimir en…',
+    'Drucken auf…',
+    'Druk in…',
+  );
 
   // shift screen
   String get noShiftOpen => _t(
@@ -1301,170 +1641,229 @@ class L {
     'No shift open',
     'No hay turno abierto',
     'Keine Schicht offen',
+    'Geen skof oop nie',
   );
   String get openingFloat => _t(
     'Fonds de caisse ($cur)',
     'Opening float ($cur)',
     'Fondo inicial ($cur)',
     'Wechselgeld ($cur)',
+    'Beginkontant ($cur)',
   );
-  String get openShift =>
-      _t('Ouvrir le quart', 'Open shift', 'Abrir turno', 'Schicht öffnen');
+  String get openShift => _t(
+    'Ouvrir le quart',
+    'Open shift',
+    'Abrir turno',
+    'Schicht öffnen',
+    'Open skof',
+  );
   String get openShiftApproval => _t(
     'Ouvrir le quart — approbation du gérant',
     'Open shift — manager approval',
     'Abrir turno: aprobación del gerente',
     'Schicht öffnen – Freigabe durch Manager',
+    'Open skof — bestuurder se goedkeuring',
   );
   String get openShiftPromptTitle => _t(
     'Aucun quart de caisse ouvert',
     'No cash drawer shift open',
     'No hay turno de caja abierto',
     'Keine Kassenschicht offen',
+    'Geen kontantlaaiskof oop nie',
   );
   String get openShiftPromptBody => _t(
     'Ouvrir un maintenant pour prendre des espèces ?',
     'Open one now to take cash?',
     '¿Abrir uno ahora para cobrar en efectivo?',
     'Jetzt eine öffnen, um Bargeld anzunehmen?',
+    'Open nou een om kontant te neem?',
   );
-  String get notNow => _t('Plus tard', 'Not now', 'Ahora no', 'Nicht jetzt');
+  String get notNow =>
+      _t('Plus tard', 'Not now', 'Ahora no', 'Nicht jetzt', 'Nie nou nie');
   String changeDue(String amount) => _t(
     'Monnaie à rendre : $amount',
     'Change due $amount',
     'Cambio a devolver: $amount',
     'Rückgeld $amount',
+    'Kleingeld verskuldig $amount',
   );
   String get overDueTitle => _t(
     'Montant plus élevé que le solde',
     'Amount is more than the bill',
     'El monto supera la cuenta',
     'Betrag höher als die Rechnung',
+    'Bedrag is meer as die rekening',
   );
   String overDueBody(String amount, String due) => _t(
     'Débiter $amount alors qu’il reste $due ?',
     'Charge $amount when only $due is due?',
     '¿Cobrar $amount cuando solo se deben $due?',
     '$amount belasten, obwohl nur $due offen sind?',
+    'Hef $amount wanneer slegs $due verskuldig is?',
   );
   String get chargeAnyway => _t(
     'Débiter quand même',
     'Charge anyway',
     'Cobrar de todos modos',
     'Trotzdem belasten',
+    'Hef in elk geval',
   );
   String get closeShiftApproval => _t(
     'Fermer le quart (Z) — approbation du gérant',
     'Close shift (Z) — manager approval',
     'Cerrar turno (Z): aprobación del gerente',
     'Schicht schließen (Z) – Freigabe durch Manager',
+    'Sluit skof (Z) — bestuurder se goedkeuring',
   );
   String shiftOpenTitle(int id) => _t(
     'Quart n° $id — ouvert',
     'Shift #$id — open',
     'Turno #$id: abierto',
     'Schicht #$id – offen',
+    'Skof #$id — oop',
   );
   String shiftOpenedLine(String at, String by, String float) => _t(
     'Ouvert le $at par $by • fonds de caisse $float',
     'Opened $at by $by • float $float',
     'Abierto el $at por $by • fondo $float',
     'Geöffnet $at von $by • Wechselgeld $float',
+    'Oopgemaak $at deur $by • beginkontant $float',
   );
   String get closeShiftZ => _t(
     'Fermer le quart (rapport Z)',
     'Close shift (Z-Report)',
     'Cerrar turno (reporte Z)',
     'Schicht schließen (Z-Bericht)',
+    'Sluit skof (Z-verslag)',
   );
   String get countedCash => _t(
     'Comptant compté ($cur)',
     'Counted cash ($cur)',
     'Efectivo contado ($cur)',
     'Gezähltes Bargeld ($cur)',
+    'Getelde kontant ($cur)',
   );
-  String get closeShift =>
-      _t('Fermer le quart', 'Close shift', 'Cerrar turno', 'Schicht schließen');
+  String get closeShift => _t(
+    'Fermer le quart',
+    'Close shift',
+    'Cerrar turno',
+    'Schicht schließen',
+    'Sluit skof',
+  );
   String get zReportDone => _t(
     'Quart fermé — rapport Z',
     'Shift closed — Z-Report',
     'Turno cerrado: reporte Z',
     'Schicht geschlossen – Z-Bericht',
+    'Skof gesluit — Z-verslag',
   );
-  String get revenue => _t('Ventes', 'Revenue', 'Ventas', 'Umsatz');
-  String get billCount => _t('Additions', 'Bills', 'Cuentas', 'Rechnungen');
+  String get revenue => _t('Ventes', 'Revenue', 'Ventas', 'Umsatz', 'Inkomste');
+  String get billCount =>
+      _t('Additions', 'Bills', 'Cuentas', 'Rechnungen', 'Rekenings');
   String get avgPerBill => _t(
     'Moyenne par addition',
     'Avg per bill',
     'Promedio por cuenta',
     'Ø pro Rechnung',
+    'Gem. per rekening',
   );
   String get byTender => _t(
     'Par mode de paiement',
     'By tender',
     'Por forma de pago',
     'Nach Zahlungsart',
+    'Per betaalmetode',
   );
-  String get topItems =>
-      _t('Meilleurs vendeurs', 'Top items', 'Más vendidos', 'Topseller');
+  String get topItems => _t(
+    'Meilleurs vendeurs',
+    'Top items',
+    'Más vendidos',
+    'Topseller',
+    'Topitems',
+  );
   String get voidedBills => _t(
     'Additions annulées',
     'Voided bills',
     'Cuentas anuladas',
     'Stornierte Rechnungen',
+    'Gekanselleerde rekenings',
   );
-  String get expectedCash =>
-      _t('Comptant attendu', 'Expected cash', 'Efectivo esperado', 'Bar-Soll');
-  String get countedActual => _t('Compté', 'Counted', 'Contado', 'Gezählt');
-  String get overShort =>
-      _t('Surplus / manque', 'Over/short', 'Sobrante / faltante', 'Differenz');
-  String get xReport => _t('Rapport X', 'X-Report', 'Reporte X', 'X-Bericht');
+  String get expectedCash => _t(
+    'Comptant attendu',
+    'Expected cash',
+    'Efectivo esperado',
+    'Bar-Soll',
+    'Verwagte kontant',
+  );
+  String get countedActual =>
+      _t('Compté', 'Counted', 'Contado', 'Gezählt', 'Getel');
+  String get overShort => _t(
+    'Surplus / manque',
+    'Over/short',
+    'Sobrante / faltante',
+    'Differenz',
+    'Oor/kort',
+  );
+  String get xReport =>
+      _t('Rapport X', 'X-Report', 'Reporte X', 'X-Bericht', 'X-verslag');
   // shift reconciliation: cash movements + refunds
   String get paidInOut => _t(
     'Entrées / sorties de caisse',
     'Paid in / out',
     'Entradas / salidas de caja',
     'Einlagen / Entnahmen',
+    'Inbetaal / uitbetaal',
   );
   String get cashRefunds => _t(
     'Remboursements en comptant',
     'Cash refunds',
     'Reembolsos en efectivo',
     'Bar-Erstattungen',
+    'Kontantterugbetalings',
   );
   String get cashRounding => _t(
     'Arrondi du comptant',
     'Cash rounding',
     'Redondeo del efectivo',
     'Barrundung',
+    'Kontantafronding',
   );
 
   // refunds — return money on a finalized (CLOSED) bill
-  String get refunds =>
-      _t('Remboursements', 'Refunds', 'Reembolsos', 'Erstattungen');
+  String get refunds => _t(
+    'Remboursements',
+    'Refunds',
+    'Reembolsos',
+    'Erstattungen',
+    'Terugbetalings',
+  );
   String get salesTitle => _t(
     'Additions fermées',
     'Closed bills',
     'Cuentas cerradas',
     'Abgeschlossene Rechnungen',
+    'Geslote rekenings',
   );
   String get refundTitle => _t(
     'Rembourser l’addition',
     'Refund bill',
     'Reembolsar la cuenta',
     'Rechnung erstatten',
+    'Betaal rekening terug',
   );
   String get refundApprovalTitle => _t(
     'Remboursement — approbation du gérant',
     'Refund — manager approval',
     'Reembolso: aprobación del gerente',
     'Erstattung – Freigabe durch Manager',
+    'Terugbetaling — bestuurder se goedkeuring',
   );
   String get refundReasonTitle => _t(
     'Motif du remboursement',
     'Refund reason',
     'Motivo del reembolso',
     'Erstattungsgrund',
+    'Rede vir terugbetaling',
   );
   List<String> get refundReasons => [
     _t(
@@ -1472,183 +1871,256 @@ class L {
       'Wrong item',
       'Artículo equivocado',
       'Falscher Artikel',
+      'Verkeerde item',
     ),
     _t(
       'Le client a changé d’idée',
       'Customer changed mind',
       'El cliente cambió de opinión',
       'Gast hat es sich anders überlegt',
+      'Klant het van plan verander',
     ),
     _t(
       'Problème de qualité',
       'Quality issue',
       'Problema de calidad',
       'Qualitätsmangel',
+      'Gehalteprobleem',
     ),
-    _t('Surfacturation', 'Overcharged', 'Cobro de más', 'Zu viel berechnet'),
+    _t(
+      'Surfacturation',
+      'Overcharged',
+      'Cobro de más',
+      'Zu viel berechnet',
+      'Te veel gehef',
+    ),
   ];
   String get refundFull => _t(
     'Remboursement complet',
     'Full refund',
     'Reembolso total',
     'Vollständige Erstattung',
+    'Volle terugbetaling',
   );
   String get refundByLine =>
-      _t('Par article', 'By item', 'Por artículo', 'Nach Artikel');
+      _t('Par article', 'By item', 'Por artículo', 'Nach Artikel', 'Per item');
   String get refundByAmount =>
-      _t('Par montant', 'By amount', 'Por monto', 'Nach Betrag');
+      _t('Par montant', 'By amount', 'Por monto', 'Nach Betrag', 'Per bedrag');
   String get refundAmountLabel => _t(
     'Montant à rembourser ($cur)',
     'Refund amount ($cur)',
     'Monto del reembolso ($cur)',
     'Erstattungsbetrag ($cur)',
+    'Terugbetalingsbedrag ($cur)',
   );
-  String get refundTender =>
-      _t('Rembourser par', 'Refund via', 'Reembolsar con', 'Erstatten über');
-  String get refundableLabel =>
-      _t('Remboursable', 'Refundable', 'Reembolsable', 'Erstattbar');
+  String get refundTender => _t(
+    'Rembourser par',
+    'Refund via',
+    'Reembolsar con',
+    'Erstatten über',
+    'Betaal terug via',
+  );
+  String get refundableLabel => _t(
+    'Remboursable',
+    'Refundable',
+    'Reembolsable',
+    'Erstattbar',
+    'Terugbetaalbaar',
+  );
   String get refundedLabel =>
-      _t('Remboursé', 'Refunded', 'Reembolsado', 'Erstattet');
+      _t('Remboursé', 'Refunded', 'Reembolsado', 'Erstattet', 'Terugbetaal');
   String get fullyRefunded => _t(
     'Entièrement remboursée',
     'Fully refunded',
     'Reembolsada por completo',
     'Vollständig erstattet',
+    'Volledig terugbetaal',
   );
   String get confirmRefund => _t(
     'Confirmer le remboursement',
     'Confirm refund',
     'Confirmar reembolso',
     'Erstattung bestätigen',
+    'Bevestig terugbetaling',
   );
   String refundDone(String amount) => _t(
     '$amount remboursé',
     'Refunded $amount',
     'Se reembolsaron $amount',
     '$amount erstattet',
+    '$amount terugbetaal',
   );
   String cashHandedBack(String amount) => _t(
     'Comptant remis : $amount',
     'Cash handed back $amount',
     'Efectivo devuelto: $amount',
     '$amount bar zurückgegeben',
+    '$amount kontant teruggegee',
   );
   String get noClosedBills => _t(
     'Aucune addition fermée pour l’instant',
     'No closed bills yet',
     'Todavía no hay cuentas cerradas',
     'Noch keine abgeschlossenen Rechnungen',
+    'Nog geen geslote rekenings nie',
   );
   String get refundHistory => _t(
     'Historique des remboursements',
     'Refund history',
     'Historial de reembolsos',
     'Erstattungsverlauf',
+    'Terugbetalingsgeskiedenis',
   );
   String get pickLinesHint => _t(
     'Touchez les articles à rembourser',
     'Tap items to refund',
     'Toca los artículos que vas a reembolsar',
     'Artikel zum Erstatten antippen',
+    'Tik items om terug te betaal',
   );
   String get refundSlipTitle => _t(
     'Bon de remboursement',
     'Refund slip',
     'Comprobante de reembolso',
     'Erstattungsbeleg',
+    'Terugbetalingstrokie',
   );
   String get amountExceedsRefundable => _t(
     'Dépasse le montant remboursable',
     'Exceeds the refundable amount',
     'Supera el monto reembolsable',
     'Übersteigt den erstattbaren Betrag',
+    'Oorskry die terugbetaalbare bedrag',
   );
   String get pickAmountOrLines => _t(
     'Choisissez des articles ou entrez un montant',
     'Pick items or enter an amount',
     'Elige artículos o ingresa un monto',
     'Artikel wählen oder Betrag eingeben',
+    'Kies items of voer ’n bedrag in',
   );
 
   // till — non-sale cash in / out
-  String get till => _t('Caisse', 'Till', 'Caja', 'Kasse');
-  String get cashIn =>
-      _t('Entrée de caisse', 'Cash in', 'Entrada de efectivo', 'Einlage');
-  String get cashOut =>
-      _t('Sortie de caisse', 'Cash out', 'Salida de efectivo', 'Entnahme');
+  String get till => _t('Caisse', 'Till', 'Caja', 'Kasse', 'Kasregister');
+  String get cashIn => _t(
+    'Entrée de caisse',
+    'Cash in',
+    'Entrada de efectivo',
+    'Einlage',
+    'Kontant in',
+  );
+  String get cashOut => _t(
+    'Sortie de caisse',
+    'Cash out',
+    'Salida de efectivo',
+    'Entnahme',
+    'Kontant uit',
+  );
   String get cashInApproval => _t(
     'Entrée de caisse — approbation du gérant',
     'Cash in — manager approval',
     'Entrada de efectivo: aprobación del gerente',
     'Einlage – Freigabe durch Manager',
+    'Kontant in — bestuurder se goedkeuring',
   );
   String get cashOutApproval => _t(
     'Sortie de caisse — approbation du gérant',
     'Cash out — manager approval',
     'Salida de efectivo: aprobación del gerente',
     'Entnahme – Freigabe durch Manager',
+    'Kontant uit — bestuurder se goedkeuring',
   );
-  String get cashAmountLabel =>
-      _t('Montant ($cur)', 'Amount ($cur)', 'Monto ($cur)', 'Betrag ($cur)');
-  String get cashReasonLabel => _t('Motif', 'Reason', 'Motivo', 'Grund');
+  String get cashAmountLabel => _t(
+    'Montant ($cur)',
+    'Amount ($cur)',
+    'Monto ($cur)',
+    'Betrag ($cur)',
+    'Bedrag ($cur)',
+  );
+  String get cashReasonLabel =>
+      _t('Motif', 'Reason', 'Motivo', 'Grund', 'Rede');
   String get cashReasonRequired => _t(
     'Un motif est requis',
     'A reason is required',
     'Se requiere un motivo',
     'Bitte einen Grund angeben',
+    '’n Rede is nodig',
   );
   String cashInDone(String amount) => _t(
     'Entrée de caisse de $amount enregistrée',
     'Cash in $amount recorded',
     'Entrada de efectivo de $amount registrada',
     'Einlage über $amount erfasst',
+    'Kontant in $amount aangeteken',
   );
   String cashOutDone(String amount) => _t(
     'Sortie de caisse de $amount enregistrée',
     'Cash out $amount recorded',
     'Salida de efectivo de $amount registrada',
     'Entnahme über $amount erfasst',
+    'Kontant uit $amount aangeteken',
   );
   String get cashMovementsLabel => _t(
     'Mouvements de caisse',
     'Cash movements',
     'Movimientos de efectivo',
     'Kassenbewegungen',
+    'Kontantbewegings',
   );
   String get noCashMovements => _t(
     'Aucun mouvement de caisse pour l’instant',
     'No cash movements yet',
     'Todavía no hay movimientos de efectivo',
     'Noch keine Kassenbewegungen',
+    'Nog geen kontantbewegings nie',
   );
   String get needOpenShiftForTill => _t(
     'Ouvrez un quart avant d’enregistrer des mouvements de caisse',
     'Open a shift before recording cash movements',
     'Abre un turno antes de registrar movimientos de efectivo',
     'Bitte zuerst eine Schicht öffnen, um Kassenbewegungen zu erfassen',
+    'Begin ’n skof voordat jy kontantbewegings aanteken',
   );
 
   // report ranges
-  String get rangeThisShift =>
-      _t('Ce quart', 'This shift', 'Este turno', 'Diese Schicht');
-  String get rangeToday => _t('Aujourd’hui', 'Today', 'Hoy', 'Heute');
-  String get rangeYesterday => _t('Hier', 'Yesterday', 'Ayer', 'Gestern');
-  String get rangeThisWeek =>
-      _t('Cette semaine', 'This week', 'Esta semana', 'Diese Woche');
-  String get rangeCustom =>
-      _t('Personnalisé…', 'Custom…', 'Personalizado…', 'Zeitraum…');
+  String get rangeThisShift => _t(
+    'Ce quart',
+    'This shift',
+    'Este turno',
+    'Diese Schicht',
+    'Hierdie skof',
+  );
+  String get rangeToday => _t('Aujourd’hui', 'Today', 'Hoy', 'Heute', 'Vandag');
+  String get rangeYesterday =>
+      _t('Hier', 'Yesterday', 'Ayer', 'Gestern', 'Gister');
+  String get rangeThisWeek => _t(
+    'Cette semaine',
+    'This week',
+    'Esta semana',
+    'Diese Woche',
+    'Hierdie week',
+  );
+  String get rangeCustom => _t(
+    'Personnalisé…',
+    'Custom…',
+    'Personalizado…',
+    'Zeitraum…',
+    'Pasgemaak…',
+  );
   String rangeTitle(String from, String to) => from == to
       ? _t(
           'Ventes du $from',
           'Sales for $from',
           'Ventas del $from',
           'Umsatz am $from',
+          'Verkope vir $from',
         )
       : _t(
           'Ventes du $from au $to',
           'Sales $from – $to',
           'Ventas del $from al $to',
           'Umsatz $from – $to',
+          'Verkope $from – $to',
         );
 
   // menu management
@@ -1657,21 +2129,30 @@ class L {
     'Manage menu — on/off sale',
     'Administrar menú: a la venta / agotado',
     'Speisekarte verwalten – verfügbar/ausverkauft',
+    'Bestuur spyskaart — beskikbaar/uitverkoop',
   );
-  String get onSale => _t('En vente', 'On sale', 'A la venta', 'Verfügbar');
-  String get offSale =>
-      _t('Épuisé (86)', 'Off sale (86)', 'Agotado (86)', 'Ausverkauft (86)');
+  String get onSale =>
+      _t('En vente', 'On sale', 'A la venta', 'Verfügbar', 'Beskikbaar');
+  String get offSale => _t(
+    'Épuisé (86)',
+    'Off sale (86)',
+    'Agotado (86)',
+    'Ausverkauft (86)',
+    'Uitverkoop (86)',
+  );
   String enableSale(String name) => _t(
     'Remettre $name en vente',
     'Put $name on sale',
     'Poner $name a la venta',
     '$name wieder verfügbar machen',
+    'Maak $name beskikbaar',
   );
   String disableSale(String name) => _t(
     'Marquer $name épuisé (86)',
     'Take $name off sale (86)',
     'Marcar $name como agotado (86)',
     '$name als ausverkauft markieren (86)',
+    'Merk $name as uitverkoop (86)',
   );
 
   // menu editing (owner catalog)
@@ -1680,108 +2161,135 @@ class L {
     'Add item',
     'Agregar artículo',
     'Artikel hinzufügen',
+    'Voeg item by',
   );
   String get editItem => _t(
     'Modifier l’article',
     'Edit item',
     'Editar artículo',
     'Artikel bearbeiten',
+    'Wysig item',
   );
   String get deleteItem => _t(
     'Supprimer l’article',
     'Delete item',
     'Eliminar artículo',
     'Artikel löschen',
+    'Verwyder item',
   );
   String deleteItemConfirm(String name) => _t(
     'Retirer « $name » du menu ? Les anciennes additions le conservent, mais il disparaît de tous les écrans.',
     'Remove "$name" from the menu? Old bills keep it; it disappears from every screen.',
     '¿Quitar "$name" del menú? Las cuentas anteriores lo conservan, pero desaparece de todas las pantallas.',
     '„$name“ von der Speisekarte entfernen? Alte Rechnungen behalten den Artikel; auf allen Bildschirmen verschwindet er.',
+    'Verwyder “$name” van die spyskaart? Ou rekenings behou dit; dit verdwyn van elke skerm.',
   );
   String get itemDeleted => _t(
     'Article retiré',
     'Item removed',
     'Artículo quitado',
     'Artikel entfernt',
+    'Item verwyder',
   );
   String get nameFrLabel => _t(
     'Nom (français)',
     'Name (French)',
     'Nombre (francés)',
     'Name (Französisch)',
+    'Naam (Frans)',
   );
   String get nameEnLabel => _t(
     'Nom (anglais)',
     'Name (English)',
     'Nombre (inglés)',
     'Name (Englisch)',
+    'Naam (Engels)',
   );
   String get categoryLabel =>
-      _t('Catégorie', 'Category', 'Categoría', 'Kategorie');
+      _t('Catégorie', 'Category', 'Categoría', 'Kategorie', 'Kategorie');
   String get abbrevLabel => _t(
     'Pastille (1 à 4 caractères)',
     'Tile badge (1–4 chars)',
     'Insignia (1 a 4 caracteres)',
     'Kachel-Kürzel (1–4 Zeichen)',
+    'Teëlkenteken (1–4 karakters)',
   );
   String get isAlcoholLabel =>
-      _t('Alcool', 'Alcohol', 'Con alcohol', 'Alkohol');
+      _t('Alcool', 'Alcohol', 'Con alcohol', 'Alkohol', 'Alkohol');
   String get activeLabel =>
-      _t('En vente', 'On sale', 'A la venta', 'Verfügbar');
+      _t('En vente', 'On sale', 'A la venta', 'Verfügbar', 'Beskikbaar');
   String get sizesLabel => _t(
     'Formats / prix',
     'Sizes / prices',
     'Tamaños / precios',
     'Größen / Preise',
+    'Groottes / pryse',
   );
-  String get addSize =>
-      _t('Ajouter un format', 'Add size', 'Agregar tamaño', 'Größe hinzufügen');
+  String get addSize => _t(
+    'Ajouter un format',
+    'Add size',
+    'Agregar tamaño',
+    'Größe hinzufügen',
+    'Voeg grootte by',
+  );
   String get sizeLabelFr => _t(
     'Format (français)',
     'Size (French)',
     'Tamaño (francés)',
     'Größe (Französisch)',
+    'Grootte (Frans)',
   );
   String get sizeLabelEn => _t(
     'Format (anglais)',
     'Size (English)',
     'Tamaño (inglés)',
     'Größe (Englisch)',
+    'Grootte (Engels)',
   );
-  String get priceCAD =>
-      _t('Prix ($cur)', 'Price ($cur)', 'Precio ($cur)', 'Preis ($cur)');
+  String get priceCAD => _t(
+    'Prix ($cur)',
+    'Price ($cur)',
+    'Precio ($cur)',
+    'Preis ($cur)',
+    'Prys ($cur)',
+  );
   String get fillAllFields => _t(
     'Remplissez tous les champs',
     'Fill in all fields',
     'Completa todos los campos',
     'Bitte alle Felder ausfüllen',
+    'Vul alle velde in',
   );
   String get editCategories => _t(
     'Gérer les catégories',
     'Edit categories',
     'Editar categorías',
     'Kategorien bearbeiten',
+    'Wysig kategorieë',
   );
   String get addCategory => _t(
     'Ajouter une catégorie',
     'Add category',
     'Agregar categoría',
     'Kategorie hinzufügen',
+    'Voeg kategorie by',
   );
   String get deleteCategory => _t(
     'Supprimer la catégorie',
     'Delete category',
     'Eliminar categoría',
     'Kategorie löschen',
+    'Verwyder kategorie',
   );
   String get dragToReorder => _t(
     'Glissez pour réordonner',
     'Drag to reorder',
     'Arrastra para reordenar',
     'Zum Sortieren ziehen',
+    'Sleep om te herrangskik',
   );
-  String get saved => _t('Enregistré', 'Saved', 'Guardado', 'Gespeichert');
+  String get saved =>
+      _t('Enregistré', 'Saved', 'Guardado', 'Gespeichert', 'Gestoor');
 
   // slips
   String get printSlips => _t(
@@ -1789,6 +2297,7 @@ class L {
     'Print all table slips',
     'Imprimir las hojas de todas las mesas',
     'Alle Tischzettel drucken',
+    'Druk alle tafelstrokies',
   );
 
   // photos
@@ -1797,18 +2306,21 @@ class L {
     'Upload photo',
     'Subir foto',
     'Foto hochladen',
+    'Laai foto op',
   );
   String uploadPhotoFor(String name) => _t(
     'Téléverser une photo pour $name',
     'Upload photo for $name',
     'Subir foto de $name',
     'Foto für $name hochladen',
+    'Laai foto op vir $name',
   );
   String get photoUploaded => _t(
     'Photo téléversée',
     'Photo uploaded',
     'Foto subida',
     'Foto hochgeladen',
+    'Foto opgelaai',
   );
 
   // AI menu photos (paid add-on)
@@ -1817,81 +2329,99 @@ class L {
     'Generate photo',
     'Generar foto',
     'Foto erzeugen',
+    'Genereer foto',
   );
   String get aiSnapEnhance => _t(
     'Photographier et améliorer',
     'Snap and enhance',
     'Tomar foto y mejorar',
     'Foto aufwerten',
+    'Neem en verbeter',
   );
   String aiGenerateFor(String name) => _t(
     'Générer une photo pour $name',
     'Generate a photo for $name',
     'Generar una foto de $name',
     'Foto für $name erzeugen',
+    'Genereer ’n foto vir $name',
   );
   String aiEnhanceFor(String name) => _t(
     'Améliorer une photo de $name',
     'Enhance a photo of $name',
     'Mejorar una foto de $name',
     'Foto von $name aufwerten',
+    'Verbeter ’n foto van $name',
   );
   String get aiTakePhoto => _t(
     'Prendre une photo',
     'Take a photo',
     'Tomar una foto',
     'Foto aufnehmen',
+    'Neem ’n foto',
   );
   String get aiChooseFromGallery => _t(
     'Choisir dans la galerie',
     'Choose from gallery',
     'Elegir de la galería',
     'Aus Galerie wählen',
+    'Kies uit galery',
   );
   String get aiWorking => _t(
     'Création des photos… (jusqu’à une minute)',
     'Making photos… (up to a minute)',
     'Creando fotos… (hasta un minuto)',
     'Fotos werden erstellt… (bis zu einer Minute)',
+    'Maak foto’s… (tot ’n minuut)',
   );
   String get aiPickOne => _t(
     'Touchez la photo à garder',
     'Tap the photo to keep',
     'Toca la foto que quieres conservar',
     'Gewünschtes Foto antippen',
+    'Tik die foto om te hou',
   );
   String get aiUseThis => _t(
     'Utiliser cette photo',
     'Use this photo',
     'Usar esta foto',
     'Dieses Foto verwenden',
+    'Gebruik hierdie foto',
   );
-  String get aiRegenerate =>
-      _t('Recommencer', 'Regenerate', 'Generar de nuevo', 'Neu erzeugen');
+  String get aiRegenerate => _t(
+    'Recommencer',
+    'Regenerate',
+    'Generar de nuevo',
+    'Neu erzeugen',
+    'Genereer weer',
+  );
   String get aiPhotoSaved => _t(
     'Photo IA enregistrée',
     'AI photo saved',
     'Foto con IA guardada',
     'KI-Foto gespeichert',
+    'KI-foto gestoor',
   );
-  String get aiBadge => _t('IA', 'AI', 'IA', 'KI');
+  String get aiBadge => _t('IA', 'AI', 'IA', 'KI', 'KI');
   String get aiGeneratedLabel => _t(
     'Photo générée par IA',
     'AI-generated photo',
     'Foto generada con IA',
     'KI-generiertes Foto',
+    'KI-gegenereerde foto',
   );
   String get aiEnhancedLabel => _t(
     'Photo réelle retouchée par IA',
     'Real photo, AI-enhanced',
     'Foto real mejorada con IA',
     'Echtes Foto, mit KI aufgewertet',
+    'Regte foto, met KI verbeter',
   );
   String get aiEnhanceHint => _t(
     'Les aliments restent tels quels : seuls l’éclairage, le fond et la présentation changent.',
     'The food stays as it is: only the lighting, background and presentation change.',
     'La comida queda igual: solo cambian la luz, el fondo y la presentación.',
     'Das Gericht bleibt, wie es ist: Nur Licht, Hintergrund und Präsentation ändern sich.',
+    'Die kos bly soos dit is: net die beligting, agtergrond en aanbieding verander.',
   );
 
   /// Why the AI photo buttons are greyed out (a note under them).
@@ -1901,12 +2431,14 @@ class L {
       'AI photos need an internet connection. Everything else works as usual.',
       'Las fotos con IA necesitan internet. Todo lo demás funciona con normalidad.',
       'KI-Fotos benötigen eine Internetverbindung. Alles andere funktioniert wie gewohnt.',
+      'KI-foto’s het ’n internetverbinding nodig. Alles anders werk soos gewoonlik.',
     ),
     _ => _t(
       'Photos IA pas encore configurées sur ce magasin.',
       'AI photos aren’t set up on this store yet.',
       'Las fotos con IA aún no están configuradas en esta tienda.',
       'KI-Fotos sind für diesen Betrieb noch nicht eingerichtet.',
+      'KI-foto’s is nog nie vir hierdie winkel opgestel nie.',
     ),
   };
 
@@ -1916,77 +2448,102 @@ class L {
     'AI menu setup',
     'Menú con IA',
     'KI-Speisekarte',
+    'KI-spyskaartopstelling',
   );
   String get aiMenuFromPhotos => _t(
     'Menu à partir de photos',
     'Menu from photos',
     'Menú desde fotos',
     'Karte aus Fotos',
+    'Spyskaart uit foto’s',
   );
   String get aiMenuChatHint => _t(
     'Ex. : « ajoute salade César 14 \$ dans Entrées », « monte les burgers d’un dollar », « 86 le saumon »',
     'e.g. “add Caesar salad \$14 under starters”, “raise all burgers by a dollar”, “86 the salmon”',
     'p. ej. «agrega ensalada César \$14 en entradas», «sube las hamburguesas un dólar», «86 el salmón»',
     'z. B. „Caesar Salad für 14 \$ zu den Vorspeisen“, „alle Burger um einen Dollar teurer“, „Lachs ist aus“',
+    'bv. “voeg Caesar-slaai \$14 by onder voorgeregte”, “maak alle burgers ’n dollar duurder”, “86 die salm”',
   );
-  String get aiMenuAsk => _t('Proposer', 'Propose', 'Proponer', 'Vorschlagen');
+  String get aiMenuAsk =>
+      _t('Proposer', 'Propose', 'Proponer', 'Vorschlagen', 'Stel voor');
   String get aiMenuPreviewNote => _t(
     'Rien ne change avant « Appliquer ». Cochez ce que vous voulez garder.',
     'Nothing changes until you tap Apply. Tick what you want to keep.',
     'Nada cambia hasta que toques Aplicar. Marca lo que quieras conservar.',
     'Nichts ändert sich, bevor Sie auf Übernehmen tippen. Markieren Sie, was Sie behalten möchten.',
+    'Niks verander voordat jy Pas toe tik nie. Merk wat jy wil hou.',
   );
-  String get aiMenuNew => _t('Nouveau', 'New', 'Nuevo', 'Neu');
-  String get aiMenuChanged => _t('Modifié', 'Changed', 'Cambiado', 'Geändert');
-  String get aiMenuRemoved => _t('Retiré', 'Removed', 'Eliminado', 'Entfernt');
+  String get aiMenuNew => _t('Nouveau', 'New', 'Nuevo', 'Neu', 'Nuut');
+  String get aiMenuChanged =>
+      _t('Modifié', 'Changed', 'Cambiado', 'Geändert', 'Verander');
+  String get aiMenuRemoved =>
+      _t('Retiré', 'Removed', 'Eliminado', 'Entfernt', 'Verwyder');
   String get aiMenuNothing => _t(
     'Aucun changement proposé.',
     'No changes proposed.',
     'No se propusieron cambios.',
     'Keine Änderungen vorgeschlagen.',
+    'Geen veranderinge voorgestel nie.',
   );
   String aiMenuRejected(int n) => _t(
     '$n suggestion(s) ignorée(s) (produit inconnu ou prix invalide).',
     '$n suggestion(s) skipped (unknown item or invalid price).',
     '$n sugerencia(s) omitida(s) (producto desconocido o precio no válido).',
     '$n Vorschlag/Vorschläge übersprungen (unbekannter Artikel oder ungültiger Preis).',
+    '$n voorstel(le) oorgeslaan (onbekende item of ongeldige prys).',
   );
-  String aiMenuApply(int n) =>
-      _t('Appliquer ($n)', 'Apply ($n)', 'Aplicar ($n)', 'Übernehmen ($n)');
+  String aiMenuApply(int n) => _t(
+    'Appliquer ($n)',
+    'Apply ($n)',
+    'Aplicar ($n)',
+    'Übernehmen ($n)',
+    'Pas toe ($n)',
+  );
   String aiMenuApplied(int n) => _t(
     '$n changement(s) appliqué(s)',
     '$n change(s) applied',
     '$n cambio(s) aplicado(s)',
     '$n Änderung(en) übernommen',
+    '$n verandering(e) toegepas',
   );
-  String get aiMenuHistory =>
-      _t('Historique IA', 'AI history', 'Historial IA', 'KI-Verlauf');
-  String get aiMenuRevert => _t('Défaire', 'Revert', 'Revertir', 'Rückgängig');
+  String get aiMenuHistory => _t(
+    'Historique IA',
+    'AI history',
+    'Historial IA',
+    'KI-Verlauf',
+    'KI-geskiedenis',
+  );
+  String get aiMenuRevert =>
+      _t('Défaire', 'Revert', 'Revertir', 'Rückgängig', 'Herstel');
   String get aiMenuReverted =>
-      _t('Défait', 'Reverted', 'Revertido', 'Rückgängig gemacht');
+      _t('Défait', 'Reverted', 'Revertido', 'Rückgängig gemacht', 'Herstel');
   String get aiMenuRevertDone => _t(
     'Mise à jour IA défaite',
     'AI update reverted',
     'Actualización IA revertida',
     'KI-Änderung rückgängig gemacht',
+    'KI-opdatering herstel',
   );
   String get aiMenuNoHistory => _t(
     'Aucune mise à jour IA pour l’instant.',
     'No AI updates yet.',
     'Aún no hay actualizaciones con IA.',
     'Noch keine KI-Änderungen.',
+    'Nog geen KI-opdaterings nie.',
   );
   String aiMenuRevertConflict(String titles) => _t(
     'Modifié depuis cette mise à jour : $titles. Défaire quand même et écraser ces changements ?',
     'Changed since this AI update: $titles. Revert anyway and overwrite those changes?',
     'Cambiado desde esta actualización: $titles. ¿Revertir de todos modos y sobrescribir esos cambios?',
     'Seit dieser KI-Änderung geändert: $titles. Trotzdem rückgängig machen und diese Änderungen überschreiben?',
+    'Verander sedert hierdie KI-opdatering: $titles. Herstel in elk geval en oorskryf daardie veranderinge?',
   );
   String get aiMenuRevertAnyway => _t(
     'Défaire quand même',
     'Revert anyway',
     'Revertir de todos modos',
     'Trotzdem rückgängig',
+    'Herstel in elk geval',
   );
   String aiMenuSourceLabel(String source) => switch (source) {
     'photos' => _t(
@@ -1994,59 +2551,95 @@ class L {
       'Menu photos',
       'Fotos del menú',
       'Kartenfotos',
+      'Spyskaartfoto’s',
     ),
-    'translate' => _t('Traduction', 'Translation', 'Traducción', 'Übersetzung'),
-    _ => _t('Clavardage', 'Chat', 'Conversación', 'Chat'),
+    'translate' => _t(
+      'Traduction',
+      'Translation',
+      'Traducción',
+      'Übersetzung',
+      'Vertaling',
+    ),
+    _ => _t('Clavardage', 'Chat', 'Conversación', 'Chat', 'Klets'),
   };
   String aiMenuPhotosFor(int n) => _t(
     'Générer des photos pour les $n nouveaux produits ?',
     'Generate photos for the $n new items?',
     '¿Generar fotos para los $n productos nuevos?',
     'Fotos für die $n neuen Artikel erzeugen?',
+    'Genereer foto’s vir die $n nuwe items?',
   );
-  String get aiMenuAddPhoto =>
-      _t('Ajouter une photo', 'Add photo', 'Agregar foto', 'Foto hinzufügen');
-  String get aiMenuReadPhotos =>
-      _t('Lire le menu', 'Read menu', 'Leer menú', 'Karte einlesen');
+  String get aiMenuAddPhoto => _t(
+    'Ajouter une photo',
+    'Add photo',
+    'Agregar foto',
+    'Foto hinzufügen',
+    'Voeg foto by',
+  );
+  String get aiMenuReadPhotos => _t(
+    'Lire le menu',
+    'Read menu',
+    'Leer menú',
+    'Karte einlesen',
+    'Lees spyskaart',
+  );
   String aiMenuField(String field) => switch (field) {
     'nameEn' => _t(
       'Nom (anglais)',
       'Name (English)',
       'Nombre (inglés)',
       'Name (Englisch)',
+      'Naam (Engels)',
     ),
     'nameFr' => _t(
       'Nom (français)',
       'Name (French)',
       'Nombre (francés)',
       'Name (Französisch)',
+      'Naam (Frans)',
     ),
     'descriptionEn' => _t(
       'Description (anglais)',
       'Description (English)',
       'Descripción (inglés)',
       'Beschreibung (Englisch)',
+      'Beskrywing (Engels)',
     ),
     'descriptionFr' => _t(
       'Description (français)',
       'Description (French)',
       'Descripción (francés)',
       'Beschreibung (Französisch)',
+      'Beskrywing (Frans)',
     ),
-    'price' => _t('Prix', 'Price', 'Precio', 'Preis'),
-    'category' => _t('Catégorie', 'Category', 'Categoría', 'Kategorie'),
-    'available' => _t('En vente', 'On sale', 'A la venta', 'Verfügbar'),
-    'order' => _t('Ordre', 'Order', 'Orden', 'Reihenfolge'),
-    'name' => _t('Nom', 'Name', 'Nombre', 'Name'),
+    'price' => _t('Prix', 'Price', 'Precio', 'Preis', 'Prys'),
+    'category' => _t(
+      'Catégorie',
+      'Category',
+      'Categoría',
+      'Kategorie',
+      'Kategorie',
+    ),
+    'available' => _t(
+      'En vente',
+      'On sale',
+      'A la venta',
+      'Verfügbar',
+      'Beskikbaar',
+    ),
+    'order' => _t('Ordre', 'Order', 'Orden', 'Reihenfolge', 'Volgorde'),
+    'name' => _t('Nom', 'Name', 'Nombre', 'Name', 'Naam'),
     _ => field,
   };
 
-  /// A language by its code, in the current language ("de" → "German").
+  /// A language by its code, in the current language ("de" → "German",
+  /// "af" → "Afrikaans" in every language but French and Spanish).
   String langName(String code) => switch (code) {
-    'fr' => _t('français', 'French', 'francés', 'Französisch'),
-    'en' => _t('anglais', 'English', 'inglés', 'Englisch'),
-    'es' => _t('espagnol', 'Spanish', 'español', 'Spanisch'),
-    'de' => _t('allemand', 'German', 'alemán', 'Deutsch'),
+    'fr' => _t('français', 'French', 'francés', 'Französisch', 'Frans'),
+    'en' => _t('anglais', 'English', 'inglés', 'Englisch', 'Engels'),
+    'es' => _t('espagnol', 'Spanish', 'español', 'Spanisch', 'Spaans'),
+    'de' => _t('allemand', 'German', 'alemán', 'Deutsch', 'Duits'),
+    'af' => _t('afrikaans', 'Afrikaans', 'afrikáans', 'Afrikaans', 'Afrikaans'),
     _ => code,
   };
 
@@ -2056,12 +2649,14 @@ class L {
     'Translate menu',
     'Traducir menú',
     'Karte übersetzen',
+    'Vertaal spyskaart',
   );
   String aiMenuTranslateNote(String langs) => _t(
     'Propose les noms manquants en $langs. Rien ne change avant d’appliquer.',
     'Suggests the missing $langs names. Nothing changes until you apply.',
     'Propone los nombres que faltan en $langs. Nada cambia hasta que apliques.',
     'Schlägt fehlende Namen auf $langs vor. Erst „Übernehmen“ ändert etwas.',
+    'Stel ontbrekende name in $langs voor. Niks verander voordat jy toepas nie.',
   );
 
   /// The assistant's fixed reply when there is no change set (the server's
@@ -2072,35 +2667,41 @@ class L {
           'I couldn’t find a menu change to make from that. Name the item and what to change, for example “poutine 14”.',
           'No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «poutine 14».',
           'Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Poutine 14“.',
+          'Ek kon nie ’n spyskaartverandering daaruit aflei nie. Noem die item en wat moet verander, byvoorbeeld “poutine 14”.',
         )
       : _t(
           'Je peux seulement vous aider à configurer et modifier votre menu. Essayez par exemple « ajoute une salade César à 14 dans Salades ».',
           'I can only help set up and edit your menu. Try something like “add a Caesar salad for 14 under Salads”.',
           'Solo puedo ayudarte a configurar y editar tu menú. Prueba algo como «añade una ensalada César a 14 en Ensaladas».',
           'Ich kann nur beim Einrichten und Bearbeiten Ihrer Speisekarte helfen. Versuchen Sie zum Beispiel „Caesar Salad für 14 unter Salate hinzufügen“.',
+          'Ek kan net help om jou spyskaart op te stel en te wysig. Probeer iets soos “voeg ’n Caesar-slaai vir 14 by onder Slaaie”.',
         );
   String aiMenuBulkConfirm(int removes, int prices) => _t(
     'C’est un gros changement : $removes produit(s) retiré(s) et $prices prix modifié(s). Appliquer quand même ?',
     'This is a big change: $removes item(s) removed and $prices price(s) changed. Apply anyway?',
     'Es un cambio grande: $removes producto(s) eliminado(s) y $prices precio(s) cambiado(s). ¿Aplicar de todos modos?',
     'Das ist eine große Änderung: $removes Artikel entfernt und $prices Preis(e) geändert. Trotzdem übernehmen?',
+    'Dit is ’n groot verandering: $removes item(s) verwyder en $prices prys(e) verander. Pas in elk geval toe?',
   );
   String get aiMenuTranslateDone => _t(
     'Tous les noms sont déjà traduits.',
     'Every name is already translated.',
     'Todos los nombres ya están traducidos.',
     'Alle Namen sind bereits übersetzt.',
+    'Elke naam is reeds vertaal.',
   );
   String get aiMenuCategoryOrder => _t(
     'Ordre des catégories',
     'Category order',
     'Orden de categorías',
     'Kategorie-Reihenfolge',
+    'Kategorievolgorde',
   );
   String aiMenuNewCategory(String name) => _t(
     'Catégorie : $name',
     'Category: $name',
     'Categoría: $name',
+    'Kategorie: $name',
     'Kategorie: $name',
   );
 
@@ -2111,12 +2712,14 @@ class L {
       'AI menu setup needs an internet connection. Everything else works as usual.',
       'El menú con IA necesita internet. Todo lo demás funciona con normalidad.',
       'Die KI-Speisekarte benötigt eine Internetverbindung. Alles andere funktioniert wie gewohnt.',
+      'KI-spyskaartopstelling het ’n internetverbinding nodig. Alles anders werk soos gewoonlik.',
     ),
     _ => _t(
       'Menu IA pas encore configuré sur ce magasin.',
       'AI menu setup isn’t set up on this store yet.',
       'El menú con IA aún no está configurado en esta tienda.',
       'Die KI-Speisekarte ist für diesen Betrieb noch nicht eingerichtet.',
+      'KI-spyskaartopstelling is nog nie vir hierdie winkel opgestel nie.',
     ),
   };
 
@@ -2126,88 +2729,126 @@ class L {
     'Manager: enter PIN',
     'Gerente: ingresa tu PIN',
     'Manager: PIN eingeben',
+    'Bestuurder: voer PIN in',
   );
   String get managerApproval => _t(
     'Approbation du gérant',
     'Manager approval',
     'Aprobación del gerente',
     'Freigabe durch Manager',
+    'Bestuurder se goedkeuring',
   );
 
   // change PIN
-  String get changePin =>
-      _t('Changer de NIP', 'Change PIN', 'Cambiar PIN', 'PIN ändern');
-  String get currentPin =>
-      _t('NIP actuel', 'Current PIN', 'PIN actual', 'Aktuelle PIN');
-  String get newPin => _t('Nouveau NIP', 'New PIN', 'PIN nuevo', 'Neue PIN');
+  String get changePin => _t(
+    'Changer de NIP',
+    'Change PIN',
+    'Cambiar PIN',
+    'PIN ändern',
+    'Verander PIN',
+  );
+  String get currentPin => _t(
+    'NIP actuel',
+    'Current PIN',
+    'PIN actual',
+    'Aktuelle PIN',
+    'Huidige PIN',
+  );
+  String get newPin =>
+      _t('Nouveau NIP', 'New PIN', 'PIN nuevo', 'Neue PIN', 'Nuwe PIN');
   String get confirmNewPin => _t(
     'Confirmer le nouveau NIP',
     'Confirm new PIN',
     'Confirmar el PIN nuevo',
     'Neue PIN bestätigen',
+    'Bevestig nuwe PIN',
   );
-  String get pinChanged =>
-      _t('NIP modifié', 'PIN changed', 'PIN cambiado', 'PIN geändert');
+  String get pinChanged => _t(
+    'NIP modifié',
+    'PIN changed',
+    'PIN cambiado',
+    'PIN geändert',
+    'PIN verander',
+  );
   String get pinMismatch => _t(
     'Les nouveaux NIP ne correspondent pas',
     'New PINs do not match',
     'Los PIN nuevos no coinciden',
     'Die neuen PINs stimmen nicht überein',
+    'Nuwe PIN’s stem nie ooreen nie',
   );
 
   // staff administration (the tablet owns its staff; the portal only shows them)
-  String get staffTitle => _t('Personnel', 'Staff', 'Personal', 'Personal');
+  String get staffTitle =>
+      _t('Personnel', 'Staff', 'Personal', 'Personal', 'Personeel');
   String get staffAdd => _t(
     'Ajouter un employé',
     'Add staff',
     'Agregar empleado',
     'Mitarbeiter hinzufügen',
+    'Voeg personeellid by',
   );
   String get staffEdit => _t(
     'Modifier l’employé',
     'Edit staff',
     'Editar empleado',
     'Mitarbeiter bearbeiten',
+    'Wysig personeellid',
   );
-  String get staffName => _t('Nom', 'Name', 'Nombre', 'Name');
-  String get staffRole => _t('Rôle', 'Role', 'Puesto', 'Rolle');
-  String get roleManager => _t('Gérant', 'Manager', 'Gerente', 'Manager');
-  String get roleServer => _t('Serveur', 'Server', 'Mesero', 'Service');
-  String get staffActive => _t('Actif', 'Active', 'Activo', 'Aktiv');
-  String get staffInactive => _t('Inactif', 'Inactive', 'Inactivo', 'Inaktiv');
+  String get staffName => _t('Nom', 'Name', 'Nombre', 'Name', 'Naam');
+  String get staffRole => _t('Rôle', 'Role', 'Puesto', 'Rolle', 'Rol');
+  String get roleManager =>
+      _t('Gérant', 'Manager', 'Gerente', 'Manager', 'Bestuurder');
+  String get roleServer =>
+      _t('Serveur', 'Server', 'Mesero', 'Service', 'Kelner');
+  String get staffActive => _t('Actif', 'Active', 'Activo', 'Aktiv', 'Aktief');
+  String get staffInactive =>
+      _t('Inactif', 'Inactive', 'Inactivo', 'Inaktiv', 'Onaktief');
   String get staffPin4 => _t(
     'NIP (4 chiffres)',
     'PIN (4 digits)',
     'PIN (4 dígitos)',
     'PIN (4 Ziffern)',
+    'PIN (4 syfers)',
   );
-  String get staffResetPin =>
-      _t('Nouveau NIP', 'Reset PIN', 'Restablecer PIN', 'PIN zurücksetzen');
+  String get staffResetPin => _t(
+    'Nouveau NIP',
+    'Reset PIN',
+    'Restablecer PIN',
+    'PIN zurücksetzen',
+    'Stel PIN terug',
+  );
   String get staffPinInvalid => _t(
     'Le NIP doit compter 4 chiffres',
     'PIN must be 4 digits',
     'El PIN debe tener 4 dígitos',
     'Die PIN muss 4 Ziffern haben',
+    'PIN moet 4 syfers wees',
   );
   String get staffNameRequired => _t(
     'Un nom est requis',
     'A name is required',
     'Se requiere un nombre',
     'Bitte einen Namen angeben',
+    '’n Naam is nodig',
   );
-  String get staffDelete => _t('Supprimer', 'Delete', 'Eliminar', 'Löschen');
+  String get staffDelete =>
+      _t('Supprimer', 'Delete', 'Eliminar', 'Löschen', 'Verwyder');
   String staffDeleteConfirm(String name) => _t(
     'Supprimer $name ? L’historique des ventes est conservé.',
     'Delete $name? Sales history is kept.',
     '¿Eliminar a $name? El historial de ventas se conserva.',
     '$name löschen? Der Umsatzverlauf bleibt erhalten.',
+    'Verwyder $name? Verkoopsgeskiedenis word behou.',
   );
-  String get staffSaved => _t('Enregistré', 'Saved', 'Guardado', 'Gespeichert');
+  String get staffSaved =>
+      _t('Enregistré', 'Saved', 'Guardado', 'Gespeichert', 'Gestoor');
   String get staffSyncHint => _t(
     'Les changements s’appliquent tout de suite sur cette tablette et sont envoyés au portail à la prochaine connexion.',
     'Changes apply on this tablet at once and are sent to the owner portal when it next connects.',
     'Los cambios se aplican de inmediato en esta tableta y se envían al portal del dueño la próxima vez que se conecte.',
     'Änderungen gelten sofort auf diesem Tablet und werden beim nächsten Verbindungsaufbau an das Inhaberportal gesendet.',
+    'Veranderinge geld dadelik op hierdie tablet en word na die eienaarportaal gestuur wanneer dit weer koppel.',
   );
 
   // settings
@@ -2216,74 +2857,86 @@ class L {
     'Venue settings',
     'Configuración de la tienda',
     'Betriebseinstellungen',
+    'Plekinstellings',
   );
   String get sectionPayments =>
-      _t('Paiements', 'Payments', 'Pagos', 'Zahlungen');
-  String get sectionFees => _t('Frais', 'Fees', 'Cargos', 'Gebühren');
-  String get sectionReceipt => _t('Reçu', 'Receipt', 'Recibo', 'Beleg');
+      _t('Paiements', 'Payments', 'Pagos', 'Zahlungen', 'Betalings');
+  String get sectionFees => _t('Frais', 'Fees', 'Cargos', 'Gebühren', 'Fooie');
+  String get sectionReceipt =>
+      _t('Reçu', 'Receipt', 'Recibo', 'Beleg', 'Kwitansie');
   String get sectionSecurity =>
-      _t('Sécurité', 'Security', 'Seguridad', 'Sicherheit');
+      _t('Sécurité', 'Security', 'Seguridad', 'Sicherheit', 'Sekuriteit');
   String get sessionIdleLabel => _t(
     'Déconnexion automatique après inactivité (minutes)',
     'Auto-logout when idle (minutes)',
     'Cerrar sesión por inactividad (minutos)',
     'Automatisch abmelden bei Inaktivität (Minuten)',
+    'Meld outomaties af wanneer onaktief (minute)',
   );
   String get cardProcessorLabel => _t(
     'Nom du terminal de paiement',
     'Card terminal label',
     'Nombre de la terminal de tarjetas',
     'Bezeichnung Kartenterminal',
+    'Kaartterminaal-etiket',
   );
-  String get bankNameLabel => _t('Banque', 'Bank', 'Banco', 'Bank');
+  String get bankNameLabel => _t('Banque', 'Bank', 'Banco', 'Bank', 'Bank');
   String get bankAccountNumberLabel => _t(
     'Numéro de compte',
     'Account number',
     'Número de cuenta',
     'Kontonummer',
+    'Rekeningnommer',
   );
   String get bankAccountNameLabel => _t(
     'Titulaire du compte',
     'Account holder name',
     'Titular de la cuenta',
     'Kontoinhaber',
+    'Naam van rekeninghouer',
   );
   String get serviceChargeLabel => _t(
     'Frais de service (%) — 0 = désactivés',
     'Service charge (%) — 0 = off',
     'Cargo por servicio (%): 0 = desactivado',
     'Servicegebühr (%) – 0 = aus',
+    'Diensheffing (%) — 0 = af',
   );
   String get corkageRateLabel => _t(
     'Droit de bouchon ($cur/bouteille) — 0 = désactivé',
     'Corkage ($cur/bottle) — 0 = off',
     'Descorche ($cur/botella): 0 = desactivado',
     'Korkgeld ($cur/Flasche) – 0 = aus',
+    'Kurkgeld ($cur/bottel) — 0 = af',
   );
   String get receiptFooterLabel => _t(
     'Message au bas du reçu',
     'Receipt footer text',
     'Mensaje al pie del recibo',
     'Fußzeile auf dem Beleg',
+    'Voetskrif op kwitansie',
   );
   String get venuePhoneLabel => _t(
     'Téléphone de l’établissement',
     'Venue phone',
     'Teléfono de la tienda',
     'Telefon des Betriebs',
+    'Plek se telefoon',
   );
   String get venueAddressLabel => _t(
     'Adresse de l’établissement',
     'Venue address',
     'Dirección de la tienda',
     'Adresse des Betriebs',
+    'Plek se adres',
   );
-  String get save => _t('Enregistrer', 'Save', 'Guardar', 'Speichern');
+  String get save => _t('Enregistrer', 'Save', 'Guardar', 'Speichern', 'Stoor');
   String get savedTakesEffectNext => _t(
     'Enregistré — s’applique à partir de la prochaine addition',
     'Saved — applies from the next bill',
     'Guardado: se aplica desde la próxima cuenta',
     'Gespeichert – gilt ab der nächsten Rechnung',
+    'Gestoor — geld vanaf die volgende rekening',
   );
 
   // store server URL (device-local; auto-discovered on the LAN)
@@ -2292,108 +2945,126 @@ class L {
     'Restaurant connection',
     'Conexión con la tienda',
     'Verbindung zum Restaurant',
+    'Restaurantverbinding',
   );
   String get serverUrlLabel => _t(
     'Adresse de connexion avancée',
     'Advanced connection address',
     'Dirección de conexión avanzada',
     'Erweiterte Verbindungsadresse',
+    'Gevorderde verbindingsadres',
   );
   String get scanForServer => _t(
     'Trouver le restaurant sur le Wi-Fi',
     'Find restaurant on Wi-Fi',
     'Buscar la tienda en el Wi-Fi',
     'Restaurant im WLAN suchen',
+    'Soek restaurant op Wi-Fi',
   );
   String get scanningForServer => _t(
     'Recherche du restaurant…',
     'Finding restaurant…',
     'Buscando la tienda…',
     'Restaurant wird gesucht…',
+    'Soek restaurant…',
   );
   String get connectingToServer => _t(
     'Recherche du restaurant…',
     'Finding your restaurant…',
     'Buscando tu tienda…',
     'Ihr Restaurant wird gesucht…',
+    'Soek jou restaurant…',
   );
   String get findingRestaurant => _t(
     'Recherche du restaurant…',
     'Finding your restaurant…',
     'Buscando tu tienda…',
     'Ihr Restaurant wird gesucht…',
+    'Soek jou restaurant…',
   );
   String get startingThisTablet => _t(
     'Démarrage de cette tablette…',
     'Starting this tablet…',
     'Iniciando esta tableta…',
     'Tablet wird gestartet…',
+    'Begin hierdie tablet…',
   );
   String get tabletStoreFailed => _t(
     'Le service local de cette tablette n’a pas démarré.',
     'This tablet’s local store did not start.',
     'El servicio local de esta tableta no arrancó.',
     'Der lokale Server dieses Tablets ist nicht gestartet.',
+    'Hierdie tablet se plaaslike bediener het nie begin nie.',
   );
   String get staffAppNeedsWifi => _t(
     'Connectez la tablette au Wi-Fi pour afficher le code de l’application du personnel.',
     'Connect this tablet to Wi-Fi to show the staff app code.',
     'Conecta esta tableta al Wi-Fi para mostrar el código de la app del personal.',
     'Verbinden Sie dieses Tablet mit dem WLAN, um den Code der Personal-App anzuzeigen.',
+    'Koppel hierdie tablet aan Wi-Fi om die personeelapp-kode te wys.',
   );
   String get restaurantUnavailable => _t(
     'Restaurant introuvable sur ce réseau Wi-Fi',
     'Restaurant is not available on this Wi-Fi',
     'La tienda no está disponible en este Wi-Fi',
     'Restaurant ist in diesem WLAN nicht erreichbar',
+    'Restaurant is nie op hierdie Wi-Fi beskikbaar nie',
   );
   String get connectionHelp => _t(
     'Aide à la connexion',
     'Connection help',
     'Ayuda con la conexión',
     'Hilfe zur Verbindung',
+    'Verbindingshulp',
   );
   String serverFoundAt(String url) => _t(
     'Restaurant trouvé',
     'Restaurant found',
     'Tienda encontrada',
     'Restaurant gefunden',
+    'Restaurant gevind',
   );
   String get serverNotFound => _t(
     'Restaurant introuvable sur ce Wi-Fi',
     'Restaurant not found on this Wi-Fi',
     'No se encontró la tienda en este Wi-Fi',
     'Restaurant in diesem WLAN nicht gefunden',
+    'Restaurant nie op hierdie Wi-Fi gevind nie',
   );
   String currentlyUsing(String url) => _t(
     'Adresse actuelle : $url',
     'Currently using: $url',
     'Dirección actual: $url',
     'Aktuell verwendet: $url',
+    'Gebruik tans: $url',
   );
   String get serverSavedRestart => _t(
     'Enregistré — redémarrez l’application pour l’appliquer',
     'Saved — restart the app to apply',
     'Guardado: reinicia la app para aplicarlo',
     'Gespeichert – App neu starten, um es anzuwenden',
+    'Gestoor — herbegin die app om toe te pas',
   );
   String get setServerUrl => _t(
     'Connexion avancée',
     'Advanced connection',
     'Conexión avanzada',
     'Erweiterte Verbindung',
+    'Gevorderde verbinding',
   );
   String get restaurantConnectionReady => _t(
     'Restaurant disponible',
     'Restaurant available',
     'Tienda disponible',
     'Restaurant erreichbar',
+    'Restaurant beskikbaar',
   );
   String get advancedConnection => _t(
     'Dépannage avancé',
     'Advanced troubleshooting',
     'Solución de problemas avanzada',
     'Erweiterte Fehlerbehebung',
+    'Gevorderde probleemoplossing',
   );
 
   // terminal pairing (cloud venues)
@@ -2402,49 +3073,58 @@ class L {
     'Pair this terminal',
     'Vincular esta terminal',
     'Dieses Terminal koppeln',
+    'Koppel hierdie terminaal',
   );
   String get pairTerminalIntro => _t(
     'Créez un code de jumelage dans le portail du propriétaire, puis entrez-le ici.',
     'Mint a pairing code in the owner portal, then enter it here.',
     'Genera un código de vinculación en el portal del dueño y luego ingrésalo aquí.',
     'Erzeugen Sie im Inhaberportal einen Kopplungscode und geben Sie ihn hier ein.',
+    'Skep ’n koppelkode in die eienaarportaal en voer dit dan hier in.',
   );
   String get pairVenueAddressLabel => _t(
     'Adresse de l’établissement',
     'Venue address',
     'Dirección de la tienda',
     'Adresse des Betriebs',
+    'Plek se adres',
   );
   String get pairingCodeLabel => _t(
     'Code de jumelage',
     'Pairing code',
     'Código de vinculación',
     'Kopplungscode',
+    'Koppelkode',
   );
   String get deviceNameLabel => _t(
     'Nom de l’appareil (ex. : Bar)',
     'Device name (e.g. Bar)',
     'Nombre del dispositivo (p. ej., Caja)',
     'Gerätename (z. B. Bar)',
+    'Toestelnaam (bv. Kroeg)',
   );
-  String get pairAction => _t('Jumeler', 'Pair', 'Vincular', 'Koppeln');
+  String get pairAction =>
+      _t('Jumeler', 'Pair', 'Vincular', 'Koppeln', 'Koppel');
   String get enterVenueAddress => _t(
     'Entrez l’adresse de l’établissement',
     'Enter the venue address',
     'Ingresa la dirección de la tienda',
     'Bitte die Adresse des Betriebs eingeben',
+    'Voer die plek se adres in',
   );
   String get enterPairingCode => _t(
     'Entrez le code de jumelage',
     'Enter the pairing code',
     'Ingresa el código de vinculación',
     'Bitte den Kopplungscode eingeben',
+    'Voer die koppelkode in',
   );
   String get pairNetworkError => _t(
     'Établissement injoignable — vérifiez l’adresse et le réseau',
     'Cannot reach the venue — check the address and your network',
     'No se puede conectar con la tienda: revisa la dirección y la red',
     'Betrieb nicht erreichbar – Adresse und Netzwerk prüfen',
+    'Kan nie die plek bereik nie — gaan die adres en jou netwerk na',
   );
 
   // global reconnecting overlay
@@ -2453,18 +3133,21 @@ class L {
     'Reconnecting to your restaurant…',
     'Reconectando con tu tienda…',
     'Verbindung zum Restaurant wird wiederhergestellt…',
+    'Herkoppel met jou restaurant…',
   );
   String get reconnectingToRestaurant => _t(
     'Reconnexion au restaurant…',
     'Reconnecting to your restaurant…',
     'Reconectando con tu tienda…',
     'Verbindung zum Restaurant wird wiederhergestellt…',
+    'Herkoppel met jou restaurant…',
   );
   String get reconnectChangeServer => _t(
     'Aide à la connexion',
     'Connection help',
     'Ayuda con la conexión',
     'Hilfe zur Verbindung',
+    'Verbindingshulp',
   );
 
   // on-screen QR codes: table scan-to-order (long-press a table) + staff app
@@ -2473,82 +3156,95 @@ class L {
     'Scan to order · $label',
     'Escanea para pedir · $label',
     'Scannen und bestellen · $label',
+    'Skandeer om te bestel · $label',
   );
   String get tableQrHint => _t(
     'Les clients balaient le code avec un téléphone branché sur le Wi-Fi de l’établissement',
     'Guests scan with a phone on the venue Wi-Fi',
     'Los clientes escanean con un celular conectado al Wi-Fi de la tienda',
     'Gäste scannen mit dem Handy im WLAN des Restaurants',
+    'Gaste skandeer met ’n foon op die plek se Wi-Fi',
   );
   String get tableQrNeedsWifi => _t(
     'Connectez la tablette au Wi-Fi pour afficher un code QR utilisable.',
     'Connect the tablet to Wi-Fi to show a scannable QR code.',
     'Conecta la tableta al Wi-Fi para mostrar un código QR que funcione.',
     'Verbinden Sie das Tablet mit dem WLAN, um einen scanbaren QR-Code anzuzeigen.',
+    'Koppel die tablet aan Wi-Fi om ’n skandeerbare QR-kode te wys.',
   );
   String get showQrCode => _t(
     'Afficher le code QR',
     'Show QR code',
     'Mostrar código QR',
     'QR-Code anzeigen',
+    'Wys QR-kode',
   );
   String get printQrCode => _t(
     'Imprimer le code QR',
     'Print QR code',
     'Imprimir código QR',
     'QR-Code drucken',
+    'Druk QR-kode',
   );
   String get regenerateTableLink => _t(
     'Régénérer le lien de la table',
     'Regenerate table link',
     'Regenerar el enlace de la mesa',
     'Tisch-Link neu erzeugen',
+    'Hergenereer tafelskakel',
   );
   String regenerateTableLinkConfirm(String label) => _t(
     'Créer un nouveau lien pour $label ? Les fiches QR déjà imprimées pour cette table cesseront de fonctionner ; réimprimez sa fiche.',
     'Create a new link for $label? QR slips already printed for this table stop working; reprint its slip.',
     '¿Crear un enlace nuevo para $label? Las hojas QR ya impresas para esta mesa dejarán de funcionar; vuelve a imprimir su hoja.',
     'Neuen Link für $label erstellen? Bereits gedruckte QR-Zettel für diesen Tisch funktionieren dann nicht mehr; drucken Sie den Zettel neu.',
+    'Skep ’n nuwe skakel vir $label? QR-strokies wat reeds vir hierdie tafel gedruk is, sal nie meer werk nie; druk sy strokie weer.',
   );
   String get regenerate =>
-      _t('Régénérer', 'Regenerate', 'Regenerar', 'Neu erzeugen');
+      _t('Régénérer', 'Regenerate', 'Regenerar', 'Neu erzeugen', 'Hergenereer');
   String get tableLinkRegenerated => _t(
     'Nouveau lien créé. Réimprimez la fiche QR de cette table.',
     'New link created. Reprint this table\'s QR slip.',
     'Se creó un enlace nuevo. Vuelve a imprimir la hoja QR de esta mesa.',
     'Neuer Link erstellt. Bitte den QR-Zettel dieses Tisches neu drucken.',
+    'Nuwe skakel geskep. Druk hierdie tafel se QR-strokie weer.',
   );
   String get slipSentToPrinter => _t(
     'Fiche QR envoyée à l’imprimante',
     'QR slip sent to the printer',
     'Hoja QR enviada a la impresora',
     'QR-Zettel an den Drucker gesendet',
+    'QR-strokie na die drukker gestuur',
   );
   String get sectionStaffApp => _t(
     'Application du personnel',
     'Staff app',
     'App del personal',
     'Personal-App',
+    'Personeelapp',
   );
   String get staffAppQrLabel => _t(
     'Application de commande du personnel — balayez pour l’ouvrir',
     'Staff ordering app — scan to open',
     'App de pedidos del personal: escanea para abrir',
     'Bestell-App fürs Personal – zum Öffnen scannen',
+    'Personeel-bestelapp — skandeer om oop te maak',
   );
   String get sectionReportsPortal =>
-      _t('Rapports', 'Reports', 'Reportes', 'Berichte');
+      _t('Rapports', 'Reports', 'Reportes', 'Berichte', 'Verslae');
   String get reportsPortalQrLabel => _t(
     'Portail de rapports du propriétaire — balayez pour l’ouvrir',
     'Owner reporting portal — scan to open',
     'Portal de reportes del dueño: escanea para abrir',
     'Auswertungsportal für Inhaber – zum Öffnen scannen',
+    'Eienaar-verslagportaal — skandeer om oop te maak',
   );
   String get cloudNotConfigured => _t(
     'Nuage non configuré',
     'Cloud not configured',
     'La nube no está configurada',
     'Cloud nicht eingerichtet',
+    'Wolk nie opgestel nie',
   );
 
   // pending-order alerts (settings + banner)
@@ -2557,24 +3253,28 @@ class L {
     'Customer order alerts',
     'Alertas de pedidos de clientes',
     'Hinweise bei Gästebestellungen',
+    'Waarskuwings vir klantbestellings',
   );
   String get alertsEnabledLabel => _t(
     'Carillon à chaque nouvelle commande d’un client',
     'Chime on new customer orders',
     'Sonido con cada pedido nuevo de un cliente',
     'Signalton bei neuen Gästebestellungen',
+    'Klokkie by nuwe klantbestellings',
   );
   String get alertEscalateLabel => _t(
     'Alerte insistante si rien n’est fait après (secondes)',
     'Escalate if un-actioned after (seconds)',
     'Alerta insistente si nadie responde después de (segundos)',
     'Erneut melden, wenn unbearbeitet nach (Sekunden)',
+    'Eskaleer indien onafgehandel na (sekondes)',
   );
   String get alertVolumeLabel => _t(
     'Volume de l’alerte',
     'Alert volume',
     'Volumen de la alerta',
     'Lautstärke der Hinweise',
+    'Waarskuwingvolume',
   );
 
   // receipt printer (settings)
@@ -2583,161 +3283,193 @@ class L {
     'Receipt printer',
     'Impresora de recibos',
     'Belegdrucker',
+    'Kwitansiedrukker',
   );
   String get printerIpLabel => _t(
     'IP de l’imprimante (vide = désactivée)',
     'Printer IP (blank = off)',
     'IP de la impresora (vacío = desactivada)',
     'Drucker-IP (leer = aus)',
+    'Drukker-IP (leeg = af)',
   );
-  String get printerPortLabel => _t('Port réseau', 'Port', 'Puerto', 'Port');
+  String get printerPortLabel =>
+      _t('Port réseau', 'Port', 'Puerto', 'Port', 'Poort');
   String get scanForPrinter => _t(
     'Chercher l’imprimante sur le réseau',
     'Scan network for printer',
     'Buscar la impresora en la red',
     'Netzwerk nach Drucker durchsuchen',
+    'Soek netwerk vir drukker',
   );
   String get scanningForPrinter => _t(
     'Recherche de l’imprimante…',
     'Scanning for printer…',
     'Buscando la impresora…',
     'Drucker wird gesucht …',
+    'Soek drukker…',
   );
   String printerFoundAt(String ip) => _t(
     'Imprimante trouvée : $ip',
     'Found printer: $ip',
     'Impresora encontrada: $ip',
     'Drucker gefunden: $ip',
+    'Drukker gevind: $ip',
   );
   String printersFound(int n, String ip) => _t(
     '$n imprimantes trouvées — utilisation de $ip',
     'Found $n printers — using $ip',
     'Se encontraron $n impresoras: usando $ip',
     '$n Drucker gefunden – verwendet wird $ip',
+    '$n drukkers gevind — gebruik $ip',
   );
   String get printerNotFound => _t(
     'Aucune imprimante trouvée sur ce réseau',
     'No printer found on this network',
     'No se encontró ninguna impresora en esta red',
     'Kein Drucker in diesem Netzwerk gefunden',
+    'Geen drukker op hierdie netwerk gevind nie',
   );
   String get testPrint => _t(
     'Impression d’essai',
     'Test print',
     'Impresión de prueba',
     'Testdruck',
+    'Toetsdruk',
   );
   String get printerTestSent => _t(
     'Page d’essai envoyée à l’imprimante',
     'Test page sent to the printer',
     'Página de prueba enviada a la impresora',
     'Testseite an den Drucker gesendet',
+    'Toetsbladsy na die drukker gestuur',
   );
   String get printerNotConfigured => _t(
     'IP de l’imprimante non définie',
     'Printer IP not set',
     'No se configuró la IP de la impresora',
     'Keine Drucker-IP eingestellt',
+    'Drukker-IP nie gestel nie',
   );
   String get printerOffline => _t(
     'Échec de l’impression — imprimante hors ligne',
     'Print failed — printer offline',
     'Falló la impresión: impresora desconectada',
     'Druck fehlgeschlagen – Drucker offline',
+    'Druk het misluk — drukker vanlyn',
   );
   String get printAllTableQr => _t(
     'Imprimer les codes QR de toutes les tables',
     'Print all table QR codes',
     'Imprimir los códigos QR de todas las mesas',
     'Alle Tisch-QR-Codes drucken',
+    'Druk alle tafel-QR-kodes',
   );
   String printAllTableQrConfirm(int n) => _t(
     'Imprimer les fiches QR des $n tables ? Cela prend beaucoup de papier.',
     'Print QR slips for all $n tables? This uses a lot of paper.',
     '¿Imprimir las hojas QR de las $n mesas? Esto usa mucho papel.',
     'QR-Zettel für alle $n Tische drucken? Das braucht viel Papier.',
+    'Druk QR-strokies vir al $n tafels? Dit gebruik baie papier.',
   );
   String slipsPrinted(int n) => _t(
     '$n fiches imprimées',
     'Printed $n slips',
     'Se imprimieron $n hojas',
     '$n Zettel gedruckt',
+    '$n strokies gedruk',
   );
 
   // guest Wi-Fi (settings): the join slip and step 1 of the table slips
-  String get sectionGuestWifi =>
-      _t('Wi-Fi invités', 'Guest Wi-Fi', 'Wi-Fi para clientes', 'Gäste-WLAN');
+  String get sectionGuestWifi => _t(
+    'Wi-Fi invités',
+    'Guest Wi-Fi',
+    'Wi-Fi para clientes',
+    'Gäste-WLAN',
+    'Gaste-Wi-Fi',
+  );
   String get guestWifiHint => _t(
     'Imprimé sur une fiche Wi-Fi et comme première étape des fiches QR des tables.',
     'Printed on a Wi-Fi slip and as step 1 on the table QR slips.',
     'Se imprime en una hoja de Wi-Fi y como paso 1 en las hojas QR de las mesas.',
     'Wird auf einem WLAN-Zettel und als Schritt 1 auf den Tisch-QR-Zetteln gedruckt.',
+    'Gedruk op ’n Wi-Fi-strokie en as stap 1 op die tafel-QR-strokies.',
   );
   String get wifiSsidLabel => _t(
     'Nom du réseau (vide = aucun)',
     'Network name (blank = none)',
     'Nombre de la red (vacío = ninguna)',
     'Netzwerkname (leer = keins)',
+    'Netwerknaam (leeg = geen)',
   );
   String get wifiPasswordLabel =>
-      _t('Mot de passe', 'Password', 'Contraseña', 'Passwort');
+      _t('Mot de passe', 'Password', 'Contraseña', 'Passwort', 'Wagwoord');
   String get wifiShowPassword => _t(
     'Afficher le mot de passe',
     'Show password',
     'Mostrar contraseña',
     'Passwort anzeigen',
+    'Wys wagwoord',
   );
   String get wifiHidePassword => _t(
     'Masquer le mot de passe',
     'Hide password',
     'Ocultar contraseña',
     'Passwort verbergen',
+    'Versteek wagwoord',
   );
   String get wifiSecurityLabel =>
-      _t('Sécurité', 'Security', 'Seguridad', 'Sicherheit');
+      _t('Sécurité', 'Security', 'Seguridad', 'Sicherheit', 'Sekuriteit');
   String get wifiSecurityNone => _t(
     'Aucune (réseau ouvert)',
     'None (open)',
     'Ninguna (abierta)',
     'Keine (offen)',
+    'Geen (oop)',
   );
   String get wifiHiddenLabel => _t(
     'Réseau masqué',
     'Hidden network',
     'Red oculta',
     'Verborgenes Netzwerk',
+    'Versteekte netwerk',
   );
   String get printWifiSlip => _t(
     'Imprimer la fiche Wi-Fi',
     'Print Wi-Fi slip',
     'Imprimir hoja de Wi-Fi',
     'WLAN-Zettel drucken',
+    'Druk Wi-Fi-strokie',
   );
-  String get wifiCopiesLabel => _t('Exemplaires', 'Copies', 'Copias', 'Anzahl');
+  String get wifiCopiesLabel =>
+      _t('Exemplaires', 'Copies', 'Copias', 'Anzahl', 'Kopieë');
   String wifiSlipsPrinted(int n) => n == 1
       ? _t(
           'Fiche Wi-Fi imprimée',
           'Wi-Fi slip printed',
           'Hoja de Wi-Fi impresa',
           'WLAN-Zettel gedruckt',
+          'Wi-Fi-strokie gedruk',
         )
       : _t(
           '$n fiches Wi-Fi imprimées',
           'Printed $n Wi-Fi slips',
           'Se imprimieron $n hojas de Wi-Fi',
           '$n WLAN-Zettel gedruckt',
+          '$n Wi-Fi-strokies gedruk',
         );
   String get wifiNotConfigured => _t(
     'Entrez d’abord le nom et le mot de passe du réseau Wi-Fi',
     'Set the Wi-Fi network name and password first',
     'Primero configura el nombre y la contraseña de la red Wi-Fi',
     'Bitte zuerst WLAN-Name und Passwort eingeben',
+    'Stel eers die Wi-Fi-netwerknaam en wagwoord',
   );
   String get saveFirstToTest => _t(
     'Enregistrez d’abord, puis lancez l’impression d’essai',
     'Save first, then test print',
     'Guarda primero y luego haz la impresión de prueba',
     'Erst speichern, dann Testdruck',
+    'Stoor eers, dan toetsdruk',
   );
   String ordersWaiting(int n) => n == 1
       ? _t(
@@ -2745,12 +3477,14 @@ class L {
           '1 order waiting',
           '1 pedido en espera',
           '1 Bestellung wartet',
+          '1 bestelling wag',
         )
       : _t(
           '$n commandes en attente',
           '$n orders waiting',
           '$n pedidos en espera',
           '$n Bestellungen warten',
+          '$n bestellings wag',
         );
 
   /// Compact age for the alert banner: seconds under a minute, else minutes.
@@ -2758,80 +3492,121 @@ class L {
       d.inMinutes < 1 ? '${d.inSeconds}s' : elapsedShort(d);
 
   // zone open/closed
-  String get zoneClosed => _t('Fermée', 'Closed', 'Cerrada', 'Geschlossen');
+  String get zoneClosed =>
+      _t('Fermée', 'Closed', 'Cerrada', 'Geschlossen', 'Gesluit');
   String get zoneClosedBanner => _t(
     'Cette section est temporairement fermée. Adressez-vous au personnel.',
     'This section is temporarily closed. Please ask staff.',
     'Esta sección está cerrada por el momento. Pregunta al personal.',
     'Dieser Bereich ist vorübergehend geschlossen. Bitte wenden Sie sich an das Personal.',
+    'Hierdie afdeling is tydelik gesluit. Vra asseblief die personeel.',
   );
-  String get zoneCloseAction =>
-      _t('Fermer la zone', 'Close zone', 'Cerrar zona', 'Bereich schließen');
-  String get zoneReopenAction =>
-      _t('Rouvrir la zone', 'Reopen zone', 'Reabrir zona', 'Bereich öffnen');
+  String get zoneCloseAction => _t(
+    'Fermer la zone',
+    'Close zone',
+    'Cerrar zona',
+    'Bereich schließen',
+    'Sluit area',
+  );
+  String get zoneReopenAction => _t(
+    'Rouvrir la zone',
+    'Reopen zone',
+    'Reabrir zona',
+    'Bereich öffnen',
+    'Heropen area',
+  );
   String get newCheckBlockedZoneClosed => _t(
     'Zone fermée',
     'Zone is closed',
     'La zona está cerrada',
     'Bereich ist geschlossen',
+    'Area is gesluit',
   );
 
   // zone (room) management — add / rename / delete / reorder
-  String get addRoom =>
-      _t('Ajouter une salle', 'Add room', 'Agregar salón', 'Raum hinzufügen');
+  String get addRoom => _t(
+    'Ajouter une salle',
+    'Add room',
+    'Agregar salón',
+    'Raum hinzufügen',
+    'Voeg vertrek by',
+  );
   String get manageRoom => _t(
     'Gérer la salle',
     'Manage room',
     'Administrar salón',
     'Raum verwalten',
+    'Bestuur vertrek',
   );
   String get renameRoom => _t(
     'Renommer la salle',
     'Rename room',
     'Cambiar nombre del salón',
     'Raum umbenennen',
+    'Hernoem vertrek',
   );
-  String get deleteRoom =>
-      _t('Supprimer la salle', 'Delete room', 'Eliminar salón', 'Raum löschen');
+  String get deleteRoom => _t(
+    'Supprimer la salle',
+    'Delete room',
+    'Eliminar salón',
+    'Raum löschen',
+    'Verwyder vertrek',
+  );
   String deleteRoomConfirm(String name) => _t(
     'Supprimer la salle « $name » ? Elle doit être vide (ni tables ni éléments) pour être supprimée.',
     'Delete room "$name"? A room must be empty (no tables or objects) to delete.',
     '¿Eliminar el salón "$name"? Debe estar vacío (sin mesas ni elementos) para eliminarlo.',
     'Raum „$name“ löschen? Nur ein leerer Raum (ohne Tische und Objekte) kann gelöscht werden.',
+    'Verwyder vertrek “$name”? ’n Vertrek moet leeg wees (geen tafels of voorwerpe nie) om verwyder te word.',
   );
-  String get roomDeleted =>
-      _t('Salle supprimée', 'Room deleted', 'Salón eliminado', 'Raum gelöscht');
-  String get roomCreated =>
-      _t('Salle créée', 'Room created', 'Salón creado', 'Raum angelegt');
+  String get roomDeleted => _t(
+    'Salle supprimée',
+    'Room deleted',
+    'Salón eliminado',
+    'Raum gelöscht',
+    'Vertrek verwyder',
+  );
+  String get roomCreated => _t(
+    'Salle créée',
+    'Room created',
+    'Salón creado',
+    'Raum angelegt',
+    'Vertrek geskep',
+  );
   String get roomNameRequired => _t(
     'Entrez un nom pour la salle',
     'Enter a name for the room',
     'Escriba un nombre para el salón',
     'Bitte einen Namen für den Raum eingeben',
+    'Voer ’n naam vir die vertrek in',
   );
   String get moveRoomLeft => _t(
     'Déplacer à gauche',
     'Move left',
     'Mover a la izquierda',
     'Nach links',
+    'Skuif links',
   );
   String get moveRoomRight => _t(
     'Déplacer à droite',
     'Move right',
     'Mover a la derecha',
     'Nach rechts',
+    'Skuif regs',
   );
   String get roomNameFrField => _t(
     'Nom de la salle (français)',
     'Room name (French)',
     'Nombre del salón (francés)',
     'Raumname (Französisch)',
+    'Vertreknaam (Frans)',
   );
   String get roomNameEnField => _t(
     'Nom de la salle (anglais)',
     'Room name (English)',
     'Nombre del salón (inglés)',
     'Raumname (Englisch)',
+    'Vertreknaam (Engels)',
   );
 
   // tables / time
@@ -2846,6 +3621,7 @@ class L {
     'This is taking too long. Check the connection and try again.',
     'Esto está tardando demasiado. Revisa la conexión e inténtalo de nuevo.',
     'Das dauert zu lange. Verbindung prüfen und erneut versuchen.',
+    'Dit neem te lank. Gaan die verbinding na en probeer weer.',
   );
 
   /// Server error codes → local language. Fallback: raw server message.
@@ -2855,6 +3631,7 @@ class L {
       'Invalid PIN',
       'PIN no válido',
       'Ungültige PIN',
+      'Ongeldige PIN',
     ),
     'image_unavailable' ||
     'image_offline' => aiUnavailableNote('image_offline'),
@@ -2864,30 +3641,35 @@ class L {
       'The AI photo service took too long. Please try again.',
       'El servicio de fotos con IA tardó demasiado. Inténtalo de nuevo.',
       'Der KI-Fotodienst hat zu lange gebraucht. Bitte erneut versuchen.',
+      'Die KI-fotodiens het te lank geneem. Probeer asseblief weer.',
     ),
     'image_rate_limited' => _t(
       'Trop de demandes de photos IA. Réessayez dans une minute.',
       'Too many AI photo requests. Try again in a minute.',
       'Demasiadas solicitudes de fotos con IA. Inténtalo en un minuto.',
       'Zu viele KI-Fotoanfragen. In einer Minute erneut versuchen.',
+      'Te veel KI-fotoversoeke. Probeer weer oor ’n minuut.',
     ),
     'image_quota' => _t(
       'Le compte de photos IA n’a plus de crédits.',
       'The AI photo account is out of credits.',
       'La cuenta de fotos con IA se quedó sin créditos.',
       'Das Guthaben des KI-Fotokontos ist aufgebraucht.',
+      'Die KI-foto-rekening se krediete is op.',
     ),
     'image_refused' => _t(
       'Le service de photos IA a refusé cette demande. Modifiez la description et réessayez.',
       'The AI photo service declined this request. Adjust the description and try again.',
       'El servicio de fotos con IA rechazó la solicitud. Ajusta la descripción e inténtalo de nuevo.',
       'Der KI-Fotodienst hat die Anfrage abgelehnt. Beschreibung anpassen und erneut versuchen.',
+      'Die KI-fotodiens het hierdie versoek geweier. Pas die beskrywing aan en probeer weer.',
     ),
     'image_auth' || 'image_error' => _t(
       'Le service de photos IA a renvoyé une erreur. Réessayez plus tard.',
       'The AI photo service returned an error. Try again later.',
       'El servicio de fotos con IA devolvió un error. Inténtalo más tarde.',
       'Der KI-Fotodienst meldet einen Fehler. Später erneut versuchen.',
+      'Die KI-fotodiens het ’n fout teruggegee. Probeer later weer.',
     ),
     'menu_ai_unavailable' ||
     'menu_ai_offline' ||
@@ -2897,24 +3679,28 @@ class L {
       'The AI service is busy or slow. Try again in a minute.',
       'El servicio de IA está ocupado o lento. Inténtalo en un minuto.',
       'Der KI-Dienst ist ausgelastet oder langsam. In einer Minute erneut versuchen.',
+      'Die KI-diens is besig of stadig. Probeer weer oor ’n minuut.',
     ),
     'menu_ai_too_many' => _t(
       'Trop de demandes IA (20 par 10 minutes). Réessayez dans quelques minutes.',
       'Too many AI requests (20 every 10 minutes). Try again in a few minutes.',
       'Demasiadas solicitudes de IA (20 cada 10 minutos). Inténtalo en unos minutos.',
       'Zu viele KI-Anfragen (20 pro 10 Minuten). In ein paar Minuten erneut versuchen.',
+      'Te veel KI-versoeke (20 elke 10 minute). Probeer weer oor ’n paar minute.',
     ),
     'menu_ai_confirm_required' => _t(
       'Ce gros changement doit être confirmé. Touchez « Appliquer » de nouveau.',
       'This big change needs a confirm. Tap Apply again.',
       'Este cambio grande necesita confirmación. Toca Aplicar de nuevo.',
       'Diese große Änderung muss bestätigt werden. Erneut auf Übernehmen tippen.',
+      'Hierdie groot verandering moet bevestig word. Tik weer op Pas toe.',
     ),
     'menu_ai_quota' => _t(
       'Le compte IA n’a plus de crédits.',
       'The AI account is out of credits.',
       'La cuenta de IA se quedó sin créditos.',
       'Das Guthaben des KI-Kontos ist aufgebraucht.',
+      'Die KI-rekening se krediete is op.',
     ),
     'menu_ai_bad_reply' ||
     'menu_ai_refused' ||
@@ -2924,6 +3710,7 @@ class L {
       'The AI couldn’t propose changes. Rephrase and try again.',
       'La IA no pudo proponer cambios. Reformula e inténtalo de nuevo.',
       'Die KI konnte keine Änderungen vorschlagen. Anders formulieren und erneut versuchen.',
+      'Die KI kon nie veranderinge voorstel nie. Herformuleer en probeer weer.',
     ),
     'menu_ai_already_reverted' => aiMenuReverted,
     'wifi_not_configured' => wifiNotConfigured,
@@ -2932,390 +3719,455 @@ class L {
       'That PIN is already used by another staff member',
       'Ese PIN ya lo usa otro empleado',
       'Diese PIN wird bereits von einem anderen Mitarbeiter verwendet',
+      'Daardie PIN word reeds deur ’n ander personeellid gebruik',
     ),
     'bad_pin' => _t(
       'Le NIP doit compter 4 chiffres',
       'PIN must be 4 digits',
       'El PIN debe tener 4 dígitos',
       'Die PIN muss 4 Ziffern haben',
+      'PIN moet 4 syfers wees',
     ),
     'last_manager' => _t(
       'Gardez au moins un gérant actif pour gérer le personnel',
       'Keep at least one active manager who can manage staff',
       'Debe quedar al menos un gerente activo que administre al personal',
       'Mindestens ein aktiver Manager mit Personalverwaltung muss bleiben',
+      'Hou ten minste een aktiewe bestuurder wat personeel kan bestuur',
     ),
     'login_required' => _t(
       'Veuillez vous reconnecter',
       'Please log in again',
       'Inicia sesión de nuevo',
       'Bitte erneut anmelden',
+      'Meld asseblief weer aan',
     ),
     'manager_approval_required' => _t(
       'Approbation du gérant requise',
       'Manager approval required',
       'Se requiere la aprobación del gerente',
       'Freigabe durch Manager erforderlich',
+      'Bestuurder se goedkeuring nodig',
     ),
     'check_not_open' => _t(
       'Cette addition n’est plus ouverte',
       'This bill is no longer open',
       'Esta cuenta ya no está abierta',
       'Diese Rechnung ist nicht mehr offen',
+      'Hierdie rekening is nie meer oop nie',
     ),
     'zone_closed' => _t(
       'Zone fermée',
       'Zone is closed',
       'La zona está cerrada',
       'Bereich ist geschlossen',
+      'Area is gesluit',
     ),
     'bill_locked' => _t(
       'Paiement de l’addition en cours — adressez-vous au personnel',
       'Bill is being paid — ask staff',
       'La cuenta se está pagando: pregunta al personal',
       'Rechnung wird gerade bezahlt – bitte Personal fragen',
+      'Rekening word betaal — vra die personeel',
     ),
     'already_paid' => _t(
       'Addition déjà entièrement payée',
       'Bill already fully paid',
       'La cuenta ya está pagada por completo',
       'Rechnung ist bereits vollständig bezahlt',
+      'Rekening is reeds ten volle betaal',
     ),
     'pending_lines_unresolved' => _t(
       'Des commandes clients attendent une confirmation — réglez-les avant le paiement',
       'Customer orders awaiting confirm — resolve before payment',
       'Hay pedidos de clientes por confirmar: resuélvelos antes de cobrar',
       'Gästebestellungen warten auf Bestätigung – vor dem Bezahlen erledigen',
+      'Klantbestellings wag op bevestiging — handel dit af voor betaling',
     ),
     'outstanding_balance' => _t(
       'Il reste un solde à payer',
       'Balance still outstanding',
       'Todavía queda saldo pendiente',
       'Es ist noch ein Betrag offen',
+      'Saldo is nog uitstaande',
     ),
     'void_has_tenders' => _t(
       'L’addition a des paiements : annulation impossible — faites plutôt un remboursement',
       'Bill has payments; void not allowed — refund instead',
       'La cuenta tiene pagos; no se puede anular: haz un reembolso',
       'Rechnung hat bereits Zahlungen; Storno nicht möglich – stattdessen erstatten',
+      'Rekening het betalings; kansellasie nie toegelaat nie — betaal eerder terug',
     ),
     'refund_not_closed' => _t(
       'Seule une addition fermée peut être remboursée',
       'Only a closed bill can be refunded',
       'Solo se puede reembolsar una cuenta cerrada',
       'Nur eine geschlossene Rechnung kann erstattet werden',
+      'Slegs ’n geslote rekening kan terugbetaal word',
     ),
     'refund_exceeds_total' => _t(
       'Le remboursement dépasse le montant encore remboursable',
       'Refund exceeds the remaining refundable amount',
       'El reembolso supera el monto que queda por reembolsar',
       'Erstattung übersteigt den noch erstattbaren Betrag',
+      'Terugbetaling oorskry die oorblywende terugbetaalbare bedrag',
     ),
     'refund_non_positive' => _t(
       'Le montant du remboursement doit être supérieur à zéro',
       'Refund amount must be positive',
       'El monto del reembolso debe ser mayor que cero',
       'Erstattungsbetrag muss positiv sein',
+      'Terugbetalingsbedrag moet positief wees',
     ),
     'refund_no_amount' => _t(
       'Entrez un montant ou choisissez des articles',
       'Enter an amount or pick items',
       'Ingresa un monto o elige artículos',
       'Betrag eingeben oder Artikel auswählen',
+      'Voer ’n bedrag in of kies items',
     ),
     'refund_bad_tender' => _t(
       'Mode de remboursement invalide',
       'Invalid refund tender',
       'Forma de reembolso no válida',
       'Ungültige Erstattungsart',
+      'Ongeldige terugbetalingsmetode',
     ),
     'refund_bad_line' => _t(
       'L’article choisi n’est pas sur cette addition',
       'Selected item is not on this bill',
       'El artículo elegido no está en esta cuenta',
       'Der gewählte Artikel steht nicht auf dieser Rechnung',
+      'Gekose item is nie op hierdie rekening nie',
     ),
     'refund_qty_too_high' => _t(
       'La quantité dépasse celle de l’addition',
       'Refund quantity exceeds the bill',
       'La cantidad supera la de la cuenta',
       'Erstattungsmenge übersteigt die Rechnung',
+      'Terugbetalingshoeveelheid oorskry die rekening',
     ),
     'cash_bad_direction' => _t(
       'Sens invalide',
       'Invalid direction',
       'Dirección no válida',
       'Ungültige Richtung',
+      'Ongeldige rigting',
     ),
     'cash_non_positive' => _t(
       'Le montant doit être supérieur à zéro',
       'Amount must be positive',
       'El monto debe ser mayor que cero',
       'Betrag muss positiv sein',
+      'Bedrag moet positief wees',
     ),
     'no_open_shift' => _t(
       'Aucun quart ouvert',
       'No shift open',
       'No hay turno abierto',
       'Keine Schicht geöffnet',
+      'Geen skof oop nie',
     ),
     'shift_already_open' => _t(
       'Un quart est déjà ouvert',
       'A shift is already open',
       'Ya hay un turno abierto',
       'Es ist bereits eine Schicht geöffnet',
+      '’n Skof is reeds oop',
     ),
     'tender_type_not_accepted' => _t(
       'Mode de paiement non accepté',
       'Payment method not accepted',
       'No se acepta esta forma de pago',
       'Zahlungsart nicht akzeptiert',
+      'Betaalmetode word nie aanvaar nie',
     ),
     'no_receipt_yet' => _t(
       'Pas encore de reçu',
       'No receipt yet',
       'Todavía no hay recibo',
       'Noch kein Beleg',
+      'Nog geen kwitansie nie',
     ),
     'check_not_billable' => _t(
       'Cette addition est fermée — impression impossible',
       'This bill is closed — cannot print',
       'Esta cuenta está cerrada: no se puede imprimir',
       'Diese Rechnung ist geschlossen – Druck nicht möglich',
+      'Hierdie rekening is gesluit — kan nie druk nie',
     ),
     'bad_pairing_code' => _t(
       'Code de jumelage invalide ou expiré',
       'Invalid or expired pairing code',
       'Código de vinculación no válido o vencido',
       'Kopplungscode ungültig oder abgelaufen',
+      'Ongeldige of verstreke koppelkode',
     ),
     'pairing_unavailable' => _t(
       'Jumelage temporairement indisponible — réessayez',
       'Pairing is temporarily unavailable — try again',
       'La vinculación no está disponible por ahora: inténtalo de nuevo',
       'Kopplung vorübergehend nicht verfügbar – erneut versuchen',
+      'Koppeling is tydelik onbeskikbaar — probeer weer',
     ),
     'cloud_unreachable' => _t(
       'L’établissement ne joint pas le nuage — réessayez sous peu',
       'The store cannot reach the cloud — try again shortly',
       'La tienda no puede conectarse con la nube: inténtalo en un momento',
       'Die Filiale erreicht die Cloud nicht – gleich erneut versuchen',
+      'Die winkel kan nie die wolk bereik nie — probeer binnekort weer',
     ),
     'device_required' => _t(
       'Ce terminal n’est pas jumelé à l’établissement',
       'This terminal is not paired with the store',
       'Esta terminal no está vinculada con la tienda',
       'Dieses Gerät ist nicht mit der Filiale gekoppelt',
+      'Hierdie terminaal is nie met die winkel gekoppel nie',
     ),
     'device_revoked' => _t(
       'Le jumelage de ce terminal a été révoqué — jumelez-le de nouveau',
       'This terminal\'s pairing was revoked — pair again',
       'Se revocó la vinculación de esta terminal: vincúlala otra vez',
       'Die Kopplung dieses Geräts wurde widerrufen – bitte neu koppeln',
+      'Hierdie terminaal se koppeling is herroep — koppel weer',
     ),
     'not_found' => _t(
       'Introuvable',
       'Not found',
       'No se encontró',
       'Nicht gefunden',
+      'Nie gevind nie',
     ),
     'bad_request' => _t(
       'Demande invalide',
       'Invalid request',
       'Solicitud no válida',
       'Ungültige Anfrage',
+      'Ongeldige versoek',
     ),
     'rate_limited' => _t(
       'Trop de tentatives échouées — réessayez plus tard',
       'Too many failed attempts — try again later',
       'Demasiados intentos fallidos: inténtalo más tarde',
       'Zu viele Fehlversuche – später erneut versuchen',
+      'Te veel mislukte pogings — probeer later weer',
     ),
     'variant_in_use' => _t(
       'Ce format est sur une addition ouverte — fermez-la ou annulez-la d’abord',
       'This size is on an open order — close or void that check first',
       'Este tamaño está en una cuenta abierta: ciérrala o anúlala primero',
       'Diese Größe steht auf einer offenen Bestellung – Rechnung erst schließen oder stornieren',
+      'Hierdie grootte is op ’n oop bestelling — sluit of kanselleer daardie rekening eers',
     ),
     'item_in_use' => _t(
       'Cet article est sur une addition ouverte — fermez-la ou annulez-la d’abord',
       'This item is on an open order — close or void that check first',
       'Este artículo está en una cuenta abierta: ciérrala o anúlala primero',
       'Dieser Artikel steht auf einer offenen Bestellung – Rechnung erst schließen oder stornieren',
+      'Hierdie item is op ’n oop bestelling — sluit of kanselleer daardie rekening eers',
     ),
     'last_variant' => _t(
       'C’est le seul format de l’article — supprimez plutôt l’article au complet',
       'This is the item\'s only size — delete the whole item instead',
       'Es el único tamaño del artículo: mejor elimina el artículo completo',
       'Das ist die einzige Größe des Artikels – stattdessen den ganzen Artikel löschen',
+      'Dit is die item se enigste grootte — verwyder eerder die hele item',
     ),
     'category_not_empty' => _t(
       'Cette catégorie contient encore des articles — déplacez-les ou retirez-les d’abord',
       'This category still has items — move or remove them first',
       'Esta categoría todavía tiene artículos: muévelos o quítalos primero',
       'Diese Kategorie enthält noch Artikel – erst verschieben oder entfernen',
+      'Hierdie kategorie het nog items — skuif of verwyder hulle eers',
     ),
     'split_locked' => _t(
       'Un paiement a déjà été reçu — la séparation est verrouillée',
       'Money already taken — split is locked',
       'Ya se recibió un pago: la división está bloqueada',
       'Es wurde bereits kassiert – Teilung ist gesperrt',
+      'Geld is reeds ontvang — verdeling is gesluit',
     ),
     'split_exists' => _t(
       'L’addition est déjà séparée',
       'Bill is already split',
       'La cuenta ya está dividida',
       'Rechnung ist bereits geteilt',
+      'Rekening is reeds verdeel',
     ),
     'no_split' => _t(
       'L’addition n’est pas séparée',
       'Bill is not split',
       'La cuenta no está dividida',
       'Rechnung ist nicht geteilt',
+      'Rekening is nie verdeel nie',
     ),
     'split_stale' => _t(
       'L’addition a changé depuis la séparation en parts égales — séparez-la de nouveau',
       'The bill changed since it was split evenly — split it again',
       'La cuenta cambió desde que se dividió en partes iguales: divídela otra vez',
       'Die Rechnung hat sich seit dem gleichmäßigen Teilen geändert – bitte neu teilen',
+      'Die rekening het verander sedert dit gelyk verdeel is — verdeel dit weer',
     ),
     'split_unassigned_lines' => _t(
       'Des articles ne sont pas encore attribués — attribuez-les tous avant le paiement',
       'Some items are still unassigned — assign everything before payment',
       'Todavía hay artículos sin asignar: asígnalos todos antes de cobrar',
       'Einige Artikel sind noch nicht zugeordnet – vor dem Bezahlen alles zuordnen',
+      'Sommige items is nog nie toegeken nie — ken alles toe voor betaling',
     ),
     'group_required' => _t(
       'L’addition est séparée — choisissez l’addition à payer',
       'Bill is split — pay a specific bill',
       'La cuenta está dividida: elige qué cuenta pagar',
       'Rechnung ist geteilt – eine bestimmte Teilrechnung bezahlen',
+      'Rekening is verdeel — betaal ’n spesifieke rekening',
     ),
     'group_already_paid' => _t(
       'Cette addition est déjà payée',
       'This bill is already paid',
       'Esta cuenta ya está pagada',
       'Diese Rechnung ist bereits bezahlt',
+      'Hierdie rekening is reeds betaal',
     ),
     'group_not_found' => _t(
       'Cette addition séparée n’existe plus — actualisez la séparation',
       'That split bill no longer exists — refresh the split',
       'Esa cuenta dividida ya no existe: actualiza la división',
       'Diese Teilrechnung gibt es nicht mehr – Teilung aktualisieren',
+      'Daardie verdeelde rekening bestaan nie meer nie — verfris die verdeling',
     ),
     'group_outstanding' => _t(
       'Certaines additions ne sont pas encore payées',
       'Some bills still owe',
       'Algunas cuentas todavía tienen saldo',
       'Einige Rechnungen sind noch offen',
+      'Sommige rekeninge is nog uitstaande',
     ),
     'qty_below_allocated' => _t(
       'L’article est attribué à une addition séparée — retirez-le de celle-ci d’abord',
       'Item is assigned to a split bill — unassign it first',
       'El artículo está asignado a una cuenta dividida: quítalo de ahí primero',
       'Artikel ist einer Teilrechnung zugeordnet – Zuordnung erst aufheben',
+      'Item is aan ’n verdeelde rekening toegeken — hef die toekenning eers op',
     ),
     'qty_exceeds_unassigned' => _t(
       'Plus que la quantité non attribuée',
       'More than the unassigned quantity',
       'Más que la cantidad sin asignar',
       'Mehr als die nicht zugeordnete Menge',
+      'Meer as die nie-toegekende hoeveelheid',
     ),
     'qty_exceeds_allocated' => _t(
       'Plus que la quantité attribuée',
       'More than the assigned quantity',
       'Más que la cantidad asignada',
       'Mehr als die zugeordnete Menge',
+      'Meer as die toegekende hoeveelheid',
     ),
     'even_split' => _t(
       'L’addition est séparée en parts égales (÷N) — les articles ne peuvent pas être déplacés',
       'Split is even ÷N — items cannot move',
       'La cuenta está dividida en partes iguales (÷N): no se pueden mover artículos',
       'Gleichmäßig geteilt ÷N – Artikel können nicht verschoben werden',
+      'Gelyk verdeel ÷N — items kan nie skuif nie',
     ),
     'empty_check' => _t(
       'Rien à séparer',
       'Nothing to split',
       'No hay nada que dividir',
       'Nichts zu teilen',
+      'Niks om te verdeel nie',
     ),
     'last_group' => _t(
       'Il doit rester au moins une addition',
       'At least one bill must remain',
       'Debe quedar al menos una cuenta',
       'Mindestens eine Rechnung muss bleiben',
+      'Minstens een rekening moet oorbly',
     ),
     'same_table' => _t(
       'L’addition est déjà à cette table',
       'Bill is already on this table',
       'La cuenta ya está en esta mesa',
       'Rechnung ist bereits an diesem Tisch',
+      'Rekening is reeds by hierdie tafel',
     ),
     'same_check' => _t(
       'Impossible de fusionner une addition avec elle-même',
       'Cannot merge a bill into itself',
       'No se puede combinar una cuenta consigo misma',
       'Eine Rechnung kann nicht mit sich selbst zusammengeführt werden',
+      'Kan nie ’n rekening met homself saamvoeg nie',
     ),
     'table_occupied' => _t(
       'La table a une addition ouverte — fusionnez plutôt',
       'Table has an open bill — merge instead',
       'La mesa tiene una cuenta abierta: mejor combínalas',
       'Tisch hat eine offene Rechnung – stattdessen zusammenführen',
+      'Tafel het ’n oop rekening — voeg eerder saam',
     ),
     'table_in_use' => _t(
       'La table a une addition ouverte — fermez-la ou déplacez-la avant de retirer la table',
       'Table has an open bill — close or move it before removing',
       'La mesa tiene una cuenta abierta: ciérrala o muévela antes de quitar la mesa',
       'Tisch hat eine offene Rechnung – vor dem Entfernen schließen oder verschieben',
+      'Tafel het ’n oop rekening — sluit of skuif dit voor verwydering',
     ),
     'has_sub_tables' => _t(
       'La table a des sous-tables — retirez-les d’abord',
       'Table has sub-tables — remove them first',
       'La mesa tiene submesas: quítalas primero',
       'Tisch hat Untertische – diese zuerst entfernen',
+      'Tafel het subtafels — verwyder hulle eers',
     ),
     'label_taken' => _t(
       'Une table porte déjà ce nom dans cette zone',
       'A table with this label already exists in this zone',
       'Ya existe una mesa con ese nombre en esta zona',
       'In diesem Bereich gibt es bereits einen Tisch mit dieser Bezeichnung',
+      '’n Tafel met hierdie etiket bestaan reeds in hierdie area',
     ),
     'table_not_in_zone' => _t(
       'Le plan ne correspond pas à cette zone — actualisez et réessayez',
       'Layout does not match this zone — refresh and retry',
       'El plano no coincide con esta zona: actualiza e inténtalo de nuevo',
       'Tischplan passt nicht zu diesem Bereich – aktualisieren und erneut versuchen',
+      'Vloerplan pas nie by hierdie area nie — verfris en probeer weer',
     ),
     'zone_not_empty' => _t(
       'Cette salle contient encore des tables ou des éléments — videz-la avant de la supprimer',
       'This room still has tables or objects — clear them before deleting it',
       'Este salón todavía tiene mesas o elementos: vacíalo antes de eliminarlo',
       'Dieser Raum hat noch Tische oder Objekte – vor dem Löschen entfernen',
+      'Hierdie vertrek het nog tafels of voorwerpe — verwyder hulle voordat jy dit uitvee',
     ),
     'clear_split_first' => _t(
       'L’addition est séparée — annulez d’abord la séparation',
       'Bill is split — clear the split first',
       'La cuenta está dividida: deshaz la división primero',
       'Rechnung ist geteilt – Teilung zuerst aufheben',
+      'Rekening is verdeel — hef eers die verdeling op',
     ),
     'conflict' => _t(
       'Action impossible pour le moment',
       'Cannot do that right now',
       'No se puede hacer eso ahora',
       'Das ist gerade nicht möglich',
+      'Kan dit nie nou doen nie',
     ),
     'internal' => _t(
       'Une erreur est survenue — réessayez',
       'Something went wrong — try again',
       'Algo salió mal: inténtalo de nuevo',
       'Etwas ist schiefgelaufen – erneut versuchen',
+      'Iets het fout gegaan — probeer weer',
     ),
     'stripe_unavailable' => _t(
       'Stripe est injoignable (Internet ?). Rien n’a été fait chez Stripe.',
       'Can\'t reach Stripe (internet?). Nothing was done at Stripe.',
       'No se puede conectar con Stripe (¿internet?). No se hizo nada en Stripe.',
       'Stripe ist nicht erreichbar (Internet?). Bei Stripe wurde nichts ausgeführt.',
+      'Kan Stripe nie bereik nie (internet?). Niks is by Stripe gedoen nie.',
     ),
     'stripe_declined' => stripeDeclineMessage(null),
     'stripe_not_configured' => _t(
@@ -3323,6 +4175,7 @@ class L {
       'Card (Stripe) is not set up on this store',
       'La tarjeta (Stripe) no está configurada en esta tienda',
       'Karte (Stripe) ist in dieser Filiale nicht eingerichtet',
+      'Kaart (Stripe) is nie in hierdie winkel opgestel nie',
     ),
     'stripe_live_key_refused' => stripeUnavailableHint(
       'stripe_live_key_refused',
@@ -3338,60 +4191,70 @@ class L {
       'Stripe refused the request. Nothing was charged.',
       'Stripe rechazó la solicitud. No se cobró nada.',
       'Stripe hat die Anfrage abgelehnt. Es wurde nichts belastet.',
+      'Stripe het die versoek geweier. Niks is gehef nie.',
     ),
     'stripe_amount_exceeds_due' => _t(
       'L’addition ne doit plus ce montant — la carte n’a pas été débitée',
       'The bill no longer owes that amount — the card was not charged',
       'La cuenta ya no debe ese monto: no se cobró a la tarjeta',
       'Die Rechnung weist diesen Betrag nicht mehr aus – die Karte wurde nicht belastet',
+      'Die rekening skuld nie meer daardie bedrag nie — die kaart is nie gehef nie',
     ),
     'stripe_payment_reversed' => _t(
       'Le paiement par carte n’a pas pu être appliqué à cette addition et a été remboursé',
       'The card payment could not be applied to this bill and was refunded',
       'El pago con tarjeta no se pudo aplicar a esta cuenta y se reembolsó',
       'Die Kartenzahlung konnte nicht auf diese Rechnung gebucht werden und wurde erstattet',
+      'Die kaartbetaling kon nie op hierdie rekening toegepas word nie en is terugbetaal',
     ),
     'stripe_payment_canceled' => _t(
       'Ce paiement par carte a été annulé',
       'That card payment was canceled',
       'Se canceló ese pago con tarjeta',
       'Diese Kartenzahlung wurde abgebrochen',
+      'Daardie kaartbetaling is gekanselleer',
     ),
     'stripe_not_ready' => _t(
       'Le paiement par carte n’est pas terminé — réessayez',
       'The card payment isn\'t finished yet — try again',
       'El pago con tarjeta todavía no termina: inténtalo de nuevo',
       'Die Kartenzahlung ist noch nicht abgeschlossen – erneut versuchen',
+      'Die kaartbetaling is nog nie klaar nie — probeer weer',
     ),
     'stripe_no_card_tender' => _t(
       'Cette addition n’a pas été payée par carte (Stripe)',
       'This bill wasn\'t paid by Card (Stripe)',
       'Esta cuenta no se pagó con tarjeta (Stripe)',
       'Diese Rechnung wurde nicht mit Karte (Stripe) bezahlt',
+      'Hierdie rekening is nie met kaart (Stripe) betaal nie',
     ),
     'stripe_refund_exceeds_card' => _t(
       'Le remboursement dépasse le montant payé par carte (Stripe)',
       'The refund is more than was paid by Card (Stripe)',
       'El reembolso supera lo que se pagó con tarjeta (Stripe)',
       'Die Erstattung übersteigt den mit Karte (Stripe) bezahlten Betrag',
+      'Die terugbetaling is meer as wat met kaart (Stripe) betaal is',
     ),
     'stripe_refund_split_required' => _t(
       'Remboursez chaque paiement par carte séparément',
       'Refund each card payment separately',
       'Reembolsa cada pago con tarjeta por separado',
       'Jede Kartenzahlung einzeln erstatten',
+      'Betaal elke kaartbetaling afsonderlik terug',
     ),
     'stripe_refund_failed' => _t(
       'Stripe n’a pas effectué le remboursement. Rien n’a été enregistré.',
       'Stripe did not make the refund. Nothing was recorded.',
       'Stripe no hizo el reembolso. No se registró nada.',
       'Stripe hat die Erstattung nicht ausgeführt. Es wurde nichts gebucht.',
+      'Stripe het nie die terugbetaling gedoen nie. Niks is aangeteken nie.',
     ),
     'stripe_refund_via_stripe' => _t(
       'Les remboursements par carte (Stripe) passent par Stripe',
       'Card (Stripe) refunds go through Stripe',
       'Los reembolsos con tarjeta (Stripe) se hacen por Stripe',
       'Erstattungen für Karte (Stripe) laufen über Stripe',
+      'Terugbetalings vir kaart (Stripe) gaan deur Stripe',
     ),
     // retail counter
     'unknown_barcode' => _t(
@@ -3399,30 +4262,35 @@ class L {
       'Unknown barcode',
       'Código de barras desconocido',
       'Unbekannter Barcode',
+      'Onbekende strepieskode',
     ),
     'age_check_required' => _t(
       'Vérifiez la pièce d’identité du client avant le paiement',
       'Check the customer\'s ID before payment',
       'Verifica la identificación del cliente antes de cobrar',
       'Vor dem Bezahlen den Ausweis des Kunden prüfen',
+      'Kontroleer die klant se ID voor betaling',
     ),
     'age_check_failed' => _t(
       'Vérification de l’âge échouée — retirez les articles réservés aux adultes',
       'ID check failed — remove the age-restricted items',
       'No pasó la verificación de edad: quita los artículos con restricción de edad',
       'Ausweisprüfung nicht bestanden – altersbeschränkte Artikel entfernen',
+      'ID-kontrole het misluk — verwyder die ouderdomsbeperkte items',
     ),
     'barcode_taken' => _t(
       'Ce code-barres appartient déjà à un produit',
       'That barcode already belongs to a product',
       'Ese código de barras ya pertenece a un producto',
       'Dieser Barcode gehört bereits zu einem Produkt',
+      'Daardie strepieskode behoort reeds aan ’n produk',
     ),
     'item_inactive' => _t(
       'Ce produit n’est pas en vente',
       'That product is off sale',
       'Ese producto no está a la venta',
       'Dieses Produkt ist nicht im Verkauf',
+      'Daardie produk is nie beskikbaar nie',
     ),
     'terminal_unavailable' ||
     'terminal_not_paired' ||
@@ -3434,60 +4302,70 @@ class L {
       'That is not the code shown on the terminal',
       'Ese no es el código que muestra la terminal',
       'Das ist nicht der Code, der am Terminal angezeigt wird',
+      'Dit is nie die kode wat op die terminaal gewys word nie',
     ),
     'terminal_pairing_code_required' => _t(
       'Entrez le code affiché sur le terminal',
       'Enter the code shown on the terminal',
       'Escribe el código que muestra la terminal',
       'Den am Terminal angezeigten Code eingeben',
+      'Voer die kode in wat op die terminaal gewys word',
     ),
     'terminal_bad_host' => _t(
       'Entrez l’adresse IP du terminal, par exemple 192.168.1.50',
       'Enter the terminal’s IP address, like 192.168.1.50',
       'Escribe la dirección IP de la terminal, por ejemplo 192.168.1.50',
       'IP-Adresse des Terminals eingeben, z. B. 192.168.1.50',
+      'Voer die terminaal se IP-adres in, soos 192.168.1.50',
     ),
     'terminal_pairing_unsupported' => _t(
       'Ce terminal ne s’associe pas depuis la caisse',
       'This terminal doesn’t pair from the POS',
       'Esta terminal no se vincula desde la caja',
       'Dieses Terminal wird nicht über die Kasse gekoppelt',
+      'Hierdie terminaal koppel nie vanaf die kasregister nie',
     ),
     'terminal_cancel_unavailable' => _t(
       'La carte est en cours de traitement — impossible d’annuler maintenant',
       'The card is being processed — it can’t be cancelled now',
       'La tarjeta se está procesando: no se puede cancelar ahora',
       'Die Karte wird verarbeitet – Abbruch jetzt nicht möglich',
+      'Die kaart word verwerk — dit kan nie nou gekanselleer word nie',
     ),
     'terminal_already_recorded' => _t(
       'Ce paiement est déjà enregistré — faites un remboursement',
       'That payment is already recorded — refund it instead',
       'Ese pago ya está registrado: haz un reembolso',
       'Diese Zahlung ist bereits gebucht – stattdessen erstatten',
+      'Daardie betaling is reeds aangeteken — betaal dit eerder terug',
     ),
     'terminal_no_card_tender' => _t(
       'Cette addition n’a pas été payée par carte au terminal',
       'This bill wasn’t paid by card on the terminal',
       'Esta cuenta no se pagó con tarjeta en la terminal',
       'Diese Rechnung wurde nicht mit Karte am Terminal bezahlt',
+      'Hierdie rekening is nie met kaart op die terminaal betaal nie',
     ),
     'terminal_refund_exceeds_card' => _t(
       'Le remboursement dépasse ce qui a été payé par carte au terminal',
       'The refund is more than was paid by card on the terminal',
       'El reembolso supera lo pagado con tarjeta en la terminal',
       'Die Erstattung übersteigt den mit Karte am Terminal bezahlten Betrag',
+      'Die terugbetaling is meer as wat met kaart op die terminaal betaal is',
     ),
     'terminal_refund_split_required' => _t(
       'Remboursez chaque paiement par carte séparément',
       'Refund each card payment separately',
       'Reembolsa cada pago con tarjeta por separado',
       'Jede Kartenzahlung einzeln erstatten',
+      'Betaal elke kaartbetaling afsonderlik terug',
     ),
     'terminal_refund_failed' => _t(
       'Le terminal n’a pas fait le remboursement. Rien n’a été enregistré.',
       'The terminal didn’t make the refund. Nothing was recorded.',
       'La terminal no hizo el reembolso. No se registró nada.',
       'Das Terminal hat die Erstattung nicht ausgeführt. Es wurde nichts gebucht.',
+      'Die terminaal het nie die terugbetaling gedoen nie. Niks is aangeteken nie.',
     ),
     _ => null,
   };
@@ -3499,159 +4377,185 @@ class L {
     'Card (terminal)',
     'Tarjeta (terminal)',
     'Karte (Terminal)',
+    'Kaart (terminaal)',
   );
   String get chargeCardTerminal => _t(
     'Encaisser au terminal',
     'Charge card on the terminal',
     'Cobrar en la terminal',
     'Karte am Terminal belasten',
+    'Hef kaart op die terminaal',
   );
   String get terminalTitle => _t(
     'Paiement par carte au terminal',
     'Card payment on the terminal',
     'Pago con tarjeta en la terminal',
     'Kartenzahlung am Terminal',
+    'Kaartbetaling op die terminaal',
   );
   String get terminalStarting => _t(
     'Envoi du montant au terminal…',
     'Sending the amount to the terminal…',
     'Enviando el monto a la terminal…',
     'Betrag wird an das Terminal gesendet …',
+    'Stuur die bedrag na die terminaal…',
   );
   String get terminalPresentCard => _t(
     'Le client présente, insère ou glisse sa carte au terminal',
     'Customer taps, inserts or swipes on the terminal',
     'El cliente acerca, inserta o desliza su tarjeta en la terminal',
     'Kunde hält, steckt oder zieht die Karte am Terminal',
+    'Klant tik, steek in of swiep op die terminaal',
   );
   String get terminalEnterPin => _t(
     'Le client entre son NIP au terminal',
     'Customer enters their PIN on the terminal',
     'El cliente escribe su PIN en la terminal',
     'Kunde gibt die PIN am Terminal ein',
+    'Klant voer hul PIN op die terminaal in',
   );
   String get terminalChooseTip => _t(
     'Le client choisit le pourboire au terminal',
     'Customer is choosing a tip on the terminal',
     'El cliente elige la propina en la terminal',
     'Kunde wählt das Trinkgeld am Terminal',
+    'Klant kies ’n fooitjie op die terminaal',
   );
   String get terminalProcessing => _t(
     'Traitement de la carte…',
     'Processing the card…',
     'Procesando…',
     'Karte wird verarbeitet …',
+    'Verwerk die kaart…',
   );
   String get terminalWaitingForPhone => _t(
     'En attente du téléphone… touchez la carte sur le téléphone',
     'Waiting for the phone… tap on the phone',
     'Esperando el teléfono… acerca la tarjeta al teléfono',
     'Warten auf das Telefon … am Telefon bezahlen',
+    'Wag vir die foon… tik op die foon',
   );
   String get terminalTapOnPhone => _t(
     'Le client touche sa carte sur le téléphone',
     'Customer taps their card on the phone',
     'El cliente acerca su tarjeta al teléfono',
     'Kunde hält die Karte ans Telefon',
+    'Klant tik hul kaart op die foon',
   );
   String get followPhone => _t(
     'Suivez les étapes sur le téléphone',
     'Follow the steps on the phone',
     'Sigue los pasos en el teléfono',
     'Den Schritten auf dem Telefon folgen',
+    'Volg die stappe op die foon',
   );
   String phonePairingCode(String code) => _t(
     'Code d’association du téléphone : $code',
     'Phone pairing code: $code',
     'Código para vincular el teléfono: $code',
     'Kopplungscode fürs Telefon: $code',
+    'Foon se koppelkode: $code',
   );
   String get phonePairingHint => _t(
     'Ouvrez l’app « Card Reader » sur le téléphone et entrez ce code.',
     'Open the Card Reader app on the phone and enter this code.',
     'Abre la app Card Reader en el teléfono y escribe este código.',
     'Auf dem Telefon die App Card Reader öffnen und diesen Code eingeben.',
+    'Maak die Card Reader-toep op die foon oop en voer hierdie kode in.',
   );
   String get unpairPhone => _t(
     'Dissocier le téléphone',
     'Unpair the phone',
     'Desvincular el teléfono',
     'Telefon entkoppeln',
+    'Ontkoppel die foon',
   );
   String get phoneSimulatedNote => _t(
     'Lecteur Tap to Pay simulé par Stripe (cartes de test choisies sur le téléphone)',
     'Stripe’s simulated Tap to Pay reader (test cards picked on the phone)',
     'Lector Tap to Pay simulado de Stripe (tarjetas de prueba en el teléfono)',
     'Simuliertes Tap-to-Pay-Lesegerät von Stripe (Testkarten am Telefon wählen)',
+    'Stripe se gesimuleerde Tap to Pay-leser (toetskaarte word op die foon gekies)',
   );
   String get terminalOfflineNow => _t(
     'Le terminal ne répond pas — vérifiez qu’il est allumé et sur le Wi-Fi',
     'The terminal isn’t answering — check it’s on and on the Wi-Fi',
     'La terminal no responde: revisa que esté encendida y en el Wi-Fi',
     'Das Terminal antwortet nicht – prüfen, ob es eingeschaltet und im WLAN ist',
+    'Die terminaal antwoord nie — kontroleer dat dit aan is en op die Wi-Fi',
   );
   String get terminalApproved => _t(
     'Paiement approuvé',
     'Payment approved',
     'Pago aprobado',
     'Zahlung genehmigt',
+    'Betaling goedgekeur',
   );
   String get terminalDeclined => _t(
     'Carte refusée',
     'Card declined',
     'Tarjeta rechazada',
     'Karte abgelehnt',
+    'Kaart geweier',
   );
   String get terminalTimedOut => _t(
     'Délai dépassé — aucune carte présentée',
     'Timed out — no card presented',
     'Se agotó el tiempo: no se presentó ninguna tarjeta',
     'Zeitüberschreitung – keine Karte vorgelegt',
+    'Tyd verstreke — geen kaart aangebied nie',
   );
   String get terminalCancelled => _t(
     'Paiement annulé',
     'Payment cancelled',
     'Pago cancelado',
     'Zahlung abgebrochen',
+    'Betaling gekanselleer',
   );
   String get terminalFailed => _t(
     'Échec du paiement par carte',
     'Card payment failed',
     'Falló el pago con tarjeta',
     'Kartenzahlung fehlgeschlagen',
+    'Kaartbetaling het misluk',
   );
   String get payAnotherWay => _t(
     'Payer autrement',
     'Pay another way',
     'Pagar de otra forma',
     'Anders bezahlen',
+    'Betaal op ’n ander manier',
   );
   String get authCodeLabel => _t(
     'N° d’autorisation',
     'Auth code',
     'Cód. de autorización',
     'Autorisierungscode',
+    'Magtigingskode',
   );
   String get processorRefLabel =>
-      _t('Référence', 'Reference', 'Referencia', 'Referenz');
+      _t('Référence', 'Reference', 'Referencia', 'Referenz', 'Verwysing');
   String followTerminal(String? address) => address == null
       ? _t(
           'Suivez les étapes sur le terminal',
           'Follow the steps on the terminal',
           'Sigue los pasos en la terminal',
           'Den Schritten am Terminal folgen',
+          'Volg die stappe op die terminaal',
         )
       : _t(
           'Suivez les étapes sur le terminal ($address)',
           'Follow the steps on the terminal ($address)',
           'Sigue los pasos en la terminal ($address)',
           'Den Schritten am Terminal folgen ($address)',
+          'Volg die stappe op die terminaal ($address)',
         );
   String get playReaderHere => _t(
     'Jouer le lecteur de carte ici',
     'Play the card reader here',
     'Usar el lector de tarjetas aquí',
     'Kartenleser hier simulieren',
+    'Speel die kaartleser hier',
   );
 
   /// Why a terminal card payment was declined.
@@ -3662,12 +4566,14 @@ class L {
       'The bank declined the card (do not honour). Try another card.',
       'El banco rechazó la tarjeta (no aceptar). Prueba con otra tarjeta.',
       'Die Bank hat die Karte abgelehnt (nicht ausführen). Andere Karte versuchen.',
+      'Die bank het die kaart geweier (moenie honoreer nie). Probeer ’n ander kaart.',
     ),
     'processor_unavailable' => _t(
       'Le processeur de paiement est injoignable. Prenez le comptant ou le terminal du comptoir.',
       'The card processor can’t be reached. Take cash or use the counter terminal.',
       'No se puede conectar con el procesador de pagos. Cobra en efectivo o con la terminal del mostrador.',
       'Der Kartenabwickler ist nicht erreichbar. Bar kassieren oder das Terminal an der Theke nutzen.',
+      'Die kaartverwerker kan nie bereik word nie. Neem kontant of gebruik die toonbankterminaal.',
     ),
     'jpm_not_configured' => terminalUnavailableHint('jpm_not_configured'),
     _ => stripeDeclineMessage(null),
@@ -3680,48 +4586,56 @@ class L {
       'The phone reader isn’t answering — open the Card Reader app on the store Wi-Fi',
       'El teléfono lector no responde: abre la app Card Reader en el Wi-Fi de la tienda',
       'Das Telefon-Lesegerät antwortet nicht – App Card Reader im WLAN der Filiale öffnen',
+      'Die foonleser antwoord nie — maak die Card Reader-toep op die winkel se Wi-Fi oop',
     ),
     'phone_reader_error' => _t(
       'Le téléphone lecteur signale une erreur — regardez l’écran du téléphone',
       'The phone reader reports a problem — check the phone’s screen',
       'El teléfono lector tiene un problema: revisa su pantalla',
       'Das Telefon-Lesegerät meldet ein Problem – Anzeige am Telefon prüfen',
+      'Die foonleser meld ’n probleem — kontroleer die foon se skerm',
     ),
     'stripe_not_configured' || 'terminal_not_configured' => _t(
       'Le terminal de carte n’est pas configuré — Réglages → Paiements',
       'Card terminal isn’t set up — Settings → Payments',
       'La terminal de tarjetas no está configurada: Ajustes → Pagos',
       'Kartenterminal ist nicht eingerichtet – Einstellungen → Zahlungen',
+      'Kaartterminaal is nie opgestel nie — Instellings → Betalings',
     ),
     'terminal_not_paired' => _t(
       'Terminal non associé — associez-le dans Réglages',
       'Terminal not paired — pair it in Settings',
       'Terminal sin vincular: vincúlala en Ajustes',
       'Terminal nicht gekoppelt – in den Einstellungen koppeln',
+      'Terminaal nie gekoppel nie — koppel dit in Instellings',
     ),
     'terminal_busy' => _t(
       'Le terminal est occupé par un autre paiement',
       'The terminal is busy with another payment',
       'La terminal está ocupada con otro pago',
       'Das Terminal ist mit einer anderen Zahlung beschäftigt',
+      'Die terminaal is besig met ’n ander betaling',
     ),
     'terminal_off' => _t(
       'Aucun terminal de carte intégré dans cet établissement',
       'No integrated card terminal on this store',
       'Esta tienda no tiene terminal de tarjetas integrada',
       'Kein integriertes Kartenterminal in dieser Filiale',
+      'Geen geïntegreerde kaartterminaal in hierdie winkel nie',
     ),
     'jpm_not_configured' => _t(
       'J.P. Morgan n’est pas configuré dans cet établissement',
       'J.P. Morgan is not set up on this store',
       'J.P. Morgan no está configurado en esta tienda',
       'J.P. Morgan ist in dieser Filiale nicht eingerichtet',
+      'J.P. Morgan is nie in hierdie winkel opgestel nie',
     ),
     _ => _t(
       'Le terminal de carte est injoignable — payez comptant ou au terminal du comptoir',
       'The card terminal can’t be reached — take cash or the counter terminal',
       'No se puede conectar con la terminal: cobra en efectivo o con la terminal del mostrador',
       'Das Kartenterminal ist nicht erreichbar – bar kassieren oder das Terminal an der Theke nutzen',
+      'Die kaartterminaal kan nie bereik word nie — neem kontant of gebruik die toonbankterminaal',
     ),
   };
 
@@ -3731,80 +4645,117 @@ class L {
     'Card reader (simulator)',
     'Lector de tarjetas (simulador)',
     'Kartenleser (Simulator)',
+    'Kaartleser (simulator)',
   );
-  String get readerTestCard =>
-      _t('Carte de test', 'Test card', 'Tarjeta de prueba', 'Testkarte');
+  String get readerTestCard => _t(
+    'Carte de test',
+    'Test card',
+    'Tarjeta de prueba',
+    'Testkarte',
+    'Toetskaart',
+  );
   String get readerOutcome => _t(
     'Réponse de la banque',
     'Bank answer',
     'Respuesta del banco',
     'Antwort der Bank',
+    'Bank se antwoord',
   );
   String get readerApprove =>
-      _t('Approuver', 'Approve', 'Aprobar', 'Genehmigen');
+      _t('Approuver', 'Approve', 'Aprobar', 'Genehmigen', 'Keur goed');
   String get readerInsufficient => _t(
     'Refus — fonds insuffisants',
     'Decline — insufficient funds',
     'Rechazo: fondos insuficientes',
     'Ablehnen – Deckung unzureichend',
+    'Weier — onvoldoende fondse',
   );
   String get readerDoNotHonour => _t(
     'Refus — ne pas honorer',
     'Decline — do not honour',
     'Rechazo: no aceptar',
     'Ablehnen – nicht ausführen',
+    'Weier — moenie honoreer nie',
   );
-  String get readerTimeout =>
-      _t('Délai dépassé', 'Time out', 'Tiempo agotado', 'Zeitüberschreitung');
+  String get readerTimeout => _t(
+    'Délai dépassé',
+    'Time out',
+    'Tiempo agotado',
+    'Zeitüberschreitung',
+    'Tyd verstreke',
+  );
   String get readerCustomerCancels => _t(
     'Le client annule',
     'Customer cancels',
     'El cliente cancela',
     'Kunde bricht ab',
+    'Klant kanselleer',
   );
-  String get readerTap => _t('Sans contact', 'Tap', 'Acercar', 'Kontaktlos');
-  String get readerInsert =>
-      _t('Insérer (NIP)', 'Insert (PIN)', 'Insertar (PIN)', 'Stecken (PIN)');
-  String get readerSwipe => _t('Glisser', 'Swipe', 'Deslizar', 'Durchziehen');
+  String get readerTap =>
+      _t('Sans contact', 'Tap', 'Acercar', 'Kontaktlos', 'Tik');
+  String get readerInsert => _t(
+    'Insérer (NIP)',
+    'Insert (PIN)',
+    'Insertar (PIN)',
+    'Stecken (PIN)',
+    'Steek in (PIN)',
+  );
+  String get readerSwipe =>
+      _t('Glisser', 'Swipe', 'Deslizar', 'Durchziehen', 'Swiep');
   String get readerTapInsertSwipe => _t(
     'Présentez, insérez ou glissez',
     'Tap, insert or swipe',
     'Acerca, inserta o desliza',
     'Karte vorhalten, stecken oder durchziehen',
+    'Tik, steek in of swiep',
   );
   String get readerEnterPin => _t(
     'Entrez votre NIP',
     'Enter your PIN',
     'Escribe tu PIN',
     'Bitte PIN eingeben',
+    'Voer u PIN in',
   );
   String get readerAddTip => _t(
     'Ajouter un pourboire',
     'Add a tip',
     'Agregar propina',
     'Trinkgeld hinzufügen',
+    'Voeg ’n fooitjie by',
   );
-  String get readerNoTip =>
-      _t('Sans pourboire', 'No tip', 'Sin propina', 'Kein Trinkgeld');
+  String get readerNoTip => _t(
+    'Sans pourboire',
+    'No tip',
+    'Sin propina',
+    'Kein Trinkgeld',
+    'Geen fooitjie',
+  );
   String get readerReady => _t(
     'Prêt pour le prochain paiement',
     'Ready for the next payment',
     'Listo para el siguiente pago',
     'Bereit für die nächste Zahlung',
+    'Gereed vir die volgende betaling',
   );
   String get readerApprovedBig =>
-      _t('APPROUVÉE', 'APPROVED', 'APROBADA', 'GENEHMIGT');
+      _t('APPROUVÉE', 'APPROVED', 'APROBADA', 'GENEHMIGT', 'GOEDGEKEUR');
   String get readerDeclinedBig =>
-      _t('REFUSÉE', 'DECLINED', 'RECHAZADA', 'ABGELEHNT');
+      _t('REFUSÉE', 'DECLINED', 'RECHAZADA', 'ABGELEHNT', 'GEWEIER');
   String get readerCancelledBig =>
-      _t('ANNULÉE', 'CANCELLED', 'CANCELADA', 'ABGEBROCHEN');
-  String get readerTimeoutBig =>
-      _t('DÉLAI DÉPASSÉ', 'TIMED OUT', 'TIEMPO AGOTADO', 'ZEIT ABGELAUFEN');
+      _t('ANNULÉE', 'CANCELLED', 'CANCELADA', 'ABGEBROCHEN', 'GEKANSELLEER');
+  String get readerTimeoutBig => _t(
+    'DÉLAI DÉPASSÉ',
+    'TIMED OUT',
+    'TIEMPO AGOTADO',
+    'ZEIT ABGELAUFEN',
+    'TYD VERSTREKE',
+  );
   String get readerNoRealCards => _t(
     'Cartes de test seulement — aucune vraie carte',
     'Test cards only — no real card data',
     'Solo tarjetas de prueba: ningún dato real',
     'Nur Testkarten – keine echten Kartendaten',
+    'Slegs toetskaarte — geen regte kaartdata nie',
   );
 
   // settings: the card terminal
@@ -3813,14 +4764,22 @@ class L {
     'Card terminal',
     'Terminal de tarjetas',
     'Kartenterminal',
+    'Kaartterminaal',
   );
   String terminalKindName(String kind) => switch (kind) {
-    'simulator' => _t('Simulateur', 'Simulator', 'Simulador', 'Simulator'),
+    'simulator' => _t(
+      'Simulateur',
+      'Simulator',
+      'Simulador',
+      'Simulator',
+      'Simulator',
+    ),
     'jpmorgan' => _t(
       'J.P. Morgan (bac à sable)',
       'J.P. Morgan (sandbox)',
       'J.P. Morgan (entorno de pruebas)',
       'J.P. Morgan (Sandbox)',
+      'J.P. Morgan (toetsomgewing)',
     ),
     'stripe' => cardStripe,
     'tap_to_pay' => _t(
@@ -3828,35 +4787,40 @@ class L {
       'Phone (Tap to Pay)',
       'Teléfono (Tap to Pay)',
       'Telefon (Tap to Pay)',
+      'Foon (Tap to Pay)',
     ),
-    'off' => _t('Aucun', 'None', 'Ninguno', 'Keins'),
+    'off' => _t('Aucun', 'None', 'Ninguno', 'Keins', 'Geen'),
     _ => _t(
       'Terminal externe',
       'External terminal',
       'Terminal externa',
       'Externes Terminal',
+      'Eksterne terminaal',
     ),
   };
   String terminalStateName(String? state) => switch (state) {
-    'idle' => _t('Prêt', 'Ready', 'Lista', 'Bereit'),
-    'busy' => _t('Occupé', 'Busy', 'Ocupada', 'Belegt'),
+    'idle' => _t('Prêt', 'Ready', 'Lista', 'Bereit', 'Gereed'),
+    'busy' => _t('Occupé', 'Busy', 'Ocupada', 'Belegt', 'Besig'),
     'not_paired' => _t(
       'Non associé',
       'Not paired',
       'Sin vincular',
       'Nicht gekoppelt',
+      'Nie gekoppel nie',
     ),
     'offline' => _t(
       'Injoignable',
       'Unreachable',
       'Sin conexión',
       'Nicht erreichbar',
+      'Onbereikbaar',
     ),
     _ => _t(
       'Sur la tablette',
       'On the tablet',
       'En la tableta',
       'Auf dem Tablet',
+      'Op die tablet',
     ),
   };
   String get terminalBuiltIn => _t(
@@ -3864,36 +4828,42 @@ class L {
     'Built into the POS (the /terminal page, or the reader on the tablet)',
     'Integrada en la caja (la página /terminal o el lector en la tableta)',
     'In die Kasse integriert (die Seite /terminal oder das Lesegerät am Tablet)',
+    'Ingebou in die kasregister (die /terminal-bladsy, of die leser op die tablet)',
   );
   String get pairTerminal => _t(
     'Associer un terminal',
     'Pair a terminal',
     'Vincular una terminal',
     'Terminal koppeln',
+    'Koppel ’n terminaal',
   );
   String get terminalAddressLabel => _t(
     'Adresse IP du terminal (ex. 192.168.1.50:8090)',
     'Terminal IP address (e.g. 192.168.1.50:8090)',
     'Dirección IP de la terminal (p. ej. 192.168.1.50:8090)',
     'IP-Adresse des Terminals (z. B. 192.168.1.50:8090)',
+    'Terminaal se IP-adres (bv. 192.168.1.50:8090)',
   );
   String get terminalCodeLabel => _t(
     'Code affiché sur le terminal',
     'Code shown on the terminal',
     'Código que muestra la terminal',
     'Am Terminal angezeigter Code',
+    'Kode wat op die terminaal gewys word',
   );
   String get useBuiltInTerminal => _t(
     'Utiliser le terminal intégré',
     'Use the built-in terminal',
     'Usar la terminal integrada',
     'Integriertes Terminal verwenden',
+    'Gebruik die ingeboude terminaal',
   );
   String get terminalPaired => _t(
     'Terminal associé',
     'Terminal paired',
     'Terminal vinculada',
     'Terminal gekoppelt',
+    'Terminaal gekoppel',
   );
 }
 

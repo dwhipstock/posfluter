@@ -414,4 +414,51 @@ void main() {
       await _shoot(tester, 'menu-management-de', const MenuManagementScreen());
     });
   });
+
+  // Afrikaans (Copper Lantern's fifth language): the same landscape layouts,
+  // any overflow fails these; money stays North American
+  group('Afrikaans', () {
+    setUp(() => Prefs.instance.lang = 'af');
+
+    testWidgets('sign-in', (tester) async {
+      Api.currentUser = null;
+      await _shoot(tester, 'login-af', const LoginScreen());
+    });
+
+    testWidgets('floor', (tester) async {
+      await _shoot(
+        tester,
+        'floor-af',
+        const ZonesScreen(),
+        act: _checkTableLabels(many: '4 sitplekke', one: '1 sitplek'),
+      );
+    });
+
+    testWidgets('check: the menu reads its Afrikaans names', (tester) async {
+      await _shoot(
+        tester,
+        'check-af',
+        const CheckScreen(checkId: 1, tableLabel: 'U-1'),
+        // a seeded Afrikaans name; the others fall back to English
+        expectText: 'Lantern Huislager',
+        act: (t) async {
+          expect(find.text('Copper Amber Ale'), findsWidgets);
+          expect(find.textContaining(RegExp(r'\$\d+\.\d\d')), findsWidgets);
+          expect(find.textContaining(RegExp(r'\d,\d\d\b')), findsNothing);
+        },
+      );
+    });
+
+    testWidgets('tender', (tester) async {
+      await _shoot(
+        tester,
+        'tender-af',
+        TenderScreen(check: Check.fromJson(_check())),
+      );
+    });
+
+    testWidgets('menu management', (tester) async {
+      await _shoot(tester, 'menu-management-af', const MenuManagementScreen());
+    });
+  });
 }
