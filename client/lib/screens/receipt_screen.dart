@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -20,11 +22,20 @@ class ReceiptScreen extends StatefulWidget {
   /// Overrides the default "Receipt — Bill #id" bar (refund / till slips reuse
   /// this same paper-white preview with their own heading).
   final String? title;
+
+  /// Counter: the order number, big above the receipt ("Order #101 · Take out").
+  final String? headline;
+
+  /// Counter: closes on its own after this (a tap on Done is sooner), so the
+  /// next order opens. Printing again keeps it open.
+  final Duration? autoDismiss;
   const ReceiptScreen({
     super.key,
     required this.checkId,
     required this.text,
     this.title,
+    this.headline,
+    this.autoDismiss,
   });
 
   @override
@@ -34,9 +45,28 @@ class ReceiptScreen extends StatefulWidget {
 class _ReceiptScreenState extends State<ReceiptScreen> {
   late String _text = widget.text;
   bool _printing = false;
+  Timer? _dismiss;
+
+  @override
+  void initState() {
+    super.initState();
+    final d = widget.autoDismiss;
+    if (d != null) {
+      _dismiss = Timer(d, () {
+        if (mounted) Navigator.maybePop(context);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _dismiss?.cancel();
+    super.dispose();
+  }
 
   /// Reprint the final receipt ([lang]: one copy in another store language).
   Future<void> _printAgain({String? lang}) async {
+    _dismiss?.cancel();
     setState(() => _printing = true);
     try {
       final text = await Api.reprintReceipt(widget.checkId, lang: lang);
@@ -65,6 +95,23 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         title: Text(
           widget.title ?? '${l.receipt} — ${l.billNo(widget.checkId)}',
         ),
+        bottom: widget.headline == null
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(64),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    widget.headline!,
+                    key: const Key('order-headline'),
+                    style: T.text(
+                      size: 34,
+                      weight: FontWeight.w800,
+                      color: T.navy,
+                    ),
+                  ),
+                ),
+              ),
       ),
       body: Center(
         child: Container(

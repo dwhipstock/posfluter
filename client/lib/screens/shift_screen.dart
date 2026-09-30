@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
+import '../quickserve/quick_serve_i18n.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
@@ -611,6 +612,14 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
                   if (r.corkageCents > 0)
                     Text(
                       '${l.corkage}  ${money(r.corkageCents)}',
+                      style: T.small(),
+                    ),
+                  // quick-serve: eaten in and taken out
+                  if (r.dineInCount + r.takeOutCount > 0)
+                    Text(
+                      '${Q.of(context).dineInCount(r.dineInCount)}  ·  '
+                      '${Q.of(context).takeOutCount(r.takeOutCount)}',
+                      key: const Key('service-mode-counts'),
                       style: T.small(),
                     ),
                 ],

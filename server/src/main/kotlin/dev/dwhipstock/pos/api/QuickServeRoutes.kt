@@ -1,6 +1,8 @@
 package dev.dwhipstock.pos.api
 
 import dev.dwhipstock.pos.StoreAssets
+import dev.dwhipstock.pos.restaurant.CounterSettings
+import dev.dwhipstock.pos.restaurant.KioskOrderLine
 import dev.dwhipstock.pos.restaurant.KioskOrderRequest
 import dev.dwhipstock.pos.restaurant.QuickServeService
 import io.ktor.http.ContentType
@@ -15,11 +17,22 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+/** A new order is stored with its first item (an empty order never is). */
 @Serializable
-data class NewCounterOrderRequest(val serviceMode: String = "TAKE_OUT")
+data class NewCounterOrderRequest(
+    val serviceMode: String = "TAKE_OUT",
+    val itemId: String,
+    val variantId: String,
+    val qty: Int = 1,
+    val note: String? = null,
+)
+
+@Serializable
+data class CounterModeRequest(val serviceMode: String)
 
 @Serializable
 data class CounterOrderStatusRequest(val status: String)
@@ -41,8 +54,11 @@ private val qsJson = Json { ignoreUnknownKeys = true }
 /**
  * The quick-serve counter (mounted only on a quick-serve store):
  *
- *  - staff (signed in): the order list, a new order, place / status, and a
- *    kiosk pairing code (manager);
+ *  - staff (signed in): a new order (with its first item), dine in / take
+ *    out, discard, the kiosk orders waiting to pay, the Orders panel (today's
+ *    paid orders) and their status, the counter settings, and a kiosk pairing
+ *    code (manager). Payment is the usual check tender / finalize: the order
+ *    is committed (numbered, sent to the kitchen) when its check closes;
  *  - the pickup board (open, like the customer menu: order numbers only):
  *    `GET /pickup` (the page for a TV) and `GET /pickup/board`;
  *  - the self-order kiosks (open routes, each checked here): `POST /kiosk/pair`
@@ -53,12 +69,24 @@ fun Route.quickServeRoutes(qs: QuickServeService, storeName: String, venueId: St
     val page by lazy { StoreAssets.readText("pickup.html") }
 
     get("/counter/orders") { call.respond(qs.list()) }
+    get("/counter/waiting") { call.respond(qs.waiting()) }
     post("/counter/orders") {
-        val req = qsJson.decodeFromString<NewCounterOrderRequest>(call.receiveText().ifBlank { "{}" })
-        call.respond(qs.createAtPos(req.serviceMode, call.sessionUser().userId))
+        val req = qsJson.decodeFromString<NewCounterOrderRequest>(call.receiveText())
+        call.respond(qs.createAtPos(req.serviceMode, KioskOrderLine(req.itemId, req.variantId, req.qty, req.note),
+            call.sessionUser().userId))
     }
-    post("/counter/orders/{id}/place") {
-        call.respond(qs.place(orderId(call), call.sessionUser().name))
+    get("/counter/orders/{id}") { call.respond(qs.view(orderId(call))) }
+    post("/counter/orders/{id}/mode") {
+        call.respond(qs.setMode(orderId(call), call.receive<CounterModeRequest>().serviceMode))
+    }
+    post("/counter/orders/{id}/discard") {
+        qs.discard(orderId(call))
+        call.respond(mapOf("discarded" to true))
+    }
+    get("/counter/settings") { call.respond(qs.settings()) }
+    put("/counter/settings") {
+        requireManagerSession(call)
+        call.respond(qs.updateSettings(call.receive<CounterSettings>()))
     }
     post("/counter/orders/{id}/status") {
         call.respond(qs.setStatus(orderId(call), call.receive<CounterOrderStatusRequest>().status))

@@ -26,21 +26,36 @@ class CheckScreen extends StatefulWidget {
   final int checkId;
   final String tableLabel;
 
-  /// A quick-serve counter order ("#101 · Take out"): no table to move it to,
-  /// and the header shows the order, not a table. The counter gets a fast
-  /// layout: every category on a rail, a dense grid, one tap = one more, and
-  /// a "New order" button. Pops with [nextOrder] when paid or when the
-  /// cashier asks for the next order.
+  /// A quick-serve counter order: no table to move it to, and the header
+  /// shows the order, not a table. The counter gets a fast layout: every
+  /// category on a rail, a dense grid, one tap = one more.
   final bool counterOrder;
 
-  /// Pop result: start the next counter order (same dine in / take out).
-  static const nextOrder = 'next';
+  /// Counter, embedded in the counter screen (the one flow): [checkId] 0 is
+  /// a new order that exists only here until its first item, which
+  /// [createOrder] stores (returns the new check id). [onFinished] replaces
+  /// leaving the screen: paid (true) or gone (emptied / discarded: false).
+  /// [onDiscard] drops the unpaid order (the bin on the rail), and
+  /// [panelTop] sits at the top of the order panel (dine in / take out).
+  final Future<int> Function(Item item, Variant variant, int qty, String? note)?
+  createOrder;
+  final void Function(bool paid)? onFinished;
+  final Future<void> Function()? onDiscard;
+  final Widget? panelTop;
   const CheckScreen({
     super.key,
     required this.checkId,
     required this.tableLabel,
     this.counterOrder = false,
+    this.createOrder,
+    this.onFinished,
+    this.onDiscard,
+    this.panelTop,
   });
+
+  /// The empty order the counter shows before its first item (never stored).
+  static Check emptyOrder() =>
+      Check(0, '', 'OPEN', 0, [], [], [], 0, 0, 0, 0, [], null);
 
   @override
   State<CheckScreen> createState() => _CheckScreenState();
@@ -51,6 +66,17 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   void onAppResume() => _refreshCheck();
 
   Check? _check;
+
+  /// The check on screen: [CheckScreen.checkId], or (counter) the order its
+  /// first item just created; 0 = a new order not stored yet.
+  late int _checkId = widget.checkId;
+
+  /// Counter: the first item's "create the order" call, while it runs (the
+  /// taps after it wait for it, so one order is created, not two).
+  Future<int>? _creating;
+
+  /// Embedded on the counter screen: never pops, tells the counter instead.
+  bool get _embedded => widget.onFinished != null;
   List<Item> _items = [];
   List<Category> _categories = [];
   String? _category;
@@ -75,27 +101,55 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   }
 
   @override
+  void didUpdateWidget(CheckScreen old) {
+    super.didUpdateWidget(old);
+    // the counter moved on: the next new order, or a kiosk order to pay
+    if (widget.checkId != old.checkId && widget.checkId != _checkId) {
+      _checkId = widget.checkId;
+      _creating = null;
+      _check = _checkId == 0 ? CheckScreen.emptyOrder() : null;
+      if (_checkId != 0) _refreshCheck();
+    }
+  }
+
+  @override
   void dispose() {
     _poll?.cancel();
     _flashTimer?.cancel();
     // leaving the bill sends whatever the kitchen doesn't have yet (best
-    // effort, never blocks; the store already handles voids on its own)
-    if (KitchenApi.enabled) KitchenApi.sendQuietly(widget.checkId);
+    // effort, never blocks; the store already handles voids on its own).
+    // A counter order goes to the kitchen when it is paid, by the store.
+    if (KitchenApi.enabled && !widget.counterOrder) {
+      KitchenApi.sendQuietly(_checkId);
+    }
     super.dispose();
   }
 
+  /// Paid, emptied or voided: back to where we came from, or (counter) on
+  /// to the next order.
+  void _leave({bool paid = false}) {
+    if (_embedded) {
+      widget.onFinished!(paid);
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   Future<void> _refreshCheck() async {
+    if (_checkId == 0) return; // a new counter order: nothing stored yet
+    final id = _checkId;
     try {
-      final check = await Api.getCheck(widget.checkId);
-      if (mounted) setState(() => _check = check);
+      final check = await Api.getCheck(id);
+      // the counter may have moved on to another order meanwhile
+      if (mounted && id == _checkId) setState(() => _check = check);
     } catch (_) {} // transient poll failures are fine
     _refreshKitchen();
   }
 
   Future<void> _refreshKitchen() async {
-    if (!KitchenApi.enabled) return;
+    if (!KitchenApi.enabled || widget.counterOrder) return;
     try {
-      final k = await KitchenApi.checkState(widget.checkId);
+      final k = await KitchenApi.checkState(_checkId);
       if (mounted) setState(() => _kitchen = k);
     } catch (_) {} // the Send count just stays as it was
   }
@@ -106,7 +160,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     final k = K.of(context);
     setState(() => _sending = true);
     try {
-      final r = await KitchenApi.send(widget.checkId);
+      final r = await KitchenApi.send(_checkId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -124,7 +178,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   Future<void> _reprintKitchen() async {
     final k = K.of(context);
     try {
-      final r = await KitchenApi.reprint(widget.checkId);
+      final r = await KitchenApi.reprint(_checkId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -166,7 +220,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     );
     if (picked == null) return;
     try {
-      final s = await KitchenApi.setGuests(widget.checkId, picked);
+      final s = await KitchenApi.setGuests(_checkId, picked);
       if (mounted) setState(() => _kitchen = s);
     } catch (e) {
       if (mounted) showApiError(context, e);
@@ -176,7 +230,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   Future<void> _load() async {
     try {
       final results = await Future.wait([
-        Api.getCheck(widget.checkId),
+        _checkId == 0
+            ? Future<Check>.value(CheckScreen.emptyOrder())
+            : Api.getCheck(_checkId),
         Api.items(includeInactive: true), // 86'd items grey out, not vanish
         Api.categories(),
       ]);
@@ -207,7 +263,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(L.of(context).emptyBillClosed)));
-        Navigator.of(context).pop();
+        _leave();
         return;
       }
       setState(() => _check = check);
@@ -239,9 +295,60 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       if (result == null) return;
       (variant, qty, note) = result;
     }
-    await _guarded(
-      () => Api.addLine(widget.checkId, item.id, variant.id, qty, note: note),
+    await _guarded(() => _addLine(item, variant, qty, note));
+  }
+
+  /// Counter: the first item stores the new order (with that item); the
+  /// taps made meanwhile wait for it, then add to it.
+  Future<Check> _addLine(Item item, Variant variant, int qty, String? note) async {
+    final create = widget.createOrder;
+    if (_checkId == 0 && create != null) {
+      final pending = _creating;
+      if (pending == null) {
+        final f = _creating = create(item, variant, qty, note);
+        try {
+          _checkId = await f;
+        } catch (_) {
+          _creating = null;
+          rethrow;
+        }
+        return Api.getCheck(_checkId);
+      }
+      await pending;
+    }
+    return Api.addLine(_checkId, item.id, variant.id, qty, note: note);
+  }
+
+  /// Counter: drop this unpaid order (nothing was paid, nothing went to
+  /// the kitchen), then the next one starts.
+  Future<void> _discard() async {
+    final q = Q.of(context);
+    final l = L.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(q.discardTitle),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.cancel),
+          ),
+          FilledButton(
+            key: const Key('discard-confirm'),
+            style: FilledButton.styleFrom(backgroundColor: T.destructive),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(q.discard),
+          ),
+        ],
+      ),
     );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.onDiscard?.call();
+      if (mounted) _leave();
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    }
   }
 
   Future<void> _voidCheck() async {
@@ -294,12 +401,12 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     if (reason == null || reason.isEmpty || !mounted) return;
 
     try {
-      await Api.voidCheck(widget.checkId, reason, pin);
+      await Api.voidCheck(_checkId, reason, pin);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(l.voidedBill(widget.checkId))));
-      Navigator.of(context).pop();
+      ).showSnackBar(SnackBar(content: Text(l.voidedBill(_checkId))));
+      _leave();
     } catch (e) {
       if (mounted) showApiError(context, e);
     }
@@ -334,19 +441,19 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       ),
     );
     if (bottles == null) return;
-    await _guarded(() => Api.setCorkage(widget.checkId, bottles));
+    await _guarded(() => Api.setCorkage(_checkId, bottles));
   }
 
   /// "Check please": print a provisional bill and open its preview. Non-mutating —
   /// the check stays open, so this just shows the current state and returns here.
   Future<void> _printBill({String? lang}) async {
     try {
-      final text = await Api.printBill(widget.checkId, lang: lang);
+      final text = await Api.printBill(_checkId, lang: lang);
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>
-              BillPreviewScreen(checkId: widget.checkId, text: text),
+              BillPreviewScreen(checkId: _checkId, text: text),
         ),
       );
     } catch (e) {
@@ -449,7 +556,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     if (ok != true || !mounted) return;
     await _guarded(
       () => Api.addOpenLine(
-        widget.checkId,
+        _checkId,
         name.text.trim(),
         int.parse(price.text) * 100,
         qty,
@@ -461,7 +568,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   /// each printed/paid on its own. When the last group settles the check
   /// closes and we pop back to the tables screen like a normal payment.
   Future<void> _openSplit(Check check) async {
-    if (KitchenApi.enabled) unawaited(KitchenApi.sendQuietly(widget.checkId));
+    if (KitchenApi.enabled && !widget.counterOrder) {
+      unawaited(KitchenApi.sendQuietly(_checkId));
+    }
     final closed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) =>
@@ -475,10 +584,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     }
   }
 
-  /// Paid in full: back to the tables; a counter goes on to the next order.
-  void _paidAndDone() => Navigator.of(
-    context,
-  ).pop(widget.counterOrder ? CheckScreen.nextOrder : null);
+  /// Paid in full: back to the tables; the counter goes on to the next order.
+  void _paidAndDone() => _leave(paid: true);
 
   @override
   Widget build(BuildContext context) {
@@ -528,32 +635,48 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       child: Column(
         children: [
           const SizedBox(height: 8),
-          IconButton(
-            icon: const Icon(LucideIcons.arrowLeft),
-            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          // the counter screen is home: nothing to go back to
+          if (!_embedded) ...[
+            IconButton(
+              icon: const Icon(LucideIcons.arrowLeft),
+              tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(height: 4),
+          ],
+          if (_embedded)
+            // unpaid, nothing sent anywhere: the cashier just drops it
+            IconButton(
+              key: const Key('discard-order'),
+              icon: const Icon(LucideIcons.trash2, color: T.destructive),
+              tooltip: Q.of(context).discard,
+              onPressed: _checkId != 0 && check.status == 'OPEN'
+                  ? _discard
+                  : null,
+            )
+          else
+            IconButton(
+              icon: const Icon(LucideIcons.trash2, color: T.destructive),
+              tooltip: l.voidBillManager,
+              onPressed:
+                  (check.status == 'OPEN' || check.status == 'TOTAL_LOCKED')
+                  ? _voidCheck
+                  : null,
+            ),
           const SizedBox(height: 4),
-          IconButton(
-            icon: const Icon(LucideIcons.trash2, color: T.destructive),
-            tooltip: l.voidBillManager,
-            onPressed:
-                (check.status == 'OPEN' || check.status == 'TOTAL_LOCKED')
-                ? _voidCheck
-                : null,
-          ),
-          const SizedBox(height: 4),
-          IconButton(
-            icon: const Icon(LucideIcons.arrowRightLeft),
-            tooltip: l.moveMerge,
-            // only while money is fluid: no tender, no split (server re-guards)
-            onPressed:
-                !widget.counterOrder &&
-                    check.status == 'OPEN' &&
-                    check.split == null
-                ? () => _moveOrMerge(check)
-                : null,
-          ),
+          // no tables at the counter: nothing to move to
+          if (!_embedded)
+            IconButton(
+              icon: const Icon(LucideIcons.arrowRightLeft),
+              tooltip: l.moveMerge,
+              // only while money is fluid: no tender, no split (server re-guards)
+              onPressed:
+                  !widget.counterOrder &&
+                      check.status == 'OPEN' &&
+                      check.split == null
+                  ? () => _moveOrMerge(check)
+                  : null,
+            ),
           const Spacer(),
           const LangActionsCompact(),
           const SizedBox(height: 8),
@@ -641,7 +764,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     fit: BoxFit.scaleDown,
                     child: Text(l.openItem, maxLines: 1),
                   ),
-                  onPressed: _check?.status == 'OPEN' ? _addOpenItem : null,
+                  onPressed: _check?.status == 'OPEN' && _checkId != 0
+                      ? _addOpenItem
+                      : null,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: T.navy,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -905,7 +1030,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       ),
                       Text(
                         [
-                          l.billNo(widget.checkId),
+                          if (_checkId != 0) l.billNo(_checkId),
                           if (check.lines.isNotEmpty)
                             l.itemCount(
                               check.lines.fold(0, (n, x) => n + x.qty),
@@ -953,6 +1078,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               ],
             ),
           ),
+          ?widget.panelTop,
           Expanded(
             child: check.lines.isEmpty && check.pendingLines.isEmpty
                 ? const _EmptyBill()
@@ -1108,7 +1234,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     ),
                   ],
                 ),
-                if (KitchenApi.enabled) ...[
+                // a counter order goes to the kitchen when it is paid
+                if (KitchenApi.enabled && !widget.counterOrder) ...[
                   const SizedBox(height: 10),
                   _kitchenRow(check),
                 ],
@@ -1117,47 +1244,6 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 // (long in French) never has to squeeze
                 Row(
                   children: [
-                    // counter: the next customer is one tap away, always
-                    if (widget.counterOrder) ...[
-                      SizedBox(
-                        height: 64,
-                        child: OutlinedButton(
-                          key: const Key('new-order'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: T.navy,
-                            side: const BorderSide(color: T.navy, width: 2),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            textStyle: T.text(
-                              size: 15,
-                              weight: FontWeight.w700,
-                            ),
-                          ),
-                          // an empty order is already the new one
-                          onPressed: check.lines.isEmpty
-                              ? null
-                              : () => Navigator.of(
-                                  context,
-                                ).pop(CheckScreen.nextOrder),
-                          child: SizedBox(
-                            width: 112,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(LucideIcons.plus, size: 20),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    Q.of(context).newOrder,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
                     Expanded(
                       child: SizedBox(
                         height: 64,
@@ -1191,16 +1277,19 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                               : check.split != null
                               ? () => _openSplit(check)
                               : () async {
-                                  if (KitchenApi.enabled) {
+                                  if (KitchenApi.enabled &&
+                                      !widget.counterOrder) {
                                     unawaited(
-                                      KitchenApi.sendQuietly(widget.checkId),
+                                      KitchenApi.sendQuietly(_checkId),
                                     );
                                   }
                                   final closed = await Navigator.of(context)
                                       .push<bool>(
                                         MaterialPageRoute(
-                                          builder: (_) =>
-                                              TenderScreen(check: check),
+                                          builder: (_) => TenderScreen(
+                                            check: check,
+                                            counterOrder: widget.counterOrder,
+                                          ),
                                         ),
                                       );
                                   if (closed == true && mounted) {
@@ -1319,7 +1408,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               minHeight: T.minTouch,
             ),
             onPressed: () =>
-                _guarded(() => Api.acceptPendingLine(widget.checkId, line.id)),
+                _guarded(() => Api.acceptPendingLine(_checkId, line.id)),
           ),
           IconButton(
             icon: const Icon(
@@ -1333,7 +1422,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               minHeight: T.minTouch,
             ),
             onPressed: () =>
-                _guarded(() => Api.rejectPendingLine(widget.checkId, line.id)),
+                _guarded(() => Api.rejectPendingLine(_checkId, line.id)),
           ),
         ],
       ),
@@ -1404,11 +1493,11 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                         () => _guarded(
                           () => line.qty > 1
                               ? Api.setLineQty(
-                                  widget.checkId,
+                                  _checkId,
                                   line.id,
                                   line.qty - 1,
                                 )
-                              : Api.removeLine(widget.checkId, line.id),
+                              : Api.removeLine(_checkId, line.id),
                         ),
                         width: 48,
                         height: 48,
@@ -1426,7 +1515,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                         LucideIcons.plus,
                         () => _guarded(
                           () => Api.setLineQty(
-                            widget.checkId,
+                            _checkId,
                             line.id,
                             line.qty + 1,
                           ),
@@ -1441,7 +1530,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 // Muted so it doesn't shout; tap = immediate delete (mistakes get re-added).
                 _stepBtn(
                   LucideIcons.trash2,
-                  () => _guarded(() => Api.removeLine(widget.checkId, line.id)),
+                  () => _guarded(() => Api.removeLine(_checkId, line.id)),
                   width: 48,
                   color: T.textMuted,
                   tooltip: l.deleteLine,
@@ -1468,7 +1557,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         child: const Icon(LucideIcons.trash2, color: T.destructive),
       ),
       onDismissed: (_) =>
-          _guarded(() => Api.removeLine(widget.checkId, line.id)),
+          _guarded(() => Api.removeLine(_checkId, line.id)),
       child: row,
     );
   }

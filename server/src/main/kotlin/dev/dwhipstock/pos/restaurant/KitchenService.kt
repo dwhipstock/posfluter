@@ -210,6 +210,9 @@ class KitchenService(
     /** Quick-serve: the order's number ("#101 · Take out") instead of a table on tickets and the screen. */
     var ticketLabel: ((checkId: Int, language: KitchenLanguage) -> String?)? = null
 
+    /** Quick-serve: true while an order is not paid yet — nothing of it goes to the kitchen. */
+    var holdSend: ((checkId: Int) -> Boolean)? = null
+
     /** Quick-serve: told (after commit) when the last open card of a check is bumped — the order is ready. */
     var onCheckDone: ((checkId: Int) -> Unit)? = null
 
@@ -548,6 +551,7 @@ class KitchenService(
      * the check was opened by a guest's phone.
      */
     fun send(checkId: Int, senderName: String? = null): KitchenSendResult {
+        if (holdSend?.invoke(checkId) == true) return KitchenSendResult(0, 0, 0, emptyList())
         val result = synchronized(sendLock) {
             transaction {
                 val p = plan(checkId)

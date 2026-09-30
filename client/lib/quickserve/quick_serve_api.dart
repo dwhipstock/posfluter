@@ -2,7 +2,13 @@ part of '../api.dart';
 
 /// One quick-serve order (Copper Lantern Express) as the counter sees it.
 class CounterOrder {
-  final int checkId, orderNumber, totalCents, outstandingCents, itemCount;
+  final int checkId, totalCents, outstandingCents, itemCount;
+
+  /// The customer's number (101...), given when the order is paid; null before.
+  final int? orderNumber;
+
+  /// A kiosk order's number while it waits to be paid (K12).
+  final int? kioskNumber;
 
   /// DINE_IN | TAKE_OUT
   final String serviceMode;
@@ -10,7 +16,7 @@ class CounterOrder {
   /// POS | KIOSK
   final String source;
 
-  /// NEW | PREPARING | READY | PICKED_UP
+  /// DRAFT | WAITING (unpaid) | PREPARING | READY | PICKED_UP (paid)
   final String status;
 
   /// The check's own status: OPEN (unpaid) | TOTAL_LOCKED | CLOSED (paid).
@@ -19,7 +25,8 @@ class CounterOrder {
 
   const CounterOrder({
     required this.checkId,
-    required this.orderNumber,
+    this.orderNumber,
+    this.kioskNumber,
     required this.serviceMode,
     required this.source,
     required this.status,
@@ -32,10 +39,11 @@ class CounterOrder {
 
   factory CounterOrder.fromJson(Map<String, dynamic> j) => CounterOrder(
     checkId: j['checkId'] as int,
-    orderNumber: j['orderNumber'] as int,
+    orderNumber: (j['orderNumber'] as num?)?.toInt(),
+    kioskNumber: (j['kioskNumber'] as num?)?.toInt(),
     serviceMode: j['serviceMode'] as String? ?? 'TAKE_OUT',
     source: j['source'] as String? ?? 'POS',
-    status: j['status'] as String? ?? 'NEW',
+    status: j['status'] as String? ?? 'DRAFT',
     checkStatus: j['checkStatus'] as String? ?? 'OPEN',
     totalCents: (j['totalCents'] as num? ?? 0).toInt(),
     outstandingCents: (j['outstandingCents'] as num? ?? 0).toInt(),
@@ -46,6 +54,13 @@ class CounterOrder {
   bool get paid => checkStatus == 'CLOSED';
   bool get takeOut => serviceMode == 'TAKE_OUT';
   bool get fromKiosk => source == 'KIOSK';
+
+  /// "#101" once paid, "K12" while a kiosk order waits.
+  String get label => orderNumber != null
+      ? '#$orderNumber'
+      : kioskNumber != null
+      ? 'K$kioskNumber'
+      : '';
 }
 
 /// The quick-serve counter's routes (only on a quick-serve store).
@@ -54,25 +69,66 @@ class QuickServeApi {
 
   static bool get enabled => StoreProfile.current.isQuickServe;
 
-  static Future<List<CounterOrder>> orders() async => [
-    for (final o in (await Api._get('/counter/orders')) as List)
-      CounterOrder.fromJson(o as Map<String, dynamic>),
+  static List<CounterOrder> _list(dynamic j) => [
+    for (final o in j as List) CounterOrder.fromJson(o as Map<String, dynamic>),
   ];
 
-  /// [mode] DINE_IN | TAKE_OUT
-  static Future<CounterOrder> create(String mode) async =>
+  /// The Orders panel: today's paid orders, newest first.
+  static Future<List<CounterOrder>> orders() async =>
+      _list(await Api._get('/counter/orders'));
+
+  /// Kiosk orders waiting to be paid at the counter, oldest first.
+  static Future<List<CounterOrder>> waiting() async =>
+      _list(await Api._get('/counter/waiting'));
+
+  static Future<CounterOrder> order(int checkId) async =>
+      CounterOrder.fromJson(await Api._get('/counter/orders/$checkId'));
+
+  /// A new order, stored with its first item ([mode] DINE_IN | TAKE_OUT).
+  static Future<CounterOrder> create(
+    String mode,
+    String itemId,
+    String variantId,
+    int qty, {
+    String? note,
+  }) async => CounterOrder.fromJson(
+    await Api._post('/counter/orders', {
+      'serviceMode': mode,
+      'itemId': itemId,
+      'variantId': variantId,
+      'qty': qty,
+      'note': ?note,
+    }),
+  );
+
+  /// Dine in / take out, until the order is paid.
+  static Future<CounterOrder> setMode(int checkId, String mode) async =>
       CounterOrder.fromJson(
-        await Api._post('/counter/orders', {'serviceMode': mode}),
+        await Api._post('/counter/orders/$checkId/mode', {'serviceMode': mode}),
       );
 
-  /// Done ringing: to the kitchen, on the pickup board as preparing.
-  static Future<CounterOrder> place(int checkId) async =>
-      CounterOrder.fromJson(await Api._post('/counter/orders/$checkId/place'));
+  /// Drop an unpaid order (nothing paid, nothing sent to the kitchen).
+  static Future<void> discard(int checkId) =>
+      Api._post('/counter/orders/$checkId/discard');
 
+  /// A paid order: PREPARING | READY | PICKED_UP.
   static Future<CounterOrder> setStatus(int checkId, String status) async =>
       CounterOrder.fromJson(
         await Api._post('/counter/orders/$checkId/status', {'status': status}),
       );
+
+  /// The counter's default dine in / take out (DINE_IN | TAKE_OUT).
+  static Future<String> defaultMode() async {
+    final j = await Api._get('/counter/settings') as Map<String, dynamic>;
+    return j['defaultServiceMode'] as String? ?? 'TAKE_OUT';
+  }
+
+  static Future<String> setDefaultMode(String mode) async {
+    final j =
+        await Api._put('/counter/settings', {'defaultServiceMode': mode})
+            as Map<String, dynamic>;
+    return j['defaultServiceMode'] as String? ?? mode;
+  }
 
   /// A one-time code for pairing a self-order kiosk (manager).
   static Future<({String code, int expiresInSeconds})> kioskCode() async {

@@ -18,18 +18,6 @@ class Q {
   };
 
   String get orders => _t('Commandes', 'Orders', 'Pedidos', 'Bestellungen');
-  String get newDineIn => _t(
-    'Nouvelle — sur place',
-    'New — dine in',
-    'Nuevo — para comer aquí',
-    'Neu — hier essen',
-  );
-  String get newTakeOut => _t(
-    'Nouvelle — pour emporter',
-    'New — take out',
-    'Nuevo — para llevar',
-    'Neu — zum Mitnehmen',
-  );
   String get dineIn =>
       _t('Sur place', 'Dine in', 'Para comer aquí', 'Hier essen');
   String get takeOut =>
@@ -38,12 +26,7 @@ class Q {
       _t('Commande n° $n', 'Order #$n', 'Pedido n.º $n', 'Bestellung Nr. $n');
 
   String status(String s) => switch (s) {
-    'NEW' => _t(
-      'En cours de saisie',
-      'Being rung',
-      'En captura',
-      'Wird erfasst',
-    ),
+    'DRAFT' || 'WAITING' => waitingToPay,
     'PREPARING' => _t(
       'En préparation',
       'Preparing',
@@ -79,10 +62,62 @@ class Q {
     'Diesen Code am Bestellterminal eingeben. $minutes Minuten gültig, einmalig.',
   );
   String get noOrders => _t(
-    'Aucune commande en cours',
-    'No open orders',
-    'No hay pedidos abiertos',
-    'Keine offenen Bestellungen',
+    'Aucune commande payée aujourd’hui',
+    'No paid orders today',
+    'No hay pedidos pagados hoy',
+    'Heute keine bezahlten Bestellungen',
+  );
+  String get waitingToPay => _t(
+    'En attente de paiement',
+    'Waiting to pay',
+    'Por pagar',
+    'Zahlung offen',
+  );
+  String get kiosk => _t('Borne', 'Kiosk', 'Quiosco', 'Terminal');
+  String kioskOrder(String n) => _t(
+    'Borne $n · à payer',
+    'Kiosk $n · to pay',
+    'Quiosco $n · por pagar',
+    'Terminal $n · zu zahlen',
+  );
+  String get noKioskOrders => _t(
+    'Aucune commande de borne en attente',
+    'No kiosk orders waiting',
+    'No hay pedidos de quiosco en espera',
+    'Keine wartenden Terminal-Bestellungen',
+  );
+  String get discard => _t(
+    'Annuler la commande',
+    'Clear order',
+    'Anular el pedido',
+    'Bestellung löschen',
+  );
+  String get discardTitle => _t(
+    'Annuler cette commande non payée ?',
+    'Clear this unpaid order?',
+    '¿Anular este pedido sin pagar?',
+    'Diese unbezahlte Bestellung löschen?',
+  );
+  String get switchTitle => _t(
+    'Annuler la commande en cours pour encaisser celle de la borne ?',
+    'Clear the order being rung to take this kiosk order?',
+    '¿Anular el pedido en curso para cobrar el del quiosco?',
+    'Aktuelle Bestellung löschen und die Terminal-Bestellung kassieren?',
+  );
+  String get recall => _t('Rappeler', 'Recall', 'Recuperar', 'Zurückholen');
+  String get reprint =>
+      _t('Réimprimer', 'Reprint', 'Reimprimir', 'Nachdrucken');
+  String get defaultMode => _t(
+    'Commande au comptoir par défaut',
+    'Counter orders start as',
+    'Los pedidos del mostrador empiezan como',
+    'Thekenbestellungen beginnen als',
+  );
+  String get serviceMode => _t(
+    'Sur place ou pour emporter',
+    'Dine in or take out',
+    'Para comer aquí o para llevar',
+    'Hier essen oder mitnehmen',
   );
   String get pickupBoard => _t(
     'Écran de retrait',
@@ -111,6 +146,18 @@ class Q {
   String get all => _t('Tout', 'All', 'Todo', 'Alle');
   String get newOrder =>
       _t('Nouvelle commande', 'New order', 'Nuevo pedido', 'Neue Bestellung');
+  String dineInCount(int n) => _t(
+    'Sur place : $n',
+    'Dine in: $n',
+    'Para comer aquí: $n',
+    'Hier essen: $n',
+  );
+  String takeOutCount(int n) => _t(
+    'Pour emporter : $n',
+    'Take out: $n',
+    'Para llevar: $n',
+    'Zum Mitnehmen: $n',
+  );
   String cashLine(String amount) => _t(
     'Comptant : $amount',
     'Cash: $amount',

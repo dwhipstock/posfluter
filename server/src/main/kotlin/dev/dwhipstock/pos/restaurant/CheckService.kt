@@ -165,6 +165,22 @@ internal fun receiptCardOf(json: String?): dev.dwhipstock.pos.sdk.ReceiptCard? =
     )
 }
 
+/**
+ * The quick-serve counter's side of a check (Copper Lantern Express). [paid]
+ * runs inside the closing transaction (the order gets its number there,
+ * before the receipt prints); the others after, and never block a sale.
+ */
+interface CounterHook {
+    /** The check is paid in full and closing: commit the counter order. Inside the transaction. */
+    fun paid(checkId: Int)
+    /** After the close committed: send the order to the kitchen. */
+    fun afterPaid(checkId: Int)
+    /** The check was cancelled (emptied, discarded, expired): the unpaid order is gone. */
+    fun cancelled(checkId: Int)
+    /** "#101 · Take out" on the receipt; null = not a counter order. */
+    fun receiptLabel(checkId: Int): String?
+}
+
 class CheckService(private val config: CustomerConfig) {
 
     private val log = LoggerFactory.getLogger(CheckService::class.java)
@@ -182,6 +198,9 @@ class CheckService(private val config: CustomerConfig) {
      */
     var forecourt: dev.dwhipstock.pos.forecourt.ForecourtHook? = null
 
+    /** The quick-serve counter (Copper Lantern Express), else null. See [CounterHook]. */
+    var counter: CounterHook? = null
+
     private fun afterForecourt(view: CheckView): CheckView {
         val hook = forecourt ?: return view
         try { hook.checkChanged(view.id) } catch (e: Exception) { log.warn("forecourt hook failed: ${e.message}") }
@@ -190,6 +209,9 @@ class CheckService(private val config: CustomerConfig) {
 
     private fun afterKitchen(view: CheckView): CheckView {
         afterForecourt(view)
+        if (view.status == "CANCELLED") counter?.let { c ->
+            try { c.cancelled(view.id) } catch (e: Exception) { log.warn("counter hook failed: ${e.message}") }
+        }
         val hook = kitchen ?: return view
         if (view.status == "VOID" || view.status == "CANCELLED") {
             try { hook.checkEnded(view.id) } catch (e: Exception) { log.warn("kitchen hook failed: ${e.message}") }
@@ -880,7 +902,11 @@ class CheckService(private val config: CustomerConfig) {
         return TenderView(tenderId, type.name, tenderedCents, applied.cents, rounding.cents, change.cents, groupId)
     }
 
-    fun finalizeCheck(checkId: Int): CheckView = afterForecourt(finalizeCheckTx(checkId))
+    fun finalizeCheck(checkId: Int): CheckView = afterForecourt(finalizeCheckTx(checkId)).also { view ->
+        counter?.let { c ->
+            try { c.afterPaid(view.id) } catch (e: Exception) { log.warn("counter hook failed: ${e.message}") }
+        }
+    }
 
     private fun finalizeCheckTx(checkId: Int): CheckView = transaction {
         val check = requireCheck(checkId)
@@ -903,6 +929,8 @@ class CheckService(private val config: CustomerConfig) {
             it[closedAt] = now
             it[shiftId] = shift
         }
+        // a counter order is committed here, before its receipt prints (its number is on it)
+        counter?.paid(checkId)
         Outbox.write("check.closed", "check", checkId.toString(),
             closedCheckPayload(check, shift, now))
         // stage 5 epilogue: cashier receipt through the customer's printer adapter
@@ -1121,6 +1149,7 @@ class CheckService(private val config: CustomerConfig) {
         return Receipt(
             checkId = checkId,
             tableLabel = table[DiningTables.nameOverride] ?: table[DiningTables.label],
+            orderLabel = counter?.receiptLabel(checkId),
             openedAt = VenueClock.local(check[Checks.openedAt]),
             closedAt = VenueClock.local(check[Checks.closedAt] ?: VenueClock.now()),
             items = items,
@@ -1143,10 +1172,39 @@ class CheckService(private val config: CustomerConfig) {
     fun voidCheck(checkId: Int, reason: String, managerId: String): CheckView =
         afterKitchen(voidCheckTx(checkId, reason, managerId))
 
-    private fun voidCheckTx(checkId: Int, reason: String, managerId: String): CheckView = transaction {
+    /** The store itself voids a check (no one signed in approves it): old test orders being cleaned up. */
+    fun systemVoid(checkId: Int, reason: String): CheckView =
+        afterKitchen(voidCheckTx(checkId, reason, "system", system = true))
+
+    /**
+     * Drop an unpaid check that was never sold: nothing tendered, so nothing to
+     * void. Like removing its last line (the check is CANCELLED, not VOID), with
+     * [reason] on the sync event. Quick-serve: a discarded or expired order.
+     */
+    fun cancelUnpaid(checkId: Int, reason: String): CheckView = afterKitchen(transaction {
+        val check = requireCheck(checkId)
+        if (check[Checks.status] !in listOf("OPEN", "TOTAL_LOCKED"))
+            throw ConflictException("check $checkId is ${check[Checks.status]}", "check_not_open")
+        if (!tenderedSoFar(checkId).isZero)
+            throw ConflictException("check $checkId has tenders applied", "void_has_tenders")
+        Checks.update({ Checks.id eq checkId }) {
+            it[status] = "CANCELLED"
+            it[closedAt] = VenueClock.now()
+        }
+        Outbox.write("check.cancelled", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("reason", reason)
+        })
+        loadCheck(checkId)
+    })
+
+    /** Money already applied to [checkId] (quick-serve: an unpaid order with a tender can't just expire). */
+    fun hasTenders(checkId: Int): Boolean = transaction { !tenderedSoFar(checkId).isZero }
+
+    private fun voidCheckTx(checkId: Int, reason: String, managerId: String, system: Boolean = false): CheckView = transaction {
         require(reason.isNotBlank()) { "void reason is required" }
         // defense-in-depth: the route already authorized this; re-check the grant on the authorizer
-        if (!GrantsRepo.has(managerId, Permissions.VOID))
+        if (!system && !GrantsRepo.has(managerId, Permissions.VOID))
             throw ConflictException("void requires the void grant or a manager's approval", "manager_approval_required")
 
         val check = requireCheck(checkId)

@@ -17,27 +17,58 @@ Plateau. Sync is one-way, store to portal, as for every store.
 
 ## How an order moves
 
-1. **A new order** gets the next number: 101, 102 and so on. Numbering starts
-   again at 101 each business day. Each order is marked *dine in* or *take out*.
-2. **From the POS**: *New — dine in* or *New — take out* opens the usual bill
-   screen, titled with the order (`#104 · Take out`). When the cashier goes
-   back to the order list, the order goes to the kitchen and shows on the
-   pickup board as *preparing*.
-3. **From a kiosk**: the order is sent the moment the customer taps *Place
-   order*. It arrives at the POS as an unpaid order with its number and goes
-   straight to the kitchen (tickets and the kitchen screen, when kitchen
-   tickets are on). Staff do not approve it first, unlike QR table orders.
-   The kiosk never takes payment. The cashier opens the order on the POS and
-   takes payment as for any bill.
-4. **Ready**: the order becomes ready when the kitchen screen bumps its last
-   card (kitchen and bar both, if it has both), or when the cashier taps
-   *Mark ready*. The number moves to the *Ready* column with a chime.
-5. **Picked up**: the cashier taps *Picked up*. The number leaves the board.
-   Once an order is both paid and picked up, it leaves the POS list.
+One flow for every order, like a burger chain: the customer pays first,
+whether they eat in or take out. Dine in or take out only decides a tray or
+a bag.
 
-A voided or cancelled order never shows on the board. Kitchen tickets and the
+1. **The counter opens on a new order**: the item grid and the order panel.
+   There is no order list to start from. A new order is not stored until its
+   first item: an empty order never shows anywhere, and leaving one discards it.
+2. **Dine in / Take out** is a toggle on the order panel (a tray or a bag).
+   A new order starts as the store's default (*Settings → Counter orders start
+   as*, take out unless changed). It can change until the order is paid. It
+   shows on the receipt, the kitchen ticket and screen, the pickup board and
+   the shift report (*Dine in: 12 · Take out: 30*).
+3. **Pay**: the usual pay screen (cash or card, the shift prompt, change due).
+   Only when the order is paid in full is it an order: it gets its number
+   (101, 102 and so on, again from 101 each business day), goes to the kitchen
+   (tickets and the kitchen screen, when kitchen tickets are on) and shows on
+   the pickup board as *preparing*. An unpaid order never goes to the kitchen.
+4. **The receipt** shows the number big (*Order #101 · Take out*). It closes
+   after 8 seconds, or on *Done*, and the next new order opens.
+5. **Clear order** (the bin on the left): drops an unpaid order. Nothing was
+   paid and nothing went to the kitchen, so no manager is needed.
+6. **Kiosk orders** arrive unpaid, as *waiting to pay*, with a kiosk number
+   (K1, K2... each day) that the kiosk shows the guest. They wait in the strip
+   at the top of the counter (*Kiosk  K12 $14.50*). The cashier taps one, it
+   loads on the order panel, Pay, and from there it is like any order: its
+   number (101...), the kitchen, the board. A kiosk order not paid within 30
+   minutes is dropped. Tapping one while ringing another order asks first,
+   then clears that order.
+7. **Ready**: when the kitchen screen bumps the order's last card (kitchen and
+   bar both, if it has both), or *Mark ready* on the **Orders** panel. The
+   number moves to the *Ready* column with a chime.
+8. **Picked up**: *Picked up* on the Orders panel. The number leaves the
+   board. The Orders panel lists today's paid orders (newest first) with
+   *Mark ready*, *Picked up*, *Recall* (back to ready) and *Reprint*.
+
+The store enforces all of this: only a paid order can be ready or picked up
+(`409 order_not_paid`), dine in / take out can't change once paid
+(`order_paid`), and a new order needs its first item. Kitchen tickets and the
 kitchen screen show the order number (`#101 · Take out`) where a pub shows
 the table.
+
+**Old test orders.** The first counter (PR #58) numbered and listed orders
+before they were paid. On its first start with this version, the store
+cleans up what it left: an empty unpaid order is dropped, and an unpaid one
+with items is voided as *Test order (old counter flow)*. Paid ones stay.
+
+Store routes (signed in): `POST /counter/orders` (a new order with its first
+item), `POST /counter/orders/{id}/mode`, `POST /counter/orders/{id}/discard`,
+`GET /counter/waiting` (the kiosk queue), `GET /counter/orders` (the Orders
+panel), `GET /counter/orders/{id}`, `POST /counter/orders/{id}/status`,
+`GET` / `PUT /counter/settings` (manager). Paying is the usual
+`/checks/{id}/tenders` and `/checks/{id}/finalize`.
 
 ## The kiosk app
 
@@ -53,8 +84,9 @@ and never runs a store of its own.
   the counter*. This is a note only; nothing is blocked.
 - **Cart** (quantities, subtotal, "taxes added at the counter"), then **Place
   order**. There is no review or confirmation step after that. The last
-  screen says *Your order number is 123. Please pay at the counter.* and goes
-  back to Welcome after 10 seconds, or sooner on a tap.
+  screen says *Your order number is K12. Please pay at the counter.* and goes
+  back to Welcome after 10 seconds, or sooner on a tap. The guest pays with
+  K12 at the counter and is called by the number on the receipt (101...).
 - **Idle timeout**: after 90 seconds with no touch mid-order, the cart is
   cleared and the kiosk goes back to Welcome.
 
@@ -73,7 +105,8 @@ and sends it as `X-Device-Token`. Store routes: `POST /kiosk/pair`,
 for a TV or any browser. It has two columns, *Preparing* and *Ready*, with
 big numbers. A new ready number flashes and plays a chime; tap *Sound* once
 to allow sound, since browsers block it until someone taps the page. The page
-signs in to nothing and shows order numbers only, read from
+signs in to nothing and shows paid order numbers only, each with *Sur place
+· Dine in* or *Pour emporter · Take out* under it, read from
 `GET /pickup/board`. The POS's *Pickup board* button shows the exact address.
 
 ## Photos
@@ -97,22 +130,23 @@ lemonade) start without photos and show their letter badges.
    (`scripts/demo-up.sh`), it syncs to the Copper Lantern portal. The script
    prints the POS, board, kitchen and kiosk addresses.
 2. **POS**: `cd client && flutter run -d macos --dart-define=SERVER_URL=http://localhost:8098`.
-   Sign in as the manager (PIN 1234). The POS opens on the order list; there
-   is no floor plan.
+   Sign in as the manager (PIN 1234). The POS opens on a new order; there
+   is no floor plan and no order list.
 3. **Board and kitchen**: open `/pickup` on the TV (or a second browser
    window) and `/kitchen` in another.
 4. **Kiosk**: `scripts/kiosk-setup.sh --kiosk <adb serial>` installs and
    starts it. On the POS, tap *Pair a kiosk* and type the code on the kiosk.
 5. **Order at the kiosk**: pick Español, *Para llevar*, a burger, large fries
    and an IPA. The ID note appears. Tap *Hacer el pedido*. The kiosk shows
-   **101**. At the same moment, #101 appears on the POS as unpaid, on the
-   kitchen screen, and under *Preparing* on the board.
-6. **Order at the counter**: *New — dine in*, ring two items, then go back.
-   #102 goes to the kitchen and the board.
-7. **Kitchen**: bump #101 at Kitchen and at Bar. #101 moves to *Ready* with
-   the chime.
-8. **Counter**: open #101, take cash or card, then tap *Picked up*. #101
-   leaves the board.
+   **K1**. At the same moment, *K1* appears in the kiosk strip on the POS.
+   Nothing is in the kitchen or on the board yet: it is not paid.
+6. **Pay the kiosk order**: tap *K1*, Pay, cash. The receipt says
+   *Order #101 · Take out*; #101 appears on the kitchen screen and under
+   *Preparing* on the board. The receipt closes and a new order opens.
+7. **Order at the counter**: tap *Dine in*, ring two items, Pay. #102 goes to
+   the kitchen and the board.
+8. **Kitchen**: bump #101 at Kitchen and at Bar. #101 moves to *Ready* with
+   the chime. On the POS, *Orders → Picked up* on #101: it leaves the board.
 9. **Portal**: the Express venue appears next to Vieux-Port and Plateau, with
    its sales.
 
@@ -121,5 +155,6 @@ Stop the store with `scripts/kiosk-setup.sh --stop`.
 ## Not in scope
 
 - Paying at the kiosk: every order is paid at the counter.
+- Holding an unpaid counter order to finish later: ring it, pay it, or clear it.
 - Item modifiers beyond sizes: kiosk lines carry no free-text notes.
 - A second POS terminal: the counter is one POS plus any number of kiosks.
