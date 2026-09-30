@@ -14,11 +14,13 @@ import 'desktop_store.dart';
 import 'home.dart';
 import 'kiosk/kiosk_app.dart';
 import 'i18n.dart';
+import 'keyboard/pos_keyboard.dart';
 import 'reader/reader_app.dart';
 import 'retail/sp_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'server_discovery.dart';
+import 'widgets/camera_capture.dart';
 import 'widgets/open_shift_prompt.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -89,6 +91,8 @@ Future<void> main() async {
   // Windows: start this app's own store (a child process) before the UI
   // waits on it; the Android app's store service starts itself.
   await DesktopStore.start();
+  // Windows: the app's own on-screen keyboard instead of the touch keyboard.
+  await PosKeyboard.install();
   await Prefs.instance.load(); // device-level fallback until login hydrates
   await Api.loadServerConfig(); // manual override + last-discovered store URL
   // A saved address is a hint, not a lock. If it disappears while the app is
@@ -142,6 +146,9 @@ Future<void> main() async {
       (_) => false,
     );
   };
+  // Windows: "Take a photo" opens our own camera page (Android keeps the
+  // system camera app).
+  CameraCaptureDelegate.register(rootNavigatorKey);
   runApp(const PosApp());
 }
 
@@ -215,6 +222,7 @@ class PosApp extends StatelessWidget {
             darkTheme: sagePoppy ? buildSagePoppyTheme(Brightness.dark) : null,
             themeMode: sagePoppy ? ThemeMode.system : ThemeMode.light,
             home: const StartupGate(),
+            builder: PosKeyboard.wrap,
           );
         },
       ),

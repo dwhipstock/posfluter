@@ -306,7 +306,7 @@ class QuickServeService(
                 ?: config.receiptPolicy.locale
             val lines = KioskTicket.render(
                 checks.billSnapshot(v.checkId), v.orderNumber!!, v.serviceMode == "TAKE_OUT", v.hasAlcohol,
-                config.receiptPolicy.withLocale(locale), config.profile.currency,
+                config.receiptPolicy.withLocale(locale), config.profile.currency, config.legalAge,
             )
             config.printer.printTicket(PrintJob(v.checkId, lines))
         } catch (e: Exception) {
@@ -385,8 +385,15 @@ class QuickServeService(
         }
     }
 
-    override fun receiptLabel(checkId: Int): String? =
-        committed(checkId)?.let { ticketLabel(checkId, KitchenLanguage.BOTH) }
+    // the receipt says "Dine in" / "Take out" in its own print language (a
+    // reprint in French or Spanish too), never two languages at once
+    override fun receiptOrder(checkId: Int): dev.dwhipstock.pos.sdk.ReceiptOrder? =
+        committed(checkId)?.let { row ->
+            dev.dwhipstock.pos.sdk.ReceiptOrder(
+                number = row[CounterOrders.orderNumber]?.let { "#$it" } ?: "—",
+                takeOut = row[CounterOrders.serviceMode] == "TAKE_OUT",
+            )
+        }
 
     /** The order row when it is committed (paid, numbered), else null. */
     private fun committed(checkId: Int): ResultRow? = transaction {

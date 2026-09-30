@@ -8,7 +8,7 @@ button, managers only), on the Android tablet and the Windows build:
   price update for anything already on the menu at a different price).
 - **Chat**: type, or dictate with the keyboard's mic, things like
   "add Caesar salad $14 under starters", "raise all burgers by a dollar",
-  "rename the Reuben to Montreal Smoked Meat", "86 the salmon",
+  "rename the Reuben to Pastrami on Rye", "86 the salmon",
   "move desserts before drinks".
 
 It is an add-on, **off by default**, online only, and manager-PIN gated.
@@ -35,7 +35,7 @@ same outbox events, so the portal gets them exactly like a hand edit
 (store → portal, one way; nothing writes the portal directly).
 
 Languages: the catalog has English and French names. A bilingual store (the
-Québec pubs) gets both filled when the menu or the manager gives both; when
+Copper Lantern pubs) gets both filled when the menu or the manager gives both; when
 only one is given the other is left blank in the preview and filled with the
 same text on Apply (the menu editor requires both). New items get a
 two-letter tile badge from their name.

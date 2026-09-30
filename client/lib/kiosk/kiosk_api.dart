@@ -37,14 +37,23 @@ class KioskOrderResult {
 class KioskConfig {
   final String storeName, currency;
   final List<String> locales;
-  const KioskConfig(this.storeName, this.currency, this.locales);
+
+  /// The legal drinking age the ID note names; older stores send none (21).
+  final int legalAge;
+  const KioskConfig(
+    this.storeName,
+    this.currency,
+    this.locales, {
+    this.legalAge = 21,
+  });
   factory KioskConfig.fromJson(Map<String, dynamic> j) => KioskConfig(
     j['storeName'] as String? ?? '',
-    j['currency'] as String? ?? 'CAD',
+    j['currency'] as String? ?? 'USD',
     [
       for (final l in (j['locales'] as List? ?? const ['en', 'fr']))
         if (l is String) l,
     ],
+    legalAge: (j['legalAge'] as num?)?.toInt() ?? 21,
   );
 }
 

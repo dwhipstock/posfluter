@@ -53,7 +53,7 @@ class _Store {
 
   /// A kiosk order waiting to pay: #112 (numbered at the kiosk) with a
   /// brownie and a cheesecake.
-  void kioskOrder({int number = 112}) {
+  void kioskOrder({int number = 112, bool beer = false}) {
     final id = _nextCheck++;
     modes[id] = 'DINE_IN';
     sources[id] = 'KIOSK';
@@ -61,7 +61,12 @@ class _Store {
     numbers[id] = number;
     _addLine(id, 'brownie', 'brownie:regular', 1);
     _addLine(id, 'cheesecake', 'cheesecake:regular', 1);
+    if (beer) _addLine(id, 'lantern-lager', 'lantern-lager:pint', 1);
   }
+
+  bool _alcohol(int id) => (lines[id] ?? []).any(
+    (l) => items.firstWhere((i) => i['id'] == l['itemId'])['isAlcohol'] == true,
+  );
 
   List<dynamic> get items => [
     ...(_fx('items') as List),
@@ -139,6 +144,7 @@ class _Store {
       0,
       (n, l) => n + (l['qty'] as int),
     ),
+    'hasAlcohol': _alcohol(id),
   };
 
   void _addLine(int id, String itemId, String variantId, int qty) {
@@ -569,6 +575,29 @@ void main() {
       expect(find.text('#112'), findsNothing, reason: 'paid: off the queue');
       expect(find.text('No kiosk orders waiting'), findsOneWidget);
       expect(store.created, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    }, () => store.client);
+  });
+
+  testWidgets('a kiosk order with a beer: the strip says check ID, 21+', (
+    tester,
+  ) async {
+    StoreProfile.current = const StoreProfile(
+      kind: 'quick-serve',
+      country: 'US',
+      currency: 'USD',
+      locales: ['en', 'fr', 'es', 'de', 'af'],
+      legalAge: 21,
+    );
+    final store = _Store()
+      ..kioskOrder(number: 112)
+      ..kioskOrder(number: 113, beer: true);
+    await http.runWithClient(() async {
+      await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+      expect(find.byKey(const Key('kiosk-id-1')), findsNothing);
+      expect(find.byKey(const Key('kiosk-id-2')), findsOneWidget);
+      expect(find.text('21+'), findsOneWidget);
+      expect(find.byTooltip('Alcohol — check ID (21+)'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     }, () => store.client);
   });

@@ -1,12 +1,14 @@
 # Local demo runbook
 
-Three fictional stores of one owner (tenant `copperlantern`): two Montréal
-pubs in `America/New_York`, CAD, English/French, and a Los Angeles bottle
-shop in USD, English/Spanish (below):
+Three fictional stores of one owner (tenant `copperlantern`): two Raleigh,
+North Carolina pubs in `America/New_York`, USD, English (French, Spanish,
+German, Afrikaans selectable), and a Los Angeles bottle shop in USD,
+English/Spanish (below). Copper Lantern moved from Montréal: see
+[Copper Lantern moved to Raleigh](#copper-lantern-moved-to-raleigh-existing-devices).
 
 | store | venue id | runs on | cloud key (`.env.local`) |
 | --- | --- | --- | --- |
-| Copper Lantern — Vieux-Port | `vieux-port` | the Android tablet | `STORE_API_KEY` |
+| Copper Lantern — Glenwood South | `vieux-port` | the Android tablet | `STORE_API_KEY` |
 | Copper Lantern — Plateau | `plateau` | this Mac (`DesktopMain.kt`, `POS_VENUE=plateau`) | `STORE_API_KEY_PLATEAU` |
 | Sage & Poppy Bottle Shop | `sage-poppy` | this Mac, `:8082` (`POS_VENUE=sage-poppy`); or the Sage & Poppy app on the same tablet, see [Two apps on one tablet](#two-apps-on-one-tablet) | `STORE_API_KEY_SAGE_POPPY` |
 
@@ -54,9 +56,84 @@ The old Mac `store` container is no longer started (compose profile
 `mac-store`). Do not start it next to the tablet: the tablet was imported from
 that database, so both would push as the same store.
 
+## Copper Lantern moved to Raleigh (existing devices)
+
+Copper Lantern is now a fictional pub brand in **Raleigh, North Carolina**
+(it was Montréal). What changed, in the code (no setting to flip):
+
+| | before (Montréal) | now (Raleigh) |
+| --- | --- | --- |
+| stores | Vieux-Port, Plateau, Express | **Copper Lantern — Glenwood South** (id still `vieux-port`), Plateau, Express |
+| address / phone | Montréal, +1 514 | Glenwood South 412 Lantern Row, Raleigh, NC 27601 · (919) 555-0142; Plateau 430 Lantern Row · (919) 555-0187; Express 418 Lantern Row · (919) 555-0163 (all fictional) |
+| zone | America/Toronto | America/New_York (same clock) |
+| money | CAD | **USD**, still `$1,234.56`; cash still rounds to the nickel, card exact |
+| tax | GST 5% + QST 9.975%, registration numbers | **NC sales tax 6.75%** (state 4.75% + Wake County 2%) + **Wake prepared food tax 1%** on all food and drink = 7.75%; codes `NC_SALES`, `WAKE_FOOD`; no registration lines |
+| receipts, tickets | French + English lines | **English only** by default; press-and-hold print in FR / ES / DE / AF still works |
+| app language | English first | English first; FR / ES / DE / AF selectable |
+| legal age | 18 | **21** (kiosk note "Alcohol — 21+ only…", a 21+ ID badge on kiosk orders at the counter; `POS_LEGAL_AGE` / `legal.age` still override) |
+| Stripe | CAD account (`STRIPE_KEY`) | a **USD** test account (`STRIPE_KEY_US`) |
+
+Menu renames (item ids and photos unchanged): Québec Dry Cider → Orchard Dry
+Cider, Canadian Lager → American Lager, Eastern Townships Pinot Noir → Oregon
+Pinot Noir, Eastern Townships Riesling → Finger Lakes Riesling, Montérégie
+Rosé → Yadkin Valley Rosé, Québec Sparkling Brut → Sparkling Brut, Québec Ice
+Cider → Ice Cider, Smoked Caesar → Smoked Bloody Mary, Montreal Reuben →
+Classic Reuben (corned beef), Québec Harvest Salad → Harvest Salad; the lager
+is "brewed in Raleigh", the hazy IPA "from a Raleigh microbrewery", the Old
+Fashioned uses bourbon. Poutine stays. Spanish, German and Afrikaans names
+follow.
+
+**The migration runs by itself** on every start of a Copper Lantern store
+(`CopperLanternRaleighMove.kt` in
+`server/src/main/kotlin/dev/dwhipstock/pos/customers/copperlantern/`). It only
+changes values that still hold the old Montréal ones:
+
+- the receipt address and phone (any Montréal / Québec address, any +1 514 or
+  +1 416 number) → the store's Raleigh ones;
+- the footer "Merci de votre visite ! · Thank you for visiting!" → "Thank you
+  for visiting!";
+- the zone (empty, America/Toronto or America/Montreal) → America/New_York;
+- kitchen ticket language "both" → the store default (English);
+- the renamed items' French and English names and descriptions, and their
+  es / de / af names.
+
+A name, description or setting a manager edited is kept. It never touches item
+ids, prices, photos, categories, rooms, tables, floor objects, staff or sales;
+old closed sales keep their GST/QST as history. A second run changes nothing.
+A store that has synced sends one catalog snapshot of the renamed items to the
+portal. It writes the marker `copperlantern_raleigh_v1` in `sync_state` and
+logs a line starting `Copper Lantern → Raleigh, NC:` when it changed
+something.
+
+**On each device** (back up the store database first, even though nothing is
+deleted: copy `.demo/<store>/pos.db`, or on the tablet back up the app's data):
+
+- **Tablet (Glenwood South)**: install the new APK over the old one
+  (`adb install -r`, keeps the data) and open the app.
+- **Mac, Plateau / Express**: rebuild the store jar and restart the store
+  (`scripts/demo-autostart.sh restart --store plateau`, or `scripts/demo-up.sh`;
+  Express: `scripts/kiosk-setup.sh --store`).
+- **Stripe on the tablet**: `scripts/tablet-stripe-config.sh` now pushes
+  `STRIPE_KEY_US`. A CAD key is refused (Card (Stripe) off; the simulator and
+  cash still work).
+
+**Check it**: `GET /health` says `"currency":"USD"`, `"country":"US"`,
+`"legalAge":21` and `"venue":"Copper Lantern — Glenwood South"`;
+`GET /settings` has the Raleigh address; a test receipt shows the two NC tax
+lines and no French.
+
+**Portal**: the brand pack is USD. The cloud env now lists
+`vieux-port=Copper Lantern — Glenwood South` in `STORES`, the three Copper
+Lantern stores as `USD` / `US` in `STORE_CURRENCIES` / `STORE_COUNTRIES`, and
+`REPORTING_CURRENCY=USD` (every store is USD, no FX needed). For the hosted
+portal, make the same edits in `clients/copperlantern/.env` on the server and
+restart the API: names and currency follow env on every boot. The zone is set
+on insert only, and America/Toronto is the same clock as America/New_York, so
+nothing to do there.
+
 ## Sage & Poppy Bottle Shop (the US retail store)
 
-The owner's third store, and the first outside Canada: a fictional
+The owner's third store, and the first retail one: a fictional
 neighbourhood liquor store in Los Angeles (`POS_VENUE=sage-poppy`), its own
 brand (sage and poppy, not copper), **USD**, **English + Spanish**,
 `America/Los_Angeles`, and a **retail counter** instead of tables.
@@ -69,7 +146,7 @@ brand (sage and poppy, not copper), **USD**, **English + Spanish**,
 | shelf | ~50 fictional products, each with a made-up UPC-A (number system 4 = in-store codes, valid check digits) |
 | money | 9.5% sales tax on taxable goods (snacks and ice exempt), CRV bottle deposit per container × pack on its own untaxed line; cash rounds to the nickel (see Cash rounding) |
 | age | ID check at 21 before age-restricted items can be paid for (`POS_LEGAL_AGE`; tablet: `legal.age` in store.properties) |
-| payments | cash, and card on the counter's own external terminal. **No Stripe**: the Stripe integration is Canada-only (CAD) for now |
+| payments | cash, and card on the counter's own external terminal (no Stripe here) |
 
 `scripts/demo-up.sh` starts it (after Plateau) and seeds five counter sales
 once (`scripts/demo-seed-retail.py`).
@@ -239,7 +316,8 @@ new, empty portal). `scripts/demo-up.sh` can do the same for its store with
 ### The portal with two currencies (a multi-currency client)
 
 The legacy single-portal demo (`scripts/demo-up.sh`) still puts all three
-stores in one tenant; a real multi-currency client would look like this.
+stores in one tenant, all in USD now. A client with stores in two currencies
+(say CA$ and US$) would look like this.
 "All stores" never adds CAD and USD together: each store is shown exactly in
 its own currency (US$ / CA$), the headline figures have exact per-currency
 rows, and the combined figure is an **approximate** CAD total at the fixed
@@ -274,7 +352,7 @@ many buy from the shop too), builds the counter for the web and opens the
 | money | 8.25% Texas sales tax on taxable goods (candy, soft drinks, prepared food, general goods); groceries, snack foods, water, milk, OTC medicine and ice exempt; **fuel: no sales tax** (fuel taxes are in the pump price); cash rounds to the nickel |
 | age | ID check at 21 for beer, tobacco and vape. `age.check=always` (default) or `looks-under:40` (`POS_AGE_CHECK`): a cashier may pass a customer who clearly looks over 40 without an ID, never for tobacco and vape |
 | deals | 2 for $5 on 16 oz energy drinks, hot dog + fountain drink $3, $1 off a coffee with 8+ gallons of (postpay) fuel — discount lines before tax |
-| payments | cash, and card on the counter's own terminal (no Stripe: CAD only) |
+| payments | cash, and card on the counter's own terminal (no Stripe here) |
 
 ### Demo steps
 
@@ -313,7 +391,7 @@ by grade with gallons and margin next to in-store sales and margin). Locally:
 here): see `docs/new-client-in-a-day.md` for the `new-client.sh pronghorn …`
 line and the DNS record to create.
 
-## Vieux-Port tablet → this Mac
+## Glenwood South tablet (`vieux-port`) → this Mac
 
 The tablet reads its cloud settings from app-private
 `store-cloud.properties` (`cloud.url`, `cloud.apiKey`, `portal.url`,
@@ -332,7 +410,7 @@ The tablet reads its cloud settings from app-private
 4. At startup the POS validates and applies them (`adb logcat -s TabletStore`
    shows `Cloud sync re-pointed to …`): it keeps its store identity, keeps the
    previous settings as `store-cloud.properties.prev`, and re-sends its whole
-   outbox so the local portal shows Vieux-Port's full history within a minute.
+   outbox so the local portal shows Glenwood South's full history within a minute.
    A store that has never synced has no identity to keep: it is refused
    (`REFUSED to re-point cloud sync` in the log; it starts normally on its
    current settings) unless you pass `--install-id <id>` explicitly.
@@ -341,7 +419,7 @@ Plain `http://` is accepted only to a private LAN address (10/8, 172.16/12,
 192.168/16); anything else must be `https://`. The Mac's DHCP address can
 change — re-run step 3 if it does. With the Mac off or unreachable the tablet
 keeps starting, signing in and selling; only its sync pauses. To send the
-tablet back to another cloud, stage that cloud's URL and Vieux-Port key the
+tablet back to another cloud, stage that cloud's URL and `vieux-port` key the
 same way.
 
 ## Two apps on one tablet
@@ -353,7 +431,7 @@ code, each with its own everything:
 | | Copper Lantern POS | Sage & Poppy POS |
 | --- | --- | --- |
 | build | `flutter build apk --release` (as always) | `flutter build apk --release --dart-define=POS_BRAND=sagepoppy` |
-| app id | `dev.dwhipstock.pos_client` (unchanged, so the live Vieux-Port install upgrades in place and keeps its data) | `dev.dwhipstock.pos_sagepoppy` |
+| app id | `dev.dwhipstock.pos_client` (unchanged, so the live Glenwood South install upgrades in place and keeps its data) | `dev.dwhipstock.pos_sagepoppy` |
 | store | `vieux-port` on `:8080` | `sage-poppy` on `:8082` |
 | staff app / guest QRs | `http://<tablet IP>:8080/…` | `http://<tablet IP>:8082/…` |
 | database, photos, receipts, cloud key, install id | the app's own private files | its own private files |
@@ -572,16 +650,16 @@ Bar, Sushi Bar…) on that station's printer, its kitchen screen, or both.
 
 | Station | Gets | Output |
 |---|---|---|
-| Cuisine / Kitchen | Starters, Burgers & Sandwiches, Mains & Salads, Desserts, anything unmapped (the default station) | printer + screen |
+| Kitchen | Starters, Burgers & Sandwiches, Mains & Salads, Desserts, anything unmapped (the default station) | printer + screen |
 | Bar | Beer & Cider, Wine, Cocktails, and any drink in another category (a Plateau Special cocktail) | printer + screen |
-| Bar à sushis / Sushi Bar (Plateau only) | Sushi & Sake | printer + screen |
+| Sushi Bar (Plateau only) | Sushi & Sake | printer + screen |
 
 Per station: French and English names, **output** (printer, screen or both),
 printer IP and port (blank = the receipt printer, so the demo can run every
 station on the one printer), paper **80 or 58 mm**, and **Test print**. Each
 menu category picks a station (or "No ticket"); **per-item overrides** win
-over the category. Also here: ticket language (the store's, French, English
-or both), the default station, the screen's timer colours (yellow after 10
+over the category. Also here: ticket language (the store's, which is
+English; French, English or both), the default station, the screen's timer colours (yellow after 10
 min, red after 20 by default) and the new-order sound.
 
 **On the floor**
@@ -590,11 +668,12 @@ min, red after 20 by default) and the new-order sound.
   a reprint button and a **guests** count for the ticket header. Leaving the
   bill or tapping Pay also sends, so nothing is forgotten; it never waits on a
   printer.
-- First send to a station: **COMMANDE / ORDER**. Later sends print only the
-  new or increased items: **AJOUT / ADD**. Removing or reducing a sent item,
-  or voiding the whole bill, prints **ANNULÉ / VOID** (black bars) to that
+- First send to a station: **ORDER**. Later sends print only the
+  new or increased items: **ADD**. Removing or reducing a sent item,
+  or voiding the whole bill, prints **VOID** (black bars) to that
   station; a changed note is a VOID of the old line plus an ADD. Reprint marks
-  the copy **RÉIMPRESSION / REPRINT**. Tickets carry the table, bill number,
+  the copy **REPRINT**. (In English, the store's language; set the ticket
+  language to French or both for COMMANDE / AJOUT / ANNULÉ.) Tickets carry the table, bill number,
   server, time, guests, and each item with its size and note.
 - The staff phone app sends to the kitchen after adding lines or accepting a
   guest's order.
@@ -642,19 +721,19 @@ nothing, so the bill can always be paid another way.
    Developers → API keys → copy the **secret test key** (`sk_test_…`).
 2. Put it in the gitignored `.env` at the repo root (never commit it):
    ```sh
-   STRIPE_KEY=sk_test_...
+   STRIPE_KEY_US=sk_test_...   # the USD account: every store is USD now
    # optional; otherwise the store creates/reuses its own Terminal Location
    # STRIPE_LOCATION_ID=tml_...
    ```
 3. **Tablet**: push it and restart the POS:
    ```sh
-   scripts/tablet-stripe-config.sh        # merges stripe.secretKey into store.properties
+   scripts/tablet-stripe-config.sh        # merges stripe.secretKey (STRIPE_KEY_US) into store.properties
    scripts/tablet-stripe-config.sh --off  # remove it again
    adb logcat -s TabletStore | grep 'Stripe:'
    ```
    The key goes into `/sdcard/Android/data/dev.dwhipstock.pos_client/files/store.properties`
    next to `print.receipts` (other lines are kept).
-   **Desktop / docker store**: `STRIPE_KEY` (and optional `STRIPE_LOCATION_ID`)
+   **Desktop / docker store**: `STRIPE_KEY_US` (and optional `STRIPE_LOCATION_ID`)
    in the environment; `scripts/demo-up.sh` reads it from `.env` for Plateau,
    and both compose files pass it through. `POS_CONFIG_FILE` with
    `stripe.secretKey=` works too.
@@ -670,12 +749,13 @@ and refund events carry only the tender type `STRIPE` and the Stripe
 PaymentIntent / refund ids.
 
 On startup (in the background, never gating anything) the store reads the
-Stripe account. The store sells in CAD, so the account must be a **Canadian
-(CAD) account**: any other default currency disables Stripe, logged as
-`Stripe: DISABLED — the Stripe account's currency is …`, and the Pay screen
-shows "Stripe is off: the Stripe account is not in CAD". Unless
-`STRIPE_LOCATION_ID` is set, the store reuses a Terminal Location tagged with
-its store id, or creates one (idempotently) with a fictional Montréal address.
+Stripe account. The store sells in USD, so the account must be a **US
+(USD) account**: any other default currency (the old CAD one too) disables
+Stripe, logged as `Stripe: DISABLED — the Stripe account's currency is …`, and
+the Pay screen shows "Stripe is off: the Stripe account is not in the store's
+currency". Unless `STRIPE_LOCATION_ID` is set, the store reuses a Terminal
+Location tagged with its store id, or creates one (idempotently) with a
+fictional US address.
 Its id is kept locally in `sync_state`.
 
 ### Taking a payment

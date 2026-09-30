@@ -78,15 +78,15 @@ class ScanToOrderAndShiftTest {
         c.post("/checks/$checkId/pending-lines/$towerLine/accept").let { assertEquals(HttpStatusCode.OK, it.status) }
         val afterReject = c.post("/checks/$checkId/pending-lines/$cigLine/reject")
         val cleaned = json.parseToJsonElement(afterReject.bodyAsText()).jsonObject
-        assertEquals(2328L, cleaned["grandTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(2182L, cleaned["grandTotalCents"]!!.jsonPrimitive.long)
         assertEquals(0, cleaned["pendingLines"]!!.jsonArray.size)
 
-        // d. add poutine manually and split the $38.23 total (33.25 + GST 1.66 + QST 3.32)
-        //    between card and cash; the $18.23 cash due rounds to $18.25
+        // d. add poutine manually and split the $35.82 total (33.25 + NC sales tax 2.24 + Wake 0.33)
+        //    between card and cash; the $15.82 cash due rounds to $15.80
         c.postJson("/checks/$checkId/lines", """{"itemId":"poutine","variantId":"poutine:regular","qty":1}""")
         c.postJson("/checks/$checkId/tenders/initiate", """{"type":"CARD","amountCents":2000}""")
         c.postJson("/checks/$checkId/tenders/confirm", """{"type":"CARD","amountCents":2000}""")
-        c.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":1825}""")
+        c.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":1580}""")
         c.post("/checks/$checkId/finalize").let { assertEquals(HttpStatusCode.OK, it.status) }
 
         // e. void a different check with a reason
@@ -98,7 +98,7 @@ class ScanToOrderAndShiftTest {
 
         // f. X-report snapshot
         val x = json.parseToJsonElement(c.get("/shifts/current/report").bodyAsText()).jsonObject
-        assertEquals(3823L, x["revenueCents"]!!.jsonPrimitive.long)
+        assertEquals(3582L, x["revenueCents"]!!.jsonPrimitive.long)
         assertEquals(1, x["transactionCount"]!!.jsonPrimitive.int)
         val tenderTypes = x["tenderBreakdown"]!!.jsonArray.map { it.jsonObject["type"]!!.jsonPrimitive.content }
         assertTrue("CASH" in tenderTypes && "CARD" in tenderTypes)
@@ -109,9 +109,9 @@ class ScanToOrderAndShiftTest {
 
         // g. counted cash equals the opening float plus the cash portion of the sale
         val z = json.parseToJsonElement(
-            c.postJson("/shifts/current/close", """{"closingCountCents":101825,"managerPin":"1234"}""")
+            c.postJson("/shifts/current/close", """{"closingCountCents":101580,"managerPin":"1234"}""")
                 .bodyAsText()).jsonObject
-        assertEquals(101825L, z["expectedCashCents"]!!.jsonPrimitive.long)
+        assertEquals(101580L, z["expectedCashCents"]!!.jsonPrimitive.long)
         assertEquals(0L, z["overShortCents"]!!.jsonPrimitive.long)
         assertEquals("CLOSED", z["shiftStatus"]!!.jsonPrimitive.content)
 
@@ -125,7 +125,7 @@ class ScanToOrderAndShiftTest {
         val range = json.parseToJsonElement(
             c.get("/reports/range?from=$today&to=$today").bodyAsText()).jsonObject
         assertEquals("RANGE", range["shiftStatus"]!!.jsonPrimitive.content)
-        assertEquals(3823L, range["revenueCents"]!!.jsonPrimitive.long)
+        assertEquals(3582L, range["revenueCents"]!!.jsonPrimitive.long)
         assertEquals(1, range["voids"]!!.jsonArray.size)
         assertTrue(range["expectedCashCents"] == null ||
             range["expectedCashCents"] is kotlinx.serialization.json.JsonNull)

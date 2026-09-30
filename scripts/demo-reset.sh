@@ -30,7 +30,7 @@
 #      off, digital receipts, cloud URL + key) and wait for it to sync
 #   The first run captures .demo/<store>/store.env from the running store.
 #
-# THE TABLET (Vieux-Port, over adb): a SAFE reset only — its sales database is NOT
+# THE TABLET (Glenwood South, store id vieux-port, over adb): a SAFE reset only — its sales database is NOT
 #   wiped (a release build's private files can't be written over adb, and clearing
 #   app data would also delete store.properties and the store's cloud identity).
 #   It backs up store.properties to this Mac (read-only), lists any open checks
@@ -142,7 +142,7 @@ desktop_plan() {
   echo "    2. back up pos.db, photos/, receipts/, bills/, store.env → $(rel "$DEMO_DATA_DIR")/backups/<time>/"
   echo "    3. recreate the database from the $store seed; keep sync identity $(mask "$NEW_INSTALL"), id counters$([[ "$ID_FLOOR" -gt 0 ]] && echo " (raised to $ID_FLOOR for the new cloud)"), venue settings"
   echo "    4. restore $photos menu photo(s) from the backup"
-  echo "    5. seed $DAYS day(s) of $([[ $SALE_KIND == pub ]] && echo "pub checks (CAD, GST+QST)" || echo "counter sales (USD, CRV, sales tax, ID checks)") on $dates ($VENUE_TZ); open today's shift"
+  echo "    5. seed $DAYS day(s) of $([[ $SALE_KIND == pub ]] && echo "pub checks (USD, NC sales tax + Wake prepared food tax)" || echo "counter sales (USD, CRV, sales tax, ID checks)") on $dates ($VENUE_TZ); open today's shift"
   echo "    6. restart on :$POS_PORT with store.env and wait for the first sync"
   if [[ "$TARGET" == hosted ]]; then
     echo "  the hosted portal afterwards:"

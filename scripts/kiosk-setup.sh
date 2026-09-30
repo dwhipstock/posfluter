@@ -73,7 +73,7 @@ if [[ "$STORE" == true ]]; then
       cd "$DIR"
       POS_VENUE=express POS_PORT="$PORT" POS_DB="$DIR/pos.db" \
       POS_RECEIPTS_DIR="$DIR/receipts" POS_BILLS_DIR="$DIR/bills" POS_PHOTOS_DIR="$DIR/photos" \
-      POS_KITCHEN_PRINTING=on POS_PAYMENT_TERMINAL=simulator VENUE_TZ=America/Toronto \
+      POS_KITCHEN_PRINTING=on POS_PAYMENT_TERMINAL=simulator VENUE_TZ=America/New_York \
       CLOUD_SYNC_URL="$SYNC_URL" CLOUD_SYNC_API_KEY="${SYNC_URL:+$KEY}" \
       REPORTING_PORTAL_URL="${SYNC_URL:+http://localhost:3000}" \
       nohup java -jar "$REPO_ROOT/server/build/libs/pos-server-all.jar" >> "$DIR/store.log" 2>&1 &

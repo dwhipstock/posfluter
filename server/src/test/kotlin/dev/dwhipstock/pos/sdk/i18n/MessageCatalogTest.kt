@@ -122,25 +122,30 @@ class MessageCatalogTest {
     }
 
     @Test
-    fun customerBannersStayBilingualInEveryLocale() {
-        // anyone at the table must be able to tell a provisional bill from a
-        // receipt — a locale pack overriding these must keep both of its
-        // store's languages: French + English at the pubs, Spanish + English
-        // at the US store (es), German + English (de), Afrikaans + English (af)
+    fun customerBannersAreEnglishOnlyInEnglishAndCarryTheEnglishElsewhere() {
+        // English receipts (the Raleigh pubs, the US stores) are English only;
+        // a reprint in another language keeps the English words beside its own,
+        // so staff can always tell a provisional bill from a receipt
+        assertEquals("*** NOT A RECEIPT ***", Messages.get(MessageKey.RECEIPT_NOT_A_RECEIPT, LocaleCode.EN))
+        assertEquals("*** CUSTOMER BILL ***", Messages.get(MessageKey.RECEIPT_BILL_BANNER, LocaleCode.EN))
+        assertEquals("*** REFUND ***", Messages.get(MessageKey.REFUND_HEADER, LocaleCode.EN))
+        assertEquals("*** CASH IN ***", Messages.get(MessageKey.CASH_IN_HEADER, LocaleCode.EN))
+        assertEquals("*** CASH OUT ***", Messages.get(MessageKey.CASH_OUT_HEADER, LocaleCode.EN))
         val second = mapOf(
+            "fr" to ("PAS UN REÇU" to "ADDITION"),
             "es" to ("NO ES UN RECIBO" to "CUENTA"),
             "de" to ("KEIN BELEG" to "RECHNUNG"),
             "af" to ("NIE ’N KWITANSIE NIE" to "REKENING"),
         )
         for (tag in Messages.supportedTags()) {
             val locale = LocaleCode(tag)
-            val (notReceipt2, bill2) = second[tag] ?: ("PAS UN REÇU" to "ADDITION")
             val notAReceipt = Messages.get(MessageKey.RECEIPT_NOT_A_RECEIPT, locale)
-            assertTrue("NOT A RECEIPT" in notAReceipt && notReceipt2 in notAReceipt,
-                "locale '$tag' de-bilingualized the NOT-A-RECEIPT banner")
             val billBanner = Messages.get(MessageKey.RECEIPT_BILL_BANNER, locale)
-            assertTrue("CUSTOMER BILL" in billBanner && bill2 in billBanner,
-                "locale '$tag' de-bilingualized the customer-bill banner")
+            assertTrue("NOT A RECEIPT" in notAReceipt, "locale '$tag' lost the NOT-A-RECEIPT banner")
+            assertTrue("CUSTOMER BILL" in billBanner, "locale '$tag' lost the customer-bill banner")
+            val (notReceipt2, bill2) = second[tag] ?: continue
+            assertTrue(notReceipt2 in notAReceipt, "locale '$tag' NOT-A-RECEIPT banner in its own language")
+            assertTrue(bill2 in billBanner, "locale '$tag' customer-bill banner in its own language")
         }
     }
 

@@ -35,7 +35,7 @@ fun main(args: Array<String>) {
     println("french-ish families: ${if (frenchish.isEmpty()) "(none — glyphs will rely on SansSerif fallback)" else frenchish.joinToString(", ")}")
 
     val lines = listOf(
-        PrintLine.LogoPlaceholder("Copper Lantern — Vieux-Port"),
+        PrintLine.LogoPlaceholder("Copper Lantern — Glenwood South"),
         PrintLine.Text("French raster probe", Align.CENTER),
         PrintLine.Divider,
         PrintLine.Header("Essai des accents français"),

@@ -7,8 +7,9 @@ import 'package:pos_client/api.dart';
 import 'package:pos_client/i18n.dart';
 import 'package:pos_client/widgets/tax_rows.dart';
 
-/// GST / QST added on top of pre-tax prices: parsed from the server's check,
-/// labelled per language, and shown as subtotal + one row per tax.
+/// North Carolina's sales tax and Wake County's prepared food tax, added on
+/// top of pre-tax prices: parsed from the server's check, labelled per
+/// language, and shown as subtotal + one row per tax.
 Check _check() => Check.fromJson(
   jsonDecode(
     File(
@@ -21,8 +22,8 @@ void main() {
   test('check carries the pre-tax subtotal and each tax; they add up', () {
     final c = _check();
     expect(c.subtotalCents, 6400);
-    expect(c.taxes.map((t) => t.code), ['GST', 'QST']);
-    expect(c.taxes.map((t) => t.amountCents), [320, 638]);
+    expect(c.taxes.map((t) => t.code), ['NC_SALES', 'WAKE_FOOD']);
+    expect(c.taxes.map((t) => t.amountCents), [432, 64]);
     expect(
       c.subtotalCents + c.taxes.fold(0, (s, t) => s + t.amountCents),
       c.grandTotalCents,
@@ -48,13 +49,16 @@ void main() {
   );
 
   test('tax labels follow the language and its decimal mark', () {
-    final qst = _check().taxes[1];
-    expect(const L(true).taxLine(_check().taxes[0]), 'GST 5%');
-    expect(const L(true).taxLine(qst), 'QST 9.975%');
-    expect(const L(false).taxLine(qst), 'TVQ 9,975\u00A0%');
+    final nc = _check().taxes[0];
+    expect(const L(true).taxLine(nc), 'NC sales tax 6.75%');
+    expect(
+      const L(true).taxLine(_check().taxes[1]),
+      'Wake prepared food tax 1%',
+    );
+    expect(const L(false).taxLine(nc), 'NC sales tax 6,75\u00A0%');
   });
 
-  testWidgets('tax rows show subtotal, GST and QST', (tester) async {
+  testWidgets('tax rows show subtotal and the two NC taxes', (tester) async {
     final c = _check();
     Prefs.instance.lang = 'en';
     await tester.pumpWidget(
@@ -66,10 +70,10 @@ void main() {
     );
     expect(find.text('Subtotal'), findsOneWidget);
     expect(find.text('\$64.00'), findsOneWidget);
-    expect(find.text('GST 5%'), findsOneWidget);
-    expect(find.text('\$3.20'), findsOneWidget);
-    expect(find.text('QST 9.975%'), findsOneWidget);
-    expect(find.text('\$6.38'), findsOneWidget);
+    expect(find.text('NC sales tax 6.75%'), findsOneWidget);
+    expect(find.text('\$4.32'), findsOneWidget);
+    expect(find.text('Wake prepared food tax 1%'), findsOneWidget);
+    expect(find.text('\$0.64'), findsOneWidget);
   });
 
   testWidgets('no taxes → nothing shown', (tester) async {

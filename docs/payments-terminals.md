@@ -369,8 +369,8 @@ as for any integrated terminal; it shows "Waiting for the phone… tap on the
 phone" until the phone picks the payment up.
 
 **Currency rule.** Stripe works in any store whose Stripe account is in the
-store's currency. Copper Lantern keeps its CAD account (`STRIPE_KEY`); the US
-stores use the USD test account: `STRIPE_KEY_US` on a desktop store,
+store's currency. Every store is USD now (Copper Lantern moved to Raleigh), so
+all use the USD test account: `STRIPE_KEY_US` on a desktop store,
 `stripe.secretKey` in the tablet's `store.properties`. A mismatched account
 is refused (`stripe_currency_mismatch`), never converted. The auto-created
 Terminal Location gets a fictional US address for a US account.

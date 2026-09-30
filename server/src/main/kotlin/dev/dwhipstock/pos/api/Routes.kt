@@ -314,7 +314,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
                 .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
                 .firstOrNull()?.let { SlipData(it, config.publicBaseUrl) }
         } ?: throw NotFoundException("table $tableId not found")
-        call.respondText(slipPage(listOf(slip), config.displayName), ContentType.Text.Html)
+        call.respondText(slipPage(listOf(slip), config.displayName, slipLocales(config)), ContentType.Text.Html)
     }
 
     /** All tables on one printable page, page break per slip ("print all table slips"). */
@@ -327,7 +327,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
                 .orderBy(Zones.sortOrder).orderBy(DiningTables.sortOrder)
                 .map { SlipData(it, config.publicBaseUrl) }
         }
-        call.respondText(slipPage(slips, config.displayName), ContentType.Text.Html)
+        call.respondText(slipPage(slips, config.displayName, slipLocales(config)), ContentType.Text.Html)
     }
 }
 
@@ -946,17 +946,27 @@ private class SlipData(row: org.jetbrains.exposed.sql.ResultRow, publicBaseUrl: 
  * A6 print layout, one slip per page. QR images are inline data URIs, so the
  * page needs nothing else from the (authenticated) API.
  */
-private fun slipPage(slips: List<SlipData>, venueName: String): String {
+private fun slipPage(
+    slips: List<SlipData>, venueName: String,
+    locales: List<dev.dwhipstock.pos.sdk.i18n.LocaleCode> = listOf(dev.dwhipstock.pos.sdk.i18n.LocaleCode.EN),
+): String {
     val venue = venueName.escapeHtml()
+    // "Scan to order" in the slip's languages: the first big, a second one below
+    val cta = locales.map {
+        dev.dwhipstock.pos.sdk.i18n.Messages.get(dev.dwhipstock.pos.sdk.i18n.MessageKey.SLIP_SCAN_TO_ORDER, it)
+    }.distinct()
+    val ctaHtml = buildString {
+        append("""<div class="cta">${cta.first().escapeHtml()}</div>""")
+        cta.drop(1).forEach { append("""<div class="cta-en">${it.escapeHtml()}</div>""") }
+    }
     val cards = slips.joinToString("\n") { s ->
         """
         <div class="slip">
           <div class="venue">$venue</div>
           <div class="label">${s.label.escapeHtml()}</div>
-          <div class="zone">${s.zoneFr.escapeHtml()} / ${s.zoneEn.escapeHtml()}</div>
+          <div class="zone">${slipZoneName(s.zoneFr, s.zoneEn, locales).escapeHtml()}</div>
           <img class="qr" src="data:image/png;base64,${java.util.Base64.getEncoder().encodeToString(qrPng(s.menuUrl, 512))}" alt="QR ${s.label.escapeHtml()}">
-          <div class="cta">Balayez pour commander</div>
-          <div class="cta-en">Scan to order</div>
+          $ctaHtml
         </div>"""
     }
     return """<!DOCTYPE html>

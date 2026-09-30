@@ -46,7 +46,7 @@ class TranslationsTest {
     }
 
     @Test
-    fun copperLanternSpeaksFiveLanguagesButSlipsStayTwo() = testApplication {
+    fun copperLanternSpeaksFiveLanguagesButSlipsAreEnglishOnly() = testApplication {
         store()
         val health = Json.parseToJsonElement(client.get("/health").bodyAsText()).jsonObject
         assertEquals(listOf("en", "fr", "es", "de", "af"), health["locales"]!!.jsonArray.map { it.jsonPrimitive.content })
@@ -55,7 +55,8 @@ class TranslationsTest {
             printer = dev.dwhipstock.pos.sdk.PrinterAdapter.VirtualPrinter(tempDir("r"), tempDir("b")),
             publicBaseUrl = "http://test",
         )
-        assertEquals(listOf(LocaleCode.EN, LocaleCode.FR), slipLocales(config))
+        // Raleigh: guest slips are English only, like the receipts
+        assertEquals(listOf(LocaleCode.EN), slipLocales(config))
         // a German server's receipt reads German
         assertEquals("Summe", Messages.get(MessageKey.RECEIPT_TOTAL, LocaleCode.DE))
     }

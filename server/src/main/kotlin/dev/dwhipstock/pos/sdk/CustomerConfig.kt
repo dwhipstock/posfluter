@@ -32,6 +32,13 @@ interface CustomerConfig {
     val profile: StoreProfile get() = StoreProfile.QUEBEC_PUB
     /** Minimum age for age-restricted items: POS_LEGAL_AGE / legal.age, else the profile's. */
     val legalAge: Int get() = profile.legalAge
+
+    /**
+     * The languages guest slips (table QR, Wi-Fi) print, one line each:
+     * English first, then the store's next language; two at most.
+     */
+    val guestSlipLocales: List<dev.dwhipstock.pos.sdk.i18n.LocaleCode>
+        get() = profile.locales.sortedBy { if (it == dev.dwhipstock.pos.sdk.i18n.LocaleCode.EN) 0 else 1 }.take(2)
     /**
      * The card terminal this store uses when `payment.terminal` is unset: the
      * built-in simulator unless the customer says otherwise (Copper Lantern: Stripe).

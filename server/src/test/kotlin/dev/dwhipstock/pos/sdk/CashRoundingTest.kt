@@ -146,7 +146,7 @@ class CashRoundingTest {
         val printer = PrinterAdapter.VirtualPrinter("build/tmp/receipts")
         val pub = CopperLanternConfig(settings = settings, printer = printer, publicBaseUrl = "http://x")
         val shop = SagePoppyConfig(settings = settings, printer = printer, publicBaseUrl = "http://x")
-        assertEquals("CAD", pub.profile.currency)
+        assertEquals("USD", pub.profile.currency) // Raleigh, NC: the US has no penny either
         assertEquals("USD", shop.profile.currency)
         for (config in listOf(pub, shop)) assertEquals(Money(1005), config.roundingPolicy.roundCashDue(Money(1007)))
         val shopOff = SagePoppyConfig(settings = settings, printer = printer, publicBaseUrl = "http://x",

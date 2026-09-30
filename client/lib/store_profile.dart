@@ -1,6 +1,6 @@
 /// What this terminal's store is: which screens, brand, languages and money
 /// format it uses. Read from the store's public `GET /health` (before
-/// sign-in), so a retail counter, a US store or a Québec pub each come up
+/// sign-in), so a retail counter, a gas station or a pub each come up
 /// right without a rebuild. Until the store answers, the pub defaults apply —
 /// exactly what the terminal always did.
 class StoreProfile {
@@ -34,16 +34,17 @@ class StoreProfile {
     this.venueId = '',
     this.brand = 'copper-lantern',
     this.kind = 'restaurant',
-    this.country = 'CA',
-    this.currency = 'CAD',
+    this.country = 'US',
+    this.currency = 'USD',
     this.locales = const ['en', 'fr'],
-    this.legalAge = 18,
+    this.legalAge = 21,
     this.kitchenPrinting = false,
     this.forecourt = false,
     this.looksOverAge,
   });
 
-  /// The Montréal pubs (and any store too old to describe itself).
+  /// The Copper Lantern pubs (Raleigh, NC: US, USD, 21) and any store too old
+  /// to describe itself.
   static const pub = StoreProfile();
 
   static StoreProfile current = pub;
@@ -88,10 +89,10 @@ class StoreProfile {
       venueId: str('venueId', ''),
       brand: str('brand', 'copper-lantern'),
       kind: str('kind', 'restaurant'),
-      country: str('country', 'CA').toUpperCase(),
-      currency: str('currency', 'CAD').toUpperCase(),
+      country: str('country', 'US').toUpperCase(),
+      currency: str('currency', 'USD').toUpperCase(),
       locales: locales,
-      legalAge: j['legalAge'] is int ? j['legalAge'] as int : 18,
+      legalAge: j['legalAge'] is int ? j['legalAge'] as int : 21,
       kitchenPrinting: j['kitchenPrinting'] == true,
       forecourt: j['forecourt'] == true,
       looksOverAge: j['looksOverAge'] is int ? j['looksOverAge'] as int : null,

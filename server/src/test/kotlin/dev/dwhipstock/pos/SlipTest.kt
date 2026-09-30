@@ -32,9 +32,10 @@ class SlipTest {
         assertEquals(HttpStatusCode.OK, slip.status)
         val slipHtml = slip.bodyAsText()
         assertTrue("data:image/png;base64," in slipHtml) // QR inline, no extra fetch
-        assertTrue("Balayez pour commander" in slipHtml && "Scan to order" in slipHtml)
+        // English only, like the receipts (Copper Lantern, Raleigh)
+        assertTrue("Scan to order" in slipHtml && "Balayez pour commander" !in slipHtml)
         // titled with the store this process runs, not a hardcoded name
-        assertTrue("<title>Table slips — Copper Lantern — Vieux-Port</title>" in slipHtml)
+        assertTrue("<title>Table slips — Copper Lantern — Glenwood South</title>" in slipHtml)
         assertTrue("Copper Lantern Pub" !in slipHtml)
 
         assertEquals(HttpStatusCode.NotFound, client.get("/tables/nope/slip?ticket=$ticket").status)

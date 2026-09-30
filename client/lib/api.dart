@@ -225,14 +225,14 @@ class Api {
     }
   }
 
-  /// The store's display name from GET /health ("Copper Lantern — Vieux-Port");
+  /// The store's display name from GET /health ("Copper Lantern — Glenwood South");
   /// null until a health probe answered (or on a store too old to send it).
   static String? venueName;
 
   /// "Copper Lantern" — the brand half of [venueName].
   static String get venueBrand => splitVenueName(venueName).$1;
 
-  /// "Vieux-Port" — the location half of [venueName]; null when unknown.
+  /// "Glenwood South" — the location half of [venueName]; null when unknown.
   static String? get venueLocation => splitVenueName(venueName).$2;
 
   /// "Brand — Location" → (brand, location). Falls back to the house brand.
@@ -770,9 +770,9 @@ class Api {
           );
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
     // covers req.send() too, not just reading the reply
-    final res = await (() async =>
-            http.Response.fromStream(await req.send()))()
-        .timeout(_aiLayoutTimeout);
+    final res = await (() async => http.Response.fromStream(
+      await req.send(),
+    ))().timeout(_aiLayoutTimeout);
     _throwOnError(res);
     return RoomObjectSuggestion.fromJson(
       jsonDecode(utf8.decode(res.bodyBytes)),
@@ -805,9 +805,9 @@ class Api {
       );
     }
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
-    final res = await (() async =>
-            http.Response.fromStream(await req.send()))()
-        .timeout(_aiLayoutTimeout);
+    final res = await (() async => http.Response.fromStream(
+      await req.send(),
+    ))().timeout(_aiLayoutTimeout);
     _throwOnError(res);
     return RoomLayoutProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
@@ -1255,9 +1255,9 @@ class Api {
           );
     if (count != null) req.fields['count'] = '$count';
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
-    final res = await (() async =>
-            http.Response.fromStream(await req.send()))()
-        .timeout(_aiTimeout);
+    final res = await (() async => http.Response.fromStream(
+      await req.send(),
+    ))().timeout(_aiTimeout);
     _throwOnError(res);
     return AiPhotoCandidates.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
@@ -1326,9 +1326,9 @@ class Api {
       );
     }
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
-    final res = await (() async =>
-            http.Response.fromStream(await req.send()))()
-        .timeout(_aiTimeout);
+    final res = await (() async => http.Response.fromStream(
+      await req.send(),
+    ))().timeout(_aiTimeout);
     _throwOnError(res);
     return MenuProposal.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
@@ -1377,9 +1377,9 @@ class Api {
     if (hasDevicePairing) req.headers['X-Device-Token'] = _deviceToken!;
     // the timeout must cover sending the clip too, not just reading the
     // reply: wrapping just the outer Future left req.send() unbounded
-    final res = await (() async =>
-            http.Response.fromStream(await req.send()))()
-        .timeout(timeout);
+    final res = await (() async => http.Response.fromStream(
+      await req.send(),
+    ))().timeout(timeout);
     _throwOnError(res);
     return jsonDecode(utf8.decode(res.bodyBytes));
   }
@@ -2957,7 +2957,7 @@ class FeeLine {
       FeeLine(j['code'], j['labelFr'], j['labelEn'], j['amountCents']);
 }
 
-/// A tax added on top of the pre-tax subtotal (GST, QST). Server-computed;
+/// A tax added on top of the pre-tax subtotal (NC sales tax, Wake prepared food tax). Server-computed;
 /// [ratePercent] is a decimal string ("9.975").
 class TaxLine {
   final String code, labelFr, labelEn, ratePercent;
@@ -3119,7 +3119,7 @@ class Check {
   /// Pre-tax: items + fees. subtotal + taxes = grand total.
   final int subtotalCents;
 
-  /// Taxes added on top of the subtotal (GST, QST), server-computed.
+  /// Taxes added on top of the subtotal (NC sales tax, Wake prepared food tax), server-computed.
   final List<TaxLine> taxes;
 
   /// Retail: an age-restricted item is on the sale → payment needs an ID

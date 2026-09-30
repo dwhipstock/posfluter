@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -37,11 +37,11 @@
   <div id="clock"></div>
 </header>
 <main>
-  <section id="preparing"><h2>En préparation<small>Preparing · Preparando · In Zubereitung</small></h2><div class="nums"></div></section>
-  <section id="ready"><h2>Prêt · Ready<small>Listo · Fertig</small></h2><div class="nums"></div></section>
+  <section id="preparing"><h2>Preparing<small>En préparation · Preparando · In Zubereitung</small></h2><div class="nums"></div></section>
+  <section id="ready"><h2>Ready<small>Prêt · Listo · Fertig</small></h2><div class="nums"></div></section>
 </main>
-<button id="sound" type="button">🔔 Son / Sound</button>
-<div id="offline">Connexion perdue — reconnexion… / Connection lost — reconnecting…</div>
+<button id="sound" type="button">🔔 Sound</button>
+<div id="offline">Connection lost — reconnecting…</div>
 <script>
 (function () {
   var known = null;          // ready numbers seen last poll (null = first load, no chime)
@@ -72,7 +72,7 @@
       d.className = 'n' + (fresh && fresh.indexOf(n) >= 0 ? ' fresh' : '');
       d.textContent = n;
       var mode = document.createElement('small');
-      mode.textContent = takeOut.indexOf(n) >= 0 ? 'Pour emporter · Take out' : 'Sur place · Dine in';
+      mode.textContent = takeOut.indexOf(n) >= 0 ? 'Take out' : 'Dine in';
       d.appendChild(mode);
       box.appendChild(d);
     });

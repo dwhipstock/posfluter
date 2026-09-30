@@ -177,8 +177,8 @@ interface CounterHook {
     fun afterPaid(checkId: Int)
     /** The check was cancelled (emptied, discarded, expired): the unpaid order is gone. */
     fun cancelled(checkId: Int)
-    /** "#101 · Take out" on the receipt; null = not a counter order. */
-    fun receiptLabel(checkId: Int): String?
+    /** The order number and dine in / take out for the receipt ("#101 · Take out"); null = not a counter order. */
+    fun receiptOrder(checkId: Int): dev.dwhipstock.pos.sdk.ReceiptOrder?
 }
 
 class CheckService(private val config: CustomerConfig) {
@@ -1163,7 +1163,7 @@ class CheckService(private val config: CustomerConfig) {
         return Receipt(
             checkId = checkId,
             tableLabel = table[DiningTables.nameOverride] ?: table[DiningTables.label],
-            orderLabel = counter?.receiptLabel(checkId),
+            order = counter?.receiptOrder(checkId),
             openedAt = VenueClock.local(check[Checks.openedAt]),
             closedAt = VenueClock.local(check[Checks.closedAt] ?: VenueClock.now()),
             items = items,

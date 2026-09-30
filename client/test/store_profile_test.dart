@@ -62,7 +62,8 @@ void main() {
     expect(p.legalAge, 21);
     // an older store says nothing: the pub defaults
     final old = StoreProfile.fromHealth({'status': 'ok', 'venue': 'x'});
-    expect(old.currency, 'CAD');
+    expect(old.currency, 'USD');
+    expect(old.legalAge, 21);
     expect(old.locales, ['en', 'fr']);
     expect(old.isRetail, isFalse);
   });
@@ -95,10 +96,10 @@ void main() {
     venueId: 'vieux-port',
     brand: 'copper-lantern',
     kind: 'restaurant',
-    country: 'CA',
-    currency: 'CAD',
+    country: 'US',
+    currency: 'USD',
     locales: ['fr', 'en', 'es', 'de', 'af'],
-    legalAge: 18,
+    legalAge: 21,
   );
 
   test('Copper Lantern: the toggle offers all five languages', () {

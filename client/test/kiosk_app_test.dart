@@ -4,6 +4,7 @@ import 'package:pos_client/api.dart';
 import 'package:pos_client/kiosk/kiosk_api.dart';
 import 'package:pos_client/kiosk/kiosk_app.dart';
 import 'package:pos_client/kiosk/kiosk_controller.dart';
+import 'package:pos_client/kiosk/kiosk_i18n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// A quick-serve store in memory: pairs with 123456, serves a tiny menu and
@@ -28,7 +29,7 @@ class _FakeStore extends KioskApi {
     if (token != 'kiosk-token') {
       throw const KioskApiException(401, 'kiosk_not_paired', 'no');
     }
-    return const KioskConfig('Copper Lantern — Express', 'CAD', [
+    return const KioskConfig('Copper Lantern — Express', 'USD', [
       'fr',
       'en',
       'es',
@@ -430,6 +431,31 @@ void main() {
       // the idle clock stops with the order
       c.cancelOrder();
       await tester.pumpAndSettle();
+    });
+  });
+
+  group('legal drinking age (Copper Lantern, Raleigh: 21)', () {
+    test('the kiosk config carries the store\'s age; older stores: 21', () {
+      final c = KioskConfig.fromJson({
+        'storeName': 'Copper Lantern — Express',
+        'currency': 'USD',
+        'locales': ['en', 'fr'],
+        'legalAge': 21,
+      });
+      expect(c.legalAge, 21);
+      expect(c.currency, 'USD');
+      expect(KioskConfig.fromJson({'storeName': 'x'}).legalAge, 21);
+      expect(KioskConfig.fromJson({'storeName': 'x'}).currency, 'USD');
+    });
+
+    test('the ID note names the age in every language', () {
+      expect(
+        const KioskText('en').idNote(21),
+        'Alcohol — 21+ only. Staff will check ID at the counter.',
+      );
+      for (final lang in ['fr', 'es', 'de', 'af']) {
+        expect(KioskText(lang).idNote(21), contains('21'), reason: lang);
+      }
     });
   });
 }

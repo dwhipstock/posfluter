@@ -137,7 +137,7 @@ class MenuAiRoutesTest {
         assertEquals(before, price("lantern-burger:regular"))
         assertEquals(outboxBefore, outbox().size)
         // the model saw the store's currency, the menu and its ids
-        assertTrue(fake.prompts.single().contains("CAD"))
+        assertTrue(fake.prompts.single().contains("USD"))
         assertTrue(fake.prompts.single().contains("\"lantern-burger:regular\""))
 
         // tick the price, the salmon and the salad (its new category comes along)

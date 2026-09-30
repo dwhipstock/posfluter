@@ -91,7 +91,7 @@ class TabletStoreService : Service() {
             val storeProps = readStoreProperties()
             // which store this tablet is: store.venue in store.properties wins;
             // unset → this build's own store (POS_BRAND: Copper Lantern → none
-            // = Vieux-Port, as always; Sage & Poppy → sage-poppy)
+            // = the pub, vieux-port (shown as Glenwood South); Sage & Poppy → sage-poppy)
             val venueId = storeProps?.getProperty("store.venue")?.trim()?.takeIf { it.isNotEmpty() }
                 ?: BuildConfig.DEFAULT_VENUE.takeIf { it.isNotEmpty() }
             val legalAge = storeProps?.getProperty("legal.age")?.trim()?.toIntOrNull()

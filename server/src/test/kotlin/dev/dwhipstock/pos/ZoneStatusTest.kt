@@ -92,7 +92,7 @@ class ZoneStatusTest {
         // menu serves normally while open, headed with the selected store's name
         val open = client.get(customerPath("t3"))
         assertEquals(HttpStatusCode.OK, open.status)
-        assertTrue("<title>Copper Lantern — Vieux-Port — Order Online</title>" in open.bodyAsText())
+        assertTrue("<title>Copper Lantern — Glenwood South — Order Online</title>" in open.bodyAsText())
 
         c.patchJson("/zones/outside/status", """{"status":"CLOSED","managerPin":"1234"}""")
 
@@ -102,7 +102,7 @@ class ZoneStatusTest {
         val body = menu.bodyAsText()
         assertTrue("Cette section est fermée pour le moment." in body, "missing French closed banner")
         assertTrue("temporarily closed" in body, "missing English closed banner")
-        assertTrue("<title>Copper Lantern — Vieux-Port</title>" in body, "closed page titled with the store")
+        assertTrue("<title>Copper Lantern — Glenwood South</title>" in body, "closed page titled with the store")
 
         // the raw QR-order endpoint refuses (machine surface) with zone_closed
         val pend = client.postJson("${customerPath("t3")}/pending-lines",

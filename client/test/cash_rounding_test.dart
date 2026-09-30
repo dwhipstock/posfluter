@@ -40,8 +40,8 @@ void main() {
   group('parsing', () {
     test('old JSON without the rounding fields still works', () {
       final c = Check.fromJson(_pubCheck());
-      expect(c.outstandingCents, 7358);
-      expect(c.cashDueCents, 7358, reason: 'cash due falls back to exact');
+      expect(c.outstandingCents, 6896);
+      expect(c.cashDueCents, 6896, reason: 'cash due falls back to exact');
       expect(c.cashRoundingCents, 0);
 
       final t = Tender.fromJson({
@@ -87,11 +87,11 @@ void main() {
     test('new fields are read from the server', () {
       final c = Check.fromJson({
         ..._pubCheck(),
-        'cashDueCents': 7360,
-        'cashRoundingCents': 2,
+        'cashDueCents': 6895,
+        'cashRoundingCents': -1,
       });
-      expect(c.cashDueCents, 7360);
-      expect(c.cashRoundingCents, 2);
+      expect(c.cashDueCents, 6895);
+      expect(c.cashRoundingCents, -1);
 
       final r = RefundView.fromJson({
         'id': 1,
@@ -145,8 +145,8 @@ void main() {
 
     final rounded = {
       ..._pubCheck(),
-      'cashDueCents': 7360,
-      'cashRoundingCents': 2,
+      'cashDueCents': 6895,
+      'cashRoundingCents': -1,
     };
 
     testWidgets('cash shows the rounding and the cash total from the server', (
@@ -155,11 +155,11 @@ void main() {
       await pump(tester, rounded);
       expect(find.byKey(const ValueKey('cash-rounding')), findsOneWidget);
       expect(find.text('Rounding'), findsOneWidget);
-      expect(find.text('+\$0.02'), findsOneWidget);
+      expect(find.text('−\$0.01'), findsOneWidget);
       expect(find.text('Cash total'), findsOneWidget);
       // cash total row + the "exact" quick button
-      expect(find.text('\$73.60'), findsNWidgets(2));
-      expect(find.text('\$73.58'), findsOneWidget, reason: 'outstanding');
+      expect(find.text('\$68.95'), findsNWidgets(2));
+      expect(find.text('\$68.96'), findsOneWidget, reason: 'outstanding');
     });
 
     testWidgets('card stays exact: no rounding line', (tester) async {
@@ -168,14 +168,14 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey('cash-rounding')), findsNothing);
       expect(find.text('Rounding'), findsNothing);
-      expect(find.text('\$73.60'), findsNothing);
-      expect(find.textContaining('\$73.58'), findsWidgets);
+      expect(find.text('\$68.95'), findsNothing);
+      expect(find.textContaining('\$68.96'), findsWidgets);
     });
 
     testWidgets('no rounding → no rounding line', (tester) async {
       await pump(tester, {
         ..._pubCheck(),
-        'cashDueCents': 7358,
+        'cashDueCents': 6896,
         'cashRoundingCents': 0,
       });
       expect(find.byKey(const ValueKey('cash-rounding')), findsNothing);
@@ -195,20 +195,20 @@ void main() {
     ) async {
       final store = MockClient((req) async {
         if (req.url.path == '/checks/1/tenders') {
-          expect(jsonDecode(req.body)['amountTenderedCents'], 7360);
+          expect(jsonDecode(req.body)['amountTenderedCents'], 6895);
           return _json({
             'tender': {
               'id': 1,
               'type': 'CASH',
-              'amountTenderedCents': 7360,
-              'amountAppliedCents': 7358,
-              'roundingAdjustmentCents': 2,
+              'amountTenderedCents': 6895,
+              'amountAppliedCents': 6896,
+              'roundingAdjustmentCents': -1,
               'changeCents': 0,
             },
             'check': {
               ...rounded,
               'status': 'TOTAL_LOCKED',
-              'paidCents': 7358,
+              'paidCents': 6896,
               'outstandingCents': 0,
               'cashDueCents': 0,
               'cashRoundingCents': 0,
@@ -220,7 +220,7 @@ void main() {
       await http.runWithClient(() async {
         await pump(tester, rounded);
         // the "exact" quick button is the rounded cash due
-        await tester.tap(find.widgetWithText(OutlinedButton, '\$73.60'));
+        await tester.tap(find.widgetWithText(OutlinedButton, '\$68.95'));
         await tester.pumpAndSettle();
         final dialog = find.byType(AlertDialog);
         expect(dialog, findsOneWidget);
@@ -229,7 +229,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.descendant(of: dialog, matching: find.text('+\$0.02')),
+          find.descendant(of: dialog, matching: find.text('−\$0.01')),
           findsOneWidget,
         );
         expect(

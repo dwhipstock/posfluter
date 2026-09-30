@@ -51,7 +51,7 @@ class TerminalPaymentsTest {
     private suspend fun HttpResponse.obj(): JsonObject = json.parseToJsonElement(bodyAsText()).jsonObject
     private fun JsonObject.s(k: String) = this[k]!!.jsonPrimitive.content
 
-    /** Manager session, open shift, a $23.28 check. */
+    /** Manager session, open shift, a $21.82 check. */
     private suspend fun ApplicationTestBuilder.checkOf(table: String = "t5-5"): Pair<HttpClient, Int> {
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":10000,"managerPin":"1234"}""")
@@ -129,7 +129,7 @@ class TerminalPaymentsTest {
             application { module(dbPath = tempDb(), paymentTerminal = off) }
             val (c, id) = checkOf()
             assertEquals("off", c.get("/payments/terminal").obj().s("kind"))
-            val card = c.postJson("/checks/$id/tenders/confirm", """{"type":"CARD","amountCents":2328}""")
+            val card = c.postJson("/checks/$id/tenders/confirm", """{"type":"CARD","amountCents":2182}""")
             assertEquals(HttpStatusCode.Conflict, card.status, card.bodyAsText())
             assertEquals(HttpStatusCode.Conflict, c.postJson("/checks/$id/terminal/payments").status)
         }
@@ -152,11 +152,11 @@ class TerminalPaymentsTest {
         val started = c.start(id)
         assertEquals("PENDING", started.s("status"))
         assertEquals("present_card", started.s("prompt"))
-        assertEquals(2328L, started["amountCents"]!!.jsonPrimitive.long)
+        assertEquals(2182L, started["amountCents"]!!.jsonPrimitive.long)
         // the reader shows the amount
         val screen = c.get("/terminal/ui/state").obj()
         assertEquals("present", screen.s("screen"))
-        assertEquals(2328L, screen["totalCents"]!!.jsonPrimitive.long)
+        assertEquals(2182L, screen["totalCents"]!!.jsonPrimitive.long)
 
         assertEquals(HttpStatusCode.OK, c.present("tap", "mastercard").status)
         val done = c.poll(started.s("paymentId"))
@@ -237,7 +237,7 @@ class TerminalPaymentsTest {
         assertEquals("do_not_honor", c.poll(p2).s("declineCode"))
         assertEquals(0, transaction { Tenders.selectAll().where { Tenders.transactionId eq id }.count() })
         assertEquals(HttpStatusCode.Created,
-            c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2330}""").status)
+            c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2180}""").status)
     }
 
     @Test
@@ -279,15 +279,15 @@ class TerminalPaymentsTest {
         val pid = c.start(id, """{"tipMode":"on_reader"}""").s("paymentId")
         assertEquals("choose_tip", c.poll(pid).s("prompt"))
         c.postJson("/terminal/ui/tip", """{"tipCents":400}""")
-        assertEquals(2728L, c.get("/terminal/ui/state").obj()["totalCents"]!!.jsonPrimitive.long)
+        assertEquals(2582L, c.get("/terminal/ui/state").obj()["totalCents"]!!.jsonPrimitive.long)
         c.present("tap")
         val done = c.poll(pid)
         assertEquals("RECORDED", done.s("status"))
         assertEquals(400L, done["tipCents"]!!.jsonPrimitive.long)
-        assertEquals(2328L, done["tender"]!!.jsonObject["amountAppliedCents"]!!.jsonPrimitive.long)
+        assertEquals(2182L, done["tender"]!!.jsonObject["amountAppliedCents"]!!.jsonPrimitive.long)
         c.post("/checks/$id/finalize")
         val receipt = c.get("/checks/$id/receipt").obj().s("text")
-        assertTrue("Tip" in receipt && "Total charged" in receipt && "27.28" in receipt, receipt)
+        assertTrue("Tip" in receipt && "Total charged" in receipt && "25.82" in receipt, receipt)
     }
 
     @Test
@@ -296,7 +296,7 @@ class TerminalPaymentsTest {
         val (c, id) = checkOf()
         val pid = c.start(id).s("paymentId")
         assertEquals(HttpStatusCode.Created,
-            c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2330}""").status)
+            c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2180}""").status)
         c.present("tap")
         val res = c.poll(pid)
         assertEquals("CANCELED", res.s("status"))
@@ -322,7 +322,7 @@ class TerminalPaymentsTest {
         val (c, id) = checkOf()
         val done = c.payByTerminal(id)
         c.post("/checks/$id/finalize")
-        assertEquals(2328L, c.get("/checks/$id/refunds").obj()["terminalRefundableCents"]!!.jsonPrimitive.long)
+        assertEquals(2182L, c.get("/checks/$id/refunds").obj()["terminalRefundableCents"]!!.jsonPrimitive.long)
 
         val r1 = c.postJson("/checks/$id/refund", """{"amountCents":1000,"tenderType":"TERMINAL","reason":"wrong item","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, r1.status, r1.bodyAsText())
@@ -331,12 +331,12 @@ class TerminalPaymentsTest {
         assertNotNull(row[Refunds.terminalRefundRef])
         assertEquals(transaction { Tenders.selectAll().where { Tenders.transactionId eq id }.single()[Tenders.terminalPaymentRef] },
             row[Refunds.terminalPaymentRef])
-        assertEquals(1328L, c.get("/checks/$id/refunds").obj()["terminalRefundableCents"]!!.jsonPrimitive.long)
+        assertEquals(1182L, c.get("/checks/$id/refunds").obj()["terminalRefundableCents"]!!.jsonPrimitive.long)
 
         val over = c.postJson("/checks/$id/refund", """{"amountCents":2000,"tenderType":"TERMINAL","reason":"x","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Conflict, over.status)
         assertEquals(HttpStatusCode.Created, c.postJson("/checks/$id/refund",
-            """{"amountCents":1328,"tenderType":"TERMINAL","reason":"rest","managerPin":"1234"}""").status)
+            """{"amountCents":1182,"tenderType":"TERMINAL","reason":"rest","managerPin":"1234"}""").status)
         assertEquals(0L, c.get("/checks/$id/refunds").obj()["refundableCents"]!!.jsonPrimitive.long)
         assertTrue(outboxPayloads().any { "\"refundId\"" in it && "\"TERMINAL\"" in it && "terminalRefundRef" in it })
         assertNotNull(done)
@@ -346,7 +346,7 @@ class TerminalPaymentsTest {
     fun `TERMINAL refund on a check paid in cash is refused`() = testApplication {
         application { module(dbPath = tempDb(), paymentTerminal = simulator, terminalDevice = device()) }
         val (c, id) = checkOf()
-        c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2330}""")
+        c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2180}""")
         c.post("/checks/$id/finalize")
         val res = c.postJson("/checks/$id/refund", """{"amountCents":500,"tenderType":"TERMINAL","reason":"x","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Conflict, res.status)
@@ -357,7 +357,7 @@ class TerminalPaymentsTest {
     fun `TERMINAL can't be confirmed by hand`() = testApplication {
         application { module(dbPath = tempDb(), paymentTerminal = simulator, terminalDevice = device()) }
         val (c, id) = checkOf()
-        val res = c.postJson("/checks/$id/tenders/confirm", """{"type":"TERMINAL","amountCents":2328}""")
+        val res = c.postJson("/checks/$id/tenders/confirm", """{"type":"TERMINAL","amountCents":2182}""")
         assertEquals(HttpStatusCode.Conflict, res.status, res.bodyAsText())
     }
 
@@ -421,7 +421,7 @@ class TerminalPaymentsTest {
         assertEquals(HttpStatusCode.ServiceUnavailable, start.status)
         assertEquals(TerminalException.UNAVAILABLE, start.obj().s("code"))
         assertEquals(HttpStatusCode.Created,
-            c2.postJson("/checks/$id2/tenders", """{"type":"CASH","amountTenderedCents":2330}""").status)
+            c2.postJson("/checks/$id2/tenders", """{"type":"CASH","amountTenderedCents":2180}""").status)
         assertEquals(HttpStatusCode.OK, c2.post("/checks/$id2/finalize").status)
     }
 
@@ -440,7 +440,7 @@ class TerminalPaymentsTest {
         val done = c.payByTerminal(id, entry = "tap", card = "visa")
         assertEquals("jpm-1", done["card"]!!.jsonObject.s("processorRef"))
         assertEquals(listOf("authorize", "capture"), api.calls.map { it.op })
-        assertEquals(2328L, api.calls.first().amount)
+        assertEquals(2182L, api.calls.first().amount)
         c.post("/checks/$id/finalize")
         val receipt = c.get("/checks/$id/receipt").obj().s("text")
         assertTrue("J.P. Morgan sandbox (test)" in receipt && "jpm-1" in receipt, receipt)
@@ -463,7 +463,7 @@ class TerminalPaymentsTest {
         assertEquals("DECLINED", res.s("status"))
         assertEquals("processor_unavailable", res.s("declineCode"))
         assertEquals(HttpStatusCode.Created,
-            c.postJson("/checks/$id/tenders/confirm", """{"type":"CARD","amountCents":2328}""").status)
+            c.postJson("/checks/$id/tenders/confirm", """{"type":"CARD","amountCents":2182}""").status)
     }
 
     @Test

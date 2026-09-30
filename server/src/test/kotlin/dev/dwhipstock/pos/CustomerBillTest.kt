@@ -106,13 +106,13 @@ class CustomerBillTest {
         assertEquals(1, fees.size)
         assertEquals("Corkage", fees[0]["labelEn"]!!.jsonPrimitive.content)
         assertEquals(2500L, fees[0]["amountCents"]!!.jsonPrimitive.long)
-        // subtotal 40.90; GST 2.045 → 2.05 (half-up), QST 4.079775 → 4.08; total 47.03
+        // subtotal 40.90; NC sales tax 6.75% 2.76075 → 2.76, Wake 1% 0.409 → 0.41 (half-up); total 44.07
         assertEquals(4090L, accepted["subtotalCents"]!!.jsonPrimitive.long)
         val taxes = accepted["taxes"]!!.jsonArray.map { it.jsonObject }
-        assertEquals(listOf("GST" to 205L, "QST" to 408L), taxes.map {
+        assertEquals(listOf("NC sales tax" to 276L, "Wake prepared food tax" to 41L), taxes.map {
             it["labelEn"]!!.jsonPrimitive.content to it["amountCents"]!!.jsonPrimitive.long })
-        assertEquals(listOf("5", "9.975"), taxes.map { it["ratePercent"]!!.jsonPrimitive.content })
-        assertEquals(4703L, accepted["grandTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(listOf("6.75", "1"), taxes.map { it["ratePercent"]!!.jsonPrimitive.content })
+        assertEquals(4407L, accepted["grandTotalCents"]!!.jsonPrimitive.long)
         assertFalse(accepted["locked"]!!.jsonPrimitive.boolean)
         // tax lines are display fields only, like the rest of the customer DTO
         assertTrue(taxes.all { it.keys == setOf("labelFr", "labelEn", "ratePercent", "amountCents") })

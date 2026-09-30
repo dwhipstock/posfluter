@@ -97,6 +97,9 @@ class Win32Window {
 
   // window handle for hosted content.
   HWND child_content_ = nullptr;
+
+  // startup attempts left at taking the foreground (full-screen mode only)
+  int foreground_retries_ = 0;
 };
 
 #endif  // RUNNER_WIN32_WINDOW_H_

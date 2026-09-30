@@ -1,7 +1,7 @@
 package dev.dwhipstock.pos.sdk
 
-import dev.dwhipstock.pos.customers.copperlantern.CopperLanternConfig
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
+import java.math.BigDecimal
 import java.time.LocalDateTime
 import kotlin.random.Random
 import kotlin.test.Test
@@ -9,11 +9,17 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/** DB-free config with Copper Lantern's Québec taxes (GST 5% + QST 9.975% on top). */
+/** Québec-style taxes (GST 5% + QST 9.975% on top, with registration numbers): the engine still supports two named taxes. */
+private val QUEBEC_TAXES = listOf(
+    TaxComponent("GST", labelFr = "TPS", labelEn = "GST", ratePercent = BigDecimal("5"), registrationNumber = "123456789 RT0001"),
+    TaxComponent("QST", labelFr = "TVQ", labelEn = "QST", ratePercent = BigDecimal("9.975"), registrationNumber = "1234567890 TQ0001"),
+)
+
+/** DB-free config with those taxes. */
 private class QuebecConfig(override val fees: List<Fee> = listOf(Fee.Corkage(Money.cad(25)))) : CustomerConfig {
     override val customerId = "test"
     override val displayName = "Test Venue"
-    override val taxPolicy = TaxPolicy.AddedTaxes(CopperLanternConfig.QUEBEC_TAXES)
+    override val taxPolicy = TaxPolicy.AddedTaxes(QUEBEC_TAXES)
     override val roundingPolicy = RoundingPolicy.RoundToUnit(Money(5), RoundingPolicy.RoundToUnit.Mode.NEAREST)
     override val authPolicy = AuthPolicy.PinLogin(4)
     override val receiptPolicy = ReceiptPolicy.Standard("t", emptyList(), "t", showTax = false)
@@ -140,7 +146,7 @@ class AddedTaxesTest {
 
     @Test
     fun taxCodesMustBeUnique() {
-        val gst = CopperLanternConfig.QUEBEC_TAXES.first()
+        val gst = QUEBEC_TAXES.first()
         assertFailsWith<IllegalArgumentException> { TaxPolicy.AddedTaxes(listOf(gst, gst)) }
     }
 

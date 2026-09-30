@@ -3,7 +3,7 @@
 #   scripts/demo-down.sh          # stop the Plateau store + the cloud containers, KEEP data
 #   scripts/demo-down.sh --reset  # also wipe the cloud db volume and the Plateau store
 #                                 # (.demo/plateau) — the next demo-up starts fresh
-# The Vieux-Port tablet is never touched; with the Mac down it keeps selling and
+# The Glenwood South tablet (vieux-port) is never touched; with the Mac down it keeps selling and
 # only its sync pauses.
 set -euo pipefail
 

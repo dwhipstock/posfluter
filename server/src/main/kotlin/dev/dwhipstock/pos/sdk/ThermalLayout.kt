@@ -11,7 +11,7 @@ package dev.dwhipstock.pos.sdk
  * 512 dots ≈ 48 columns of Font A, minus the side margins; a 58mm head is
  * [WIDTH_58MM] dots, see [contentFor]):
  * - The venue name splits on " — ": brand in the title font, location below it
- *   in a smaller bold font ("Copper Lantern" / "Vieux-Port").
+ *   in a smaller bold font ("Copper Lantern" / "Glenwood South").
  * - A bilingual "fr / en" line that doesn't fit wraps at the " / ".
  * - Otherwise a line that doesn't fit shrinks one size step; if it still doesn't
  *   fit it word-wraps onto more lines at its normal size.

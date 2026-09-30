@@ -28,7 +28,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Cash rounding to the nickel end to end, on the pubs (CAD) and the bottle
+ * Cash rounding to the nickel end to end, on the pubs (USD, Raleigh) and the bottle
  * shop (USD): what a check says cash comes to, cash vs card, mixed and split
  * payments, cash refunds, the bill and receipt lines, the drawer, the sync
  * events, and the switch turned off.
@@ -49,13 +49,13 @@ class CashRoundingFlowTest {
         postJson("/shifts", """{"openingFloatCents":$float,"managerPin":"1234"}""")
             .also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }
 
-    /** A Québec total (price + GST 5% + QST 9.975%, each half-up) for a pre-tax price. */
-    private fun quebecTotal(price: Long): Long =
-        price + CopperLanternConfig.QUEBEC_TAXES.sumOf { it.on(Money(price)).cents }
+    /** A Raleigh total (price + NC sales tax 6.75% + Wake prepared food tax 1%, each half-up) for a pre-tax price. */
+    private fun ncTotal(price: Long): Long =
+        price + CopperLanternConfig.NC_TAXES.sumOf { it.on(Money(price)).cents }
 
-    /** The smallest pre-tax price ≥ [from] whose Québec total ends in [digit]. */
+    /** The smallest pre-tax price ≥ [from] whose Raleigh total ends in [digit]. */
     private fun priceEndingIn(digit: Int, from: Long = 1000): Long =
-        generateSequence(from) { it + 1 }.first { quebecTotal(it) % 10 == digit.toLong() }
+        generateSequence(from) { it + 1 }.first { ncTotal(it) % 10 == digit.toLong() }
 
     /** Open a check on [table] with one off-menu line at [price]; returns (id, check view). */
     private suspend fun HttpClient.checkAt(table: String, price: Long): Pair<Int, JsonObject> {
@@ -148,7 +148,7 @@ class CashRoundingFlowTest {
         assertEquals(2L, c.cash(three, 5)["tender"]!!.jsonObject.long("roundingAdjustmentCents"))
         c.finalize(three)
         // 10.07 → 10.05
-        val price = generateSequence(800L) { it + 1 }.first { quebecTotal(it) == 1007L }
+        val price = generateSequence(800L) { it + 1 }.first { ncTotal(it) == 1007L }
         val (ten, v) = c.checkAt("t1", price)
         assertEquals(1007L, v.long("grandTotalCents"))
         assertEquals(1005L, v.long("cashDueCents"))
@@ -189,7 +189,7 @@ class CashRoundingFlowTest {
         val c = loginClient()
         c.openShift(float = 0)
         // $20 on card, the rest in cash: 3.47 → 3.45 in cash
-        val price = generateSequence(1900L) { it + 1 }.first { quebecTotal(it) == 2347L }
+        val price = generateSequence(1900L) { it + 1 }.first { ncTotal(it) == 2347L }
         val (id, _) = c.checkAt("t3", price)
         val afterCard = c.card(id, 2000)["check"]!!.jsonObject
         assertEquals(347L, afterCard.long("outstandingCents"))

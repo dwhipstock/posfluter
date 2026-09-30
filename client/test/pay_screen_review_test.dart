@@ -22,9 +22,9 @@ Map<String, dynamic> _check() => {
         ).readAsStringSync(),
       )
       as Map<String, dynamic>,
-  // $73.58 due; cash rounds to $73.60
-  'cashDueCents': 7360,
-  'cashRoundingCents': 2,
+  // $68.96 due; cash rounds to $68.95
+  'cashDueCents': 6895,
+  'cashRoundingCents': -1,
 };
 
 http.Response _json(Object b, [int s = 200]) => http.Response.bytes(
@@ -121,12 +121,12 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await type(tester, '70');
+    await type(tester, '60');
     expect(find.byKey(const Key('change-due')), findsNothing);
     await type(tester, '⌫');
     await type(tester, '⌫');
-    await type(tester, '80');
-    expect(find.text('Change due \$6.40'), findsOneWidget);
+    await type(tester, '70');
+    expect(find.text('Change due \$1.05'), findsOneWidget);
   });
 
   testWidgets('card terminal not set up: the button says why and is off', (
@@ -219,10 +219,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Receive'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('open-shift-prompt')), findsOneWidget);
-      expect(
-        find.text('Open one now to take cash?'),
-        findsOne,
-      );
+      expect(find.text('Open one now to take cash?'), findsOne);
       // the float defaults to $200 and can be changed
       expect(find.text('200'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('open-shift-float')), '150');

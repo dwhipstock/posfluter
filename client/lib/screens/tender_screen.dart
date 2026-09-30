@@ -507,7 +507,7 @@ class _TenderScreenState extends State<TenderScreen> {
                 ),
               ],
             ),
-            // what the total is made of: pre-tax subtotal + GST / QST
+            // what the total is made of: pre-tax subtotal + the taxes on top
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: TaxRows(

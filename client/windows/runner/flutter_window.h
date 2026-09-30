@@ -2,10 +2,13 @@
 #define RUNNER_FLUTTER_WINDOW_H_
 
 #include <flutter/dart_project.h>
+#include <flutter/encodable_value.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
 
+#include "touch_keyboard.h"
 #include "win32_window.h"
 
 // A window that does nothing but host a Flutter view.
@@ -28,6 +31,12 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // The app's own on-screen keyboard asks, over this channel, for the
+  // Windows touch keyboard to stay hidden (lib/keyboard/pos_keyboard.dart).
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      keyboard_channel_;
+  TouchKeyboardSuppressor touch_keyboard_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
