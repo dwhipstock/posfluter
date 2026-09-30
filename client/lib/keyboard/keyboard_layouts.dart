@@ -2,8 +2,12 @@
 /// two symbol pages, and the long-press accent rows. Pure data, no widgets.
 library;
 
-/// The languages the keyboard has a layout for, in globe-key order.
+/// The languages the keyboard has a layout for.
 const keyboardLayouts = ['en', 'fr', 'es', 'de'];
+
+/// The layout for the app language [lang] (English for anything else).
+String keyboardLayoutFor(String lang) =>
+    keyboardLayouts.contains(lang) ? lang : 'en';
 
 /// Each layout's name in its own language, shown on the space bar.
 const keyboardLayoutNames = {

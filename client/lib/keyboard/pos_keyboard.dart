@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../i18n.dart';
 import 'keyboard_host.dart';
 import 'keyboard_layouts.dart';
 
@@ -94,11 +95,6 @@ class PosKeyboardControl extends ChangeNotifier with TextInputControl {
   ShiftState _shift = ShiftState.off;
   DateTime _lastShiftTap = DateTime(0);
 
-  // globe key: a layout picked by hand, kept while the app language is the
-  // one it was picked under (changing the app language resets it)
-  String? _layoutPick;
-  String? _layoutPickBase;
-
   KeyboardPage get page => _page;
   ShiftState get shift => _shift;
   TextInputConfiguration get configuration => _config;
@@ -130,20 +126,10 @@ class PosKeyboardControl extends ChangeNotifier with TextInputControl {
     return a;
   }
 
-  /// The letter layout for [appLang]: the app's language unless the globe key
-  /// picked another.
-  String layoutFor(String appLang) {
-    if (_layoutPick != null && _layoutPickBase == appLang) return _layoutPick!;
-    return keyboardLayouts.contains(appLang) ? appLang : 'en';
-  }
-
-  /// Globe key: the next layout, without changing the app's language.
-  void nextLayout(String appLang) {
-    final i = keyboardLayouts.indexOf(layoutFor(appLang));
-    _layoutPick = keyboardLayouts[(i + 1) % keyboardLayouts.length];
-    _layoutPickBase = appLang;
-    notifyListeners();
-  }
+  /// The letter layout: always the app's current UI language (there is no
+  /// manual override). Read fresh on every build, so it follows the EN / FR /
+  /// ES / DE button whether the keyboard is up or down.
+  String get layout => keyboardLayoutFor(Prefs.instance.lang);
 
   // ---- TextInputControl ------------------------------------------------
 

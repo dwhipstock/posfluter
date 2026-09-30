@@ -1,13 +1,15 @@
 // The Windows tablet's on-screen keyboard (lib/keyboard/): it is Flutter's
 // virtual keyboard, so these drive real TextFields through it — typing,
 // backspace, shift, the number pad, the enter key's action, typing over a
-// selection, accents, the per-language layouts and the globe key.
+// selection, accents, and the letter layout following the app's language.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_client/i18n.dart';
 import 'package:pos_client/keyboard/keyboard_host.dart';
 import 'package:pos_client/keyboard/pos_keyboard.dart';
+import 'package:pos_client/store_profile.dart';
 
 const _screen = Size(1600, 1000);
 
@@ -36,10 +38,14 @@ Future<PosKeyboardControl> _pumpApp(WidgetTester tester, Widget home) async {
     TextInput.restorePlatformInputControl();
     kb.dispose();
   });
+  // wired as in the app: the language scope above MaterialApp, the keyboard
+  // in its builder
   await tester.pumpWidget(
-    MaterialApp(
-      builder: (context, child) => KeyboardHost(control: kb, child: child!),
-      home: home,
+    prefsScope(
+      child: MaterialApp(
+        builder: (context, child) => KeyboardHost(control: kb, child: child!),
+        home: home,
+      ),
     ),
   );
   return kb;
@@ -81,7 +87,11 @@ Future<PosKeyboardControl> _pumpField(
 }
 
 void main() {
-  tearDown(() => Prefs.instance.lang = 'en');
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  tearDown(() {
+    Prefs.instance.lang = 'en';
+    StoreProfile.current = StoreProfile.pub;
+  });
 
   testWidgets('slides up on focus and types into the field', (tester) async {
     final c = TextEditingController();
@@ -372,22 +382,62 @@ void main() {
     expect(c.text, 'ça');
   });
 
-  testWidgets('the globe key cycles layouts, not the app language', (
+  testWidgets('app started in German: QWERTZ with umlauts on first show', (
+    tester,
+  ) async {
+    StoreProfile.current = const StoreProfile(locales: ['en', 'de']);
+    FlutterSecureStorage.setMockInitialValues({'pref_lang': 'de'});
+    await Prefs.instance.load(); // what main() does at startup
+    expect(Prefs.instance.lang, 'de');
+    final c = TextEditingController();
+    await _pumpField(tester, c);
+    final top = tester.getCenter(_key('q')).dy;
+    expect(tester.getCenter(_key('z')).dy, top);
+    for (final k in ['ü', 'ö', 'ä', 'ß']) {
+      expect(_key(k), findsOneWidget);
+    }
+    expect(find.text('Deutsch'), findsOneWidget);
+  });
+
+  testWidgets('switching EN to ES with the keyboard up brings in ñ', (
+    tester,
+  ) async {
+    StoreProfile.current = const StoreProfile(locales: ['en', 'es']);
+    final c = TextEditingController();
+    final kb = await _pumpField(tester, c);
+    expect(_key('ñ'), findsNothing);
+    expect(find.text('English'), findsOneWidget);
+    await Prefs.instance.setLang(Prefs.instance.nextLang); // the EN/ES button
+    await tester.pump();
+    expect(Prefs.instance.lang, 'es');
+    expect(kb.visible.value, isTrue);
+    expect(_key('ñ'), findsOneWidget);
+    expect(find.text('Español'), findsOneWidget);
+    expect(find.text('Listo'), findsOneWidget); // enter key relabelled too
+    await _tap(tester, 'ñ');
+    expect(c.text, 'ñ');
+  });
+
+  testWidgets('a language change while hidden shows on the next show', (
     tester,
   ) async {
     final c = TextEditingController();
     final kb = await _pumpField(tester, c);
-    expect(_key('ç'), findsNothing);
-    await _tap(tester, 'globe');
-    expect(_key('ç'), findsOneWidget); // French
-    await _tap(tester, 'globe');
-    expect(_key('ñ'), findsOneWidget); // Spanish
-    await _tap(tester, 'globe');
-    expect(_key('ß'), findsOneWidget); // German
-    expect(Prefs.instance.lang, 'en');
-    expect(find.text('Done'), findsOneWidget); // labels stay in the app's
-    // a new app language wins over the pick
-    expect(kb.layoutFor('fr'), 'fr');
+    await _tap(tester, 'hide');
+    await tester.pumpAndSettle();
+    expect(kb.visible.value, isFalse);
+    await Prefs.instance.setLang('fr');
+    await tester.pump();
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expect(kb.visible.value, isTrue);
+    expect(_key('ç'), findsOneWidget);
+    expect(find.text('Français'), findsOneWidget);
+  });
+
+  testWidgets('there is no layout-switch key', (tester) async {
+    await _pumpField(tester, TextEditingController());
+    expect(_key('globe'), findsNothing);
   });
 
   testWidgets('symbols page types punctuation', (tester) async {
