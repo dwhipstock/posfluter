@@ -72,7 +72,10 @@ class KioskController extends ChangeNotifier {
   KioskStage stage = KioskStage.setup;
   String? storeUrl, message;
   String storeName = '';
-  String currency = 'CAD';
+  String currency = 'USD';
+
+  /// The store's legal drinking age, named on the ID note (21 in the US).
+  int legalAge = 21;
   List<String> locales = const ['en', 'fr', 'es', 'de', 'af'];
   String lang = 'en';
   bool busy = false, offline = false;
@@ -186,6 +189,7 @@ class KioskController extends ChangeNotifier {
       final c = await api.config();
       storeName = c.storeName;
       currency = c.currency;
+      legalAge = c.legalAge;
       if (c.locales.isNotEmpty) locales = c.locales;
       lang = locales.first;
       await _loadMenu();

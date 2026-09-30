@@ -4,14 +4,16 @@ Copper Lantern's counter-service location, set up like a burger chain's
 counter. It has no floor plan and no tables. Customers order at the counter
 or at a self-order kiosk, pay at the counter, and are called by a short
 order number. It is one more venue of the `copper-lantern` brand (venue id
-`express`) and reports to the same Copper Lantern portal as Vieux-Port and
+`express`) and reports to the same Copper Lantern portal as Glenwood South and
 Plateau. Sync is one-way, store to portal, as for every store.
 
 | | |
 |---|---|
 | Store | `POS_VENUE=express` (desktop), or `store.venue=express` in the Copper Lantern POS app's `store.properties` (tablet) |
 | Kind | `quick-serve` (`GET /health` → `"kind":"quick-serve"`) |
-| Country, money, languages | Canada, CAD, GST + QST added on top; fr / en / es / de |
+| Country, money, languages | US (Raleigh, NC; 418 Lantern Row, fictional), USD, NC sales tax 6.75% + Wake prepared food tax 1% added on top; en first, fr / es / de / af selectable |
+| Legal age | 21: the kiosk's ID note and a 21+ badge on kiosk orders with alcohol at the counter |
+| Existing counters | moved from Montréal in place on their next start: see [Copper Lantern moved to Raleigh](demo-runbook.md#copper-lantern-moved-to-raleigh-existing-devices) |
 | Menu | 22 items: burgers, chicken, fries and sides, salads, desserts, soft drinks, and beer and wine only (no cocktails). Sizes on fries, soft drinks, wings and tenders |
 | Staff | manager PIN 1234, cashier 9999 |
 
@@ -84,8 +86,10 @@ and never runs a store of its own.
 - **Welcome**: *Touch to order*, with buttons for Français, English, Español
   and Deutsch.
 - **Dine in / Take out**, then **categories and big photo tiles**. Items with
-  more than one size open a size picker. Alcohol shows *Staff will check ID at
-  the counter*. This is a note only; nothing is blocked.
+  more than one size open a size picker. Alcohol shows *Alcohol — 21+ only.
+  Staff will check ID at the counter*. This is a note only; nothing is
+  blocked. At the counter, a kiosk order with alcohol shows an ID *21+* badge
+  in the kiosk strip.
 - **Add a drink?** On the way to the cart, once per order: when the order has
   a main (a burger, chicken or a salad) but no drink, a full-width step
   offers up to four soft drinks, with photos and prices. If there is no side
@@ -184,7 +188,7 @@ store seeded before them has only the two drinks until its data is reset.
    the kitchen and the board.
 8. **Kitchen**: bump #101 at Kitchen and at Bar. #101 moves to *Ready* with
    the chime. On the POS, *Orders → Picked up* on #101: it leaves the board.
-9. **Portal**: the Express venue appears next to Vieux-Port and Plateau, with
+9. **Portal**: the Express venue appears next to Glenwood South and Plateau, with
    its sales.
 
 Stop the store with `scripts/kiosk-setup.sh --stop`.

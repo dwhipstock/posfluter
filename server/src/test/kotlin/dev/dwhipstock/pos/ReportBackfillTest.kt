@@ -85,11 +85,11 @@ class ReportBackfillTest {
         assertEquals(
             original["grandTotalCents"]!!.jsonPrimitive.content.toLong(),
             backfilled["grandTotalCents"]!!.jsonPrimitive.content.toLong())
-        // GST 1.01 + QST 2.02 on the $20.25 pitcher, with the per-tax breakdown
-        assertEquals(303L, backfilled["taxIncludedCents"]!!.jsonPrimitive.content.toLong())
+        // NC sales tax 1.37 + Wake 0.20 on the $20.25 pitcher, with the per-tax breakdown
+        assertEquals(157L, backfilled["taxIncludedCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(2025L, backfilled["subtotalCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(original["taxes"], backfilled["taxes"])
-        assertEquals(listOf("GST", "QST"), backfilled["taxes"]!!.jsonArray.map {
+        assertEquals(listOf("NC_SALES", "WAKE_FOOD"), backfilled["taxes"]!!.jsonArray.map {
             it.jsonObject["code"]!!.jsonPrimitive.content })
         assertTrue(backfilled["tenders"]!!.jsonArray.isNotEmpty())
         assertEquals("CASH", backfilled["tenders"]!!.jsonArray.first().jsonObject["type"]!!.jsonPrimitive.content)

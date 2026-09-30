@@ -185,12 +185,14 @@ class Q {
     'Öffnen Sie $url auf dem Fernseher oder in einem Browser.',
     'Maak $url oop op die TV of in enige blaaier.',
   );
-  String get idCheck => _t(
-    'Alcool — vérifier une pièce d’identité',
-    'Alcohol — check ID',
-    'Alcohol — verificar identificación',
-    'Alkohol — Ausweis prüfen',
-    'Alkohol — kontroleer ID',
+
+  /// Alcohol on an order: check the guest's ID against the store's legal age.
+  String idCheck(int age) => _t(
+    'Alcool — vérifier une pièce d’identité ($age ans et plus)',
+    'Alcohol — check ID ($age+)',
+    'Alcohol — verificar identificación ($age+)',
+    'Alkohol — Ausweis prüfen (ab $age)',
+    'Alkohol — kontroleer ID ($age+)',
   );
   String items(int n) => _t(
     n == 1 ? '1 article' : '$n articles',

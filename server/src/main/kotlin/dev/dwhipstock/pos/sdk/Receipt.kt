@@ -55,10 +55,20 @@ data class Receipt(
     /** Promotions taken off before tax, one line each (a c-store's deals). */
     val discounts: List<ReceiptDiscount> = emptyList(),
     /** Quick-serve: the customer's order number and dine in / take out ("#101 · Take out"). */
-    val orderLabel: String? = null,
+    val order: ReceiptOrder? = null,
 ) {
     /** Pre-tax subtotal: the total less the taxes added on top. */
     val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
+}
+
+/**
+ * A quick-serve order on its receipt: "#101" and dine in / take out. The words
+ * follow the receipt's print language ([MessageKey.KIOSK_TAKE_OUT]), one
+ * language only.
+ */
+data class ReceiptOrder(val number: String, val takeOut: Boolean) {
+    fun label(locale: LocaleCode): String =
+        "$number · " + Messages.get(if (takeOut) MessageKey.KIOSK_TAKE_OUT else MessageKey.KIOSK_DINE_IN, locale)
 }
 
 data class ReceiptItem(
@@ -222,8 +232,7 @@ object ReceiptRenderer {
         if (policy.headerRule) add(PrintLine.Divider)
         add(PrintLine.Blank)
         if (provisional) {
-            // Customer-facing banner: bilingual in every locale pack — anyone at
-            // the table might read it, so it doesn't defer to the owner's locale.
+            // Customer-facing banner, in the receipt's print language
             add(PrintLine.Header(msg(RECEIPT_BILL_BANNER)))
             add(PrintLine.Blank)
         }
@@ -232,7 +241,7 @@ object ReceiptRenderer {
         } else {
             add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
         }
-        receipt.orderLabel?.let { add(PrintLine.Large(it)) }
+        receipt.order?.let { add(PrintLine.Large(it.label(locale))) }
         add(PrintLine.KeyValue(msg(RECEIPT_OPEN), policy.formatDate(receipt.openedAt)))
         // provisional: "Printed at" (this snapshot); final: the close/paid time
         add(PrintLine.KeyValue(

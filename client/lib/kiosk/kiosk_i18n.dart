@@ -77,12 +77,14 @@ class KioskText {
     'Meine Bestellung ($n)',
     'My bestelling ($n)',
   );
-  String get idNote => _t(
-    'Alcool — le personnel vérifiera une pièce d’identité au comptoir.',
-    'Alcohol — staff will check ID at the counter.',
-    'Alcohol — el personal verificará su identificación en el mostrador.',
-    'Alkohol — das Personal prüft an der Kasse Ihren Ausweis.',
-    'Alkohol — personeel sal u ID by die toonbank kontroleer.',
+
+  /// The alcohol note, naming the store's legal drinking age (21 in the US).
+  String idNote(int age) => _t(
+    'Alcool — $age ans et plus. Le personnel vérifiera une pièce d’identité au comptoir.',
+    'Alcohol — $age+ only. Staff will check ID at the counter.',
+    'Alcohol — solo mayores de $age. El personal verificará su identificación en el mostrador.',
+    'Alkohol erst ab $age — das Personal prüft an der Kasse Ihren Ausweis.',
+    'Alkohol — slegs $age+. Personeel sal u ID by die toonbank kontroleer.',
   );
 
   // "Add a drink?" (the store picks the rows; once per order)

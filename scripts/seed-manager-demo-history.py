@@ -22,13 +22,13 @@ VENUE = "vieux-port"  # cloud migration 014 renamed the original "main" store
 ID_BASE = 900_000
 
 # item id, variant id, category id, English display name, pre-tax unit price
-# (CAD cents; the store's seeded menu, CopperLanternSeed)
+# (USD cents; the store's seeded menu, CopperLanternSeed)
 MENU = [
     ("lantern-lager", "lantern-lager:pint", "beer-cider", "Lantern House Lager", 750),
     ("amber-ale", "amber-ale:pint", "beer-cider", "Copper Amber Ale", 795),
     ("hazy-ipa", "hazy-ipa:regular", "beer-cider", "Local Hazy IPA", 825),
     ("irish-stout", "irish-stout:regular", "beer-cider", "Irish Stout", 850),
-    ("dry-cider", "dry-cider:regular", "beer-cider", "Québec Dry Cider", 795),
+    ("dry-cider", "dry-cider:regular", "beer-cider", "Orchard Dry Cider", 795),
     ("hop-water", "hop-water:regular", "beer-cider", "Sparkling Hop Water", 495),
     ("wings", "wings:regular", "starters", "Chicken Wings", 1675),
     ("poutine", "poutine:regular", "starters", "Classic Poutine", 1300),
@@ -63,17 +63,18 @@ def q(value: str | None) -> str:
 
 VENUE_TZ = "America/New_York"
 
-# Québec taxes added on top of the pre-tax subtotal, as the store charges them:
-# code, French label, English label, rate (percent, decimal string), registration no.
+# Raleigh, NC taxes added on top of the pre-tax subtotal, as the store charges
+# them (CopperLanternConfig.NC_TAXES): code, French label, English label, rate
+# (percent, decimal string), registration no. (none on US receipts)
 TAXES = [
-    ("GST", "TPS", "GST", "5", "123456789 RT0001"),
-    ("QST", "TVQ", "QST", "9.975", "1234567890 TQ0001"),
+    ("NC_SALES", "NC sales tax", "NC sales tax", "6.75", ""),
+    ("WAKE_FOOD", "Wake prepared food tax", "Wake prepared food tax", "1", ""),
 ]
 
 
 def tax_cents(subtotal: int, rate: str) -> int:
     """One tax on the whole check, rounded half-up to the cent (the store's math)."""
-    thousandths = round(float(rate) * 1000)  # 9.975 -> 9975
+    thousandths = round(float(rate) * 1000)  # 6.75 -> 6750
     return (subtotal * thousandths * 2 + 100_000) // 200_000
 
 
@@ -172,10 +173,10 @@ def main() -> None:
                     f"{q(name)},{q(name)},NULL,NULL,{q(name)},{qty},{price},{line_total})"
                 )
 
-            # GST and QST on top of the pre-tax subtotal: the guest pays the total
+            # NC sales tax + Wake prepared food tax on top of the pre-tax subtotal
             taxes = taxes_for(subtotal)
-            gst, qst = (t["amountCents"] for t in taxes)
-            tax = gst + qst
+            tax = sum(t["amountCents"] for t in taxes)
+            gst = qst = 0  # the cloud's GST/QST columns hold Québec-era history only
             total = subtotal + tax
 
             is_void = rng.random() < 0.018

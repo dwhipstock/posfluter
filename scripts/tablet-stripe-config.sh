@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Give the Android tablet store a Stripe TEST key for the "Card (Stripe)" tender.
 #
-#   scripts/tablet-stripe-config.sh          # push STRIPE_KEY from the repo-root .env
+#   scripts/tablet-stripe-config.sh          # push the store's key from the repo-root .env
 #   scripts/tablet-stripe-config.sh --off    # remove the key (Stripe disabled)
 #
 # --app copperlantern|sagepoppy picks which POS app on the tablet (default
 # copperlantern; see scripts/lib/tablet-app.sh). The Stripe account's currency
-# must be the store's: this is the CAD key; the US stores take STRIPE_KEY_US
-# (scripts/phone-reader.sh).
+# must be the store's: every store sells in USD now (Copper Lantern moved to
+# Raleigh, NC), so this pushes STRIPE_KEY_US; STRIPE_KEY (the old CAD account)
+# is used only when there is no STRIPE_KEY_US, and the store then refuses it.
 #
 # Reads STRIPE_KEY (and optional STRIPE_LOCATION_ID) from the gitignored .env at
 # the repo root (one line: STRIPE_KEY=sk_test_...). Only sk_test_ keys are
@@ -38,14 +39,14 @@ KEY=""
 LOCATION=""
 if [[ "$OFF" == false ]]; then
   [[ -f "$REPO_ROOT/.env" ]] || { echo "ERROR: $REPO_ROOT/.env not found (add a line STRIPE_KEY=sk_test_...)." >&2; exit 1; }
-  KEY="$(env_value STRIPE_KEY)"
+  KEY="$(env_value STRIPE_KEY_US)"
+  [[ -n "$KEY" ]] || { KEY="$(env_value STRIPE_KEY)"; [[ -n "$KEY" ]] && echo "NOTE: no STRIPE_KEY_US in .env — pushing STRIPE_KEY (a CAD account is refused by the USD store)." >&2; }
   LOCATION="$(env_value STRIPE_LOCATION_ID)"
-  [[ -n "$KEY" ]] || { echo "ERROR: no STRIPE_KEY in $REPO_ROOT/.env." >&2; exit 1; }
+  [[ -n "$KEY" ]] || { echo "ERROR: no STRIPE_KEY_US (or STRIPE_KEY) in $REPO_ROOT/.env." >&2; exit 1; }
   if [[ "$KEY" != sk_test_* ]]; then
-    echo "ERROR: STRIPE_KEY is not a test key (must start with sk_test_). Live keys are not supported yet." >&2
+    echo "ERROR: the Stripe key is not a test key (must start with sk_test_). Live keys are not supported yet." >&2
     exit 1
   fi
-  [[ "$TABLET_APP" != copperlantern ]] && echo "NOTE: STRIPE_KEY is the CAD account; a US store refuses it (use scripts/phone-reader.sh, STRIPE_KEY_US)." >&2
 fi
 
 tablet_require_adb

@@ -425,7 +425,7 @@ Future<Variant?> _chooseVariant(
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        t.idNote,
+                        t.idNote(c.legalAge),
                         style: const TextStyle(fontSize: 16),
                       ),
                     ),
@@ -906,7 +906,7 @@ class _CartScreen extends StatelessWidget {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  t.idNote,
+                                  t.idNote(c.legalAge),
                                   style: const TextStyle(fontSize: 18),
                                 ),
                               ),
@@ -1027,7 +1027,7 @@ class _DoneScreen extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 24),
                       child: Text(
-                        t.idNote,
+                        t.idNote(c.legalAge),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.white70,

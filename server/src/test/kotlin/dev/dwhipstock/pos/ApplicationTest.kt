@@ -32,9 +32,9 @@ class ApplicationTest {
         // venue names the store on the sign-in screen; the profile tells the
         // terminal its screens, brand, languages and currency before sign-in
         assertEquals(
-            """{"status":"ok","pairingRequired":false,"venue":"Copper Lantern — Vieux-Port",""" +
-                """"venueId":"vieux-port","brand":"copper-lantern","kind":"restaurant","country":"CA",""" +
-                """"currency":"CAD","locales":["en","fr","es","de","af"],"legalAge":18,"cashRounding":"nickel"}""",
+            """{"status":"ok","pairingRequired":false,"venue":"Copper Lantern — Glenwood South",""" +
+                """"venueId":"vieux-port","brand":"copper-lantern","kind":"restaurant","country":"US",""" +
+                """"currency":"USD","locales":["en","fr","es","de","af"],"legalAge":21,"cashRounding":"nickel"}""",
             response.bodyAsText(),
         )
     }
@@ -81,14 +81,14 @@ class ApplicationTest {
             setBody("""{"bottles":1}""")
         }.let { assertEquals(HttpStatusCode.OK, it.status) }
 
-        // subtotal: 20.25 + 7.95 + 25.00 corkage = $53.20; GST 5% = 2.66,
-        // QST 9.975% = 5.3067 → 5.31; total $61.17
+        // subtotal: 20.25 + 7.95 + 25.00 corkage = $53.20; NC sales tax 6.75% =
+        // 3.591 → 3.59, Wake prepared food tax 1% = 0.532 → 0.53; total $57.32
         val check = json.parseToJsonElement(c.get("/checks/$checkId").bodyAsText()).jsonObject
         assertEquals(5320L, check["subtotalCents"]!!.jsonPrimitive.long)
         val taxes = check["taxes"]!!.jsonArray.map { it.jsonObject }
-        assertEquals(listOf("GST", "QST"), taxes.map { it["code"]!!.jsonPrimitive.content })
-        assertEquals(listOf(266L, 531L), taxes.map { it["amountCents"]!!.jsonPrimitive.long })
-        assertEquals(6117L, check["grandTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(listOf("NC_SALES", "WAKE_FOOD"), taxes.map { it["code"]!!.jsonPrimitive.content })
+        assertEquals(listOf(359L, 53L), taxes.map { it["amountCents"]!!.jsonPrimitive.long })
+        assertEquals(5732L, check["grandTotalCents"]!!.jsonPrimitive.long)
         assertEquals(0L, check["taxIncludedCents"]!!.jsonPrimitive.long)
 
         // Put $30 on the generic card terminal; totals lock at initiation.
@@ -107,21 +107,21 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.Created, confirmed.status)
         val afterCard = json.parseToJsonElement(confirmed.bodyAsText()).jsonObject["check"]!!.jsonObject
         assertEquals(3000L, afterCard["paidCents"]!!.jsonPrimitive.long)
-        assertEquals(3117L, afterCard["outstandingCents"]!!.jsonPrimitive.long)
+        assertEquals(2732L, afterCard["outstandingCents"]!!.jsonPrimitive.long)
 
         // finalize refused while outstanding
         assertEquals(HttpStatusCode.Conflict, c.post("/checks/$checkId/finalize").status)
 
-        // Cash settles the remaining $31.17 (due rounds to $31.15) and returns $3.85 change.
+        // Cash settles the remaining $27.32 (due rounds to $27.30) and returns $7.70 change.
         val tendered = c.post("/checks/$checkId/tenders") {
             contentType(ContentType.Application.Json)
             setBody("""{"type":"CASH","amountTenderedCents":3500}""")
         }
         assertEquals(HttpStatusCode.Created, tendered.status)
         val tender = json.parseToJsonElement(tendered.bodyAsText()).jsonObject["tender"]!!.jsonObject
-        assertEquals(385L, tender["changeCents"]!!.jsonPrimitive.long)
+        assertEquals(770L, tender["changeCents"]!!.jsonPrimitive.long)
         assertEquals(-2L, tender["roundingAdjustmentCents"]!!.jsonPrimitive.long)
-        assertEquals(3117L, tender["amountAppliedCents"]!!.jsonPrimitive.long)
+        assertEquals(2732L, tender["amountAppliedCents"]!!.jsonPrimitive.long)
 
         val closed = c.post("/checks/$checkId/finalize")
         assertEquals(HttpStatusCode.OK, closed.status)
@@ -133,20 +133,25 @@ class ApplicationTest {
         val receiptText = json.parseToJsonElement(c.get("/checks/$checkId/receipt").bodyAsText())
             .jsonObject["text"]!!.jsonPrimitive.content
         assertEquals(receiptFiles[0].readText(), receiptText)
-        assertTrue("Copper Lantern — Vieux-Port" in receiptText)
+        assertTrue("Copper Lantern — Glenwood South" in receiptText)
+        assertTrue("412 Lantern Row, Raleigh, NC 27601" in receiptText, receiptText)
+        assertTrue("Tel. (919) 555-0142" in receiptText, receiptText)
         assertTrue("Lantern House Lager (60 oz pitcher) ×1" in receiptText)
         // exactly ONE Lantern House Lager line — guards against variant-join fan-out
         assertEquals(1, receiptText.lines().count { it.startsWith("Lantern House Lager") })
         assertTrue("Je ne veux pas de glace." in receiptText)
         assertTrue("Corkage" in receiptText)
-        // itemised taxes: subtotal, each tax with its rate, total, registration numbers
+        // itemised taxes: subtotal, each North Carolina tax with its rate, total;
+        // no GST/QST and no registration-number lines (a US receipt)
         val kv = receiptText.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
         assertTrue("Subtotal | 53.20" in kv, receiptText)
-        assertTrue("GST/TPS 5% | 2.66" in kv, receiptText)
-        assertTrue("QST/TVQ 9.975% | 5.31" in kv, receiptText)
-        assertTrue("Total | 61.17" in kv, receiptText)
-        assertTrue("GST/TPS no. 123456789 RT0001" in receiptText)
-        assertTrue("QST/TVQ no. 1234567890 TQ0001" in receiptText)
+        assertTrue("NC sales tax 6.75% | 3.59" in kv, receiptText)
+        assertTrue("Wake prepared food tax 1% | 0.53" in kv, receiptText)
+        assertTrue("Total | 57.32" in kv, receiptText)
+        assertTrue("Rounding | -0.02" in kv, receiptText)
+        for (gone in listOf("GST", "QST", "TPS", "TVQ", " no. ", "Merci", "REÇU")) {
+            assertTrue(gone !in receiptText, "'$gone' on an English receipt: $receiptText")
+        }
         assertTrue("2026" in receiptText)          // four-digit year
         assertTrue("included" !in receiptText)       // no inclusive-tax line
         assertTrue("Card" in receiptText && "Cash" in receiptText)

@@ -4,9 +4,9 @@ import 'package:pos_client/i18n.dart';
 
 void main() {
   test('store display name splits into brand and location', () {
-    expect(Api.splitVenueName('Copper Lantern — Vieux-Port'), (
+    expect(Api.splitVenueName('Copper Lantern — Glenwood South'), (
       'Copper Lantern',
-      'Vieux-Port',
+      'Glenwood South',
     ));
     expect(Api.splitVenueName('Copper Lantern - Plateau'), (
       'Copper Lantern',

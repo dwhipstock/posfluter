@@ -31,7 +31,7 @@ web images; the differences are runtime config (`cloud/infra/new-client.sh`,
 the brand packs in `cloud/web/brands/`). One edge proxy per server routes each
 client's hostname to its own instance. Runbook: `docs/new-client-in-a-day.md`.
 The three demo clients are **Copper Lantern** (tenant `copperlantern`, two
-Montréal pubs, CAD, French/English), **Sage & Poppy** (tenant `sagepoppy`,
+Raleigh, NC pubs and a quick-serve counter, USD, English first), **Sage & Poppy** (tenant `sagepoppy`,
 one Los Angeles bottle shop, USD, English/Spanish) and **Pronghorn Fuel &
 Market** (tenant `pronghorn`, one Texas gas station with a convenience store,
 USD, English/Spanish).
@@ -50,8 +50,8 @@ the shop keeps selling. See `docs/forecourt.md`.
 One owner (tenant) has many stores (venues), and each store has exactly one
 POS tablet (one store database per venue; the cloud pins each venue to one
 store installation). Extra stations use the staff app served by that tablet
-over the LAN. The demo tenant `copperlantern` has two fictional Montréal
-stores: **Copper Lantern — Vieux-Port** (`vieux-port`, the Android tablet) and
+over the LAN. The demo tenant `copperlantern` has fictional Raleigh, NC
+stores: **Copper Lantern — Glenwood South** (`vieux-port`, the Android tablet) and
 **Copper Lantern — Plateau** (`plateau`, the desktop build of the same store
 server). The store server picks its venue config — display name and first-boot
 seed — from `POS_VENUE` (`vieux-port` default, or `plateau`); a store's cloud
@@ -108,7 +108,7 @@ zone, taking the first occurrence of the repeated fall-back hour.
    for the first tablet's cloud reporting, and tablets do not sync with one
    another.
 
-Venue policy is isolated in a typed configuration. The included configuration is fictional: CAD minor units, Gregorian dates, English/French content, generic tenders, and Québec sales taxes (GST 5% and QST 9.975%) added on top of pre-tax prices as data (`TaxPolicy.AddedTaxes`). Menu, staff, settings, receipts, and uploaded photos remain venue-scoped.
+Venue policy is isolated in a typed configuration. The included configuration is fictional: USD minor units, Gregorian dates, English content (French, Spanish, German, Afrikaans selectable), generic tenders, and North Carolina taxes (NC sales tax 6.75% and Wake County's 1% prepared food tax) added on top of pre-tax prices as data (`TaxPolicy.AddedTaxes`). Menu, staff, settings, receipts, and uploaded photos remain venue-scoped.
 
 The one tender that needs the internet is the optional **Card (Stripe)**
 (Stripe Terminal, test mode, simulated reader; `payments/StripeService.kt`,

@@ -1149,7 +1149,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             ),
             child: Column(
               children: [
-                // pre-tax subtotal + GST / QST added on top, then the total
+                // pre-tax subtotal + the taxes added on top, then the total
                 TaxRows(subtotalCents: check.subtotalCents, taxes: check.taxes),
                 if (check.taxes.isNotEmpty) const SizedBox(height: 6),
                 Row(

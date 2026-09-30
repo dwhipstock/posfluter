@@ -1,10 +1,16 @@
 {
  "status": "ok",
  "pairingRequired": false,
- "venue": "Copper Lantern — Vieux-Port",
+ "venue": "Copper Lantern — Glenwood South",
+ "venueId": "vieux-port",
+ "brand": "copper-lantern",
+ "kind": "restaurant",
+ "country": "US",
+ "currency": "USD",
+ "legalAge": 21,
  "locales": [
-  "fr",
   "en",
+  "fr",
   "es",
   "de",
   "af"

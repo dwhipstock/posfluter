@@ -54,7 +54,7 @@ Lantern House Lager", a model prints those words on the glass as garbled
 lettering, even when the prompt says "no text". So:
 
 - The subject is the item's **description** ("Crisp, malty lager brewed in
-  Montréal").
+  Raleigh").
 - When the description doesn't say what the thing is ("Beef, cheddar, bacon,
   onions and house sauce"), it is led by a plain phrase: the name without the
   brand and place words, plus a generic noun from a one-word category

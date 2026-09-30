@@ -5,8 +5,8 @@
   "layout": "sidebar",
   "login": "band",
   "font": "inter",
-  "locales": { "default": "en", "available": ["fr", "en", "es", "de", "af"] },
-  "currency": "CAD",
+  "locales": { "default": "en", "available": ["en", "fr", "es", "de", "af"] },
+  "currency": "USD",
   "assets": { "mark": "mark-192.webp", "markLarge": "mark-384.webp", "icon": "icon.png" },
   "palette": {
     "primary": "#17456E",

@@ -19,9 +19,9 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 
 /**
- * Copper Lantern Express, the quick-serve counter (fictional, Montréal): a
+ * Copper Lantern Express, the quick-serve counter (fictional, Raleigh, NC): a
  * short counter menu — burgers, chicken, fries and sides, salads, desserts,
- * soft drinks, and beer and wine only (no cocktails). CAD cents, pre-tax like
+ * soft drinks, and beer and wine only (no cocktails). USD cents, pre-tax like
  * the pubs. French and English on the rows, Spanish, German and Afrikaans
  * in the translations table.
  *
@@ -105,15 +105,15 @@ object CopperLanternExpressSeed {
             "Bouteille de 500 ml.", "500 ml bottle.", one(275)),
         // beer & wine only (the pubs' own beers and wines keep their ids and photos)
         E("lantern-lager", "beer-wine", "LL", true, "Lager de la Lanterne", "Lantern House Lager", "Lager de la casa Lantern", "Lantern Hauslager", "Lantern-huislager",
-            "Lager désaltérante et maltée, brassée à Montréal.", "Crisp, malty lager brewed in Montréal.",
+            "Lager désaltérante et maltée, brassée à Raleigh.", "Crisp, malty lager brewed in Raleigh.",
             listOf(V("16oz", "Verre 16 oz", "16 oz glass", "Vaso de 16 oz", "Glas (16 oz)", "Glas (16 oz)", 725))),
         E("north-ipa", "beer-wine", "NI", true, "IPA du Nord", "North Trail IPA", "IPA North Trail", "North Trail IPA", "North Trail IPA",
             "IPA houblonnée aux arômes d'agrumes et de pin.", "Hop-forward IPA with citrus and pine.",
             listOf(V("16oz", "Verre 16 oz", "16 oz glass", "Vaso de 16 oz", "Glas (16 oz)", "Glas (16 oz)", 775))),
-        E("pinot-noir", "beer-wine", "PN", true, "Pinot noir des Cantons-de-l'Est", "Eastern Townships Pinot Noir", "Pinot noir de los Cantones del Este", "Pinot Noir aus den Eastern Townships", "Pinot Noir van die Oostelike Townships",
+        E("pinot-noir", "beer-wine", "PN", true, "Pinot noir de l'Oregon", "Oregon Pinot Noir", "Pinot Noir de Oregón", "Pinot Noir aus Oregon", "Pinot Noir van Oregon",
             "Rouge léger, notes de cerise et d'épices.", "Light red with cherry and spice.",
             listOf(V("glass", "Verre", "Glass", "Copa", "Glas", "Glas", 1050))),
-        E("riesling", "beer-wine", "RI", true, "Riesling des Cantons-de-l'Est", "Eastern Townships Riesling", "Riesling de los Cantones del Este", "Riesling aus den Eastern Townships", "Riesling van die Oostelike Townships",
+        E("riesling", "beer-wine", "RI", true, "Riesling des Finger Lakes", "Finger Lakes Riesling", "Riesling de Finger Lakes", "Riesling aus den Finger Lakes", "Finger Lakes-Riesling",
             "Blanc vif, notes de pomme et d'agrumes.", "Bright white with apple and citrus.",
             listOf(V("glass", "Verre", "Glass", "Copa", "Glas", "Glas", 950))),
     )

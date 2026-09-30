@@ -9,7 +9,7 @@
 # resolve from phones on the same Wi-Fi. Bring up with:  scripts/demo-up.sh
 #
 # Two-store demo: this file runs the cloud side only (db + api + portal). The
-# stores are the Android tablet (Vieux-Port) and the Mac desktop store (Plateau,
+# stores are the Android tablet (Glenwood South, id vieux-port) and the Mac desktop store (Plateau,
 # started by demo-up.sh outside Docker). The old `store` container is opt-in
 # (profile mac-store) and must NOT run next to the tablet: the tablet was
 # imported from its database, so both would push as the same store.
@@ -53,15 +53,17 @@ services:
       # stores on this Mac)
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env.local}"
       STORE_API_KEYS: "plateau=${STORE_API_KEY_PLATEAU:-},express=${STORE_API_KEY_EXPRESS:-},sage-poppy=${STORE_API_KEY_SAGE_POPPY:-},pronghorn=${STORE_API_KEY_PRONGHORN:-}"
-      STORES: "vieux-port=Copper Lantern — Vieux-Port,plateau=Copper Lantern — Plateau,express=Copper Lantern — Express,sage-poppy=Sage & Poppy Bottle Shop,pronghorn=Pronghorn Fuel & Market"
-      # the US shops (the bottle shop, the gas station): their own zone, currency,
-      # country and kind (cloud migration 017)
+      STORES: "vieux-port=Copper Lantern — Glenwood South,plateau=Copper Lantern — Plateau,express=Copper Lantern — Express,sage-poppy=Sage & Poppy Bottle Shop,pronghorn=Pronghorn Fuel & Market"
+      # every store is in the US now (Copper Lantern moved to Raleigh, NC): the
+      # bottle shop and the gas station keep their own zone; currency, country
+      # and kind per store (cloud migration 017)
       STORE_ZONES: "sage-poppy=America/Los_Angeles,pronghorn=America/Chicago"
-      STORE_CURRENCIES: "sage-poppy=USD,pronghorn=USD"
-      STORE_COUNTRIES: "sage-poppy=US,pronghorn=US"
+      STORE_CURRENCIES: "vieux-port=USD,plateau=USD,express=USD,sage-poppy=USD,pronghorn=USD"
+      STORE_COUNTRIES: "vieux-port=US,plateau=US,express=US,sage-poppy=US,pronghorn=US"
       RETAIL_STORES: "sage-poppy,pronghorn"
-      # "All stores" shows an approximate total in CAD at this fixed rate
-      REPORTING_CURRENCY: "${REPORTING_CURRENCY:-CAD}"
+      # "All stores" totals in USD (every store sells in USD; the rate is only
+      # used if a CAD store comes back)
+      REPORTING_CURRENCY: "${REPORTING_CURRENCY:-USD}"
       FX_USD_CAD: "${FX_USD_CAD:-1.37}"
       COOKIE_SECURE: "false"
       # portal sign-out: idle minutes (background polls don't count) + absolute cap in hours

@@ -26,9 +26,11 @@ object KioskTicket {
         alcohol: Boolean,
         policy: ReceiptPolicy,
         currency: String,
+        /** The store's legal drinking age, printed on the ID note (21 in the US). */
+        legalAge: Int = 21,
     ): List<PrintLine> = buildList {
         val locale = policy.locale
-        fun msg(key: MessageKey) = Messages.get(key, locale)
+        fun msg(key: MessageKey, vararg args: Any) = Messages.get(key, locale, *args)
         fun money(m: Money) = MoneyFormat.format(m, currency, locale.tag)
 
         add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
@@ -51,7 +53,7 @@ object KioskTicket {
             add(PrintLine.KeyValue(Messages.get(MessageKey.RECEIPT_CASH_TOTAL, locale), money(cash)))
         }
         add(PrintLine.Blank)
-        if (alcohol) add(PrintLine.Text(msg(MessageKey.KIOSK_ID_CHECK), Align.CENTER))
+        if (alcohol) add(PrintLine.Text(msg(MessageKey.KIOSK_ID_CHECK, legalAge), Align.CENTER))
         add(PrintLine.Header(msg(MessageKey.KIOSK_PAY_AT_COUNTER)))
         add(PrintLine.Blank)
     }

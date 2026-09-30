@@ -166,12 +166,15 @@ private val wifiPrintJson = kotlinx.serialization.json.Json { ignoreUnknownKeys 
 internal val SLIP_LOCALES = listOf(LocaleCode.EN, LocaleCode.FR)
 
 /**
- * A store's languages in slip order: English first (guests from anywhere),
- * then its next one. Two at most: a four-language store (Copper Lantern's
- * staff also speak es / de) still prints the slip in English and French.
+ * A store's languages in slip order ([CustomerConfig.guestSlipLocales]):
+ * English first (guests from anywhere), then its next one, two at most.
+ * Copper Lantern (Raleigh) prints its slips in English only.
  */
-internal fun slipLocales(config: CustomerConfig): List<LocaleCode> =
-    config.profile.locales.sortedBy { if (it == LocaleCode.EN) 0 else 1 }.take(2)
+internal fun slipLocales(config: CustomerConfig): List<LocaleCode> = config.guestSlipLocales.ifEmpty { listOf(LocaleCode.EN) }
+
+/** A zone's name in the slip's languages: "Patio", or "Terrasse / Patio" on a French + English slip. */
+internal fun slipZoneName(nameFr: String, nameEn: String, locales: List<LocaleCode>): String =
+    locales.map { if (it == LocaleCode.FR) nameFr else nameEn }.distinct().joinToString(" / ")
 
 /** Guests read these: each message printed in every one of [locales]. */
 private fun bilingual(key: MessageKey, locales: List<LocaleCode>): List<String> =
@@ -218,7 +221,8 @@ internal fun wifiSlipLines(
 private fun slipLines(row: ResultRow, config: CustomerConfig, wifi: GuestWifi?): List<PrintLine> {
     val label = row[DiningTables.nameOverride] ?: row[DiningTables.label]
     val url = config.publicBaseUrl + TableTokens.menuPath(row[DiningTables.publicToken]!!)
-    return tableSlipLines(config.displayName, label, "${row[Zones.nameFr]} / ${row[Zones.nameEn]}", url, wifi, slipLocales(config))
+    val locales = slipLocales(config)
+    return tableSlipLines(config.displayName, label, slipZoneName(row[Zones.nameFr], row[Zones.nameEn], locales), url, wifi, locales)
 }
 
 /**

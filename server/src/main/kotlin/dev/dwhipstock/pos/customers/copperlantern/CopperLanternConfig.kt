@@ -7,6 +7,7 @@ import dev.dwhipstock.pos.sdk.CardMethod
 import dev.dwhipstock.pos.sdk.CashRounding
 import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.Fee
+import dev.dwhipstock.pos.sdk.LegalAge
 import dev.dwhipstock.pos.sdk.Money
 import dev.dwhipstock.pos.sdk.PrinterAdapter
 import dev.dwhipstock.pos.sdk.ReceiptPolicy
@@ -20,10 +21,12 @@ import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import java.math.BigDecimal
 
 /**
- * Copper Lantern — fictional Canadian venue configuration, one per store
- * ([CopperLanternVenue]). Owner-editable
- * payment, fee, and receipt details read live from
- * [SettingsRepository] so a settings change applies on the next transaction.
+ * Copper Lantern — a fictional pub brand in Raleigh, North Carolina (it moved
+ * there from Montréal: [CopperLanternRaleighMove]), one configuration per
+ * store ([CopperLanternVenue]). USD, English first, Eastern time, ID checks
+ * at 21 and North Carolina's taxes ([NC_TAXES]). Owner-editable payment, fee
+ * and receipt details read live from [SettingsRepository] so a settings
+ * change applies on the next transaction.
  */
 class CopperLanternConfig(
     val venue: CopperLanternVenue = CopperLanternVenue.VIEUX_PORT,
@@ -33,6 +36,8 @@ class CopperLanternConfig(
     private val publicUrlProvider: (() -> String)? = null,
     /** cash.rounding / POS_CASH_ROUNDING: nickel (default) or off. */
     cashRounding: CashRounding = CashRounding.DEFAULT,
+    /** Alcohol: 21 in the US. POS_LEGAL_AGE / legal.age overrides. */
+    override val legalAge: Int = LegalAge.fromEnv(LEGAL_AGE),
 ) : CustomerConfig {
 
     override val publicBaseUrl: String
@@ -44,22 +49,22 @@ class CopperLanternConfig(
     override val displayName = venue.displayName
     override val venueId = venue.id
     override val brand = "copper-lantern"
-    // Montréal: Canada, CAD, French + English (StoreProfile.QUEBEC_PUB), and
-    // Spanish, German and Afrikaans on the staff screens for visiting staff (the menu's
-    // extra names live in the translations table)
-    // Express is the quick-serve counter (no floor plan, numbered orders)
-    override val profile = StoreProfile.QUEBEC_PUB.copy(
-        // English first: the demo is presented in English (the first language is the default)
-        locales = listOf(LocaleCode.EN, LocaleCode.FR, LocaleCode.ES, LocaleCode.DE, LocaleCode.AF),
-        kind = if (venue.quickServe) StoreProfile.Kind.QUICK_SERVE else StoreProfile.Kind.RESTAURANT,
-    )
+    // Raleigh: US, USD, English (the default) with French, Spanish, German and
+    // Afrikaans selectable on the staff screens, the kiosk and reprints (the
+    // menu's extra names live in the translations table). Express is the
+    // quick-serve counter (no floor plan, numbered orders).
+    override val profile = profileFor(venue)
+    // table QR and Wi-Fi slips: English only, like the receipts
+    override val guestSlipLocales = listOf(LocaleCode.EN)
 
     // ---- policy: typed, changing these is a deploy, on purpose ----
-    // Québec: menu prices are pre-tax; GST (TPS) and QST (TVQ) are added on
-    // top. Registration numbers are fictional, in the real formats.
-    override val taxPolicy = TaxPolicy.AddedTaxes(QUEBEC_TAXES)
-    // Canada has no penny: a cash payment rounds to the nearest five cents
-    // (cash.rounding=off charges cash to the cent)
+    // North Carolina: menu prices are pre-tax; the state + Wake County sales
+    // tax and Wake County's prepared food & beverage tax are added on top of
+    // everything a pub sells (its food and drinks are all prepared food and
+    // beverages). US receipts print no tax registration number.
+    override val taxPolicy = TaxPolicy.AddedTaxes(NC_TAXES)
+    // the US no longer makes pennies either: a cash payment rounds to the
+    // nearest five cents, card is exact (cash.rounding=off charges cash to the cent)
     override val roundingPolicy: RoundingPolicy = cashRounding.policy
     override val authPolicy = AuthPolicy.PinLogin(pinLength = 4)
 
@@ -81,6 +86,9 @@ class CopperLanternConfig(
                 phone = s.venuePhone,
                 footerText = s.receiptFooter,
                 showTax = false,
+                locale = LocaleCode.EN,
+                // US receipts: "09/25/2026 5:57 PM"
+                usDates = true,
             )
         }
 
@@ -88,7 +96,8 @@ class CopperLanternConfig(
     override val upsell: UpsellConfig
         get() = if (venue.quickServe) CopperLanternExpressSeed.upsell else UpsellConfig.NONE
 
-    // Stripe Terminal (test mode) unless payment.terminal says otherwise
+    // Stripe Terminal (test mode) unless payment.terminal says otherwise. The
+    // Stripe account must be in USD now (STRIPE_KEY_US; StripeService checks).
     override val defaultPaymentTerminal get() = dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE
 
     override val electronicTenders: List<TenderMethod>
@@ -100,12 +109,40 @@ class CopperLanternConfig(
         }
 
     companion object {
-        /** GST 5% and QST 9.975%, both on the same pre-tax base (QST is not charged on GST). */
-        val QUEBEC_TAXES = listOf(
-            TaxComponent("GST", labelFr = "TPS", labelEn = "GST", ratePercent = BigDecimal("5"),
-                registrationNumber = "123456789 RT0001"),
-            TaxComponent("QST", labelFr = "TVQ", labelEn = "QST", ratePercent = BigDecimal("9.975"),
-                registrationNumber = "1234567890 TQ0001"),
+        const val COUNTRY = "US"
+        const val CURRENCY = "USD"
+        const val TIME_ZONE = "America/New_York"
+
+        /** North Carolina: 21 to buy alcohol. POS_LEGAL_AGE / legal.age overrides. */
+        const val LEGAL_AGE = 21
+
+        /** English is the default; the others stay selectable (staff screens, kiosk, reprints). */
+        val LOCALES = listOf(LocaleCode.EN, LocaleCode.FR, LocaleCode.ES, LocaleCode.DE, LocaleCode.AF)
+
+        fun profileFor(venue: CopperLanternVenue) = StoreProfile(
+            country = COUNTRY, currency = CURRENCY,
+            locales = LOCALES,
+            timeZone = TIME_ZONE,
+            kind = if (venue.quickServe) StoreProfile.Kind.QUICK_SERVE else StoreProfile.Kind.RESTAURANT,
+            legalAge = LEGAL_AGE,
         )
+
+        /**
+         * Raleigh (Wake County), both on the same pre-tax base, never compounded:
+         * - sales tax 6.75% = North Carolina's 4.75% + Wake County's 2%;
+         * - Wake County's 1% prepared food and beverage tax on restaurant food
+         *   and drinks — so a pub check pays 7.75% in all.
+         * The same shape as the other US stores' sales tax (no registration
+         * number); the codes are what reports and sync group by.
+         */
+        val NC_SALES_TAX = TaxComponent(
+            code = "NC_SALES", labelFr = "NC sales tax", labelEn = "NC sales tax",
+            ratePercent = BigDecimal("6.75"), registrationNumber = "",
+        )
+        val WAKE_FOOD_TAX = TaxComponent(
+            code = "WAKE_FOOD", labelFr = "Wake prepared food tax", labelEn = "Wake prepared food tax",
+            ratePercent = BigDecimal("1"), registrationNumber = "",
+        )
+        val NC_TAXES = listOf(NC_SALES_TAX, WAKE_FOOD_TAX)
     }
 }

@@ -1,19 +1,21 @@
 # Demo walkthrough (10–15 minutes)
 
 A scripted tour of Copper Lantern POS for showing it to an employer. It covers
-two Montréal pubs, a Los Angeles bottle shop and the owner portal that sees all
-three, and it ends with the part people remember: **pulling the internet and
+two Raleigh, North Carolina pubs, a Los Angeles bottle shop and the owner portal
+that sees all three, and it ends with the part people remember: **pulling the internet and
 carrying on selling**.
 
 Everything here is fictional: the pubs, the shop, the staff, the menu and the
-money.
+money. (Copper Lantern moved from Montréal to Raleigh; the demo devices update
+themselves on their next start, see
+[Copper Lantern moved to Raleigh](demo-runbook.md#copper-lantern-moved-to-raleigh-existing-devices).)
 
 | | Where it runs | Sign in |
 | --- | --- | --- |
-| **Copper Lantern — Vieux-Port** (pub) | the Android tablet | PIN `1234` manager, `9999` server |
+| **Copper Lantern — Glenwood South** (pub) | the Android tablet | PIN `1234` manager, `9999` server |
 | **Copper Lantern — Plateau** (pub) | this Mac, `:8080` | same PINs |
 | **Sage & Poppy Bottle Shop** (US shop) | this Mac, `:8082`, counter screen in Chrome (or the Sage & Poppy app on the same tablet, see below) | `1234` manager, `9999` cashier, `5555` Spanish-speaking cashier |
-| **Owner portal** | the hosted portal (all stores, CAD + USD) | your portal login + authenticator code |
+| **Owner portal** | the hosted portal (all stores, USD) | your portal login + authenticator code |
 
 The bottle shop can also run on the tablet itself, as a second app next to
 the pub ("Sage & Poppy POS", its store on `:8082`; swap apps from the
@@ -70,7 +72,7 @@ move the portal's Sage & Poppy store onto the tablet, see
 
 ![Tablet floor plan](screenshots/walkthrough/01-tablet-floor.png)
 
-**Say:** "This is a pub in Old Montréal on a normal Android tablet. The whole
+**Say:** "This is a pub in Raleigh's Glenwood South on a normal Android tablet. The whole
 restaurant runs on the tablet itself. There's no server in a back room, and it
 doesn't need the internet to take money."
 
@@ -85,11 +87,11 @@ doesn't need the internet to take money."
      screen" in `docs/demo-runbook.md`). With it off, what prints is the bill,
      the receipt, table QR slips and Wi-Fi slips. To show it, turn it on before
      the meeting (`scripts/tablet-kitchen-printing.sh on`), then:
-     - Tap **Send (4)** on the bill: a **COMMANDE / ORDER** ticket prints for the
+     - Tap **Send (4)** on the bill: an **ORDER** ticket prints for the
        Kitchen (the mains) and one for the Bar (the drinks), each with only its
        own items, the table, bill number, server, time and guests.
-     - Add a dessert and tap Send: only the dessert prints, marked **AJOUT / ADD**.
-       Take a drink off and send: the Bar gets **ANNULÉ / VOID**.
+     - Add a dessert and tap Send: only the dessert prints, marked **ADD**.
+       Take a drink off and send: the Bar gets **VOID**.
      - Tap **Kitchen** in the floor header: the same orders as cards with
        timers (yellow at 10 min, red at 20). Tap a card to finish it; **Recall**
        brings it back. A phone on the pub Wi-Fi can be a kitchen screen too:
@@ -100,15 +102,16 @@ doesn't need the internet to take money."
 
      ![Kitchen screen](screenshots/kitchen/kitchen-view.png)
 4. **Printer.** Tap **Print bill**. A provisional bill comes out marked
-   "NOT A RECEIPT / Pas un reçu", and a preview shows on screen.
-5. **Québec taxes.** Point at the totals: Subtotal, **GST 5%**, **QST 9.975%**,
-   Total. Tap the EN/FR pill to show "TPS / TVQ" in French. The printed receipt
-   carries the tax registration numbers.
+   "NOT A RECEIPT" (English only), and a preview shows on screen. Press and
+   hold Print to print it in French, Spanish, German or Afrikaans instead.
+5. **North Carolina taxes.** Point at the totals: Subtotal, **NC sales tax
+   6.75%** (state 4.75% + Wake County 2%), **Wake prepared food tax 1%**,
+   Total: 7.75% on food and drink.
 6. **Split the bill.** Tap the split icon (it has no text label). "Bill 1" and
    "Bill 2" appear. Tap a bill, then tap items under "Unassigned" to move them.
    (Or **Split evenly** → 2–9 ways.) Each part has its own **Pay**.
 7. **Cash rounding.** Pay one part in **Cash**. The screen shows "Rounding −0.02"
-   and a "Cash total" ending in 0 or 5. **Say:** "Canada dropped the penny, so cash
+   and a "Cash total" ending in 0 or 5. **Say:** "The US stopped making pennies, so cash
    rounds to the nickel. Card doesn't."
 8. **Receipt.** When the bill is paid, the receipt prints and shows on screen
    ("Receipt — Bill #…"). Its language follows the server who opened the table.
@@ -175,18 +178,19 @@ store, in US dollars, with California's rules."
 
 ## 4. The owner portal (about 3 min)
 
-![All stores, CAD + USD](screenshots/us-store/11-portal-all-stores-cad-usd.png)
+![All stores](screenshots/us-store/11-portal-all-stores-cad-usd.png)
 
 **Say:** "The owner sees every store from anywhere. The stores send their sales
 up. The portal can't change a sale, and it never has to be up for a store to sell."
 
-1. **All stores vs one store.** The picker at the top says "All stores (3)". Each store card
-   shows today in its **own currency** (CA$ for the pubs, US$ for the shop). The
-   combined figure is marked "≈" and converted to CAD at a fixed rate. Next to
-   it, "By currency (exact)" never mixes the two. Pick **Sage & Poppy**: everything
-   is in US$.
-2. **Tax report.** Reports → **Sales tax**: GST and QST by day for a pub; switch to
-   the shop for US sales tax. Show the cash-rounding note.
+1. **All stores vs one store.** The picker at the top says "All stores (3)". Every
+   store sells in US$, so the combined figure is exact. (A client with stores in
+   two currencies gets each in its own, a "≈" converted total, and "By currency
+   (exact)"; the screenshot is from when the pubs were in CA$.) Pick **Sage &
+   Poppy** to see one store.
+2. **Tax report.** Reports → **Sales tax**: NC sales tax and Wake prepared food
+   tax by day for a pub (older days keep their GST and QST); switch to the shop
+   for California sales tax. Show the cash-rounding note.
    ![Tax report](screenshots/us-store/14-portal-tax-sage-poppy.png)
 3. **Stock** (shops only): with Sage & Poppy picked, show on-hand units and low
    stock, and **Receive** for a delivery.

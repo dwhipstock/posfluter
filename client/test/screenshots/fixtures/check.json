@@ -75,29 +75,29 @@
  ],
  "itemsSubtotalCents": 6400,
  "fees": [],
- "grandTotalCents": 7358,
+ "grandTotalCents": 6896,
  "taxIncludedCents": 0,
  "paidCents": 0,
- "outstandingCents": 7358,
+ "outstandingCents": 6896,
  "tenders": [],
  "split": null,
  "subtotalCents": 6400,
  "taxes": [
   {
-   "code": "GST",
-   "labelFr": "TPS",
-   "labelEn": "GST",
-   "ratePercent": "5",
-   "registrationNumber": "123456789 RT0001",
-   "amountCents": 320
+   "code": "NC_SALES",
+   "labelFr": "NC sales tax",
+   "labelEn": "NC sales tax",
+   "ratePercent": "6.75",
+   "registrationNumber": "",
+   "amountCents": 432
   },
   {
-   "code": "QST",
-   "labelFr": "TVQ",
-   "labelEn": "QST",
-   "ratePercent": "9.975",
-   "registrationNumber": "1234567890 TQ0001",
-   "amountCents": 638
+   "code": "WAKE_FOOD",
+   "labelFr": "Wake prepared food tax",
+   "labelEn": "Wake prepared food tax",
+   "ratePercent": "1",
+   "registrationNumber": "",
+   "amountCents": 64
   }
  ]
 }

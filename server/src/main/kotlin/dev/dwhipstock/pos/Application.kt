@@ -183,7 +183,7 @@ fun Application.module(
     dev.dwhipstock.pos.sdk.VenueClock.fallbackZone = when {
         pronghorn -> Pronghorn.TIME_ZONE
         sagePoppy -> SagePoppy.TIME_ZONE
-        else -> dev.dwhipstock.pos.sdk.VenueClock.DEFAULT_ZONE
+        else -> CopperLanternConfig.TIME_ZONE
     }
     initDatabase(dbPath)
     // discover i18n message catalogs now so missing-key warnings surface at
@@ -224,6 +224,11 @@ fun Application.module(
             else -> CopperLanternSeed.seedBootstrapManagerIfNoStaff()
         }
     }
+    // Copper Lantern moved from Montréal to Raleigh, NC: an existing store's
+    // receipt header, zone, kitchen-ticket language and Québec menu names are
+    // updated in place, only where they still hold the old values (items,
+    // photos, rooms, tables, staff and sales are never touched). A no-op once done.
+    if (!pronghorn && !sagePoppy) dev.dwhipstock.pos.customers.copperlantern.CopperLanternRaleighMove.run(venue)
     // the forecourt rings fuel up as catalog items: every gas station has them
     if (pronghorn) PronghornSeed.ensureFuelItems()
     // every table must have its customer link token (033); covers any row a
@@ -283,6 +288,8 @@ fun Application.module(
         publicBaseUrl = publicBaseUrl,
         publicUrlProvider = publicUrlProvider,
         cashRounding = cashRounding.rounding,
+        legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
+            dev.dwhipstock.pos.sdk.LegalAge.fromEnv(CopperLanternConfig.LEGAL_AGE), legalAgeOverride?.toString()),
     )
     // Which card terminal (payment.terminal). Stripe works in any store whose
     // Stripe account is in the store's currency (checked by StripeService).
@@ -300,7 +307,7 @@ fun Application.module(
     log.info("Cash rounding: ${cashRounding.rounding.wire} (${cashRounding.source})")
     log.info("Store: ${config.displayName} (POS_VENUE=${config.venueId}, ${config.profile.country}, " +
         "${config.profile.currency}, ${config.profile.locales.joinToString("/")}, ${config.profile.kind.wire})")
-    if (config.profile.kind == StoreProfile.Kind.RETAIL) log.info("Legal age for age-restricted items: ${config.legalAge}")
+    log.info("Legal age for age-restricted items: ${config.legalAge}")
     log.info("Customers scan: $publicBaseUrl/m/t/{token} (a random link per table, on its QR slip; a manager can regenerate it)  — print slips from the tablet")
     val checkService = CheckService(config)
     // The forecourt (the gas station): pumps on the counter through the
@@ -527,7 +534,7 @@ fun Application.module(
         get("/") { call.respond(mapOf("service" to "pos-server", "version" to "0.1.0")) }
         // pairingRequired lets the terminal decide between the pairing screen and
         // the legacy LAN flow before it has any credentials
-        // venue = the store's display name ("Copper Lantern — Vieux-Port") so the
+        // venue = the store's display name ("Copper Lantern — Glenwood South") so the
         // sign-in screen can say which store this terminal serves before login
         get("/health") {
             call.respond(HealthResponse.of(config, requireDeviceToken, kitchenService != null, forecourt != null)
@@ -585,7 +592,7 @@ fun Application.module(
         kitchenRoutes(kitchenService)
         quickServe?.let {
             quickServeRoutes(it, config.displayName, config.venueId, config.profile.currency,
-                config.profile.locales.map { l -> l.tag })
+                config.profile.locales.map { l -> l.tag }, config.legalAge)
         }
         forecourtRoutes(forecourt, authService)
         // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in

@@ -3,6 +3,7 @@ package dev.dwhipstock.pos
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.VenueSettings
+import dev.dwhipstock.pos.customers.copperlantern.CopperLanternRaleighMove
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternSeed
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
 import dev.dwhipstock.pos.db.MenuTextMigration
@@ -52,7 +53,8 @@ class MenuTextMigrationTest {
         else -> error(column)
     }
 
-    private val placeNames = Regex("Ontario|ontarien|Toronto|Niagara|péninsule|Peninsula|clamato")
+    private val placeNames = Regex("Ontario|ontarien|Toronto|Niagara|péninsule|Peninsula|clamato|" +
+        "Montr[ée]al|montréalais|Québec|Cantons-de-l|Eastern Townships|Montérégie|canadien|Canadian")
 
     @Test
     fun aFreshStoreIsSeededWithTheNewTextAndNoOldPlaceNames() {
@@ -63,7 +65,10 @@ class MenuTextMigrationTest {
             val seeded = texts(db)
             for (c in MenuTextMigration.CHANGES) {
                 val item = seeded[c.itemId] ?: continue // Plateau-only ids at Vieux-Port
-                assertEquals(c.new, column(item, c.column), "${c.itemId}.${c.column} at ${venue.name}")
+                // 042's text, or what the Raleigh move made of it since
+                val now = CopperLanternRaleighMove.ITEM_CHANGES
+                    .firstOrNull { it.itemId == c.itemId && it.column == c.column && it.old == c.new }?.new ?: c.new
+                assertEquals(now, column(item, c.column), "${c.itemId}.${c.column} at ${venue.name}")
             }
             for ((id, t) in seeded) {
                 for (s in listOfNotNull(t.nameFr, t.nameEn, t.descFr, t.descEn)) {
@@ -120,7 +125,8 @@ class MenuTextMigrationTest {
             val s = VenueSettings.selectAll().single()
             assertEquals("+1 514 555 0142", s[VenueSettings.venuePhone])
             // 042 moved it to Montréal; 043 then gave it the French-style address
-            assertEquals(CopperLanternVenue.VIEUX_PORT.address, s[VenueSettings.venueAddress])
+            // (the Raleigh move replaces it at startup: CopperLanternRaleighMoveTest)
+            assertEquals("47, rue de la Lanterne, Montréal (Québec) H2Y 1Q7", s[VenueSettings.venueAddress])
         }
 
         // one item.updated per changed item, with the full snapshot for the portal

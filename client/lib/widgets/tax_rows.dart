@@ -4,8 +4,9 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
 
-/// Subtotal plus one row per tax added on top (GST, QST), shown just above a
-/// total. All figures are the server's; renders nothing when no tax is added.
+/// Subtotal plus one row per tax added on top (NC sales tax, Wake prepared
+/// food tax), shown just above a total. All figures are the server's;
+/// renders nothing when no tax is added.
 class TaxRows extends StatelessWidget {
   final int subtotalCents;
   final List<TaxLine> taxes;
@@ -28,7 +29,9 @@ class TaxRows extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: T.small()),
+          // a long tax name ("Wake prepared food tax 1%") wraps, never overflows
+          Flexible(child: Text(label, style: T.small())),
+          const SizedBox(width: 8),
           Text(
             money(cents),
             style: T.price(size: priceSize, color: T.textMuted),

@@ -48,6 +48,8 @@ data class KioskConfigResponse(
     val deviceName: String,
     val currency: String,
     val locales: List<String>,
+    /** The legal drinking age the kiosk's ID note names (21 in the US). */
+    val legalAge: Int = 21,
 )
 
 private val qsJson = Json { ignoreUnknownKeys = true }
@@ -67,7 +69,10 @@ private val qsJson = Json { ignoreUnknownKeys = true }
  *    `POST /kiosk/upsell` (the "Add a drink?" rows for a cart) and
  *    `POST /kiosk/orders`.
  */
-fun Route.quickServeRoutes(qs: QuickServeService, storeName: String, venueId: String, currency: String, locales: List<String>) {
+fun Route.quickServeRoutes(
+    qs: QuickServeService, storeName: String, venueId: String, currency: String, locales: List<String>,
+    legalAge: Int = 21,
+) {
     val page by lazy { StoreAssets.readText("pickup.html") }
 
     get("/counter/orders") { call.respond(qs.list()) }
@@ -113,7 +118,7 @@ fun Route.quickServeRoutes(qs: QuickServeService, storeName: String, venueId: St
     }
     get("/kiosk/config") {
         val device = kioskDevice(call, qs) ?: return@get
-        call.respond(KioskConfigResponse(storeName, venueId, device.name, currency, locales))
+        call.respond(KioskConfigResponse(storeName, venueId, device.name, currency, locales, legalAge))
     }
     post("/kiosk/upsell") {
         kioskDevice(call, qs) ?: return@post

@@ -15,7 +15,7 @@ void main() {
 
   test('a pub receipt keeps its name', () {
     const text =
-        '**********\nCopper Lantern — Vieux-Port\n**********\nTotal 10';
+        '**********\nCopper Lantern — Glenwood South\n**********\nTotal 10';
     expect(withoutNameLine(text), text);
   });
 }

@@ -921,7 +921,7 @@ class L {
   String get subtotal =>
       _t('Sous-total', 'Subtotal', 'Subtotal', 'Zwischensumme', 'Subtotaal');
 
-  /// A tax added on top, e.g. "GST 5%" / "TPS 5 %" (rate is a decimal string).
+  /// A tax added on top, e.g. "NC sales tax 6.75%" / "NC sales tax 6,75 %" (rate is a decimal string).
   /// Data, not a string table: the tax names come from the store.
   String taxLine(TaxLine tax) => switch (lang) {
     'fr' => '${tax.labelFr} ${tax.ratePercent.replaceAll('.', ',')} %',
@@ -1271,10 +1271,10 @@ class L {
     ),
     'stripe_currency_mismatch' => _t(
       'Stripe désactivé : le compte Stripe n’est pas en CAD',
-      'Stripe is off: the Stripe account is not in CAD',
-      'Stripe está desactivado: la cuenta de Stripe no está en CAD',
-      'Stripe ist aus: das Stripe-Konto ist nicht in CAD',
-      'Stripe is af: die Stripe-rekening is nie in CAD nie',
+      'Stripe is off: the Stripe account is not in the store’s currency',
+      'Stripe está desactivado: la cuenta de Stripe no está en la moneda de la tienda',
+      'Stripe ist aus: das Stripe-Konto ist nicht in der Währung des Geschäfts',
+      'Stripe is af: die Stripe-rekening is nie in die winkel se geldeenheid nie',
     ),
     _ => _t(
       'La carte (Stripe) est indisponible pour le moment',

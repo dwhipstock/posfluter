@@ -2,7 +2,7 @@
 # LOCAL proof of "one portal per client": three client portal instances side
 # by side on this Mac behind ONE shared edge proxy, exactly as on a server —
 #
-#   http://cpr.localhost:8088   Copper Lantern (Vieux-Port + Plateau, CAD, fr/en)
+#   http://cpr.localhost:8088   Copper Lantern (Glenwood South + Plateau, Raleigh NC, USD, en first)
 #   http://sp.localhost:8088    Sage & Poppy   (one bottle shop, USD, en/es)
 #   http://pf.localhost:8088    Pronghorn      (one gas station, USD, en/es)
 #
@@ -125,8 +125,8 @@ case "$cmd" in
     fi
     common=(--clients-dir "$CLIENTS_DIR" --admin-email owner@example.test --api-image "$API_IMAGE" --web-image "$WEB_IMAGE" --local --no-totp --up)
     "$INFRA/new-client.sh" copperlantern "$CPR_HOST" --name "Copper Lantern" --brand copperlantern \
-      --store "vieux-port=Copper Lantern — Vieux-Port" --store "plateau=Copper Lantern — Plateau" \
-      --zone America/Toronto --currency CAD --country CA "${common[@]}"
+      --store "vieux-port=Copper Lantern — Glenwood South" --store "plateau=Copper Lantern — Plateau" \
+      --zone America/New_York --currency USD --country US "${common[@]}"
     echo
     "$INFRA/new-client.sh" sagepoppy "$SP_HOST" --name "Sage & Poppy" --brand sagepoppy \
       --store "sage-poppy=Sage & Poppy Bottle Shop" \
@@ -143,7 +143,7 @@ case "$cmd" in
     cat <<EOF
 
   Three client portals behind one edge proxy:
-    Copper Lantern : http://$CPR_HOST:$PORT     (Vieux-Port + Plateau · CAD · fr/en)
+    Copper Lantern : http://$CPR_HOST:$PORT     (Glenwood South + Plateau · USD · en first)
     Sage & Poppy   : http://$SP_HOST:$PORT      (the bottle shop · USD · en/es)
     Pronghorn      : http://$PF_HOST:$PORT      (the gas station · USD · en/es)
   Sign in        : owner@example.test / ADMIN_PASSWORD in .demo/clients/<client>/.env

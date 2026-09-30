@@ -149,8 +149,8 @@ this portal only.
 ## Try it on a laptop
 
 `scripts/demo-clients.sh up --stores` runs three clients side by side behind
-one local proxy — `http://cpr.localhost:8088` (a Montréal pub group, CAD,
-French and English), `http://sp.localhost:8088` (a California bottle shop, USD,
+one local proxy — `http://cpr.localhost:8088` (a Raleigh, NC pub group, USD,
+English first), `http://sp.localhost:8088` (a California bottle shop, USD,
 English and Spanish) and `http://pf.localhost:8088` (a Texas gas station, USD,
 English and Spanish) — each with demo stores syncing to it.
 

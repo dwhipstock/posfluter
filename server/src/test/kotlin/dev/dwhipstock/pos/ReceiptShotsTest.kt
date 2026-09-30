@@ -1,5 +1,6 @@
 package dev.dwhipstock.pos
 
+import dev.dwhipstock.pos.customers.copperlantern.CopperLanternConfig
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
 import dev.dwhipstock.pos.customers.sagepoppy.SagePoppy
 import dev.dwhipstock.pos.sdk.Align
@@ -12,12 +13,10 @@ import dev.dwhipstock.pos.sdk.ReceiptKind
 import dev.dwhipstock.pos.sdk.ReceiptPolicy
 import dev.dwhipstock.pos.sdk.ReceiptRenderer
 import dev.dwhipstock.pos.sdk.ReceiptTender
-import dev.dwhipstock.pos.sdk.TaxComponent
 import dev.dwhipstock.pos.sdk.TaxLine
 import dev.dwhipstock.pos.sdk.ThermalReceiptRenderer
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import java.io.File
-import java.math.BigDecimal
 import java.time.LocalDateTime
 import javax.imageio.ImageIO
 import kotlin.test.Test
@@ -25,15 +24,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * A French pub receipt and bill and a Spanish Sage & Poppy receipt, through
+ * A Raleigh pub receipt and bill (English, the default, and a French reprint)
+ * and a Spanish Sage & Poppy receipt, through
  * the production thermal raster path. Always checks the text; with
  * RECEIPT_SHOTS_DIR set it also writes the bitmaps a printer would print:
  *
  *   RECEIPT_SHOTS_DIR=$PWD/../docs/screenshots/language-pass ./gradlew test --tests '*ReceiptShotsTest'
  */
 class ReceiptShotsTest {
-    private val gst = TaxComponent("GST", "TPS", "GST", BigDecimal("5"), "123456789 RT0001")
-    private val qst = TaxComponent("QST", "TVQ", "QST", BigDecimal("9.975"), "1234567890 TQ0001")
 
     private val pubReceipt = Receipt(
         checkId = 1207, tableLabel = "B-4",
@@ -44,17 +42,19 @@ class ReceiptShotsTest {
             ReceiptItem("Ailes de poulet", "Chicken Wings", null, null, 1, Money(1675), Money(1675), null),
         ),
         fees = emptyList(),
-        grandTotal = Money(7300 + 365 + 728),
+        // 73.00 + NC sales tax 6.75% (4.9275 → 4.93) + Wake 1% (0.73) = 78.66;
+        // cash rounds to the nickel: 78.65
+        grandTotal = Money(7300 + 493 + 73),
         taxIncluded = Money.ZERO, taxRatePercent = null,
-        tenders = listOf(ReceiptTender("Comptant", "Cash", Money(10000), Money(8393), Money(2), Money(1605), "CASH")),
-        taxes = listOf(TaxLine(gst, Money(365)), TaxLine(qst, Money(728))),
-        cashDue = Money(8395), cashRounding = Money(2),
+        tenders = listOf(ReceiptTender("Comptant", "Cash", Money(10000), Money(7866), Money(-1), Money(2135), "CASH")),
+        taxes = listOf(TaxLine(CopperLanternConfig.NC_SALES_TAX, Money(493)), TaxLine(CopperLanternConfig.WAKE_FOOD_TAX, Money(73))),
+        cashDue = Money(7865), cashRounding = Money(-1),
     )
     private val pubPolicy = ReceiptPolicy.Standard(
-        "Copper Lantern — Vieux-Port",
+        CopperLanternVenue.VIEUX_PORT.displayName,
         listOf(CopperLanternVenue.VIEUX_PORT.address),
-        "Merci de votre visite ! / Thank you for visiting!",
-        showTax = false, locale = LocaleCode.FR, phone = CopperLanternVenue.VIEUX_PORT.phone,
+        "Thank you for visiting!",
+        showTax = false, locale = LocaleCode.EN, phone = CopperLanternVenue.VIEUX_PORT.phone, usDates = true,
     )
 
     private val spReceipt = Receipt(
@@ -87,18 +87,61 @@ class ReceiptShotsTest {
         ImageIO.write(img, "png", File(dir, name))
     }
 
+    private fun texts(lines: List<PrintLine>): List<String> = lines.flatMap {
+        when (it) {
+            is PrintLine.KeyValue -> listOf(it.left, it.right)
+            is PrintLine.Text -> listOf(it.text)
+            is PrintLine.Header -> listOf(it.text)
+            is PrintLine.Large -> listOf(it.text)
+            else -> emptyList()
+        }
+    }
+
     @Test
-    fun frenchPubReceiptAndBill() {
+    fun raleighPubReceiptAndBillAreEnglishOnly() {
         val receipt = ReceiptRenderer.render(pubReceipt, pubPolicy, ReceiptKind.FINAL)
         val bill = ReceiptRenderer.render(pubReceipt, pubPolicy, ReceiptKind.PROVISIONAL)
         val kv = receipt.filterIsInstance<PrintLine.KeyValue>().associate { it.left to it.right }
+        assertEquals("73.00", kv["Subtotal"])
+        assertEquals("4.93", kv["NC sales tax 6.75%"])
+        assertEquals("0.73", kv["Wake prepared food tax 1%"])
+        assertEquals("78.66", kv["Total"])
+        // cash still rounds to the nickel, and the receipt says so
+        assertEquals("-0.01", kv["Rounding"])
+        assertEquals("78.65", kv["Cash total"])
+        assertEquals("21.35", kv["Change"])
+        assertEquals(PrintLine.Text("412 Lantern Row, Raleigh, NC 27601", Align.CENTER), receipt[1])
+        assertEquals(PrintLine.Text("Tel. (919) 555-0142", Align.CENTER), receipt[2])
+        assertTrue(bill.any { it is PrintLine.Header && it.text == "*** CUSTOMER BILL ***" })
+        assertTrue(bill.any { it is PrintLine.Header && it.text == "*** NOT A RECEIPT ***" })
+        // no French, no GST/QST, no registration numbers
+        val all = texts(receipt) + texts(bill)
+        for (gone in listOf("GST", "QST", "TPS", "TVQ", " no. ", "ADDITION", "REÇU", "Merci", "Montréal", "Sous-total")) {
+            assertTrue(all.none { gone in it }, "'$gone' on an English receipt: $all")
+        }
+        shoot("receipt-en.png", receipt)
+        shoot("bill-en.png", bill)
+    }
+
+    @Test
+    fun aFrenchReprintStillWorks() {
+        val fr = pubPolicy.withLocale(LocaleCode.FR)
+        val receipt = ReceiptRenderer.render(pubReceipt, fr, ReceiptKind.FINAL)
+        val bill = ReceiptRenderer.render(pubReceipt, fr, ReceiptKind.PROVISIONAL)
+        val kv = receipt.filterIsInstance<PrintLine.KeyValue>().associate { it.left to it.right }
         assertEquals("73.00", kv["Sous-total"])
-        assertEquals("3.65", kv["TPS/GST 5 %"])
-        assertEquals("7.28", kv["TVQ/QST 9,975 %"])
-        assertEquals("83.93", kv["Total"])
-        assertEquals("16.05", kv["Monnaie rendue"])
-        assertTrue(bill.any { it is PrintLine.Header && it.text == "*** ADDITION / CUSTOMER BILL ***" })
-        assertEquals(PrintLine.Text("Tél. +1 514 555 0142", Align.CENTER), receipt[2])
+        assertEquals("4.93", kv["Taxe de vente (C.-N.) 6,75\u00A0%"])
+        assertEquals("0.73", kv["Taxe sur les repas (Wake) 1\u00A0%"])
+        assertEquals("21.35", kv["Monnaie rendue"])
+        assertTrue(bill.any { it is PrintLine.Header && it.text.startsWith("*** ADDITION") })
+        assertEquals(PrintLine.Text("Tél. (919) 555-0142", Align.CENTER), receipt[2])
+        // and Spanish, German, Afrikaans name the taxes too
+        for ((lang, label) in listOf("es" to "Impuesto sobre las ventas de NC 6.75%", "de" to "Umsatzsteuer NC 6.75 %",
+            "af" to "NC-verkoopbelasting 6.75%")) {
+            val lines = ReceiptRenderer.render(pubReceipt, pubPolicy.withLocale(LocaleCode.of(lang)), ReceiptKind.FINAL)
+            assertTrue(lines.filterIsInstance<PrintLine.KeyValue>().any { it.left == label && it.right == "4.93" },
+                "$lang: ${texts(lines)}")
+        }
         shoot("receipt-fr.png", receipt)
         shoot("bill-fr.png", bill)
     }

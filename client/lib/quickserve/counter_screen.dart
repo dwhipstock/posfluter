@@ -369,6 +369,29 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
                               '${money(o.outstandingCents)} · '
                               '${q.toPay.toLowerCase()}',
                             ),
+                            // alcohol on the order: check the guest's ID (21+)
+                            if (o.hasAlcohol) ...[
+                              const SizedBox(width: 8),
+                              Tooltip(
+                                message: q.idCheck(
+                                  StoreProfile.current.legalAge,
+                                ),
+                                child: Row(
+                                  key: Key('kiosk-id-${o.checkId}'),
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(LucideIcons.idCard, size: 16),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${StoreProfile.current.legalAge}+',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       );

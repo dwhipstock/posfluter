@@ -11,7 +11,7 @@
 #      with its own SQLite DB under .demo/plateau/, syncing to the local API;
 #   3. Sage & Poppy Bottle Shop: the US retail store, a second desktop store
 #      (POS_VENUE=sage-poppy, port 8082, DB under .demo/sage-poppy/), USD, en/es;
-#   4. Copper Lantern — Vieux-Port is the Android tablet: point it at this Mac with
+#   4. Copper Lantern — Glenwood South (vieux-port) is the Android tablet: point it at this Mac with
 #      scripts/tablet-cloud-config.sh (printed at the end).
 #
 #   scripts/demo-up.sh            # build + start + seed Plateau demo sales (once)
@@ -273,10 +273,10 @@ fi
 cat <<BANNER
 
 ============================================================
-  Three-store demo is UP (two pubs in Montréal, one bottle shop in LA)
+  Three-store demo is UP (two pubs in Raleigh, NC, one bottle shop in LA)
 ============================================================
   LAN IP         : ${LAN_IP}
-  Owner portal   : ${PORTAL_URL}      (store picker: All stores / Vieux-Port / Plateau / Sage & Poppy)
+  Owner portal   : ${PORTAL_URL}      (store picker: All stores / Glenwood South / Plateau / Sage & Poppy)
   Cloud API      : ${SYNC_URL}/health
   Portal login   : $(env_get ADMIN_EMAIL)  /  (ADMIN_PASSWORD in $ENV_FILE)
                    First login enrolls TOTP — scan the QR in an authenticator app.
@@ -297,7 +297,7 @@ cat <<BANNER
                      --dart-define=SERVER_URL=http://localhost:${SAGE_POPPY_PORT}
                    log: .demo/sage-poppy/store.log
 
-  Vieux-Port tablet → this Mac (tablet on the same Wi-Fi, USB debugging on):
+  Glenwood South tablet → this Mac (tablet on the same Wi-Fi, USB debugging on):
                    scripts/tablet-cloud-config.sh
                    (stages sync URL + key; the POS restarts and syncs here)
 

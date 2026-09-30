@@ -50,9 +50,10 @@ test("a mounted custom pack loads", () => {
 test("the two clients differ where it shows", () => {
   const cl = parseBrand(pack("copperlantern"));
   const sp = parseBrand(pack("sagepoppy"));
-  assert.deepEqual(cl.locales, { default: "en", available: ["fr", "en", "es", "de", "af"] });
+  assert.deepEqual(cl.locales, { default: "en", available: ["en", "fr", "es", "de", "af"] });
   assert.deepEqual(sp.locales, { default: "en", available: ["en", "es"] });
-  assert.equal(cl.currency, "CAD");
+  // Copper Lantern moved to Raleigh, NC: every client sells in USD now
+  assert.equal(cl.currency, "USD");
   assert.equal(sp.currency, "USD");
   assert.equal(cl.layout, "sidebar");
   assert.equal(sp.layout, "topbar");

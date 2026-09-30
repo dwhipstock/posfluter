@@ -17,8 +17,10 @@ import kotlin.test.assertTrue
 
 /**
  * Migration 043: floor-plan captions become bilingual, and the pubs' receipt
- * addresses become French-style Montréal ones. Running stores change only
- * where the value is still the old seeded one; a fresh store is seeded new.
+ * addresses became French-style Montréal ones (frozen history: the brand has
+ * since moved to Raleigh, NC, which CopperLanternRaleighMove applies on
+ * startup). Running stores change only where the value is still the old
+ * seeded one; a fresh store is seeded with its Raleigh address.
  */
 class FloorLabelsAddressMigrationTest {
 
@@ -38,8 +40,8 @@ class FloorLabelsAddressMigrationTest {
         "sushi-counter" to ("Comptoir à sushis" to "Sushi Counter"),
     )
 
-    /** "…, Montréal (Québec) H2Y 1Q7": French style, an H postal code, never "Lantern Lane". */
-    private val montrealAddress = Regex("""^\d+, (rue|avenue) [^,]+, Montréal \(Québec\) H\d[A-Z] \d[A-Z]\d$""")
+    /** "412 Lantern Row, Raleigh, NC 27601": the fictional Raleigh street. */
+    private val raleighAddress = Regex("""^\d+ Lantern Row, Raleigh, NC 27601$""")
 
     @Test
     fun aFreshStoreIsSeededWithBothCaptionsAndItsOwnAddress() {
@@ -52,8 +54,8 @@ class FloorLabelsAddressMigrationTest {
             assertEquals(seeded["lower-pool"], l["lower-pool"])
             assertEquals(if (venue == CopperLanternVenue.PLATEAU) seeded["sushi-counter"] else null, l["sushi-counter"])
             assertEquals(venue.address, address(db))
-            assertTrue(montrealAddress.matches(venue.address), venue.address)
-            assertFalse(Regex("Lantern (Lane|Row)|, QC").containsMatchIn(venue.address), venue.address)
+            assertTrue(raleighAddress.matches(venue.address), venue.address)
+            assertFalse(Regex("Montr|Québec|, QC").containsMatchIn(venue.address), venue.address)
         }
         assertTrue(CopperLanternVenue.VIEUX_PORT.address != CopperLanternVenue.PLATEAU.address, "each pub has its own address")
     }
@@ -79,7 +81,8 @@ class FloorLabelsAddressMigrationTest {
         assertEquals("Main Bar" to "Main Bar", l["upper-bar"], "a manager's caption reads the same in both languages")
         assertEquals("Snooker" to "Snooker", l["outside-pool"])
         assertEquals(null to null, l["upper-pillar-1"], "pillars stay uncaptioned")
-        assertEquals(CopperLanternVenue.PLATEAU.address, address(db))
+        // 043's own (frozen) value; the Raleigh move replaces it at startup
+        assertEquals("212, avenue du Lampion, Montréal (Québec) H2J 3U4", address(db))
     }
 
     @Test
@@ -88,7 +91,7 @@ class FloorLabelsAddressMigrationTest {
         Migrations.run(old, through = 42)
         transaction(old) { exec("UPDATE venue_settings SET venue_address = '47 Lantern Lane, Montréal, QC' WHERE id = 1") }
         Migrations.run(old)
-        assertEquals(CopperLanternVenue.VIEUX_PORT.address, address(old))
+        assertEquals("47, rue de la Lanterne, Montréal (Québec) H2Y 1Q7", address(old))
 
         val edited = connect(tempDb())
         Migrations.run(edited, through = 42)
