@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -27,11 +28,16 @@ class FloorPlanEditScreen extends StatefulWidget {
 
   /// null = the device microphone; tests pass a fake.
   final VoiceRecorder? recorder;
+
+  /// null = the camera / gallery / file picker for "set up from picture";
+  /// tests pass the pictures directly (null or empty = the manager backed out).
+  final Future<List<RoomPhoto>?> Function()? pickRoomPhotos;
   const FloorPlanEditScreen({
     super.key,
     required this.zone,
     required this.managerPin,
     this.recorder,
+    this.pickRoomPhotos,
   });
 
   @override
@@ -80,6 +86,58 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     _snack = null;
   }
 
+  /// Show an AI proposal ("Ask AI" or "set up from picture") as the ghost
+  /// preview. Any leftover applied/Revert snackbar is closed first: it would
+  /// otherwise sit over the preview panel's Apply / Cancel buttons.
+  void _showProposal(RoomLayoutProposal proposal) {
+    _closeSnack();
+    _hideKeyboard();
+    setState(() {
+      _proposal = proposal;
+      _selectedId = null;
+      _selectedObjectId = null;
+    });
+  }
+
+  /// Leave AI-proposal mode completely — after Apply, Cancel, an error, a
+  /// revert or leaving — for both "Ask AI" and "set up from picture": no
+  /// ghost, no preview panel, no pending request, and the canvas redrawn from
+  /// the room as the store has it now ([applied] shows at once, the reload
+  /// then confirms it).
+  Future<void> _endProposal({RoomLayoutApplyResult? applied}) async {
+    _asking?.cancelled = true;
+    setState(() {
+      _proposal = null;
+      _asking = null;
+      _selectedId = null;
+      _selectedObjectId = null;
+      if (applied != null) {
+        _tables = List.of(applied.tables);
+        _objects = List.of(applied.objects);
+        _dirty = false;
+        _undo.clear();
+      }
+    });
+    await _reloadRoom();
+  }
+
+  /// This room's saved tables and objects, fresh from the store. Unsaved
+  /// geometry is kept (nothing AI-driven runs while the layout is dirty).
+  Future<void> _reloadRoom() async {
+    try {
+      final zones = await Api.zones();
+      final zone = zones.where((z) => z.id == widget.zone.id).firstOrNull;
+      if (zone == null || !mounted || _dirty || _proposal != null) return;
+      setState(() {
+        _tables = List.of(zone.tables);
+        _objects = List.of(zone.objects);
+        _undo.clear();
+      });
+    } catch (_) {
+      // offline: keep what the apply returned
+    }
+  }
+
   /// Drops focus AND tells the platform to put its on-screen keyboard away.
   /// FocusScope/FocusManager alone can leave a real software keyboard (e.g.
   /// on Windows touch) showing over a screen with no text field at all,
@@ -92,6 +150,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
 
   @override
   void dispose() {
+    _asking?.cancelled = true; // a late result must not land on a dead screen
     _closeSnack();
     _hideKeyboard();
     super.dispose();
@@ -522,52 +581,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     final l = L.of(context);
     if (_dirty) await _save(); // the preview draws the room as saved
     if (_dirty || !mounted) return;
-    final picker = ImagePicker();
-    final source = picker.supportsImageSource(ImageSource.camera)
-        ? await showDialog<ImageSource>(
-            context: context,
-            builder: (context) => SimpleDialog(
-              title: Text(l.roomFromPicture),
-              children: [
-                SimpleDialogOption(
-                  onPressed: () => Navigator.pop(context, ImageSource.camera),
-                  child: Text(l.aiTakePhoto),
-                ),
-                SimpleDialogOption(
-                  onPressed: () => Navigator.pop(context, ImageSource.gallery),
-                  child: Text(l.aiChooseFromGallery),
-                ),
-              ],
-            ),
-          )
-        : ImageSource.gallery;
-    if (source == null || !mounted) return;
-    final files = source == ImageSource.camera
-        ? [
-            ?await picker.pickImage(
-              source: source,
-              maxWidth: 2048,
-              maxHeight: 2048,
-              imageQuality: 88,
-            ),
-          ]
-        : await picker.pickMultiImage(
-            maxWidth: 2048,
-            maxHeight: 2048,
-            imageQuality: 88,
-            limit: 4,
-          );
-    if (files.isEmpty || !mounted) return;
-    final photos = [
-      for (final f in files.take(4))
-        (
-          bytes: await f.readAsBytes(),
-          contentType: f.name.toLowerCase().endsWith('.png')
-              ? 'image/png'
-              : 'image/jpeg',
-        ),
-    ];
-    if (!mounted) return;
+    final photos = await (widget.pickRoomPhotos ?? _pickRoomPhotos)();
+    if (photos == null || photos.isEmpty || !mounted) return;
+    _closeSnack(); // never leave a Revert snackbar over the card or panel
     // several pictures for the model to read: the slowest of the AI asks
     final req = _AiRequest(const Duration(seconds: 40));
     setState(() => _asking = req);
@@ -603,11 +619,59 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       );
       return;
     }
-    setState(() {
-      _proposal = proposal;
-      _selectedId = null;
-      _selectedObjectId = null;
-    });
+    if (!mounted) return;
+    _showProposal(proposal);
+  }
+
+  /// 1–4 room pictures from the camera, gallery or a picked file.
+  Future<List<RoomPhoto>?> _pickRoomPhotos() async {
+    final l = L.of(context);
+    final picker = ImagePicker();
+    final source = picker.supportsImageSource(ImageSource.camera)
+        ? await showDialog<ImageSource>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: Text(l.roomFromPicture),
+              children: [
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.camera),
+                  child: Text(l.aiTakePhoto),
+                ),
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, ImageSource.gallery),
+                  child: Text(l.aiChooseFromGallery),
+                ),
+              ],
+            ),
+          )
+        : ImageSource.gallery;
+    if (source == null || !mounted) return null;
+    final files = source == ImageSource.camera
+        ? [
+            ?await picker.pickImage(
+              source: source,
+              maxWidth: 2048,
+              maxHeight: 2048,
+              imageQuality: 88,
+            ),
+          ]
+        : await picker.pickMultiImage(
+            maxWidth: 2048,
+            maxHeight: 2048,
+            imageQuality: 88,
+            limit: 4,
+          );
+    if (files.isEmpty || !mounted) return null;
+    final photos = [
+      for (final f in files.take(4))
+        (
+          bytes: await f.readAsBytes(),
+          contentType: f.name.toLowerCase().endsWith('.png')
+              ? 'image/png'
+              : 'image/jpeg',
+        ),
+    ];
+    return photos;
   }
 
   /// Cancel on the AI working card: the request keeps running (nothing to
@@ -681,6 +745,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     // sent (text or voice): drop focus so the on-screen keyboard doesn't sit
     // over the canvas/panel while the request runs, or once the result shows
     _hideKeyboard();
+    _closeSnack(); // never leave a Revert snackbar over the card or panel
     final req = _AiRequest(const Duration(seconds: 15));
     setState(() => _asking = req);
     RoomLayoutProposal proposal;
@@ -726,12 +791,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       return;
     }
     if (!mounted) return;
-    _hideKeyboard(); // the preview panel is about to show
-    setState(() {
-      _proposal = proposal;
-      _selectedId = null;
-      _selectedObjectId = null;
-    });
+    _showProposal(proposal);
   }
 
   Future<void> _applyRoom(
@@ -758,14 +818,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
               widget.managerPin,
             );
       if (!mounted) return;
-      setState(() {
-        _tables = r.tables;
-        _objects = r.objects;
-        _proposal = null;
-        _dirty = false;
-        _undo.clear();
-      });
       _closeSnack();
+      unawaited(_endProposal(applied: r));
       _snack = ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -784,7 +838,10 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         ),
       );
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (!mounted) return;
+      showApiError(context, e);
+      // expired / already applied / refused: out of preview, the room as saved
+      await _endProposal();
     }
   }
 
@@ -797,7 +854,13 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       final zones = await Api.zones();
       final zone = zones.where((z) => z.id == widget.zone.id).firstOrNull;
       if (!mounted) return;
+      _asking?.cancelled = true;
       setState(() {
+        // the room as the store has it now, and never a stale preview over it
+        _proposal = null;
+        _asking = null;
+        _selectedId = null;
+        _selectedObjectId = null;
         if (zone != null) {
           _tables = List.of(zone.tables);
           _objects = List.of(zone.objects);
@@ -959,7 +1022,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
 
   Future<void> _confirmLeave(bool didPop, Object? result) async {
     if (didPop) return;
-    if (_proposal != null) return setState(() => _proposal = null);
+    if (_proposal != null) return _endProposal();
     if (_asking != null) return _cancelAsking();
     final l = L.of(context);
     final leave = await showDialog<bool>(
@@ -1126,11 +1189,13 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         ),
         body: _proposal != null
             ? RoomLayoutPreview(
+                // a new proposal never inherits the last one's ghost/mode
+                key: ValueKey(_proposal!.proposalId),
                 existingTables: _tables,
                 existingObjects: _objects,
                 proposal: _proposal!,
                 onApply: _applyRoom,
-                onCancel: () => setState(() => _proposal = null),
+                onCancel: _endProposal,
               )
             : AiWorkingOverlay(
                 active: _asking != null,
