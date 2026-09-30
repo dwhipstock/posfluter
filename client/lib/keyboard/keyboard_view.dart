@@ -204,7 +204,10 @@ class _KeyboardViewState extends State<KeyboardView> {
                 ? 'osk:more$side'
                 : 'osk:back123$side',
             kind: _KeyKind.special,
-            label: Text(page == KeyboardPage.symbols ? '#+=' : '123'),
+            label: Text(
+              page == KeyboardPage.symbols ? '#+=' : '123',
+              style: const TextStyle(fontSize: 19),
+            ),
             onTap: () => _kb.showPage(
               page == KeyboardPage.symbols
                   ? KeyboardPage.moreSymbols
@@ -235,7 +238,10 @@ class _KeyboardViewState extends State<KeyboardView> {
             id: letters ? 'osk:123' : 'osk:abc',
             kind: _KeyKind.special,
             semantic: letters ? l.kbSymbols : l.kbLetters,
-            label: Text(letters ? '?123' : 'ABC'),
+            label: Text(
+              letters ? '?123' : 'ABC',
+              style: const TextStyle(fontSize: 19),
+            ),
             onTap: () => _kb.showPage(
               letters ? KeyboardPage.symbols : KeyboardPage.letters,
             ),
@@ -291,7 +297,7 @@ class _KeyboardViewState extends State<KeyboardView> {
             id: 'osk:abc',
             kind: _KeyKind.special,
             semantic: l.kbLetters,
-            label: const Text('ABC'),
+            label: const Text('ABC', style: TextStyle(fontSize: 19)),
             onTap: () => _kb.showPage(KeyboardPage.letters),
           ),
         ),
@@ -535,6 +541,13 @@ class _KeyState extends State<_Key> {
     final style = _KeyStyle.of(context);
     final s = style.scheme;
     final pressed = _pointer != null;
+    // letter keys stand out from the board: lighter in both modes
+    final face = s.brightness == Brightness.dark
+        ? Color.alphaBlend(
+            s.onSurface.withValues(alpha: .12),
+            s.surfaceContainerHigh,
+          )
+        : s.surface;
     final (Color bg, Color fg) = switch (widget.kind) {
       _KeyKind.action => (
         pressed ? Color.alphaBlend(Colors.black26, s.primary) : s.primary,
@@ -550,8 +563,8 @@ class _KeyState extends State<_Key> {
       ),
       _KeyKind.char => (
         pressed
-            ? Color.alphaBlend(s.primary.withValues(alpha: .22), s.surface)
-            : s.surface,
+            ? Color.alphaBlend(s.primary.withValues(alpha: .22), face)
+            : face,
         s.onSurface,
       ),
     };

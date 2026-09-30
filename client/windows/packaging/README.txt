@@ -24,5 +24,13 @@ Everything lives in %LOCALAPPDATA%\{{BRAND}}\
                     Edit it with Notepad, then close and reopen the POS.
   store.log         the store's log, if something goes wrong
 
+On-screen keyboard
+------------------
+The POS brings its own keyboard up whenever a text box is touched, in the
+language the screen is in (the globe key switches it). To use the Windows
+touch keyboard instead, set the environment variable POS_SYSTEM_KEYBOARD=1
+(System > About > Advanced system settings > Environment Variables), then
+reopen the POS.
+
 Not on Windows: camera barcode scanning (a USB or Bluetooth scanner works),
 the Stripe Bluetooth card reader, and paper receipts over Bluetooth.
