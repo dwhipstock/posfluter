@@ -2607,7 +2607,9 @@ class RoomLayoutApplyResult {
 }
 
 /// A previewed table as the apply call wants it (its number from the label).
+// the id goes back so the store can check each table was in its proposal
 Map<String, dynamic> roomTableJson(TableInfo t) => {
+  'id': t.id,
   'x': t.x,
   'y': t.y,
   'width': t.width,
@@ -2619,6 +2621,7 @@ Map<String, dynamic> roomTableJson(TableInfo t) => {
 };
 
 Map<String, dynamic> roomObjectJson(FloorObject o) => {
+  'id': o.id,
   'type': o.type,
   'x': o.x,
   'y': o.y,
