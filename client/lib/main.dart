@@ -19,6 +19,7 @@ import 'retail/sp_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'server_discovery.dart';
+import 'widgets/camera_capture.dart';
 import 'widgets/open_shift_prompt.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -142,6 +143,9 @@ Future<void> main() async {
       (_) => false,
     );
   };
+  // Windows: "Take a photo" opens our own camera page (Android keeps the
+  // system camera app).
+  CameraCaptureDelegate.register(rootNavigatorKey);
   runApp(const PosApp());
 }
 
