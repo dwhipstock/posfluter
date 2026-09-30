@@ -57,6 +57,12 @@ dependencies:
   # so the AI working card's elapsed timer is real in the app and fast/exact
   # in a widget test rather than needing to wait on the wall clock.
   clock: ^1.1.2
+  # "Take a photo" on the Windows tablet: image_picker has no camera there, so
+  # lib/widgets/camera_capture.dart registers its own camera page (camera +
+  # camera_windows, which is not endorsed, so it is listed explicitly).
+  camera: ^0.12.1
+  camera_windows: ^0.3.0
+  image_picker_platform_interface: ^2.11.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -67,6 +73,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  # a fake camera for test/camera_capture_test.dart
+  camera_platform_interface: ^2.14.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
