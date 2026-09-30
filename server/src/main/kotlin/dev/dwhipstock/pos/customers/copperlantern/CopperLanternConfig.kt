@@ -15,6 +15,7 @@ import dev.dwhipstock.pos.sdk.StoreProfile
 import dev.dwhipstock.pos.sdk.TaxComponent
 import dev.dwhipstock.pos.sdk.TaxPolicy
 import dev.dwhipstock.pos.sdk.TenderMethod
+import dev.dwhipstock.pos.sdk.UpsellConfig
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import java.math.BigDecimal
 
@@ -82,6 +83,10 @@ class CopperLanternConfig(
                 showTax = false,
             )
         }
+
+    // the kiosk's "Add a drink?" step: Express only (the pubs have no kiosk)
+    override val upsell: UpsellConfig
+        get() = if (venue.quickServe) CopperLanternExpressSeed.upsell else UpsellConfig.NONE
 
     // Stripe Terminal (test mode) unless payment.terminal says otherwise
     override val defaultPaymentTerminal get() = dev.dwhipstock.pos.payments.terminal.TerminalKind.STRIPE

@@ -43,6 +43,22 @@ class KioskConfig {
   );
 }
 
+/// One row of the "Add a drink?" step, as the store picked it: why
+/// ("drink", "side", "dessert"), the category, and its items, best first.
+class KioskUpsellRow {
+  final String reason, categoryId;
+  final List<String> itemIds;
+  const KioskUpsellRow(this.reason, this.categoryId, this.itemIds);
+  factory KioskUpsellRow.fromJson(Map<String, dynamic> j) => KioskUpsellRow(
+    j['reason'] as String? ?? '',
+    j['categoryId'] as String? ?? '',
+    [
+      for (final i in (j['itemIds'] as List? ?? const []))
+        if (i is String) i,
+    ],
+  );
+}
+
 class KioskApiException implements Exception {
   final int status;
   final String? code;
@@ -72,7 +88,12 @@ class KioskApi {
     'X-Device-Token': ?token,
   };
 
-  Future<dynamic> _send(String method, String path, [Object? body]) async {
+  Future<dynamic> _send(
+    String method,
+    String path, [
+    Object? body,
+    Duration timeout = _timeout,
+  ]) async {
     final uri = Uri.parse('$baseUrl$path');
     final res =
         await (method == 'GET'
@@ -82,7 +103,7 @@ class KioskApi {
                     headers: _headers,
                     body: jsonEncode(body ?? {}),
                   ))
-            .timeout(_timeout);
+            .timeout(timeout);
     dynamic j;
     try {
       j = jsonDecode(utf8.decode(res.bodyBytes));
@@ -144,6 +165,18 @@ class KioskApi {
     await _send('POST', '/kiosk/orders', {'serviceMode': mode, 'lines': lines})
         as Map<String, dynamic>,
   );
+
+  /// The store's "Add a drink?" rows for this cart (none: straight to the
+  /// cart). Quick: the guest is waiting on it.
+  Future<List<KioskUpsellRow>> upsell(List<Map<String, dynamic>> lines) async {
+    final j = await _send('POST', '/kiosk/upsell', {
+      'lines': lines,
+    }, const Duration(seconds: 3));
+    return [
+      for (final r in ((j as Map?)?['rows'] as List? ?? const []))
+        if (r is Map<String, dynamic>) KioskUpsellRow.fromJson(r),
+    ];
+  }
 
   /// A tile-sized photo (the store downsizes), or null when the item has none.
   String? photoUrl(Item item, {int width = 480}) => item.photoVersion == null

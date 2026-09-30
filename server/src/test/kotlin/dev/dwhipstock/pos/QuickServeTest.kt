@@ -79,7 +79,7 @@ class QuickServeTest {
                 printer = PrinterAdapter.VirtualPrinter("r", "b"), publicBaseUrl = "http://x").profile.kind)
         transaction {
             val items = dev.dwhipstock.pos.base.Items.selectAll().toList()
-            assertTrue(items.size in 15..20, "menu size ${items.size}")
+            assertTrue(items.size in 15..22, "menu size ${items.size}")
             assertTrue("cocktails" !in dev.dwhipstock.pos.base.Categories.selectAll().map { it[dev.dwhipstock.pos.base.Categories.id] })
             // no floor plan: just the counter
             assertEquals(listOf(QuickServeService.COUNTER_TABLE),
@@ -304,6 +304,14 @@ class QuickServeTest {
         val code2 = obj(staff.post("/counter/kiosk-code").bodyAsText())["code"]!!.jsonPrimitive.content
         assertEquals(HttpStatusCode.OK, client.postJson("/kiosk/pair", """{"code":"$code2","deviceName":"Door 2"}""").status)
         assertEquals(HttpStatusCode.OK, client.get("/kiosk/config") { header("X-Device-Token", token) }.status)
+
+        // the "Add a drink?" step: the kiosk's own token, the store's rules
+        val cart = """{"lines":[{"itemId":"lantern-burger","variantId":"lantern-burger:regular"}]}"""
+        assertEquals(HttpStatusCode.Unauthorized, client.postJson("/kiosk/upsell", cart).status)
+        val upsell = client.postJson("/kiosk/upsell", cart, token)
+        assertEquals(HttpStatusCode.OK, upsell.status, upsell.bodyAsText())
+        assertEquals(listOf("drink", "side"),
+            obj(upsell.bodyAsText())["rows"]!!.jsonArray.map { it.jsonObject["reason"]!!.jsonPrimitive.content })
 
         // the menu the kiosk shows is the open catalog
         assertTrue(json.parseToJsonElement(client.get("/items").bodyAsText()).jsonArray.size >= 15)

@@ -66,6 +66,47 @@ class KioskText {
     'Alkohol — das Personal prüft an der Kasse Ihren Ausweis.',
   );
 
+  // "Add a drink?" (the store picks the rows; once per order)
+  String get completeMeal => _t(
+    'Pour compléter votre repas',
+    'Complete your meal',
+    'Complete su comida',
+    'Ihr Menü vervollständigen',
+  );
+  String get addDrink => _t(
+    'Ajouter une boisson ?',
+    'Add a drink?',
+    '¿Agregar una bebida?',
+    'Ein Getränk dazu?',
+  );
+  String get addFries => _t(
+    'Ajouter des frites ?',
+    'Add fries?',
+    '¿Agregar papas fritas?',
+    'Pommes dazu?',
+  );
+  String get addDessert => _t(
+    'Un petit dessert ?',
+    'Something sweet?',
+    '¿Algo dulce?',
+    'Etwas Süßes?',
+  );
+  String get noThanks => _t(
+    'Non merci, continuer',
+    'No thanks, continue',
+    'No, gracias, continuar',
+    'Nein danke, weiter',
+  );
+
+  /// A row's title by the store's reason; null for one this kiosk doesn't
+  /// know (the category's name is shown instead).
+  String? offerTitle(String reason) => switch (reason) {
+    'drink' => addDrink,
+    'side' => addFries,
+    'dessert' => addDessert,
+    _ => null,
+  };
+
   // the cart
   String get yourOrder =>
       _t('Votre commande', 'Your order', 'Su pedido', 'Ihre Bestellung');

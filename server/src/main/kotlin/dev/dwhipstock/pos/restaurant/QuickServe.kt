@@ -265,6 +265,14 @@ class QuickServeService(
         return KioskOrderResult(v.kioskNumber!!, v.checkId, v.serviceMode, v.totalCents, v.hasAlcohol)
     }
 
+    private val upsellRules = QuickServeUpsell({ config.upsell })
+
+    /** The kiosk's "Add a drink?" step for the guest's cart ([QuickServeUpsell]); nothing is stored. */
+    fun kioskUpsell(req: KioskUpsellRequest): KioskUpsell {
+        require(req.lines.size <= MAX_LINES) { "too many lines" }
+        return upsellRules.suggest(req.lines)
+    }
+
     /** Dine in / take out: changeable until the order is paid. */
     fun setMode(checkId: Int, mode: String): CounterOrderView {
         val m = normMode(mode)

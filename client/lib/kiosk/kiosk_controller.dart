@@ -19,6 +19,10 @@ enum KioskStage {
   /// Categories and photo tiles.
   menu,
 
+  /// "Add a drink?": the store's suggestions, once per order, on the way to
+  /// the cart.
+  upsell,
+
   /// What is in the order, and Place order.
   cart,
 
@@ -32,6 +36,14 @@ class KioskLine {
   int qty;
   KioskLine(this.item, this.variant, this.qty);
   int get totalCents => variant.priceCents * qty;
+}
+
+/// One row of the "Add a drink?" step: the store's reason ("drink", "side",
+/// "dessert"), its category, and the items the kiosk has for it.
+class KioskOffer {
+  final String reason, categoryId;
+  final List<Item> items;
+  const KioskOffer(this.reason, this.categoryId, this.items);
 }
 
 /// The kiosk's brain, UI-free (tests drive it with a fake API): pair with the
@@ -73,6 +85,10 @@ class KioskController extends ChangeNotifier {
   String? mode;
   final List<KioskLine> cart = [];
   KioskOrderResult? result;
+
+  /// The "Add a drink?" rows being shown; asked for once per order.
+  List<KioskOffer> offers = const [];
+  bool _offered = false;
 
   KioskApi? _api;
   KioskApi? get api => _api;
@@ -210,6 +226,8 @@ class KioskController extends ChangeNotifier {
     cart.clear();
     mode = null;
     result = null;
+    offers = const [];
+    _offered = false;
     message = null;
     busy = false;
     lang = locales.isEmpty ? 'en' : locales.first;
@@ -221,6 +239,7 @@ class KioskController extends ChangeNotifier {
   void touch() {
     if (stage == KioskStage.mode ||
         stage == KioskStage.menu ||
+        stage == KioskStage.upsell ||
         stage == KioskStage.cart) {
       _idle?.cancel();
       _idle = Timer(idleTimeout, _toWelcome);
@@ -283,15 +302,72 @@ class KioskController extends ChangeNotifier {
     _changed();
   }
 
-  void openCart() {
-    if (cart.isEmpty) return;
+  List<Map<String, dynamic>> get _lines => [
+    for (final l in cart)
+      {'itemId': l.item.id, 'variantId': l.variant.id, 'qty': l.qty},
+  ];
+
+  /// To the cart. The first time in an order, the store is asked what to
+  /// suggest ("Add a drink?"); with nothing to suggest, or the store slow or
+  /// away, straight to the cart. Never twice in one order.
+  Future<void> openCart() async {
+    if (cart.isEmpty || busy) return;
+    final api = _api;
+    if (!_offered && api != null) {
+      _offered = true;
+      busy = true;
+      _changed();
+      var found = <KioskOffer>[];
+      try {
+        final byId = {for (final i in items) i.id: i};
+        for (final r in await api.upsell(_lines)) {
+          final shown = [
+            for (final id in r.itemIds)
+              if (byId[id] case final i? when i.active && i.variants.isNotEmpty)
+                i,
+          ];
+          if (shown.isNotEmpty) {
+            found.add(KioskOffer(r.reason, r.categoryId, shown));
+          }
+        }
+      } catch (_) {
+        found = [];
+      }
+      busy = false;
+      // the guest went idle (or started over) while the store answered
+      if (stage != KioskStage.menu || cart.isEmpty) {
+        _changed();
+        return;
+      }
+      if (found.isNotEmpty) {
+        offers = found;
+        stage = KioskStage.upsell;
+        touch();
+        _changed();
+        return;
+      }
+    }
     stage = KioskStage.cart;
+    _changed();
+  }
+
+  /// A suggestion tapped (its size picked): in the cart, and on to the cart.
+  void addOffer(Item item, Variant variant) {
+    add(item, variant);
+    closeOffers();
+  }
+
+  /// No thanks: on to the cart; the step does not come back this order.
+  void closeOffers() {
+    offers = const [];
+    stage = cart.isEmpty ? KioskStage.menu : KioskStage.cart;
     _changed();
   }
 
   void back() {
     stage = switch (stage) {
       KioskStage.cart => KioskStage.menu,
+      KioskStage.upsell => KioskStage.menu,
       KioskStage.menu => KioskStage.mode,
       _ => KioskStage.welcome,
     };
@@ -312,10 +388,7 @@ class KioskController extends ChangeNotifier {
     message = null;
     _changed();
     try {
-      result = await api.placeOrder(mode ?? 'TAKE_OUT', [
-        for (final l in cart)
-          {'itemId': l.item.id, 'variantId': l.variant.id, 'qty': l.qty},
-      ]);
+      result = await api.placeOrder(mode ?? 'TAKE_OUT', _lines);
       busy = false;
       _idle?.cancel();
       cart.clear();

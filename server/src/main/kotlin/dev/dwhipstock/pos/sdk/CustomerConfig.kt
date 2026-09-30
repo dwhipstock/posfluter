@@ -42,5 +42,9 @@ interface CustomerConfig {
     /** Deals applied to the basket before tax ([Promotions]); none by default. */
     val promotions: List<Promotion> get() = emptyList()
 
+    /** The kiosk's "Add a drink?" step by menu category ([UpsellConfig]); a quick-serve store gets the usual ids. */
+    val upsell: UpsellConfig
+        get() = if (profile.kind == StoreProfile.Kind.QUICK_SERVE) UpsellConfig.QUICK_SERVE_DEFAULT else UpsellConfig.NONE
+
     fun tenderMethod(type: TenderType): TenderMethod? = electronicTenders.firstOrNull { it.type == type }
 }

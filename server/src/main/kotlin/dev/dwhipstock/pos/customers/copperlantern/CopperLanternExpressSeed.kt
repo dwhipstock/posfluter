@@ -8,6 +8,8 @@ import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.base.VenueSettings
 import dev.dwhipstock.pos.sdk.Outbox
+import dev.dwhipstock.pos.sdk.UpsellConfig
+import dev.dwhipstock.pos.sdk.UpsellRule
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -97,6 +99,10 @@ object CopperLanternExpressSeed {
             "Cola, cola diète, soda citron-lime ou soda gingembre.", "Cola, diet cola, lemon-lime or ginger ale.", sml(245, 295, 345)),
         E("lemonade", "soft-drinks", "LE", false, "Limonade maison", "House Lemonade", "Limonada de la casa", "Hausgemachte Limonade",
             "Citron pressé, un peu pétillante.", "Fresh-squeezed lemon, lightly sparkling.", one(395)),
+        E("iced-tea", "soft-drinks", "IT", false, "Thé glacé", "Iced Tea", "Té helado", "Eistee",
+            "Thé noir infusé maison, citron.", "House-brewed black tea with lemon.", sml(245, 295, 345)),
+        E("sparkling-water", "soft-drinks", "SW", false, "Eau pétillante", "Sparkling Water", "Agua con gas", "Mineralwasser",
+            "Bouteille de 500 ml.", "500 ml bottle.", one(275)),
         // beer & wine only (the pubs' own beers and wines keep their ids and photos)
         E("lantern-lager", "beer-wine", "LL", true, "Lager de la Lanterne", "Lantern House Lager", "Lager de la casa Lantern", "Lantern Hauslager",
             "Lager désaltérante et maltée, brassée à Montréal.", "Crisp, malty lager brewed in Montréal.",
@@ -110,6 +116,22 @@ object CopperLanternExpressSeed {
         E("riesling", "beer-wine", "RI", true, "Riesling des Cantons-de-l'Est", "Eastern Townships Riesling", "Riesling de los Cantones del Este", "Riesling aus den Eastern Townships",
             "Blanc vif, notes de pomme et d'agrumes.", "Bright white with apple and citrus.",
             listOf(V("glass", "Verre", "Glass", "Copa", "Glas", 950))),
+    )
+
+    /**
+     * The kiosk's "Add a drink?" step: a burger, chicken or salad without a
+     * soft drink (a beer or wine counts) gets drinks, then fries and sides,
+     * then desserts; two rows at most. Beer and wine are never offered.
+     */
+    val upsell = UpsellConfig(
+        mains = setOf("burgers", "chicken", "salads"),
+        rules = listOf(
+            UpsellRule("drink", offer = listOf("soft-drinks"), satisfiedBy = listOf("soft-drinks", "beer-wine")),
+            UpsellRule("side", offer = listOf("fries-sides")),
+            UpsellRule("dessert", offer = listOf("desserts")),
+        ),
+        maxRows = 2,
+        maxItems = 4,
     )
 
     /** Item ids on the Express menu. */
