@@ -5,25 +5,30 @@ import 'package:http/http.dart' as http;
 
 import '../api.dart' show Item, Category;
 
-/// What a kiosk order came back as: the kiosk number the guest pays with at
-/// the counter (K12). The order gets its pickup number once it is paid.
+/// What a kiosk order came back as: the guest's order number (#101), the
+/// same one they pay with at the counter and are called by at pickup.
 class KioskOrderResult {
   final int orderNumber, totalCents;
   final bool idCheckAtCounter;
 
-  /// What the kiosk shows ("K12"); older stores send none.
+  /// What the kiosk shows ("#101"); older stores send none.
   final String? displayNumber;
+
+  /// The store printed the guest a ticket: "Take your ticket to the counter".
+  final bool ticket;
   const KioskOrderResult(
     this.orderNumber,
     this.totalCents,
     this.idCheckAtCounter, {
     this.displayNumber,
+    this.ticket = false,
   });
   factory KioskOrderResult.fromJson(Map<String, dynamic> j) => KioskOrderResult(
     (j['orderNumber'] as num).toInt(),
     (j['totalCents'] as num? ?? 0).toInt(),
     j['idCheckAtCounter'] == true,
     displayNumber: j['displayNumber'] as String?,
+    ticket: j['ticket'] == true,
   );
 
   String get label => displayNumber ?? '$orderNumber';
@@ -39,6 +44,22 @@ class KioskConfig {
     [
       for (final l in (j['locales'] as List? ?? const ['en', 'fr']))
         if (l is String) l,
+    ],
+  );
+}
+
+/// One row of the "Add a drink?" step, as the store picked it: why
+/// ("drink", "side", "dessert"), the category, and its items, best first.
+class KioskUpsellRow {
+  final String reason, categoryId;
+  final List<String> itemIds;
+  const KioskUpsellRow(this.reason, this.categoryId, this.itemIds);
+  factory KioskUpsellRow.fromJson(Map<String, dynamic> j) => KioskUpsellRow(
+    j['reason'] as String? ?? '',
+    j['categoryId'] as String? ?? '',
+    [
+      for (final i in (j['itemIds'] as List? ?? const []))
+        if (i is String) i,
     ],
   );
 }
@@ -72,7 +93,12 @@ class KioskApi {
     'X-Device-Token': ?token,
   };
 
-  Future<dynamic> _send(String method, String path, [Object? body]) async {
+  Future<dynamic> _send(
+    String method,
+    String path, [
+    Object? body,
+    Duration timeout = _timeout,
+  ]) async {
     final uri = Uri.parse('$baseUrl$path');
     final res =
         await (method == 'GET'
@@ -82,7 +108,7 @@ class KioskApi {
                     headers: _headers,
                     body: jsonEncode(body ?? {}),
                   ))
-            .timeout(_timeout);
+            .timeout(timeout);
     dynamic j;
     try {
       j = jsonDecode(utf8.decode(res.bodyBytes));
@@ -136,14 +162,32 @@ class KioskApi {
       Category.fromJson(c as Map<String, dynamic>),
   ];
 
-  /// [mode] DINE_IN | TAKE_OUT. Lines: itemId, variantId, qty.
+  /// [mode] DINE_IN | TAKE_OUT. Lines: itemId, variantId, qty. [lang]: the
+  /// guest's language, for the ticket the store prints.
   Future<KioskOrderResult> placeOrder(
     String mode,
-    List<Map<String, dynamic>> lines,
-  ) async => KioskOrderResult.fromJson(
-    await _send('POST', '/kiosk/orders', {'serviceMode': mode, 'lines': lines})
+    List<Map<String, dynamic>> lines, {
+    String? lang,
+  }) async => KioskOrderResult.fromJson(
+    await _send('POST', '/kiosk/orders', {
+          'serviceMode': mode,
+          'lines': lines,
+          'lang': ?lang,
+        })
         as Map<String, dynamic>,
   );
+
+  /// The store's "Add a drink?" rows for this cart (none: straight to the
+  /// cart). Quick: the guest is waiting on it.
+  Future<List<KioskUpsellRow>> upsell(List<Map<String, dynamic>> lines) async {
+    final j = await _send('POST', '/kiosk/upsell', {
+      'lines': lines,
+    }, const Duration(seconds: 3));
+    return [
+      for (final r in ((j as Map?)?['rows'] as List? ?? const []))
+        if (r is Map<String, dynamic>) KioskUpsellRow.fromJson(r),
+    ];
+  }
 
   /// A tile-sized photo (the store downsizes), or null when the item has none.
   String? photoUrl(Item item, {int width = 480}) => item.photoVersion == null

@@ -82,6 +82,7 @@ class _KioskAppState extends State<KioskApp> {
     KioskStage.welcome => _WelcomeScreen(c),
     KioskStage.mode => _ModeScreen(c),
     KioskStage.menu => _MenuScreen(c),
+    KioskStage.upsell => _UpsellScreen(c),
     KioskStage.cart => _CartScreen(c),
     KioskStage.done => _DoneScreen(c),
   };
@@ -389,6 +390,84 @@ class _ModeScreen extends StatelessWidget {
 
 // ------------------------------------------------------------------ the menu
 
+/// The size picker (and the ID note for alcohol): the size, or null if closed.
+Future<Variant?> _chooseVariant(
+  BuildContext context,
+  KioskController c,
+  Item item,
+) {
+  final t = KioskText(c.lang);
+  return showModalBottomSheet<Variant>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _name(c, item),
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              pickName(c.lang, item.descriptionFr, item.descriptionEn),
+              style: const TextStyle(color: _muted, fontSize: 18),
+            ),
+            if (item.isAlcohol)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.idCard, color: _copper),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        t.idNote,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (item.variants.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 16, bottom: 4),
+                child: Text(
+                  t.chooseSize,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            for (final v in item.variants)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: FilledButton(
+                  key: Key('kiosk-variant-${v.id}'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(64),
+                  ),
+                  onPressed: () => Navigator.pop(context, v),
+                  child: Text(
+                    item.variants.length > 1
+                        ? '${pickName(c.lang, v.labelFr, v.labelEn)} — ${_money(c, v.priceCents)}'
+                        : t.addFor(_money(c, v.priceCents)),
+                    style: const TextStyle(fontSize: 22),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _MenuScreen extends StatelessWidget {
   final KioskController c;
   const _MenuScreen(this.c);
@@ -410,78 +489,7 @@ class _MenuScreen extends StatelessWidget {
         );
       return;
     }
-    final picked = await showModalBottomSheet<Variant>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                _name(c, item),
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                pickName(c.lang, item.descriptionFr, item.descriptionEn),
-                style: const TextStyle(color: _muted, fontSize: 18),
-              ),
-              if (item.isAlcohol)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Row(
-                    children: [
-                      const Icon(LucideIcons.idCard, color: _copper),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          t.idNote,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (item.variants.length > 1)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16, bottom: 4),
-                  child: Text(
-                    t.chooseSize,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              for (final v in item.variants)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: FilledButton(
-                    key: Key('kiosk-variant-${v.id}'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(64),
-                    ),
-                    onPressed: () => Navigator.pop(context, v),
-                    child: Text(
-                      item.variants.length > 1
-                          ? '${pickName(c.lang, v.labelFr, v.labelEn)} — ${_money(c, v.priceCents)}'
-                          : t.addFor(_money(c, v.priceCents)),
-                      style: const TextStyle(fontSize: 22),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
+    final picked = await _chooseVariant(context, c, item);
     if (picked != null) c.add(item, picked);
   }
 
@@ -557,7 +565,7 @@ class _MenuScreen extends StatelessWidget {
                     backgroundColor: _copper,
                     minimumSize: const Size.fromHeight(76),
                   ),
-                  onPressed: c.openCart,
+                  onPressed: c.busy ? null : c.openCart,
                   child: Row(
                     children: [
                       const Icon(LucideIcons.shoppingCart, size: 30),
@@ -665,6 +673,123 @@ class _Tile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ "Add a drink?"
+
+/// The store's suggestions on the way to the cart: one or two rows of photo
+/// tiles (a drink first), one tap to add (sizes as on the menu), and a big
+/// No thanks. Adding one, or No thanks, goes on to the cart.
+class _UpsellScreen extends StatelessWidget {
+  final KioskController c;
+  const _UpsellScreen(this.c);
+
+  Future<void> _tap(BuildContext context, Item item) async {
+    final v = item.variants.length == 1 && !item.isAlcohol
+        ? item.variants.first
+        : await _chooseVariant(context, c, item);
+    if (v != null) c.addOffer(item, v);
+  }
+
+  String _title(KioskText t, KioskOffer o) {
+    final cat = c.categories.where((x) => x.id == o.categoryId);
+    return t.offerTitle(o.reason) ??
+        (cat.isEmpty
+            ? o.categoryId
+            : pickName(
+                c.lang,
+                cat.first.nameFr,
+                cat.first.nameEn,
+                cat.first.names,
+              ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = KioskText(c.lang);
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: _navy,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(LucideIcons.arrowLeft),
+          tooltip: t.back,
+          onPressed: c.back,
+        ),
+        title: Text(t.completeMeal),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              key: const Key('kiosk-upsell'),
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+              children: [
+                for (final o in c.offers) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+                    child: Text(
+                      _title(t, o),
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: _ink,
+                      ),
+                    ),
+                  ),
+                  LayoutBuilder(
+                    builder: (context, box) {
+                      // four across on the portrait kiosk; never taller than
+                      // a menu tile, so two rows fit in landscape too
+                      const gap = 12.0;
+                      final w = (box.maxWidth - gap * 3) / 4;
+                      final h = (w / 0.82).clamp(200.0, 300.0);
+                      return SizedBox(
+                        height: h,
+                        child: Row(
+                          children: [
+                            for (var i = 0; i < 4; i++) ...[
+                              if (i > 0) const SizedBox(width: gap),
+                              SizedBox(
+                                width: w,
+                                child: i < o.items.length
+                                    ? _Tile(
+                                        c,
+                                        o.items[i],
+                                        () => _tap(context, o.items[i]),
+                                      )
+                                    : null,
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: FilledButton(
+                key: const Key('kiosk-upsell-skip'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _navy,
+                  minimumSize: const Size.fromHeight(88),
+                ),
+                onPressed: c.closeOffers,
+                child: Text(t.noThanks, style: const TextStyle(fontSize: 30)),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -890,7 +1015,7 @@ class _DoneScreen extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    t.payAtCounter,
+                    (r?.ticket ?? false) ? t.takeTicket : t.payAtCounter,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,

@@ -4,10 +4,11 @@ part of '../api.dart';
 class CounterOrder {
   final int checkId, totalCents, outstandingCents, itemCount;
 
-  /// The customer's number (101...), given when the order is paid; null before.
+  /// The customer's number (101...): a kiosk order's from when it is placed
+  /// (on the guest's ticket), a counter order's from when it is paid.
   final int? orderNumber;
 
-  /// A kiosk order's number while it waits to be paid (K12).
+  /// An older kiosk order's waiting number (K12); new ones have [orderNumber].
   final int? kioskNumber;
 
   /// DINE_IN | TAKE_OUT
@@ -55,7 +56,7 @@ class CounterOrder {
   bool get takeOut => serviceMode == 'TAKE_OUT';
   bool get fromKiosk => source == 'KIOSK';
 
-  /// "#101" once paid, "K12" while a kiosk order waits.
+  /// "#101" (a kiosk order from the start, a counter order once paid).
   String get label => orderNumber != null
       ? '#$orderNumber'
       : kioskNumber != null
@@ -121,6 +122,19 @@ class QuickServeApi {
   static Future<String> defaultMode() async {
     final j = await Api._get('/counter/settings') as Map<String, dynamic>;
     return j['defaultServiceMode'] as String? ?? 'TAKE_OUT';
+  }
+
+  /// Whether a kiosk order prints the guest's ticket (on unless turned off).
+  static Future<bool> kioskTicket() async {
+    final j = await Api._get('/counter/settings') as Map<String, dynamic>;
+    return j['kioskTicket'] as bool? ?? true;
+  }
+
+  static Future<bool> setKioskTicket(bool on) async {
+    final j =
+        await Api._put('/counter/settings', {'kioskTicket': on})
+            as Map<String, dynamic>;
+    return j['kioskTicket'] as bool? ?? on;
   }
 
   static Future<String> setDefaultMode(String mode) async {

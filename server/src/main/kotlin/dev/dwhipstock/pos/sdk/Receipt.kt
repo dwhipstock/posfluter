@@ -241,11 +241,7 @@ object ReceiptRenderer {
         add(PrintLine.Divider)
 
         for (item in receipt.items) {
-            // Spanish / German read the translations table, else English (dataText)
-            val name = item.names[locale.tag]?.takeIf { it.isNotBlank() } ?: locale.dataText(item.nameFr, item.nameEn)
-            val variant = locale.dataTextOrNull(item.variantLabelFr, item.variantLabelEn)
-                ?.let { item.variantNames[locale.tag]?.takeIf { v -> v.isNotBlank() } ?: it }?.let { " ($it)" } ?: ""
-            add(PrintLine.KeyValue("$name$variant ×${item.qty}", item.lineTotal.let(policy::money)))
+            add(PrintLine.KeyValue(itemText(item, locale), item.lineTotal.let(policy::money)))
             if (item.qty > 1) add(PrintLine.Text("  @${item.unitPrice.let(policy::money)}"))
             item.note?.let { add(PrintLine.Text("  • $it")) }
             item.fuel?.let { f ->
@@ -323,6 +319,14 @@ object ReceiptRenderer {
 
         add(PrintLine.Blank)
         add(PrintLine.Text(policy.footerText, Align.CENTER))
+    }
+
+    /** An item line's text: "Fries (Large) ×2". Spanish / German read the translations table, else English. */
+    fun itemText(item: ReceiptItem, locale: LocaleCode): String {
+        val name = item.names[locale.tag]?.takeIf { it.isNotBlank() } ?: locale.dataText(item.nameFr, item.nameEn)
+        val variant = locale.dataTextOrNull(item.variantLabelFr, item.variantLabelEn)
+            ?.let { item.variantNames[locale.tag]?.takeIf { v -> v.isNotBlank() } ?: it }?.let { " ($it)" } ?: ""
+        return "$name$variant ×${item.qty}"
     }
 
     /**

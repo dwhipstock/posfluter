@@ -365,7 +365,10 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
                               size: 16,
                             ),
                             const SizedBox(width: 8),
-                            Text(money(o.outstandingCents)),
+                            Text(
+                              '${money(o.outstandingCents)} · '
+                              '${q.toPay.toLowerCase()}',
+                            ),
                           ],
                         ),
                       );
@@ -660,7 +663,8 @@ class _OrdersPanelState extends State<_OrdersPanel> {
 }
 
 /// Settings (quick-serve only): whether a new counter order starts as take
-/// out or dine in. Saved as soon as it is changed.
+/// out or dine in, and whether a kiosk order prints the guest's ticket.
+/// Saved as soon as it is changed.
 class CounterModeSetting extends StatefulWidget {
   const CounterModeSetting({super.key});
 
@@ -670,6 +674,7 @@ class CounterModeSetting extends StatefulWidget {
 
 class _CounterModeSettingState extends State<CounterModeSetting> {
   String? _mode;
+  bool? _ticket;
 
   @override
   void initState() {
@@ -677,6 +682,21 @@ class _CounterModeSettingState extends State<CounterModeSetting> {
     QuickServeApi.defaultMode().then((m) {
       if (mounted) setState(() => _mode = m);
     }, onError: (_) {});
+    QuickServeApi.kioskTicket().then((on) {
+      if (mounted) setState(() => _ticket = on);
+    }, onError: (_) {});
+  }
+
+  Future<void> _saveTicket(bool on) async {
+    final before = _ticket;
+    setState(() => _ticket = on);
+    try {
+      await QuickServeApi.setKioskTicket(on);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _ticket = before);
+      showApiError(context, e);
+    }
   }
 
   Future<void> _save(String m) async {
@@ -719,6 +739,15 @@ class _CounterModeSettingState extends State<CounterModeSetting> {
               ],
               selected: {mode},
               onSelectionChanged: (s) => _save(s.first),
+            ),
+          if (_ticket != null)
+            SwitchListTile(
+              key: const Key('kiosk-ticket'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(q.kioskTicket),
+              subtitle: Text(q.kioskTicketHelp),
+              value: _ticket!,
+              onChanged: _saveTicket,
             ),
         ],
       ),

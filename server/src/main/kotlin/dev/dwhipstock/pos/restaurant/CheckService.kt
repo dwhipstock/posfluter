@@ -951,6 +951,20 @@ class CheckService(private val config: CustomerConfig) {
      * in cash would round — the rounding and the cash total underneath it.
      * Returns the rendered text for the client preview.
      */
+    /**
+     * The check as the bill shows it (items, taxes, total), with what paying it
+     * all in cash comes to (to the nickel). Nothing is printed or recorded: the
+     * kiosk's guest ticket lays it out its own way.
+     */
+    fun billSnapshot(checkId: Int): Receipt = transaction {
+        val built = buildReceipt(checkId)
+        val due = built.grandTotal - tenderedSoFar(checkId)
+        built.copy(
+            cashDue = config.roundingPolicy.roundCashDue(due),
+            cashRounding = config.roundingPolicy.cashAdjustment(due),
+        )
+    }
+
     fun printBill(checkId: Int, groupId: Int? = null, lang: String? = null): String = transaction {
         val check = requireCheck(checkId)
         if (check[Checks.status] !in listOf("OPEN", "TOTAL_LOCKED")) {

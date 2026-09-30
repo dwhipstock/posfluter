@@ -94,8 +94,19 @@ class NetworkThermalPrinter(
         return text
     }
 
+    /** The kiosk guest's ticket: queued like a receipt, but on paper in digital mode too (it is how they pay). */
+    override fun printTicket(job: PrintJob): String {
+        val text = audit.printProvisional(job)
+        enqueue(job.lines)
+        return text
+    }
+
     private fun enqueueReceipt(lines: List<PrintLine>) {
         if (receiptMode == ReceiptPrintMode.DIGITAL) return // audit spool only, no paper
+        enqueue(lines)
+    }
+
+    private fun enqueue(lines: List<PrintLine>) {
         val t = target()
         if (!t.configured) return // no printer set up yet — silently skip, no error
         try {

@@ -7,12 +7,12 @@ import 'package:pos_client/kiosk/kiosk_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// A quick-serve store in memory: pairs with 123456, serves a tiny menu and
-/// numbers orders K1, K2... (the pickup number comes when they are paid).
+/// numbers orders #101, #102... (the guest keeps that number through payment).
 class _FakeStore extends KioskApi {
   _FakeStore(super.baseUrl, {super.token});
 
   static final placed = <Map<String, dynamic>>[];
-  static int next = 12;
+  static int next = 101;
 
   @override
   Future<String> pair(String code, {String deviceName = ''}) async {
@@ -76,6 +76,13 @@ class _FakeStore extends KioskApi {
     _item('north-ipa', 'beer-wine', 'IPA du Nord', 'North Trail IPA', [
       Variant('north-ipa:16oz', 'Verre 16 oz', '16 oz glass', 775),
     ], alcohol: true),
+    _item('fountain-soda', 'soft-drinks', 'Boisson gazeuse', 'Fountain Soda', [
+      Variant('fountain-soda:small', 'Petit', 'Small', 245),
+      Variant('fountain-soda:medium', 'Moyen', 'Medium', 295),
+    ]),
+    _item('lemonade', 'soft-drinks', 'Limonade maison', 'House Lemonade', [
+      Variant('lemonade:regular', 'Standard', 'Regular', 395),
+    ]),
   ];
 
   @override
@@ -83,24 +90,42 @@ class _FakeStore extends KioskApi {
     Category('burgers', 'Burgers', 'Burgers', 0),
     Category('fries-sides', 'Frites', 'Fries & Sides', 1),
     Category('beer-wine', 'Bières et vins', 'Beer & Wine', 2),
+    Category('soft-drinks', 'Boissons', 'Soft Drinks', 3),
   ];
+
+  /// What the store suggests on the way to the cart (none unless a test says).
+  static List<KioskUpsellRow> offers = const [];
+  static final asked = <List<Map<String, dynamic>>>[];
+  static bool upsellFails = false;
+
+  @override
+  Future<List<KioskUpsellRow>> upsell(List<Map<String, dynamic>> lines) async {
+    asked.add(lines);
+    if (upsellFails) throw const KioskApiException(500, null, 'down');
+    return offers;
+  }
 
   @override
   Future<KioskOrderResult> placeOrder(
     String mode,
-    List<Map<String, dynamic>> lines,
-  ) async {
-    placed.add({'mode': mode, 'lines': lines});
+    List<Map<String, dynamic>> lines, {
+    String? lang,
+  }) async {
+    placed.add({'mode': mode, 'lines': lines, 'lang': lang});
     final alcohol = lines.any((l) => l['itemId'] == 'north-ipa');
     final n = next++;
-    return KioskOrderResult(n, 0, alcohol, displayNumber: 'K$n');
+    // the store prints the guest's ticket, numbered #101...
+    return KioskOrderResult(n, 0, alcohol, displayNumber: '#$n', ticket: true);
   }
 }
 
 void main() {
   setUp(() {
     _FakeStore.placed.clear();
-    _FakeStore.next = 12;
+    _FakeStore.next = 101;
+    _FakeStore.offers = const [];
+    _FakeStore.asked.clear();
+    _FakeStore.upsellFails = false;
   });
 
   KioskController controller({Duration idle = const Duration(seconds: 90)}) =>
@@ -111,8 +136,12 @@ void main() {
         doneFor: const Duration(seconds: 5),
       );
 
-  Future<void> pump(WidgetTester tester, KioskController c) async {
-    tester.view.physicalSize = const Size(1080, 1920);
+  Future<void> pump(
+    WidgetTester tester,
+    KioskController c, {
+    Size size = const Size(1080, 1920),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(KioskApp(controller: c));
@@ -181,8 +210,16 @@ void main() {
       expect(_FakeStore.placed.single['mode'], 'TAKE_OUT');
       expect((_FakeStore.placed.single['lines'] as List).length, 3);
       expect(c.stage, KioskStage.done);
-      expect(find.text('K12'), findsOneWidget);
-      expect(find.text('Por favor pague en el mostrador.'), findsOneWidget);
+      expect(find.text('#101'), findsOneWidget);
+      expect(
+        _FakeStore.placed.single['lang'],
+        'es',
+        reason: 'the ticket prints in Spanish',
+      );
+      expect(
+        find.text('Lleve su ticket al mostrador para pagar.'),
+        findsOneWidget,
+      );
 
       // back to welcome on its own, in the store's language, the cart empty
       await tester.pump(const Duration(seconds: 6));
@@ -213,5 +250,151 @@ void main() {
     expect(c.stage, KioskStage.welcome);
     expect(c.cart, isEmpty);
     expect(_FakeStore.placed, isEmpty);
+  });
+
+  group('"Add a drink?"', () {
+    // the "Burger added" note sits over My order for a moment
+    Future<void> waitOutAdded(WidgetTester tester) async {
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+    }
+
+    Future<KioskController> toMenuWithBurger(
+      WidgetTester tester, {
+      String lang = 'en',
+      Size size = const Size(800, 1280),
+    }) async {
+      SharedPreferences.setMockInitialValues({
+        'kiosk.storeUrl': 'http://10.0.0.5:8080',
+        'kiosk.token': 'kiosk-token',
+      });
+      _FakeStore.offers = const [
+        KioskUpsellRow('drink', 'soft-drinks', [
+          'fountain-soda',
+          'lemonade',
+          'gone-drink', // not on this kiosk's menu: left out
+        ]),
+        KioskUpsellRow('side', 'fries-sides', ['late-fries']),
+      ];
+      final c = controller();
+      await pump(tester, c, size: size);
+      await tester.tap(find.byKey(Key('kiosk-lang-$lang')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-welcome')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-take-out')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-item-lantern-burger')));
+      await tester.pumpAndSettle();
+      await waitOutAdded(tester);
+      await tester.tap(find.byKey(const Key('kiosk-view-order')));
+      await tester.pumpAndSettle();
+      return c;
+    }
+
+    testWidgets('No thanks goes on to the cart, and it never shows again', (
+      tester,
+    ) async {
+      final c = await toMenuWithBurger(tester);
+      expect(c.stage, KioskStage.upsell);
+      // the store got the cart and chose the rows
+      expect(_FakeStore.asked.single.single['itemId'], 'lantern-burger');
+      expect(find.text('Add a drink?'), findsOneWidget);
+      expect(find.text('Add fries?'), findsOneWidget);
+      expect(find.byKey(const Key('kiosk-item-fountain-soda')), findsOneWidget);
+      expect(find.byKey(const Key('kiosk-item-lemonade')), findsOneWidget);
+      expect(find.text('\$2.45'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('kiosk-upsell-skip')));
+      await tester.pumpAndSettle();
+      expect(c.stage, KioskStage.cart);
+      expect(c.itemCount, 1);
+
+      // back to the menu and to the cart again: straight to the cart
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(c.stage, KioskStage.menu);
+      await tester.tap(find.byKey(const Key('kiosk-view-order')));
+      await tester.pumpAndSettle();
+      expect(c.stage, KioskStage.cart);
+      expect(_FakeStore.asked.length, 1);
+
+      // a new guest gets it again
+      await tester.tap(find.byKey(const Key('kiosk-place-order')));
+      await tester.pumpAndSettle();
+      c.finish();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-welcome')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-dine-in')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-item-lantern-burger')));
+      await tester.pumpAndSettle();
+      await waitOutAdded(tester);
+      await tester.tap(find.byKey(const Key('kiosk-view-order')));
+      await tester.pumpAndSettle();
+      expect(c.stage, KioskStage.upsell);
+      // the idle clock stops with the order
+      c.cancelOrder();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a tap adds the drink (its size picked) and goes to the cart', (
+      tester,
+    ) async {
+      // the landscape kiosk too
+      final c = await toMenuWithBurger(
+        tester,
+        lang: 'fr',
+        size: const Size(1280, 800),
+      );
+      expect(find.text('Ajouter une boisson\u00a0?'), findsOneWidget);
+      expect(find.text('Non merci, continuer'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('kiosk-item-fountain-soda')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('kiosk-variant-fountain-soda:medium')),
+      );
+      await tester.pumpAndSettle();
+      expect(c.stage, KioskStage.cart);
+      expect(c.cart.map((l) => l.variant.id), [
+        'lantern-burger:regular',
+        'fountain-soda:medium',
+      ]);
+      // North American money in French too
+      expect(find.text('\$14.90'), findsOneWidget);
+      // no second offer on the way back
+      await tester.tap(find.byTooltip('Retour'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-view-order')));
+      await tester.pumpAndSettle();
+      expect(c.stage, KioskStage.cart);
+      // the idle clock stops with the order
+      c.cancelOrder();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the store away: straight to the cart', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'kiosk.storeUrl': 'http://10.0.0.5:8080',
+        'kiosk.token': 'kiosk-token',
+      });
+      _FakeStore.upsellFails = true;
+      final c = controller();
+      await pump(tester, c);
+      await tester.tap(find.byKey(const Key('kiosk-welcome')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-take-out')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('kiosk-item-lantern-burger')));
+      await tester.pumpAndSettle();
+      await waitOutAdded(tester);
+      await tester.tap(find.byKey(const Key('kiosk-view-order')));
+      await tester.pumpAndSettle();
+      expect(c.stage, KioskStage.cart);
+      // the idle clock stops with the order
+      c.cancelOrder();
+      await tester.pumpAndSettle();
+    });
   });
 }

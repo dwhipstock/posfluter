@@ -1,9 +1,10 @@
 package dev.dwhipstock.pos.api
 
 import dev.dwhipstock.pos.StoreAssets
-import dev.dwhipstock.pos.restaurant.CounterSettings
+import dev.dwhipstock.pos.restaurant.CounterSettingsUpdate
 import dev.dwhipstock.pos.restaurant.KioskOrderLine
 import dev.dwhipstock.pos.restaurant.KioskOrderRequest
+import dev.dwhipstock.pos.restaurant.KioskUpsellRequest
 import dev.dwhipstock.pos.restaurant.QuickServeService
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -62,7 +63,8 @@ private val qsJson = Json { ignoreUnknownKeys = true }
  *  - the pickup board (open, like the customer menu: order numbers only):
  *    `GET /pickup` (the page for a TV) and `GET /pickup/board`;
  *  - the self-order kiosks (open routes, each checked here): `POST /kiosk/pair`
- *    with the code, then `X-Device-Token` on `GET /kiosk/config` and
+ *    with the code, then `X-Device-Token` on `GET /kiosk/config`,
+ *    `POST /kiosk/upsell` (the "Add a drink?" rows for a cart) and
  *    `POST /kiosk/orders`.
  */
 fun Route.quickServeRoutes(qs: QuickServeService, storeName: String, venueId: String, currency: String, locales: List<String>) {
@@ -86,7 +88,7 @@ fun Route.quickServeRoutes(qs: QuickServeService, storeName: String, venueId: St
     get("/counter/settings") { call.respond(qs.settings()) }
     put("/counter/settings") {
         requireManagerSession(call)
-        call.respond(qs.updateSettings(call.receive<CounterSettings>()))
+        call.respond(qs.updateSettings(call.receive<CounterSettingsUpdate>()))
     }
     post("/counter/orders/{id}/status") {
         call.respond(qs.setStatus(orderId(call), call.receive<CounterOrderStatusRequest>().status))
@@ -112,6 +114,10 @@ fun Route.quickServeRoutes(qs: QuickServeService, storeName: String, venueId: St
     get("/kiosk/config") {
         val device = kioskDevice(call, qs) ?: return@get
         call.respond(KioskConfigResponse(storeName, venueId, device.name, currency, locales))
+    }
+    post("/kiosk/upsell") {
+        kioskDevice(call, qs) ?: return@post
+        call.respond(qs.kioskUpsell(qsJson.decodeFromString<KioskUpsellRequest>(call.receiveText())))
     }
     post("/kiosk/orders") {
         val device = kioskDevice(call, qs) ?: return@post

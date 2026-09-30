@@ -8,7 +8,7 @@ import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.restaurant.ConflictException
 import dev.dwhipstock.pos.restaurant.CounterOrders
-import dev.dwhipstock.pos.restaurant.CounterSettings
+import dev.dwhipstock.pos.restaurant.CounterSettingsUpdate
 import dev.dwhipstock.pos.restaurant.KioskOrderLine
 import dev.dwhipstock.pos.restaurant.KioskOrderRequest
 import dev.dwhipstock.pos.restaurant.QuickServeService
@@ -79,7 +79,7 @@ class QuickServeTest {
                 printer = PrinterAdapter.VirtualPrinter("r", "b"), publicBaseUrl = "http://x").profile.kind)
         transaction {
             val items = dev.dwhipstock.pos.base.Items.selectAll().toList()
-            assertTrue(items.size in 15..20, "menu size ${items.size}")
+            assertTrue(items.size in 15..22, "menu size ${items.size}")
             assertTrue("cocktails" !in dev.dwhipstock.pos.base.Categories.selectAll().map { it[dev.dwhipstock.pos.base.Categories.id] })
             // no floor plan: just the counter
             assertEquals(listOf(QuickServeService.COUNTER_TABLE),
@@ -91,7 +91,11 @@ class QuickServeTest {
         assertTrue(CopperLanternExpressSeed.menuItemIds.containsAll(listOf("lantern-burger", "poutine", "late-fries", "wings")))
     }
 
-    private data class Store(val qs: QuickServeService, val checks: CheckService, val config: CopperLanternConfig)
+    private data class Store(val qs: QuickServeService, val checks: CheckService, val config: CopperLanternConfig, val dir: File) {
+        /** What the receipt printer printed for [checkId] that is not a receipt (bills, kiosk tickets). */
+        fun slips(checkId: Int): List<String> =
+            File(dir, "b").listFiles().orEmpty().filter { it.name.startsWith("$checkId-") }.map { it.readText() }
+    }
 
     private fun store(day: () -> LocalDate, clock: () -> Instant = { Instant.now() }): Store {
         val dir = tempDir()
@@ -104,7 +108,7 @@ class QuickServeTest {
         )
         val checks = CheckService(config)
         dev.dwhipstock.pos.restaurant.ShiftService(config).openShift("manager", 0)
-        return Store(QuickServeService(config, checks, today = day, clock = clock).also { it.ensureCounter() }, checks, config)
+        return Store(QuickServeService(config, checks, today = day, clock = clock).also { it.ensureCounter() }, checks, config, dir)
     }
 
     private val burger = KioskOrderLine("lantern-burger", "lantern-burger:regular")
@@ -191,33 +195,124 @@ class QuickServeTest {
     }
 
     @Test
-    fun `a kiosk order waits to pay under its K number, expires after 30 minutes, and is numbered when paid`() {
+    fun `a kiosk order has its number from the start, keeps it through payment, and a gap stays when one expires`() {
         var now = Instant.parse("2026-10-08T16:00:00Z")
         val s = store({ LocalDate.of(2026, 10, 8) }, { now })
         val k1 = s.qs.placeKioskOrder(KioskOrderRequest("DINE_IN", listOf(burger, brownie)), "Kiosk")
         val k2 = s.qs.placeKioskOrder(KioskOrderRequest("TAKE_OUT", listOf(brownie)), "Kiosk")
-        assertEquals(listOf(1, 2), listOf(k1.orderNumber, k2.orderNumber))
-        assertEquals("K1", k1.displayNumber)
+        assertEquals(listOf(101, 102), listOf(k1.orderNumber, k2.orderNumber))
+        assertEquals("#101", k1.displayNumber)
+        assertNull(s.qs.view(k1.checkId).kioskNumber, "no K number any more")
         assertEquals(listOf(k1.checkId, k2.checkId), s.qs.waiting().map { it.checkId })
+        assertEquals(listOf(101, 102), s.qs.waiting().map { it.orderNumber })
         assertTrue(s.qs.board().preparing.isEmpty(), "unpaid: not on the board")
+        assertTrue(s.qs.list().isEmpty(), "nor on the Orders panel")
         assertTrue(s.qs.holdKitchen(k1.checkId), "unpaid: held from the kitchen")
-        assertEquals("K1 · Sur place / Dine in",
+        for (st in listOf("READY", "PICKED_UP")) {
+            assertEquals("order_not_paid", assertFailsWith<ConflictException> { s.qs.setStatus(k1.checkId, st) }.code)
+        }
+        assertEquals("#101 · Sur place / Dine in",
             s.qs.ticketLabel(k1.checkId, dev.dwhipstock.pos.sdk.KitchenLanguage.BOTH))
+        // a counter order rung meanwhile is numbered when paid, after the kiosk's
+        val pos = s.qs.createAtPos("TAKE_OUT", burger, "manager")
+        assertNull(pos.orderNumber)
 
         now = now.plusSeconds(10 * 60)
         s.pay(k1.checkId)
         val paid = s.qs.view(k1.checkId)
-        assertEquals(101, paid.orderNumber)
-        assertEquals(1, paid.kioskNumber)
+        assertEquals(101, paid.orderNumber, "the number on the guest's ticket")
         assertEquals("PREPARING", paid.status)
         assertFalse(s.qs.holdKitchen(k1.checkId))
         assertEquals(listOf(101), s.qs.board().preparing)
+        assertTrue(s.checks.receiptText(k1.checkId).contains("#101"), s.checks.receiptText(k1.checkId))
         assertEquals(listOf(k2.checkId), s.qs.waiting().map { it.checkId })
+        s.pay(pos.checkId)
+        assertEquals(103, s.qs.view(pos.checkId).orderNumber)
 
-        // K2 never comes to pay
+        // #102 never comes to pay: dropped, and its number is not given again
         now = now.plusSeconds(25 * 60)
         assertTrue(s.qs.waiting().isEmpty())
         assertEquals("CANCELLED", s.checks.getCheck(k2.checkId).status)
+        assertEquals("CANCELLED", s.qs.view(k2.checkId).status)
+        assertEquals(listOf(101, 103), s.qs.board().preparing)
+        val next = s.qs.placeKioskOrder(KioskOrderRequest("TAKE_OUT", listOf(burger)), "Kiosk")
+        assertEquals(104, next.orderNumber)
+    }
+
+    @Test
+    fun `a kiosk order prints the guest's ticket in their language, unless the store turns it off`() {
+        val s = store({ LocalDate.of(2026, 10, 8) })
+        assertTrue(s.qs.settings().kioskTicket, "on by default")
+        val fries = KioskOrderLine("late-fries", "late-fries:large", qty = 2)
+        val lager = KioskOrderLine("lantern-lager", "lantern-lager:16oz")
+        val es = s.qs.placeKioskOrder(KioskOrderRequest("TAKE_OUT", listOf(burger, fries, lager), lang = "es"), "Door 1")
+        val ticket = s.slips(es.checkId).single()
+        assertTrue(es.ticket, "the kiosk says to take the ticket")
+        assertTrue(ticket.contains("Copper Lantern"), ticket)
+        assertTrue(ticket.contains("Su número de pedido"), ticket)
+        assertTrue(ticket.contains("#101"), ticket)
+        assertTrue(ticket.contains("Para llevar"), ticket)
+        assertTrue(ticket.contains("Hamburguesa Copper Lantern ×1"), ticket)
+        assertTrue(Regex("""Papas fritas \(Grande\) ×2\s+\$11\.90""").containsMatchIn(ticket), ticket)
+        assertTrue(ticket.contains("Por favor pague en el mostrador."), ticket)
+        assertTrue(ticket.replace(Regex("""\s+"""), " ").contains("verificará su identificación"), "alcohol: the ID note")
+        // the total with the taxes, and paying cash rounds it to the nickel
+        val check = s.checks.getCheck(es.checkId)
+        val total = dev.dwhipstock.pos.sdk.MoneyFormat.format(dev.dwhipstock.pos.sdk.Money(check.grandTotalCents), "CAD", "es")
+        assertTrue(Regex("""Total\s+\Q$total\E""").containsMatchIn(ticket), "$total in\n$ticket")
+        assertTrue(total.matches(Regex("""\$\d{1,3}(,\d{3})*\.\d{2}""")), "North American money in Spanish too: $total")
+        if (check.cashRoundingCents != 0L) {
+            val cash = dev.dwhipstock.pos.sdk.MoneyFormat.format(dev.dwhipstock.pos.sdk.Money(check.cashDueCents), "CAD", "es")
+            assertTrue(ticket.contains("Total en efectivo") && ticket.contains(cash), ticket)
+        }
+
+        // French, and a language the store doesn't speak falls back to the store's first
+        val fr = s.qs.placeKioskOrder(KioskOrderRequest("DINE_IN", listOf(brownie), lang = "fr"), "Door 1")
+        assertTrue(s.slips(fr.checkId).single().let { it.contains("Veuillez payer au comptoir.") && it.contains("Sur place") })
+        val xx = s.qs.placeKioskOrder(KioskOrderRequest("DINE_IN", listOf(brownie), lang = "xx"), "Door 1")
+        assertTrue(s.slips(xx.checkId).single().contains("Please pay at the counter."))
+
+        // turned off: the order goes through, nothing prints
+        assertFalse(s.qs.updateSettings(CounterSettingsUpdate(kioskTicket = false)).kioskTicket)
+        assertEquals("TAKE_OUT", s.qs.settings().defaultServiceMode, "the other setting is left alone")
+        val quiet = s.qs.placeKioskOrder(KioskOrderRequest("TAKE_OUT", listOf(brownie)), "Door 1")
+        assertTrue(s.slips(quiet.checkId).isEmpty())
+        assertFalse(quiet.ticket)
+    }
+
+    @Test
+    fun `the kiosk ticket goes on the receipt printer's queue, on paper even with digital receipts, and never fails the order`() {
+        val sent = java.util.concurrent.CopyOnWriteArrayList<ByteArray>()
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val dir = tempDir()
+        val printer = dev.dwhipstock.pos.sdk.NetworkThermalPrinter(
+            audit = PrinterAdapter.VirtualPrinter(File(dir, "r").path, File(dir, "b").path),
+            target = { dev.dwhipstock.pos.sdk.PrinterTarget("10.0.0.9", 9100) },
+            transport = object : dev.dwhipstock.pos.sdk.EscPosTransport {
+                override fun send(target: dev.dwhipstock.pos.sdk.PrinterTarget, bytes: ByteArray) {
+                    sent += bytes; latch.countDown()
+                }
+            },
+            receiptMode = dev.dwhipstock.pos.sdk.ReceiptPrintMode.DIGITAL,
+        )
+        val text = printer.printTicket(dev.dwhipstock.pos.sdk.PrintJob(7, listOf(dev.dwhipstock.pos.sdk.PrintLine.Huge("#101"))))
+        assertTrue(text.contains("#101"))
+        assertTrue(latch.await(5, java.util.concurrent.TimeUnit.SECONDS), "queued to the printer")
+        assertEquals(1, sent.size)
+        // an offline printer: the order still goes through
+        val offline = dev.dwhipstock.pos.sdk.NetworkThermalPrinter(
+            audit = PrinterAdapter.VirtualPrinter(File(dir, "r2").path, File(dir, "b2").path),
+            target = { dev.dwhipstock.pos.sdk.PrinterTarget("10.0.0.9", 9100) },
+            transport = object : dev.dwhipstock.pos.sdk.EscPosTransport {
+                override fun send(target: dev.dwhipstock.pos.sdk.PrinterTarget, bytes: ByteArray) = throw java.io.IOException("offline")
+            },
+        )
+        initDatabase(File(dir, "pos.db").path)
+        CopperLanternExpressSeed.seedIfEmpty()
+        val config = CopperLanternConfig(venue = CopperLanternVenue.EXPRESS, settings = SettingsRepository(),
+            printer = offline, publicBaseUrl = "http://127.0.0.1:8080")
+        val qs = QuickServeService(config, CheckService(config)).also { it.ensureCounter() }
+        assertEquals(101, qs.placeKioskOrder(KioskOrderRequest("TAKE_OUT", listOf(burger)), "Door 1").orderNumber)
     }
 
     @Test
@@ -262,9 +357,10 @@ class QuickServeTest {
     fun `the default dine in - take out is a counter setting, and reports count both`() {
         val s = store({ LocalDate.of(2026, 10, 8) })
         assertEquals("TAKE_OUT", s.qs.settings().defaultServiceMode)
-        assertEquals("DINE_IN", s.qs.updateSettings(CounterSettings("dine-in")).defaultServiceMode)
+        assertEquals("DINE_IN", s.qs.updateSettings(CounterSettingsUpdate("dine-in")).defaultServiceMode)
         assertEquals("DINE_IN", s.qs.settings().defaultServiceMode)
-        assertFailsWith<IllegalArgumentException> { s.qs.updateSettings(CounterSettings("DRIVE_THRU")) }
+        assertTrue(s.qs.settings().kioskTicket, "the ticket setting is left alone")
+        assertFailsWith<IllegalArgumentException> { s.qs.updateSettings(CounterSettingsUpdate("DRIVE_THRU")) }
         for (mode in listOf("DINE_IN", "TAKE_OUT", "TAKE_OUT")) s.pay(s.qs.createAtPos(mode, burger, "manager").checkId)
         s.qs.createAtPos("DINE_IN", burger, "manager") // unpaid: not counted
         val report = dev.dwhipstock.pos.restaurant.ShiftService(s.config).xReport()
@@ -305,14 +401,22 @@ class QuickServeTest {
         assertEquals(HttpStatusCode.OK, client.postJson("/kiosk/pair", """{"code":"$code2","deviceName":"Door 2"}""").status)
         assertEquals(HttpStatusCode.OK, client.get("/kiosk/config") { header("X-Device-Token", token) }.status)
 
+        // the "Add a drink?" step: the kiosk's own token, the store's rules
+        val cart = """{"lines":[{"itemId":"lantern-burger","variantId":"lantern-burger:regular"}]}"""
+        assertEquals(HttpStatusCode.Unauthorized, client.postJson("/kiosk/upsell", cart).status)
+        val upsell = client.postJson("/kiosk/upsell", cart, token)
+        assertEquals(HttpStatusCode.OK, upsell.status, upsell.bodyAsText())
+        assertEquals(listOf("drink", "side"),
+            obj(upsell.bodyAsText())["rows"]!!.jsonArray.map { it.jsonObject["reason"]!!.jsonPrimitive.content })
+
         // the menu the kiosk shows is the open catalog
         assertTrue(json.parseToJsonElement(client.get("/items").bodyAsText()).jsonArray.size >= 15)
 
         val placed = client.postJson("/kiosk/orders", order, token)
         assertEquals(HttpStatusCode.OK, placed.status, placed.bodyAsText())
         val res = obj(placed.bodyAsText())
-        assertEquals(1, res["orderNumber"]!!.jsonPrimitive.int)
-        assertEquals("K1", res["displayNumber"]!!.jsonPrimitive.content)
+        assertEquals(101, res["orderNumber"]!!.jsonPrimitive.int)
+        assertEquals("#101", res["displayNumber"]!!.jsonPrimitive.content)
         assertTrue(res["idCheckAtCounter"]!!.jsonPrimitive.boolean)
         val checkId = res["checkId"]!!.jsonPrimitive.int
 

@@ -117,6 +117,12 @@ enum class MessageKey(val id: String) {
     KITCHEN_GUESTS("kitchen.guests"),
     KITCHEN_TEST("kitchen.test"),
     KITCHEN_TEST_BODY("kitchen.test_body"),
+    // the guest's ticket from a self-order kiosk (quick-serve), in the guest's language
+    KIOSK_TICKET_TITLE("kiosk.ticket_title"),
+    KIOSK_DINE_IN("kiosk.dine_in"),
+    KIOSK_TAKE_OUT("kiosk.take_out"),
+    KIOSK_PAY_AT_COUNTER("kiosk.pay_at_counter"),
+    KIOSK_ID_CHECK("kiosk.id_check"),
 }
 
 /**
