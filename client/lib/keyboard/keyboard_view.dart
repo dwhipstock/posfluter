@@ -78,7 +78,6 @@ class _KeyboardViewState extends State<KeyboardView> {
 
   @override
   Widget build(BuildContext context) {
-    final l = L.of(context);
     final scheme = Theme.of(context).colorScheme;
     final m = widget.metrics;
     return Material(
@@ -87,9 +86,12 @@ class _KeyboardViewState extends State<KeyboardView> {
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: scheme.outlineVariant)),
         ),
+        // the app language too: the layout and key labels follow the EN / FR /
+        // ES / DE button even while the keyboard is up
         child: ListenableBuilder(
-          listenable: _kb,
+          listenable: Listenable.merge([_kb, Prefs.instance]),
           builder: (context, _) {
+            final l = L.forLang(Prefs.instance.lang);
             final numbers = _kb.page == KeyboardPage.numbers;
             return Stack(
               key: _stackKey,
@@ -112,7 +114,7 @@ class _KeyboardViewState extends State<KeyboardView> {
                       child: _KeyStyle(
                         scheme: scheme,
                         keyHeight: m.keyHeight,
-                        child: numbers ? _numberPad(l) : _textPage(l, l.lang),
+                        child: numbers ? _numberPad(l) : _textPage(l),
                       ),
                     ),
                   ),
@@ -147,8 +149,8 @@ class _KeyboardViewState extends State<KeyboardView> {
     ],
   );
 
-  Widget _textPage(L l, String appLang) {
-    final layout = _kb.layoutFor(appLang);
+  Widget _textPage(L l) {
+    final layout = _kb.layout;
     final page = _kb.page;
     final letters = page == KeyboardPage.letters;
     final rows = switch (page) {
@@ -216,7 +218,7 @@ class _KeyboardViewState extends State<KeyboardView> {
           );
 
     final extra = _kb.isEmail ? '@' : (_kb.isUrl ? '/' : null);
-    final fixed4 = 18 + 14 + 18 + (extra != null ? 10 : 0);
+    final fixed4 = 18 + 18 + (extra != null ? 10 : 0);
     return _rows([
       _row([
         for (final k in rows[0]) char(k),
@@ -247,7 +249,6 @@ class _KeyboardViewState extends State<KeyboardView> {
             ),
           ),
         ),
-        (14, _globe(l, layout, appLang)),
         if (extra != null) char(extra),
         (
           units - fixed4,
@@ -330,21 +331,6 @@ class _KeyboardViewState extends State<KeyboardView> {
     semantic: l.kbHide,
     label: const Icon(LucideIcons.keyboardOff),
     onTap: _kb.dismiss,
-  );
-
-  Widget _globe(L l, String layout, String appLang) => _Key(
-    id: 'osk:globe',
-    kind: _KeyKind.special,
-    semantic: l.kbLayout,
-    label: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(LucideIcons.globe, size: 22),
-        const SizedBox(width: 6),
-        Text(layout.toUpperCase(), style: const TextStyle(fontSize: 15)),
-      ],
-    ),
-    onTap: () => _kb.nextLayout(appLang),
   );
 
   Widget _enter(L l) {

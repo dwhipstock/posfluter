@@ -234,12 +234,6 @@ class L {
     'Ocultar teclado',
     'Tastatur ausblenden',
   );
-  String get kbLayout => _t(
-    'Langue du clavier',
-    'Keyboard language',
-    'Idioma del teclado',
-    'Tastatursprache',
-  );
 
   // login
   String get enterPin => _t(
