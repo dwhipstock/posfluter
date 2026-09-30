@@ -784,7 +784,7 @@ class Api {
   /// drops the pictures after the call. Uses the AI menu add-on.
   static Future<RoomLayoutProposal> roomLayoutFromPhotos(
     String zoneId,
-    List<({List<int> bytes, String contentType})> photos,
+    List<RoomPhoto> photos,
     String managerPin,
   ) async {
     final req =
@@ -2488,6 +2488,9 @@ class RoomObjectSuggestion {
 
 /// A proposed room layout ("set up from picture"), already checked by the
 /// store: tables and objects drawn with the usual widgets as a ghost.
+/// One "set up from picture" photo as sent to the store.
+typedef RoomPhoto = ({List<int> bytes, String contentType});
+
 class RoomLayoutProposal {
   final String proposalId, zoneId;
   final List<TableInfo> tables;
@@ -2604,7 +2607,9 @@ class RoomLayoutApplyResult {
 }
 
 /// A previewed table as the apply call wants it (its number from the label).
+// the id goes back so the store can check each table was in its proposal
 Map<String, dynamic> roomTableJson(TableInfo t) => {
+  'id': t.id,
   'x': t.x,
   'y': t.y,
   'width': t.width,
@@ -2616,6 +2621,7 @@ Map<String, dynamic> roomTableJson(TableInfo t) => {
 };
 
 Map<String, dynamic> roomObjectJson(FloorObject o) => {
+  'id': o.id,
   'type': o.type,
   'x': o.x,
   'y': o.y,
