@@ -3,7 +3,7 @@
 library;
 
 /// The languages the keyboard has a layout for.
-const keyboardLayouts = ['en', 'fr', 'es', 'de'];
+const keyboardLayouts = ['en', 'fr', 'es', 'de', 'af'];
 
 /// The layout for the app language [lang] (English for anything else).
 String keyboardLayoutFor(String lang) =>
@@ -15,6 +15,7 @@ const keyboardLayoutNames = {
   'fr': 'Français',
   'es': 'Español',
   'de': 'Deutsch',
+  'af': 'Afrikaans',
 };
 
 /// The three letter rows of a layout (lowercase).
@@ -23,6 +24,8 @@ const keyboardLayoutNames = {
 /// - fr: Canadian French QWERTY (not AZERTY), with è, à, ç and é on keys
 /// - es: QWERTY with ñ
 /// - de: QWERTZ with ü, ö, ä and ß
+/// - af: QWERTY with an apostrophe key (for ’n); its accents (ê ë é è ô ö
+///   î ï û ü á ŉ) are on long-press
 List<List<String>> letterRows(String layout) => switch (layout) {
   'fr' => const [
     ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'è'],
@@ -38,6 +41,11 @@ List<List<String>> letterRows(String layout) => switch (layout) {
     ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', 'ü'],
     ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'ö', 'ä'],
     ['y', 'x', 'c', 'v', 'b', 'n', 'm', 'ß'],
+  ],
+  'af' => const [
+    ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+    ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
+    ['z', 'x', 'c', 'v', 'b', 'n', 'm', "'"],
   ],
   _ => const [
     ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
@@ -60,13 +68,13 @@ const moreSymbolRows = [
 ];
 
 /// Long-press alternates for a key, lowercase. Letters get their accented
-/// forms (French, Spanish and German first), a few symbols their cousins.
+/// forms (French, Spanish, German and Afrikaans first), a few symbols their cousins.
 const _alternates = {
   'a': ['à', 'â', 'á', 'ä', 'æ', 'ã', 'å'],
   'c': ['ç'],
   'e': ['é', 'è', 'ê', 'ë'],
   'i': ['î', 'ï', 'í', 'ì'],
-  'n': ['ñ'],
+  'n': ['ñ', 'ŉ'],
   'o': ['ô', 'ó', 'ö', 'ò', 'œ', 'õ', 'ø'],
   's': ['ß'],
   'u': ['ù', 'û', 'ú', 'ü'],
@@ -90,7 +98,12 @@ const _alternates = {
 
 /// The letters each layout's language uses most, moved to the front of a
 /// popup so the likeliest accent is the one under the finger.
-const _preferred = {'fr': 'éèàâêîôûç', 'es': 'áéíóúñü', 'de': 'äöüß'};
+const _preferred = {
+  'fr': 'éèàâêîôûç',
+  'es': 'áéíóúñü',
+  'de': 'äöüß',
+  'af': 'êëéèôöîïûüáŉ',
+};
 
 /// The popup row for [key] on [layout], cased to match [upper] (empty when
 /// the key has none).
@@ -109,5 +122,7 @@ List<String> alternatesFor(String key, String layout, {bool upper = false}) {
   return upper ? sorted.map(upperOf).toList() : sorted;
 }
 
-/// A key's shifted form. ß has no everyday capital: it stays ß.
-String upperOf(String key) => key == 'ß' ? key : key.toUpperCase();
+/// A key's shifted form. ß has no everyday capital, and ŉ has no single
+/// capital letter: they stay as they are.
+String upperOf(String key) =>
+    key == 'ß' || key == 'ŉ' ? key : key.toUpperCase();

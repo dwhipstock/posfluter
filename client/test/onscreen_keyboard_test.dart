@@ -382,6 +382,67 @@ void main() {
     expect(c.text, 'ça');
   });
 
+  testWidgets('Afrikaans: QWERTY with an apostrophe key, labels in af', (
+    tester,
+  ) async {
+    Prefs.instance.lang = 'af';
+    final c = TextEditingController();
+    await _pumpField(tester, c, textInputAction: TextInputAction.next);
+    final top = tester.getCenter(_key('q')).dy;
+    expect(tester.getCenter(_key('y')).dy, top); // y on the top row
+    expect(tester.getCenter(_key('z')).dy, greaterThan(top));
+    expect(_key("'"), findsOneWidget);
+    expect(_key('ß'), findsNothing);
+    await _typeKeys(tester, "'n");
+    expect(c.text, "'n");
+    expect(find.text('Volgende'), findsOneWidget); // the enter key, in af
+    expect(find.text('Afrikaans'), findsOneWidget); // the space bar
+  });
+
+  testWidgets('Afrikaans: holding e offers ê first; holding n offers ŉ', (
+    tester,
+  ) async {
+    Prefs.instance.lang = 'af';
+    final c = TextEditingController();
+    await _pumpField(tester, c);
+    var hold = await tester.startGesture(tester.getCenter(_key('e')));
+    await tester.pump(const Duration(milliseconds: 500));
+    for (final a in ['ê', 'ë', 'é', 'è']) {
+      expect(_key('alt:$a'), findsOneWidget);
+    }
+    // ê is the first choice, left of the others
+    expect(
+      tester.getCenter(_key('alt:ê')).dx,
+      lessThan(tester.getCenter(_key('alt:ë')).dx),
+    );
+    await hold.moveTo(tester.getCenter(_key('alt:ê')));
+    await tester.pump();
+    await hold.up();
+    await tester.pump();
+    expect(c.text, 'ê');
+    hold = await tester.startGesture(tester.getCenter(_key('n')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(_key('alt:ŉ'), findsOneWidget);
+    await hold.moveTo(tester.getCenter(_key('alt:ŉ')));
+    await tester.pump();
+    await hold.up();
+    await tester.pump();
+    expect(c.text, 'êŉ');
+  });
+
+  testWidgets('app started in Afrikaans: the af layout on first show', (
+    tester,
+  ) async {
+    StoreProfile.current = const StoreProfile(locales: ['en', 'af']);
+    FlutterSecureStorage.setMockInitialValues({'pref_lang': 'af'});
+    await Prefs.instance.load();
+    expect(Prefs.instance.lang, 'af');
+    await _pumpField(tester, TextEditingController());
+    expect(_key("'"), findsOneWidget);
+    expect(find.text('Afrikaans'), findsOneWidget);
+    expect(find.text('Klaar'), findsOneWidget);
+  });
+
   testWidgets('app started in German: QWERTZ with umlauts on first show', (
     tester,
   ) async {

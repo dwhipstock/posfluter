@@ -227,24 +227,35 @@ class L {
   );
 
   // on-screen keyboard (Windows tablet): key names and the enter key's labels
-  String get kbDone => _t('Terminé', 'Done', 'Listo', 'Fertig');
-  String get kbNext => _t('Suivant', 'Next', 'Siguiente', 'Weiter');
-  String get kbPrevious => _t('Précédent', 'Previous', 'Anterior', 'Zurück');
-  String get kbGo => _t('Aller', 'Go', 'Ir', 'Los');
-  String get kbSearch => _t('Rechercher', 'Search', 'Buscar', 'Suchen');
-  String get kbSend => _t('Envoyer', 'Send', 'Enviar', 'Senden');
-  String get kbNewLine =>
-      _t('Nouvelle ligne', 'New line', 'Nueva línea', 'Neue Zeile');
-  String get kbSpace => _t('Espace', 'Space', 'Espacio', 'Leertaste');
-  String get kbBackspace => _t('Effacer', 'Delete', 'Borrar', 'Löschen');
-  String get kbShift => _t('Majuscule', 'Shift', 'Mayúscula', 'Umschalt');
-  String get kbSymbols => _t('Symboles', 'Symbols', 'Símbolos', 'Symbole');
-  String get kbLetters => _t('Lettres', 'Letters', 'Letras', 'Buchstaben');
+  String get kbDone => _t('Terminé', 'Done', 'Listo', 'Fertig', 'Klaar');
+  String get kbNext => _t('Suivant', 'Next', 'Siguiente', 'Weiter', 'Volgende');
+  String get kbPrevious =>
+      _t('Précédent', 'Previous', 'Anterior', 'Zurück', 'Vorige');
+  String get kbGo => _t('Aller', 'Go', 'Ir', 'Los', 'Gaan');
+  String get kbSearch => _t('Rechercher', 'Search', 'Buscar', 'Suchen', 'Soek');
+  String get kbSend => _t('Envoyer', 'Send', 'Enviar', 'Senden', 'Stuur');
+  String get kbNewLine => _t(
+    'Nouvelle ligne',
+    'New line',
+    'Nueva línea',
+    'Neue Zeile',
+    'Nuwe reël',
+  );
+  String get kbSpace => _t('Espace', 'Space', 'Espacio', 'Leertaste', 'Spasie');
+  String get kbBackspace =>
+      _t('Effacer', 'Delete', 'Borrar', 'Löschen', 'Vee uit');
+  String get kbShift =>
+      _t('Majuscule', 'Shift', 'Mayúscula', 'Umschalt', 'Hoofletter');
+  String get kbSymbols =>
+      _t('Symboles', 'Symbols', 'Símbolos', 'Symbole', 'Simbole');
+  String get kbLetters =>
+      _t('Lettres', 'Letters', 'Letras', 'Buchstaben', 'Alfabet');
   String get kbHide => _t(
     'Masquer le clavier',
     'Hide keyboard',
     'Ocultar teclado',
     'Tastatur ausblenden',
+    'Versteek sleutelbord',
   );
 
   // login
@@ -2388,33 +2399,42 @@ class L {
     'Kies uit galery',
   );
   // The Windows tablet's own camera page (lib/widgets/camera_capture.dart).
-  String get cameraUsePhoto =>
-      _t('Utiliser la photo', 'Use photo', 'Usar la foto', 'Foto verwenden');
+  String get cameraUsePhoto => _t(
+    'Utiliser la photo',
+    'Use photo',
+    'Usar la foto',
+    'Foto verwenden',
+    'Gebruik foto',
+  );
   String get cameraRetake =>
-      _t('Reprendre', 'Retake', 'Repetir', 'Neu aufnehmen');
+      _t('Reprendre', 'Retake', 'Repetir', 'Neu aufnehmen', 'Neem weer');
   String get cameraSwitch => _t(
     'Changer de caméra',
     'Switch camera',
     'Cambiar de cámara',
     'Kamera wechseln',
+    'Wissel kamera',
   );
   String get cameraNone => _t(
     'Aucune caméra trouvée sur cet appareil.',
     'No camera found on this device.',
     'No se encontró ninguna cámara en este dispositivo.',
     'Keine Kamera auf diesem Gerät gefunden.',
+    'Geen kamera op hierdie toestel gevind nie.',
   );
   String get cameraDenied => _t(
     'L’accès à la caméra est désactivé. Autorisez-le dans Paramètres Windows > Confidentialité et sécurité > Caméra.',
     'Camera access is turned off. Allow it in Windows Settings > Privacy & security > Camera.',
     'El acceso a la cámara está desactivado. Actívelo en Configuración de Windows > Privacidad y seguridad > Cámara.',
     'Der Kamerazugriff ist ausgeschaltet. Erlauben Sie ihn unter Windows-Einstellungen > Datenschutz und Sicherheit > Kamera.',
+    'Kameratoegang is afgeskakel. Laat dit toe in Windows-instellings > Privaatheid en sekuriteit > Kamera.',
   );
   String get cameraFailed => _t(
     'La caméra n’a pas pu démarrer. Elle est peut-être utilisée par une autre application.',
     'The camera could not start. Another app may be using it.',
     'No se pudo iniciar la cámara. Puede que otra aplicación la esté usando.',
     'Die Kamera konnte nicht starten. Vielleicht wird sie von einer anderen App verwendet.',
+    'Die kamera kon nie begin nie. ’n Ander toep gebruik dit dalk.',
   );
   String get aiWorking => _t(
     'Création des photos… (jusqu’à une minute)',
