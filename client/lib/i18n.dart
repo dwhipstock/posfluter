@@ -226,6 +226,27 @@ class L {
     'Restaurant tydelik onbeskikbaar',
   );
 
+  // on-screen keyboard (Windows tablet): key names and the enter key's labels
+  String get kbDone => _t('Terminé', 'Done', 'Listo', 'Fertig');
+  String get kbNext => _t('Suivant', 'Next', 'Siguiente', 'Weiter');
+  String get kbPrevious => _t('Précédent', 'Previous', 'Anterior', 'Zurück');
+  String get kbGo => _t('Aller', 'Go', 'Ir', 'Los');
+  String get kbSearch => _t('Rechercher', 'Search', 'Buscar', 'Suchen');
+  String get kbSend => _t('Envoyer', 'Send', 'Enviar', 'Senden');
+  String get kbNewLine =>
+      _t('Nouvelle ligne', 'New line', 'Nueva línea', 'Neue Zeile');
+  String get kbSpace => _t('Espace', 'Space', 'Espacio', 'Leertaste');
+  String get kbBackspace => _t('Effacer', 'Delete', 'Borrar', 'Löschen');
+  String get kbShift => _t('Majuscule', 'Shift', 'Mayúscula', 'Umschalt');
+  String get kbSymbols => _t('Symboles', 'Symbols', 'Símbolos', 'Symbole');
+  String get kbLetters => _t('Lettres', 'Letters', 'Letras', 'Buchstaben');
+  String get kbHide => _t(
+    'Masquer le clavier',
+    'Hide keyboard',
+    'Ocultar teclado',
+    'Tastatur ausblenden',
+  );
+
   // login
   String get enterPin => _t(
     'Entrez votre NIP pour vous connecter',

@@ -29,6 +29,52 @@ constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"AppsUseLightTheme"
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
 
+// Startup retries at taking the foreground: a remote-management tool that
+// launched the POS may take focus back just after the first try.
+constexpr UINT_PTR kForegroundTimerId = 0x504F53;  // "POS"
+constexpr UINT kForegroundRetryMs = 500;
+constexpr int kForegroundRetries = 10;
+
+// Makes |window| the foreground window. Windows only lets the process that
+// owns the foreground (or that received the last input) do that, so a POS
+// started from a remote tool, a service or a scheduled task is refused and
+// stays behind the taskbar. Joining the foreground thread's input queue
+// lifts that; failing that, a synthetic Alt tap counts as "last input".
+bool BringToForeground(HWND window) {
+  if (GetForegroundWindow() == window) {
+    return true;
+  }
+  HWND foreground = GetForegroundWindow();
+  DWORD foreground_thread =
+      foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
+  DWORD this_thread = GetCurrentThreadId();
+  bool attached = foreground_thread != 0 && foreground_thread != this_thread &&
+                  AttachThreadInput(this_thread, foreground_thread, TRUE);
+  AllowSetForegroundWindow(ASFW_ANY);
+  BringWindowToTop(window);
+  SetForegroundWindow(window);
+  SetActiveWindow(window);
+  SetFocus(window);
+  if (attached) {
+    AttachThreadInput(this_thread, foreground_thread, FALSE);
+  }
+  if (GetForegroundWindow() != window) {
+    INPUT alt[2] = {};
+    alt[0].type = INPUT_KEYBOARD;
+    alt[0].ki.wVk = VK_MENU;
+    alt[1].type = INPUT_KEYBOARD;
+    alt[1].ki.wVk = VK_MENU;
+    alt[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, alt, sizeof(INPUT));
+    SetForegroundWindow(window);
+  }
+  // on top of the normal windows either way; a full-screen window that is
+  // the foreground one is drawn over the taskbar
+  SetWindowPos(window, HWND_TOP, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+  return GetForegroundWindow() == window;
+}
+
 using EnableNonClientDpiScaling = BOOL __stdcall(HWND hwnd);
 
 // Scale helper to convert logical scaler values to physical using passed in
@@ -167,6 +213,11 @@ bool Win32Window::Show() {
                mi.rcMonitor.right - mi.rcMonitor.left,
                mi.rcMonitor.bottom - mi.rcMonitor.top,
                SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+  // take the foreground so the taskbar goes behind the POS, and keep trying
+  // for a few seconds in case whatever launched it grabs focus back
+  BringToForeground(window_handle_);
+  foreground_retries_ = kForegroundRetries;
+  SetTimer(window_handle_, kForegroundTimerId, kForegroundRetryMs, nullptr);
   return true;
 }
 
@@ -233,6 +284,19 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
       return 0;
+
+    case WM_TIMER:
+      if (wparam == kForegroundTimerId) {
+        // a few tries; done early once it is in front after the first second
+        bool front = BringToForeground(hwnd);
+        --foreground_retries_;
+        bool settled = front && foreground_retries_ <= kForegroundRetries - 2;
+        if (settled || foreground_retries_ <= 0) {
+          KillTimer(hwnd, kForegroundTimerId);
+        }
+        return 0;
+      }
+      break;
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
