@@ -28,8 +28,18 @@ import org.jetbrains.exposed.sql.update
 object Hlc {
     const val LEGACY = ""
 
+    const val MAX_COUNTER = 9999
+
     fun of(physicalMs: Long, counter: Int, node: String): String =
-        "%013d-%04d-%s".format(physicalMs, counter.coerceIn(0, 9999), node)
+        "%013d-%04d-%s".format(physicalMs, counter.coerceIn(0, MAX_COUNTER), node)
+
+    /**
+     * The stamp right after (physicalMs, counter): the counter goes up; past
+     * 9,999 the time part moves on by 1 ms and the counter starts again, so a
+     * long burst of writes while the wall clock lags never ties.
+     */
+    fun next(physicalMs: Long, counter: Int, node: String): String =
+        if (counter >= MAX_COUNTER) of(physicalMs + 1, 0, node) else of(physicalMs, counter + 1, node)
 
     fun physical(stamp: String): Long? = stamp.substringBefore('-', "").toLongOrNull()
 
@@ -93,12 +103,15 @@ object MenuFields {
 }
 
 object MenuClock {
+    private val log = org.slf4j.LoggerFactory.getLogger(MenuClock::class.java)
     const val HLC_KEY = "menu_hlc"
     const val NODE_KEY = "menu_node"
     const val OFFSET_KEY = "menu_clock_offset_ms"
 
-    /** A stamp further ahead of (corrected) now than this is a broken clock, not a real write. */
+    /** A remote stamp further ahead of (corrected) now than this is a broken clock, not a real write. */
     const val MAX_FUTURE_MS = 10 * 60_000L
+
+    @Volatile private var lastJumpLogMs = 0L
 
     /** How a snapshot's fields get their stamps. */
     enum class Mode {
@@ -136,19 +149,33 @@ object MenuClock {
 
     private fun physicalNow(): Long = System.currentTimeMillis() + (SyncState.get(OFFSET_KEY)?.toLongOrNull() ?: 0L)
 
-    /** A fresh stamp, after every stamp this store has issued or observed. */
+    /**
+     * A fresh stamp, after every stamp this store has issued or observed —
+     * never smaller, whatever the wall clock does. When the clock is behind
+     * the last stamp (stepped back, NTP, a tablet clock changed while
+     * offline) the stamps carry on from the last one; every last-write-wins
+     * decision on both sides relies on that.
+     */
     fun now(): String {
         val pt = physicalNow()
         val last = SyncState.get(HLC_KEY)
         val lastPt = last?.let(Hlc::physical)
-        val stamp = if (last == null || lastPt == null || lastPt < pt || lastPt > pt + MAX_FUTURE_MS) {
-            // (a remembered stamp far in the future came from a broken clock: start again from now)
+        val stamp = if (last == null || lastPt == null || lastPt < pt) {
             Hlc.of(pt, 0, node())
         } else {
-            Hlc.of(lastPt, (Hlc.counter(last) ?: 0) + 1, node())
+            if (lastPt > pt + MAX_FUTURE_MS) logJump(lastPt - pt)
+            Hlc.next(lastPt, Hlc.counter(last) ?: 0, node())
         }
         SyncState.set(HLC_KEY, stamp)
         return stamp
+    }
+
+    private fun logJump(aheadMs: Long) {
+        val wall = System.currentTimeMillis()
+        if (wall - lastJumpLogMs < 60_000) return
+        lastJumpLogMs = wall
+        log.warn("menu clock: the wall clock is ${aheadMs / 1000}s behind the last menu stamp " +
+            "(clock set back?); menu stamps carry on from the last one")
     }
 
     /** A stamp seen from the cloud: later local stamps sort after it (unless it is implausibly far ahead). */
@@ -207,11 +234,19 @@ object MenuClock {
     /** The menu's change counter (GET /menu/version): bumped with every menu event. Inside a transaction. */
     fun menuVersion(): Long = SyncState.get(VERSION_KEY)?.toLongOrNull() ?: 0L
 
+    fun isMenuEvent(eventType: String): Boolean = eventType.startsWith("item.") || eventType.startsWith("category.") ||
+        eventType == "categories.reordered" || eventType == "catalog.snapshot"
+
+    /**
+     * A menu event written while a cloud change is applied: the cloud already
+     * has that state (it sent it), so the event is not queued for the cloud —
+     * it would only grow the cloud's history with echoes (CONTRACT §2).
+     */
+    fun isEcho(eventType: String): Boolean = isApplying && isMenuEvent(eventType)
+
     /** Snapshot keys of each menu event: catalog snapshots are baselines, everything else an edit. */
     fun stampPayload(eventType: String, payload: JsonObject): JsonObject {
-        val menu = eventType.startsWith("item.") || eventType.startsWith("category.") ||
-            eventType == "categories.reordered" || eventType == "catalog.snapshot"
-        if (!menu) return payload
+        if (!isMenuEvent(eventType)) return payload
         SyncState.set(VERSION_KEY, (menuVersion() + 1).toString())
         if (!present()) return payload
         val mode = when {
@@ -223,7 +258,12 @@ object MenuClock {
         (payload["item"] as? JsonObject)?.let { out["item"] = stampItems(listOf(it), mode).first() }
         (payload["category"] as? JsonObject)?.let { out["category"] = stampCategories(listOf(it), mode).first() }
         (payload["categories"] as? JsonArray)?.let { arr ->
-            out["categories"] = JsonArray(stampCategories(arr.filterIsInstance<JsonObject>(), mode))
+            // a reorder is ONE last-write-wins value, the whole order: every
+            // category's position gets the same fresh stamp (changed or not), so
+            // the later drag (tablet's or portal's) wins for all of them
+            val wholeOrder = eventType == "categories.reordered" && mode == Mode.EDIT
+            out["categories"] = JsonArray(stampCategories(arr.filterIsInstance<JsonObject>(), mode,
+                freshFields = if (wholeOrder) setOf("sortOrder") else emptySet()))
         }
         (payload["items"] as? JsonArray)?.let { arr ->
             out["items"] = JsonArray(stampItems(arr.filterIsInstance<JsonObject>(), mode))
@@ -261,12 +301,15 @@ object MenuClock {
         }
     }
 
-    fun stampCategories(categories: List<JsonObject>, mode: Mode): List<JsonObject> {
+    /** [freshFields]: fields stamped fresh (one stamp for the whole list) even when unchanged. */
+    fun stampCategories(categories: List<JsonObject>, mode: Mode, freshFields: Set<String> = emptySet()): List<JsonObject> {
         val ids = categories.mapNotNull { (it["id"] as? JsonPrimitive)?.contentOrNull }
         val regs = load(MenuFields.CATEGORY, ids)
+        val shared = if (freshFields.isEmpty() || categories.isEmpty()) null else now()
+        val forced = shared?.let { st -> freshFields.associateWith { st } }.orEmpty()
         return categories.map { c ->
             val id = (c["id"] as? JsonPrimitive)?.contentOrNull ?: return@map c
-            stampOne(MenuFields.CATEGORY, id, c, regs[id].orEmpty(), mode).obj
+            stampOne(MenuFields.CATEGORY, id, c, regs[id].orEmpty(), mode, forced = forced).obj
         }
     }
 
@@ -278,6 +321,7 @@ object MenuClock {
      */
     private fun stampOne(
         entity: String, id: String, obj: JsonObject, regs: Map<String, Reg>, mode: Mode, parentDeleted: Boolean = false,
+        forced: Map<String, String> = emptyMap(),
     ): Stamped {
         val fields = MenuFields.flat(entity, obj, regs.keys)
         val frozen = parentDeleted || (obj["deleted"] as? JsonPrimitive)?.contentOrNull == "true"
@@ -291,6 +335,7 @@ object MenuClock {
                 mode == Mode.APPLY -> reg?.hlc ?: Hlc.LEGACY
                 reg == null && v is JsonNull && field.startsWith(MenuFields.NAMES) -> continue
                 frozen && field != "deleted" -> reg?.hlc ?: Hlc.LEGACY.also { changes[field] = Reg(canon, it) }
+                field in forced -> forced.getValue(field).also { changes[field] = Reg(canon, it); minted = true }
                 reg == null && mode == Mode.BASELINE -> Hlc.LEGACY.also { changes[field] = Reg(canon, it) }
                 reg == null || reg.value != canon -> now().also { changes[field] = Reg(canon, it); minted = true }
                 else -> reg.hlc

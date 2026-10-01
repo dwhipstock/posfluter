@@ -578,6 +578,7 @@ export const de: Record<MsgKey, string> = {
   menu_skip_other: "{store}: nicht geändert ({reason})",
   menu_not_everywhere: "Gespeichert, außer: {list}",
   menu_pending: "{store}: {n} Änderung(en) warten, bis der Standort online ist",
+  menu_apply_failed: "{store}: {n} Menüänderung(en) konnte der Standort noch nicht übernehmen (neuer Versuch bei jeder Synchronisierung)",
   menu_store_outdated: "{store}: Die App dieses Standorts braucht ein Update, bevor sie Kartenänderungen von hier übernehmen kann",
   menu_cat_title: "Kartenkategorien",
   menu_cat_add: "Kategorie hinzufügen",

@@ -471,12 +471,11 @@ product listed twice in one chunk keeps its last copy. An older cloud already
 applied snapshots this way, so chunked stores work with it unchanged.
 
 ### The `origin: "cloud"` tag
-A store that applies a portal menu edit (§10) writes the matching
-`item.*`/`category.*` events with `"origin": "cloud"` (they carry the cloud's
-stamps, maybe an intermediate state while it applies). The cloud stores them
-(audit) and never applies them: that would be an echo. Events from before
-one-way sync carry the same tag and are treated the same way. Every other
-event has no `origin`.
+A store that applies a portal menu edit (§10) no longer queues the matching
+`item.*`/`category.*` events at all: the cloud already has that state, and
+storing the echoes only grew its history. Events from older stores (and from
+before one-way sync) may still carry `"origin": "cloud"`: the cloud stores them
+(audit) and never applies them. Every other event has no `origin`.
 
 ## 3. Photo up-sync (sideband binary, event-triggered)
 
@@ -729,9 +728,12 @@ a store's is `s<random>`, so two writers never tie.
 - The **cloud** stamps a portal edit with its own clock (persisted per tenant,
   `menu_hlc`), after every stamp it has issued or seen.
 - A **store** stamps with its own clock **plus the offset to the cloud's**
-  (`serverTimeMs` of every feed page, half the round trip each way), never
-  below a stamp it has seen, and starts again from now if its remembered stamp
-  is more than 10 minutes ahead (a clock that was broken).
+  (`serverTimeMs` of every feed page, half the round trip each way), and
+  **never goes backwards**: when its wall clock is behind its last stamp (set
+  back, NTP, a tablet clock changed while offline) it carries on from the last
+  stamp (and logs the jump).
+- Both clocks: past counter 9999 the time part moves on by 1 ms and the
+  counter starts again at 0, so a burst of writes never ties.
 - **Skew guard:** a store stamp more than 2 minutes ahead of the cloud's clock
   is re-stamped with the cloud's on ingest, and the store gets a feed entry
   with `"restamp": true`; for an equal value it adopts the cloud's stamp.
@@ -746,6 +748,20 @@ stamp, the same on both sides), an earlier one stays deleted. Merging is
 idempotent, commutative and order-independent: replays and duplicates are
 harmless.
 
+- **The category order is one value.** A reorder (tablet `categories.reordered`
+  or portal `PUT /v1/menu/categories/order`) stamps EVERY category's
+  `sortOrder` with the same stamp, moved or not, so the later drag wins whole.
+- **A live dish needs a live category.** When a store applies a dish (a portal
+  create, a later edit that revives it, a move) into a category it deleted, it
+  brings the category back from its tombstone (its registers) and that
+  revival goes up as the store's own, freshly stamped edit.
+- **A losing store write is corrected.** When a store snapshot's stamped field
+  loses on the cloud (an older stamp than the cloud's), the cloud appends the
+  merged state to that store's feed (`origin` `correction`), so the store
+  converges instead of keeping its value forever.
+- Cloud writers take the tenant's menu lock (`menu_hlc` row) **before**
+  reading: a store push and a portal edit of the same thing never lose either.
+
 ### Up: store → cloud
 Unchanged events (§2) with `clock` on every snapshot. The store stamps, in
 the outbox writer, exactly the fields whose value changed — whatever code path
@@ -753,10 +769,10 @@ changed them (menu editor, 86, AI menu setup or revert, translations, a seed
 upgrade). A `catalog.snapshot` stamps a never-seen field `""` (baseline).
 
 ### Down: cloud → store
-`GET {CLOUD_SYNC_URL}/v1/store/menu/changes?since={cursor}` — `Authorization: Bearer {key}`
+`GET {CLOUD_SYNC_URL}/v1/store/menu/changes?since={cursor}&epoch={epoch}&failed={n}` — `Authorization: Bearer {key}`
 
 ```json
-{ "cursor": 57, "serverTimeMs": 1790000000000,
+{ "cursor": 57, "serverTimeMs": 1790000000000, "epoch": "16384-9f2c…",
   "changes": [
     { "seq": 57, "entity": "item", "id": "nachos-x7k2",
       "data": { "id": "nachos-x7k2", "nameFr": "Nachos", "nameEn": "Nachos", "descriptionFr": "",
@@ -771,14 +787,28 @@ upgrade). A `catalog.snapshot` stamps a never-seen field `""` (baseline).
 ```
 - Per store (`menu_feed`), in `seq` order, ≤ 200 per page; empty `changes` →
   cursor unchanged. Each entry is the thing's **full state with clocks** after
-  a portal edit (or a restamp), so applying is a merge and a replay is a no-op.
+  a portal edit (or a restamp, or a correction), so applying is a merge and a
+  replay is a no-op. Hence an entry followed by a newer one of the same thing
+  is left out of the page (restamps always stay): a store catching up applies
+  each thing once. A dish may then come before the newer entry of its
+  category; the store retries what failed once more at the end of the page.
+- **Epoch** (cloud migration 029): `<database oid>-<random id>`; it changes
+  when the cloud database is restored into a new database or reset. The store
+  sends the epoch it has (`epoch`, absent on first pull); when it differs, or
+  `since` is past the newest entry for the store (the feed went back), the
+  cloud serves the feed **from the start** (and records cursor 0 for the
+  portal's count). On a new epoch the store also re-sends its whole menu
+  (`catalog.snapshot`, its own stamps), since the restored cloud may have lost
+  what it pushed after the backup.
+- `failed`: menu changes the store could not apply. The store keeps each one
+  (`sync_state` `menu_failed`), logs it and retries it on every pull until it
+  goes through; the portal's sync status shows the count (`failed`).
 - Pulled every sync tick after the drain; the store pages until caught up,
   applies each page in one transaction with its cursor (`sync_state`
   `menu_cursor`), merges per field and brings its rows to the merged state
   **through the tablet's own menu code** (`CatalogOps`, `Translations`), so
   translations, photos, prices and kitchen routing stay consistent. Menu
-  events it writes meanwhile carry `origin: "cloud"` and the cloud's stamps
-  (no echo, §2).
+  events it writes meanwhile are not queued for the cloud (no echo, §2).
 - A change the store can't take — a category that still has items, a size
   that would be the item's last — is refused there; the store re-stamps its
   own state now, so its state wins everywhere. A portal delete of an item or

@@ -20,6 +20,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -128,8 +130,10 @@ class CloudSync(
         var pages = 0
         while (pages++ < 50) {
             val since = stateLong(MenuSync.MENU_CURSOR) ?: 0L
+            val epoch = transaction { SyncState.get(MenuSync.MENU_EPOCH) }
+            val failed = transaction { MenuSync.failedCount() }
             val sentAt = System.currentTimeMillis()
-            val page = runCatching { transport.fetchMenuChanges(since) }
+            val page = runCatching { transport.fetchMenuChanges(since, epoch, failed) }
                 .getOrElse { log.warn("menu pull failed: ${it.message}"); return }
             if (page == null) {
                 nextMenuPullNanos = System.nanoTime() + 300L * 1_000_000_000
@@ -140,10 +144,22 @@ class CloudSync(
                 // the cloud's clock minus ours (half the round trip each way)
                 setState(MenuClock.OFFSET_KEY, (server - (sentAt + receivedAt) / 2).toString())
             }
-            if (page.changes.isEmpty()) return
+            val newEpoch = page.epoch != null && epoch != null && page.epoch != epoch
+            if (newEpoch) transaction {
+                // the cloud's database was restored or reset: it serves its feed from
+                // the start (replays are harmless), and it may have lost what this
+                // store pushed since its backup — send the whole menu again (it
+                // carries the store's stamps, so only newer values land)
+                log.warn("menu sync: the cloud's menu feed was reset (epoch $epoch -> ${page.epoch}); " +
+                    "re-reading it from the start and re-sending this store's menu")
+                SyncState.set(MenuSync.MENU_CURSOR, "0")
+                SyncState.deleteWhere { SyncState.key eq CATALOG_SNAPSHOT_SEQ }
+            }
+            // also an empty page: the cursor / epoch it carries, and a retry of what failed before
             MenuSync.applyPage(page)
+            if (page.changes.isEmpty()) return
             log.info("menu sync: applied ${page.changes.size} change(s) from the portal (cursor ${page.cursor})")
-            if (page.cursor <= since) return
+            if (page.cursor <= since && !newEpoch) return
         }
     }
 

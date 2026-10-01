@@ -108,12 +108,17 @@ deleted. No ghosts: a deleted item can't be 86'd back on.
 
 **No echo.** While the tablet applies the feed it goes through the same menu
 code a tablet edit uses (`CatalogOps`, `Translations`), so translations,
-photos, prices and kitchen routing stay consistent, but every menu event it
-writes meanwhile is tagged `origin: cloud` and carries the cloud's stamps: the
-cloud ignores those, so nothing applied from the cloud goes back up as a new
-edit. When the tablet can't take a change (a category that still has items),
+photos, prices and kitchen routing stay consistent, but the menu events it
+writes meanwhile are not queued for the cloud at all (the cloud already has
+that state), so nothing applied from the cloud goes back up as a new edit.
+When the tablet can't take a change (a category that still has items),
 it keeps its own state and stamps that afresh, so its state wins everywhere and
-both sides agree again. Everything is **idempotent**: feed entries carry full
+both sides agree again. A dish that lands in a category the tablet deleted
+brings the category back (a later edit of something in it resurrects it); a
+change the tablet cannot apply at all is kept, retried every sync and counted
+in the portal's sync status, never dropped. When a tablet edit loses on the
+cloud (an older stamp), the cloud puts the winning state in that store's feed
+so the tablet converges too. Everything is **idempotent**: feed entries carry full
 state, so a replayed page, a re-sent event or a retried portal request
 (`Idempotency-Key`) changes nothing.
 

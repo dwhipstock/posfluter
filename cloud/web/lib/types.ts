@@ -662,6 +662,8 @@ export interface MenuSyncStore {
   lastPullAt: string | null;
   /** Portal edits the store has not pulled yet (it's offline, or about to sync). */
   pending: number;
+  /** Menu changes the store could not apply (it retries them every sync); absent on an older cloud. */
+  failed?: number;
 }
 
 export interface MenuSyncStatus {

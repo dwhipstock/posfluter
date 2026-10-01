@@ -300,8 +300,9 @@ no store could take it, the call fails with that reason as its `code`
   `PATCH /v1/menu/categories/{id}` `{ nameEn?, nameFr?, names?, sortOrder? }`;
   `DELETE /v1/menu/categories/{id}` (only when empty: 409 `category_not_empty`);
   `PUT /v1/menu/categories/order` `{ orderedIds }` (unlisted categories follow).
-- `GET /v1/menu/sync-status` → `{ canEdit, role, stores: [{ venueId, name, editable, lastPullAt, pending }] }`:
-  `editable` = the store takes portal edits; `pending` = edits it hasn't applied yet.
+- `GET /v1/menu/sync-status` → `{ canEdit, role, stores: [{ venueId, name, editable, lastPullAt, pending, failed }] }`:
+  `editable` = the store takes portal edits; `pending` = edits it hasn't applied yet;
+  `failed` = menu changes the store could not apply (it retries them every sync).
 
 `GET /v1/auth/me` also returns `role` (`owner | manager | viewer`) and `canEditMenu`.
 

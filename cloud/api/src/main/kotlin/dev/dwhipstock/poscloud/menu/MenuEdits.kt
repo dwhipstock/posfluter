@@ -98,11 +98,14 @@ data class MenuEditResult(
     val id: String? = null, val duplicate: Boolean = false,
 )
 
-/** Per store: can the portal edit its menu, and is the store keeping up. */
+/**
+ * Per store: can the portal edit its menu, and is the store keeping up.
+ * [failed]: menu changes the store could not apply (it retries them every sync).
+ */
 @Serializable
 data class MenuSyncStoreDto(
     val venueId: String, val name: String, val editable: Boolean,
-    val lastPullAt: String?, val pending: Long,
+    val lastPullAt: String?, val pending: Long, val failed: Int = 0,
 )
 
 @Serializable
@@ -244,6 +247,7 @@ fun Route.menuEditRoutes() {
                 MenuSyncStoreDto(
                     v.venueId, v.name, row[Venues.menuSyncAt] != null,
                     row[Venues.menuSyncAt]?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, v.zone) }, pending,
+                    row[Venues.menuFailed] ?: 0,
                 )
             }
         }
@@ -493,7 +497,13 @@ fun Route.menuEditRoutes() {
         }
     }
 
-    /** The categories' order: index in [MenuCategoryOrder.orderedIds] becomes the sort order (unlisted ones follow). */
+    /**
+     * The categories' order: index in [MenuCategoryOrder.orderedIds] becomes
+     * the sort order (unlisted ones follow). The order is ONE last-write-wins
+     * value: every live category's position is written with this edit's
+     * stamp, changed or not, so a concurrent drag on a tablet either wins
+     * whole or loses whole (never a mix of both orders).
+     */
     put("/menu/categories/order") {
         val req = call.receive<MenuCategoryOrder>()
         if (req.orderedIds.isEmpty()) throw BadRequestException("orderedIds must not be empty", "bad_request")
@@ -504,9 +514,8 @@ fun Route.menuEditRoutes() {
                     val listed = req.orderedIds.filter { id -> all.any { it.id == id } }
                     if (listed.isEmpty()) "not_found" else {
                         val order = listed + all.sortedBy { it.int("sortOrder") ?: 0 }.map { it.id }.filter { it !in listed }
-                        val changed = order.mapIndexedNotNull { i, id ->
-                            val r = all.first { it.id == id }
-                            if (r.int("sortOrder") == i) null else r.also { it.write("sortOrder", JsonPrimitive(i), stamp) }
+                        val changed = order.mapIndexed { i, id ->
+                            all.first { it.id == id }.also { it.write("sortOrder", JsonPrimitive(i), stamp) }
                         }
                         MenuState.saveCategories(v.scope, changed)
                         changed.forEach { MenuState.appendFeed(v.scope, MenuFields.CATEGORY, it.id,

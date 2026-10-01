@@ -579,6 +579,7 @@ export const af: Record<MsgKey, string> = {
   menu_skip_other: "{store}: nie verander nie ({reason})",
   menu_not_everywhere: "Gestoor, behalwe: {list}",
   menu_pending: "{store}: {n} verandering(e) wag dat die winkel aanlyn kom",
+  menu_apply_failed: "{store}: {n} spyskaartverandering(e) kon die winkel nog nie toepas nie (probeer weer met elke sinkronisasie)",
   menu_store_outdated: "{store}: hierdie winkel se toep moet opgedateer word voordat dit spyskaartveranderinge van hier af kan ontvang",
   menu_cat_title: "Spyskaartkategorieë",
   menu_cat_add: "Voeg kategorie by",

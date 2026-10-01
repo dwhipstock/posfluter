@@ -842,6 +842,7 @@ export const messages = {
   menu_skip_other: m("{store} : non modifié ({reason})", "{store}: not changed ({reason})"),
   menu_not_everywhere: m("Enregistré, sauf : {list}", "Saved, except: {list}"),
   menu_pending: m("{store} : {n} modification(s) en attente que l’établissement soit en ligne", "{store}: {n} change(s) waiting for the store to come online"),
+  menu_apply_failed: m("{store} : {n} modification(s) du menu pas encore appliquée(s) par l’établissement (nouvel essai à chaque synchronisation)", "{store}: {n} menu change(s) the store could not apply yet (it retries every sync)"),
   menu_store_outdated: m("{store} : l’application de cet établissement doit être mise à jour avant de recevoir des modifications du menu d’ici", "{store}: this store’s app needs an update before it can take menu changes from here"),
   menu_cat_title: m("Catégories du menu", "Menu categories"),
   menu_cat_add: m("Ajouter une catégorie", "Add category"),

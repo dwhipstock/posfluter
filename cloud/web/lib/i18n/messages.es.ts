@@ -576,6 +576,7 @@ export const es: Record<MsgKey, string> = {
   menu_skip_other: "{store}: sin cambios ({reason})",
   menu_not_everywhere: "Guardado, excepto: {list}",
   menu_pending: "{store}: {n} cambio(s) esperando a que la tienda esté en línea",
+  menu_apply_failed: "{store}: {n} cambio(s) del menú que la tienda aún no pudo aplicar (reintenta en cada sincronización)",
   menu_store_outdated: "{store}: la app de esta tienda necesita una actualización antes de recibir cambios del menú desde aquí",
   menu_cat_title: "Categorías del menú",
   menu_cat_add: "Agregar categoría",

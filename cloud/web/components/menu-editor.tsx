@@ -125,8 +125,10 @@ export function MenuSyncBanner({ status }: { status: MenuSyncStatus | undefined 
   const lines = status.stores.flatMap((s) => {
     const store = shortStoreName(s.name);
     if (!s.editable) return [{ warn: true, text: t("menu_store_outdated", { store }) }];
-    if (s.pending > 0) return [{ warn: false, text: t("menu_pending", { store, n: s.pending }) }];
-    return [];
+    const out: { warn: boolean; text: string }[] = [];
+    if (s.failed && s.failed > 0) out.push({ warn: true, text: t("menu_apply_failed", { store, n: s.failed }) });
+    if (s.pending > 0) out.push({ warn: false, text: t("menu_pending", { store, n: s.pending }) });
+    return out;
   });
   if (lines.length === 0) return null;
   return (
