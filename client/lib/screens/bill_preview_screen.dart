@@ -5,6 +5,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
 import '../widgets/print_language_picker.dart';
+import '../widgets/receipt_text.dart';
 
 /// Provisional "check please" bill preview. Same paper card as the receipt
 /// preview, but the server render carries the CUSTOMER BILL header, no tender
@@ -65,7 +66,7 @@ class _BillPreviewScreenState extends State<BillPreviewScreen> {
             borderRadius: T.radiusSmall,
             border: Border.all(color: T.border),
           ),
-          child: SingleChildScrollView(child: Text(_text, style: T.receipt())),
+          child: SingleChildScrollView(child: ReceiptText(_text)),
         ),
       ),
       bottomNavigationBar: SafeArea(

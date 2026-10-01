@@ -8,6 +8,7 @@ import '../design/tokens.dart';
 import '../retail/sp_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/print_language_picker.dart';
+import '../widgets/receipt_text.dart';
 import '../api.dart';
 import '../i18n.dart';
 
@@ -132,10 +133,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                     children: [
                       const _WordmarkHeader(),
                       const SizedBox(height: 14),
-                      Text(withoutNameLine(text), style: T.receipt()),
+                      ReceiptText(withoutNameLine(text)),
                     ],
                   )
-                : Text(text, style: T.receipt()),
+                : ReceiptText(text),
           ),
         ),
       ),
