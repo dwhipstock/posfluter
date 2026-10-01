@@ -151,15 +151,22 @@ fun Route.catalogRoutes() {
  */
 internal object CatalogOps {
 
-    fun createItem(req: ItemCreateRequest): ItemDto {
+    /**
+     * [fixedId] / [variantIds]: the ids the cloud minted for an item created in
+     * the manager portal (two-way menu sync) — the store keeps them, so both
+     * sides mean the same thing. A tablet edit leaves them null (a slug).
+     */
+    fun createItem(req: ItemCreateRequest, fixedId: String? = null, variantIds: List<String>? = null): ItemDto {
         validateItemFields(req.nameFr, req.nameEn, req.abbrev)
         require(req.variants.isNotEmpty()) { "at least one variant (size + price) is required" }
         req.variants.forEach { validateVariantFields(it.labelFr, it.labelEn, it.priceCents) }
         return transaction {
             requireCategory(req.categoryId)
-            val itemId = uniqueSlug(req.nameEn, taken = { candidate ->
+            val itemId = fixedId ?: uniqueSlug(req.nameEn, taken = { candidate ->
                 Items.selectAll().where { Items.id eq candidate }.any()
             })
+            if (fixedId != null && Items.selectAll().where { Items.id eq fixedId }.any())
+                throw ConflictException("item $fixedId already exists", "item_exists")
             Items.insert {
                 it[id] = itemId
                 it[nameFr] = req.nameFr.trim()
@@ -172,7 +179,7 @@ internal object CatalogOps {
                 it[active] = true
             }
             req.variants.forEachIndexed { index, v ->
-                insertVariant(itemId, v.copy(sortOrder = v.sortOrder ?: index))
+                insertVariant(itemId, v.copy(sortOrder = v.sortOrder ?: index), variantIds?.getOrNull(index))
             }
             Outbox.write("item.created", "item", itemId, buildJsonObject {
                 put("itemId", itemId)
@@ -221,10 +228,17 @@ internal object CatalogOps {
         }
     }
 
-    fun deleteItem(itemId: String) {
+    /**
+     * [allowInUse]: a delete from the manager portal (two-way menu sync) goes
+     * through even while the item is on an open check — the line keeps the
+     * item as rung (LineSnapshot) and can still be sent, split, paid, refunded
+     * and reprinted; it just can't be rung again. A tablet delete still asks
+     * for the open checks to be settled first.
+     */
+    fun deleteItem(itemId: String, allowInUse: Boolean = false) {
         transaction {
             requireLiveItem(itemId)
-            val openLines = openCheckLineCount(CheckLines.itemId eq itemId)
+            val openLines = if (allowInUse) 0 else openCheckLineCount(CheckLines.itemId eq itemId)
             if (openLines > 0) throw ConflictException(
                 "item $itemId is on $openLines open check line(s)", "item_in_use")
             val now = VenueClock.now()
@@ -258,14 +272,14 @@ internal object CatalogOps {
         }
     }
 
-    fun addVariant(itemId: String, req: VariantCreateRequest): ItemDto {
+    fun addVariant(itemId: String, req: VariantCreateRequest, fixedId: String? = null): ItemDto {
         validateVariantFields(req.labelFr, req.labelEn, req.priceCents)
         return transaction {
             requireLiveItem(itemId)
             val maxSort = ItemVariants.selectAll()
                 .where { ItemVariants.itemId eq itemId }
                 .maxOfOrNull { it[ItemVariants.sortOrder] } ?: -1
-            val variantId = insertVariant(itemId, req.copy(sortOrder = req.sortOrder ?: (maxSort + 1)))
+            val variantId = insertVariant(itemId, req.copy(sortOrder = req.sortOrder ?: (maxSort + 1)), fixedId)
             Outbox.write("item.variant_added", "item", itemId, buildJsonObject {
                 put("itemId", itemId)
                 put("variantId", variantId)
@@ -300,9 +314,29 @@ internal object CatalogOps {
         }
     }
 
-    fun deleteVariant(itemId: String, variantId: String): ItemDto = transaction {
+    /**
+     * Undo of [deleteVariant] — a size deleted on one side and edited later on
+     * the other comes back (two-way menu sync, last write wins).
+     */
+    fun restoreVariant(itemId: String, variantId: String): ItemDto = transaction {
+        requireLiveItem(itemId)
+        val count = ItemVariants.update({
+            (ItemVariants.id eq variantId) and (ItemVariants.itemId eq itemId) and ItemVariants.deletedAt.isNotNull()
+        }) { it[deletedAt] = null }
+        if (count == 0) throw NotFoundException("deleted variant $variantId of item $itemId not found")
+        Outbox.write("item.variant_added", "item", itemId, buildJsonObject {
+            put("itemId", itemId)
+            put("variantId", variantId)
+            put("restored", true)
+            put("item", itemSnapshotJson(itemId))
+        })
+        itemDto(itemId)
+    }
+
+    /** [allowInUse]: see [deleteItem]. The last size is never deleted (delete the item instead). */
+    fun deleteVariant(itemId: String, variantId: String, allowInUse: Boolean = false): ItemDto = transaction {
         requireLiveVariant(itemId, variantId)
-        val openLines = openCheckLineCount(CheckLines.variantId eq variantId)
+        val openLines = if (allowInUse) 0 else openCheckLineCount(CheckLines.variantId eq variantId)
         if (openLines > 0) throw ConflictException(
             "variant $variantId is on $openLines open check line(s)", "variant_in_use")
         val liveSiblings = ItemVariants.selectAll().where {
@@ -321,12 +355,15 @@ internal object CatalogOps {
         itemDto(itemId)
     }
 
-    fun createCategory(req: CategoryCreateRequest): CategoryDto {
+    /** [fixedId]: the cloud's id for a category made in the manager portal (see [createItem]). */
+    fun createCategory(req: CategoryCreateRequest, fixedId: String? = null): CategoryDto {
         require(req.nameFr.isNotBlank() && req.nameEn.isNotBlank()) { "category names must not be blank" }
         return transaction {
-            val categoryId = uniqueSlug(req.nameEn, taken = { candidate ->
+            val categoryId = fixedId ?: uniqueSlug(req.nameEn, taken = { candidate ->
                 Categories.selectAll().where { Categories.id eq candidate }.any()
             })
+            if (fixedId != null && Categories.selectAll().where { Categories.id eq fixedId }.any())
+                throw ConflictException("category $fixedId already exists", "category_exists")
             val maxSort = Categories.selectAll().maxOfOrNull { it[Categories.sortOrder] } ?: -1
             Categories.insert {
                 it[id] = categoryId
@@ -451,12 +488,13 @@ private fun uniqueSlug(source: String, taken: (String) -> Boolean): String {
     return "$base-$n"
 }
 
-private fun insertVariant(itemId: String, v: VariantCreateRequest): String {
+private fun insertVariant(itemId: String, v: VariantCreateRequest, fixedId: String? = null): String {
     // seed style: "lantern-lager:bottle" — item id + ':' + slug of the EN label
-    val labelSlug = uniqueSlug(v.labelEn, taken = { candidate ->
+    val variantId = fixedId ?: ("$itemId:" + uniqueSlug(v.labelEn, taken = { candidate ->
         ItemVariants.selectAll().where { ItemVariants.id eq "$itemId:$candidate" }.any()
-    })
-    val variantId = "$itemId:$labelSlug"
+    }))
+    if (fixedId != null && ItemVariants.selectAll().where { ItemVariants.id eq fixedId }.any())
+        throw ConflictException("variant $fixedId already exists", "variant_exists")
     ItemVariants.insert {
         it[id] = variantId
         it[ItemVariants.itemId] = itemId

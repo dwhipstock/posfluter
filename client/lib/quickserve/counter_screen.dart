@@ -97,6 +97,7 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
       variant.id,
       qty,
       note: note,
+      expectedPriceCents: variant.priceCents,
     );
     if (mounted) setState(() => _checkId = o.checkId);
     return o.checkId;

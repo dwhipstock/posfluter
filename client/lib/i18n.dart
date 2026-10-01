@@ -942,6 +942,46 @@ class L {
       _t('Refuser', 'Reject', 'Rechazar', 'Ablehnen', 'Weier');
   String get deleteLine =>
       _t('Retirer', 'Remove', 'Quitar', 'Entfernen', 'Verwyder');
+
+  /// "[name] is no longer available" (deleted, 86ed, or that size deleted).
+  String itemNoLongerAvailable(String name) => _t(
+    '$name n’est plus offert',
+    '$name is no longer available',
+    '$name ya no está disponible',
+    '$name ist nicht mehr verfügbar',
+    '$name is nie meer beskikbaar nie',
+  );
+
+  /// The menu changed under the screen: the new price, confirm to add.
+  String priceChangedTo(String name, String price) => _t(
+    'Le prix de $name est maintenant $price',
+    'The price of $name changed to $price',
+    'El precio de $name cambió a $price',
+    'Der Preis von $name ist jetzt $price',
+    'Die prys van $name is nou $price',
+  );
+  String get priceChangedTitle => _t(
+    'Prix modifié',
+    'Price changed',
+    'Precio modificado',
+    'Preis geändert',
+    'Prys verander',
+  );
+  String addAtPrice(String price) => _t(
+    'Ajouter à $price',
+    'Add at $price',
+    'Agregar a $price',
+    'Für $price hinzufügen',
+    'Voeg by teen $price',
+  );
+  String get menuUpdated => _t(
+    'Le menu a été mis à jour',
+    'The menu was updated',
+    'El menú se actualizó',
+    'Die Karte wurde aktualisiert',
+    'Die spyskaart is bygewerk',
+  );
+
   String get emptyBillClosed => _t(
     'Addition vide fermée',
     'Empty bill closed',
@@ -4354,6 +4394,27 @@ class L {
       'Ese código de barras ya pertenece a un producto',
       'Dieser Barcode gehört bereits zu einem Produkt',
       'Daardie strepieskode behoort reeds aan ’n produk',
+    ),
+    'item_unavailable' => _t(
+      'Cet article n’est plus offert (retiré du menu ou en rupture)',
+      'That item is no longer available (taken off the menu or sold out)',
+      'Ese artículo ya no está disponible (retirado del menú o agotado)',
+      'Dieser Artikel ist nicht mehr verfügbar (von der Karte genommen oder ausverkauft)',
+      'Daardie item is nie meer beskikbaar nie (van die spyskaart af of uitverkoop)',
+    ),
+    'price_changed' => _t(
+      'Le prix de cet article vient de changer',
+      'The price of that item just changed',
+      'El precio de ese artículo acaba de cambiar',
+      'Der Preis dieses Artikels hat sich gerade geändert',
+      'Die prys van daardie item het pas verander',
+    ),
+    'lines_rejected' => _t(
+      'Le menu a changé : aucun article n’a pu être ajouté',
+      'The menu changed: none of the items could be added',
+      'El menú cambió: no se pudo agregar ningún artículo',
+      'Die Karte hat sich geändert: kein Artikel konnte hinzugefügt werden',
+      'Die spyskaart het verander: geen items kon bygevoeg word nie',
     ),
     'item_inactive' => _t(
       'Ce produit n’est pas en vente',

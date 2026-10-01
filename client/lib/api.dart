@@ -620,13 +620,15 @@ class Api {
     if (res.statusCode >= 400) {
       String message = 'HTTP ${res.statusCode}';
       String? code, declineCode;
+      Map<String, dynamic>? errorBody;
       try {
         final body = jsonDecode(utf8.decode(res.bodyBytes));
         message = body['error'] ?? message;
         code = body['code'];
         declineCode = body['declineCode'];
+        if (body is Map<String, dynamic>) errorBody = body;
       } catch (_) {}
-      throw ApiException(message, code, declineCode, res.statusCode);
+      throw ApiException(message, code, declineCode, res.statusCode, errorBody);
     }
   }
 
@@ -1084,20 +1086,40 @@ class Api {
   static Future<Check> getCheck(int id) async =>
       Check.fromJson(await _get('/checks/$id'));
 
+  /// [expectedPriceCents]: the unit price the screen showed. The store
+  /// refuses (409 price_changed, with the new price) if the menu moved since.
   static Future<Check> addLine(
     int checkId,
     String itemId,
     String variantId,
     int qty, {
     String? note,
+    int? expectedPriceCents,
   }) async => Check.fromJson(
     await _post('/checks/$checkId/lines', {
       'itemId': itemId,
       'variantId': variantId,
       'qty': qty,
       'note': ?note,
+      'expectedPriceCents': ?expectedPriceCents,
     }),
   );
+
+  /// The store's menu version: it moves whenever an item, size or category
+  /// changes (here, in the AI menu, or from the manager portal). Null when
+  /// the store is too old to say (or unreachable).
+  static Future<int?> menuVersion() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/menu/version'), headers: _headers)
+          .timeout(const Duration(seconds: 5));
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(utf8.decode(res.bodyBytes));
+      return j is Map ? (j['version'] as num?)?.toInt() : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   static Future<Check> removeLine(int checkId, int lineId) async {
     final res = await _send(
@@ -2092,7 +2114,20 @@ class ApiException implements Exception {
 
   /// The HTTP status, when the store answered (null for client-made errors).
   final int? status;
-  ApiException(this.message, [this.code, this.declineCode, this.status]);
+
+  /// The whole error body (e.g. the `rejected` lines and `priceCents` of a
+  /// refused line-add), when the store sent one.
+  final Map<String, dynamic>? body;
+  ApiException(
+    this.message, [
+    this.code,
+    this.declineCode,
+    this.status,
+    this.body,
+  ]);
+
+  /// price_changed: the item's current unit price.
+  int? get priceCents => (body?['priceCents'] as num?)?.toInt();
 
   /// User-facing text: the localized copy for [code], or — for an unknown or
   /// missing code — a clean generic message. The raw server [message] (internal

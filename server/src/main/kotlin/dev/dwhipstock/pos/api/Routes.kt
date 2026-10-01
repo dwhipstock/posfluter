@@ -195,7 +195,11 @@ data class ZoneDto(
 data class ZoneStatusRequest(val status: String, val managerPin: String? = null)
 
 @Serializable
-data class AddLineRequest(val itemId: String, val variantId: String, val qty: Int = 1, val note: String? = null)
+data class AddLineRequest(
+    val itemId: String, val variantId: String, val qty: Int = 1, val note: String? = null,
+    /** The unit price the client showed; a different price now is refused (409 price_changed). */
+    val expectedPriceCents: Long? = null,
+)
 
 @Serializable
 data class AddOpenLineRequest(val name: String, val unitPriceCents: Long, val qty: Int = 1, val note: String? = null)
@@ -496,6 +500,17 @@ fun Route.posRoutes(
         call.respond(checkService.rejectPendingLine(checkId(call), lineIdParam(call)))
     }
 
+    /**
+     * The menu's change counter (two-way menu sync): it moves on every menu
+     * change — a tablet edit, AI menu setup, or a manager-portal edit synced
+     * down — so the guest QR menu, the kiosk and the staff phones poll this
+     * (cheap) and reload /items only when it moved.
+     */
+    get("/menu/version") {
+        call.response.header(HttpHeaders.CacheControl, "no-store")
+        call.respond(mapOf("version" to transaction { dev.dwhipstock.pos.sync.MenuClock.menuVersion() }))
+    }
+
     get("/items") {
         // ?all=true includes 86'ed items (menu-management view). Paging and
         // filters are optional (a 5,000-product shelf): ?limit=&offset= pages
@@ -628,7 +643,8 @@ fun Route.posRoutes(
 
     post("/checks/{id}/lines") {
         val req = call.receive<AddLineRequest>()
-        call.respond(HttpStatusCode.Created, checkService.addLine(checkId(call), req.itemId, req.variantId, req.qty, req.note))
+        call.respond(HttpStatusCode.Created, checkService.addLine(checkId(call), req.itemId, req.variantId, req.qty, req.note,
+            req.expectedPriceCents))
     }
 
     // Open / misc item: off-menu line rung as name + price + qty. No catalog
@@ -799,7 +815,8 @@ fun Route.posRoutes(
         val req = call.receive<AvailabilityRequest>()
         requireGrant(auth, call, Permissions.EDIT_MENU, req.managerPin)
         val updated = transaction {
-            val count = Items.update({ Items.id eq itemId }) { it[active] = req.active }
+            // a deleted item stays deleted: 86'ing it back on would be a ghost
+            val count = Items.update({ (Items.id eq itemId) and Items.deletedAt.isNull() }) { it[active] = req.active }
             if (count == 0) throw NotFoundException("item $itemId not found")
             Outbox.write("item.availability_changed", "item", itemId, buildJsonObject {
                 put("itemId", itemId)
@@ -883,8 +900,10 @@ private fun customerBill(check: CheckView?): CustomerBillDto {
         nameFr = l.nameFr, nameEn = l.nameEn,
         variantLabelFr = l.variantLabelFr, variantLabelEn = l.variantLabelEn,
         qty = l.qty, lineTotalCents = l.lineTotalCents, note = l.note,
-        names = l.itemId?.let { itemNames[it] }.orEmpty(),
-        variantNames = if (l.variantLabelEn == null) emptyMap() else l.variantId?.let { variantNames[it] }.orEmpty(),
+        // as rung (LineSnapshot); a line from before 059 falls back to the live names
+        names = l.names.ifEmpty { l.itemId?.let { itemNames[it] }.orEmpty() },
+        variantNames = if (l.variantLabelEn == null) emptyMap()
+            else l.variantNames.ifEmpty { l.variantId?.let { variantNames[it] }.orEmpty() },
     )
     return CustomerBillDto(
         open = true,

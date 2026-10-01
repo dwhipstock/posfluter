@@ -75,21 +75,24 @@ export const get = <T>(path: string) => request<T>(path);
 /** A GET that doesn't count as user activity — for auto-refresh polling only. */
 export const getBackground = <T>(path: string) => request<T>(path, undefined, true);
 
-const json = (body: unknown): RequestInit => ({
-  headers: { "Content-Type": "application/json" },
+const json = (body: unknown, headers?: Record<string, string>): RequestInit => ({
+  headers: { "Content-Type": "application/json", ...headers },
   body: JSON.stringify(body),
 });
 
-export const post = <T>(path: string, body?: unknown) =>
-  request<T>(path, { method: "POST", ...(body === undefined ? {} : json(body)) });
+/** Extra request headers, e.g. `{ "Idempotency-Key": ... }` on a menu edit. */
+export type ExtraHeaders = Record<string, string>;
 
-export const patch = <T>(path: string, body: unknown) =>
-  request<T>(path, { method: "PATCH", ...json(body) });
+export const post = <T>(path: string, body?: unknown, headers?: ExtraHeaders) =>
+  request<T>(path, { method: "POST", ...(body === undefined ? { headers } : json(body, headers)) });
 
-export const put = <T>(path: string, body: unknown) =>
-  request<T>(path, { method: "PUT", ...json(body) });
+export const patch = <T>(path: string, body: unknown, headers?: ExtraHeaders) =>
+  request<T>(path, { method: "PATCH", ...json(body, headers) });
 
-export const del = <T>(path: string) => request<T>(path, { method: "DELETE" });
+export const put = <T>(path: string, body: unknown, headers?: ExtraHeaders) =>
+  request<T>(path, { method: "PUT", ...json(body, headers) });
+
+export const del = <T>(path: string, headers?: ExtraHeaders) => request<T>(path, { method: "DELETE", headers });
 
 export const putFile = <T>(path: string, field: string, file: File) => {
   const fd = new FormData();

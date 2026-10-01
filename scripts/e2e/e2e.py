@@ -115,11 +115,11 @@ def main():
         st, h = req(base, "GET", "/health")
         check(f"A4 {tag} https health + pairingRequired", st == 200 and h.get("pairingRequired") is True)
 
-    # -- the portal is read-only for staff and menu (one-way sync) --
+    # -- the portal is read-only for staff (one-way); the menu is two-way (CONTRACT §10) --
     st, _ = p.req("POST", f"/v1/staff?venue={VA}", {"name": "X", "role": "SERVER", "pin": "4711"})
     check("D1 portal cannot create staff", st in (404, 405), str(st))
     st, _ = p.req("POST", f"/v1/menu/items?venue={VA}", {"nameFr": "x", "nameEn": "x"})
-    check("D2 portal cannot edit the menu", st in (404, 405), str(st))
+    check("D2 portal menu edit validates (no category / sizes: 400)", st == 400, str(st))
 
     # -- pairing codes (one per venue) --
     def mint(venue):

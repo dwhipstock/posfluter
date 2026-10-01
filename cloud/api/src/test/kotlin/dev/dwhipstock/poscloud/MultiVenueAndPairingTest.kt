@@ -123,7 +123,7 @@ class MultiVenueAndPairingTest {
         assertEquals(HttpStatusCode.OK, res.status)
         val body = testJson.parseToJsonElement(res.bodyAsText()).jsonObject
         assertEquals("instant", body["timestampFormat"]!!.jsonPrimitive.content)
-        assertEquals("2", body["contractVersion"]!!.jsonPrimitive.content)
+        assertEquals("3", body["contractVersion"]!!.jsonPrimitive.content)
         assertEquals(HttpStatusCode.Unauthorized, client.get("/v1/store/capabilities").status)
     }
 

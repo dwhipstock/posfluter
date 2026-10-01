@@ -76,6 +76,9 @@ object Venues : Table("venues") {
     val currency = text("currency").default("CAD")
     val country = text("country").default("CA")
     val kind = text("kind").default("restaurant")
+    // last time the store pulled the menu feed (027); NULL = an older store, no portal menu edits
+    val menuSyncAt = timestampWithTimeZone("menu_sync_at").nullable()
+    val menuCursor = long("menu_cursor").nullable()
     override val primaryKey = PrimaryKey(tenantId, id)
 }
 
@@ -99,6 +102,8 @@ object PortalUsers : Table("portal_users") {
     val totpEnabled = bool("totp_enabled")
     val displayName = text("display_name")
     val createdAt = timestampWithTimeZone("created_at")
+    // owner | manager (may edit the menu) | viewer (027)
+    val role = text("role").default("owner")
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -318,6 +323,8 @@ object CatalogCategories : Table("catalog_categories") {
     val nameEn = text("name_en")
     val sortOrder = integer("sort_order")
     val deleted = bool("deleted")
+    // per-field write stamps (027, two-way menu sync)
+    val clock = jsonb("clock")
     override val primaryKey = PrimaryKey(tenantId, venueId, id)
 }
 
@@ -345,6 +352,8 @@ object CatalogItems : Table("catalog_items") {
     val sizeLabel = text("size_label").nullable()
     // the item's current cost (024); NULL = not sent
     val costCents = long("cost_cents").nullable()
+    // per-field write stamps (027, two-way menu sync)
+    val clock = jsonb("clock")
     override val primaryKey = PrimaryKey(tenantId, venueId, id)
 }
 
@@ -358,7 +367,38 @@ object CatalogVariants : Table("catalog_variants") {
     val priceCents = long("price_cents")
     val sortOrder = integer("sort_order")
     val deleted = bool("deleted")
+    // per-field write stamps (027, two-way menu sync)
+    val clock = jsonb("clock")
     override val primaryKey = PrimaryKey(tenantId, venueId, id)
+}
+
+/** The per-store menu feed the store pulls (027, CONTRACT §10). */
+object MenuFeed : Table("menu_feed") {
+    val seq = long("seq").autoIncrement()
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val entity = text("entity")
+    val entityId = text("entity_id")
+    val data = jsonb("data")
+    val origin = text("origin")
+    val createdAt = timestampWithTimeZone("created_at")
+    override val primaryKey = PrimaryKey(seq)
+}
+
+/** The cloud's hybrid logical clock per tenant (027). */
+object MenuHlc : Table("menu_hlc") {
+    val tenantId = text("tenant_id")
+    val last = text("last")
+    override val primaryKey = PrimaryKey(tenantId)
+}
+
+/** Idempotency keys of portal menu edits (027). */
+object MenuEdits : Table("menu_edits") {
+    val tenantId = text("tenant_id")
+    val editId = text("edit_id")
+    val response = jsonb("response")
+    val createdAt = timestampWithTimeZone("created_at")
+    override val primaryKey = PrimaryKey(tenantId, editId)
 }
 
 /** Names beyond fr/en per catalog entity (026): item | variant | category | zone. */

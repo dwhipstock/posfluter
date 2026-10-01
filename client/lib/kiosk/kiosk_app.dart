@@ -518,6 +518,7 @@ class _MenuScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
+          _MenuChangeBanner(c),
           SizedBox(
             height: 76,
             child: ListView(
@@ -817,6 +818,7 @@ class _CartScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
+          _MenuChangeBanner(c),
           Expanded(
             child: c.cart.isEmpty
                 ? Center(
@@ -856,6 +858,21 @@ class _CartScreen extends StatelessWidget {
                                           style: const TextStyle(
                                             fontSize: 18,
                                             color: _muted,
+                                          ),
+                                        ),
+                                      if (l.repriced)
+                                        Text(
+                                          t.priceNowIs(
+                                            _name(c, l.item),
+                                            _money(c, l.variant.priceCents),
+                                          ),
+                                          key: Key(
+                                            'kiosk-repriced-${l.item.id}',
+                                          ),
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            color: _copper,
+                                            fontWeight: FontWeight.w700,
                                           ),
                                         ),
                                     ],
@@ -957,7 +974,9 @@ class _CartScreen extends StatelessWidget {
                       backgroundColor: _copper,
                       minimumSize: const Size.fromHeight(80),
                     ),
-                    onPressed: c.busy || c.cart.isEmpty ? null : c.placeOrder,
+                    onPressed: c.busy || c.cart.isEmpty || c.needsPriceConfirm
+                        ? null
+                        : c.placeOrder,
                     child: Text(
                       c.busy ? t.sending : t.placeOrder,
                       style: const TextStyle(fontSize: 30),
@@ -1023,6 +1042,37 @@ class _DoneScreen extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  if (r != null && r.rejected.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 24),
+                      child: Column(
+                        key: const Key('kiosk-not-included'),
+                        children: [
+                          Text(
+                            t.notInYourOrder,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          for (final x in r.rejected)
+                            Text(
+                              x.isPriceChange
+                                  ? t.priceChangedAskCounter(
+                                      x.name(c.lang),
+                                      _money(c, x.priceCents!),
+                                    )
+                                  : t.noLongerAvailable(x.name(c.lang)),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 22,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   if (r?.idCheckAtCounter ?? false)
                     Padding(
                       padding: const EdgeInsets.only(top: 24),
@@ -1040,6 +1090,60 @@ class _DoneScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ menu changed
+
+/// The menu changed during the order: what left the cart, and the new
+/// prices to accept before the order can go.
+class _MenuChangeBanner extends StatelessWidget {
+  final KioskController c;
+  const _MenuChangeBanner(this.c);
+
+  @override
+  Widget build(BuildContext context) {
+    if (c.notices.isEmpty) return const SizedBox.shrink();
+    final t = KioskText(c.lang);
+    String name(KioskNotice n) =>
+        n.item == null ? n.fallbackName : _name(c, n.item!);
+    return Container(
+      key: const Key('kiosk-menu-changed'),
+      width: double.infinity,
+      color: const Color(0xFFFFF4E5),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            t.menuChanged,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+          ),
+          for (final n in c.notices)
+            Text(
+              n.kind == 'removed'
+                  ? t.removedFromOrder(name(n))
+                  : t.priceNowIs(name(n), _money(c, n.priceCents ?? 0)),
+              style: const TextStyle(fontSize: 18),
+            ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              key: const Key('kiosk-menu-changed-ok'),
+              style: FilledButton.styleFrom(backgroundColor: _copper),
+              onPressed: c.needsPriceConfirm
+                  ? c.acceptNewPrices
+                  : c.dismissNotices,
+              child: Text(
+                c.needsPriceConfirm ? t.keepNewPrices : 'OK',
+                style: const TextStyle(fontSize: 20),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

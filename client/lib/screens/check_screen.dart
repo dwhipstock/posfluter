@@ -9,6 +9,8 @@ import '../design/widgets.dart';
 import '../i18n.dart';
 import '../kitchen/kitchen_banner.dart';
 import '../kitchen/kitchen_i18n.dart';
+import '../menu_changes.dart';
+import '../widgets/menu_change_dialogs.dart';
 import '../quickserve/quick_serve_i18n.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
@@ -83,6 +85,10 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   String? _error;
   Timer? _poll;
 
+  /// The menu can change under the screen (a tablet edit elsewhere, the AI
+  /// menu, the manager portal): its version is polled and the grid reloaded.
+  MenuVersionPoller? _menuPoll;
+
   /// Kitchen tickets (store has kitchen.printing=on): what a Send would print.
   KitchenCheckState? _kitchen;
   bool _sending = false;
@@ -98,6 +104,32 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     _load();
     // pick up QR-submitted pending lines while the screen is open. TODO: push/SSE
     _poll = Timer.periodic(const Duration(seconds: 5), (_) => _refreshCheck());
+    _menuPoll = MenuVersionPoller(fetch: Api.menuVersion, onChange: _reloadMenu)
+      ..start();
+  }
+
+  /// The menu moved (or an add was refused for a stale item): reload the
+  /// grid — 86'd items grey out, deleted ones go. Lines already on the check
+  /// keep what was ordered (the store snapshots them).
+  Future<void> _reloadMenu() async {
+    try {
+      final results = await Future.wait([
+        Api.items(includeInactive: true),
+        Api.categories(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _items = results[0] as List<Item>;
+        _categories = (results[1] as List<Category>)
+            .where((c) => _items.any((i) => i.category == c.id))
+            .toList();
+        if (_category != null &&
+            _category != _allCategories &&
+            !_categories.any((c) => c.id == _category)) {
+          _category = _categories.isEmpty ? null : _categories.first.id;
+        }
+      });
+    } catch (_) {} // offline: the next poll tries again
   }
 
   @override
@@ -115,6 +147,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   @override
   void dispose() {
     _poll?.cancel();
+    _menuPoll?.dispose();
     _flashTimer?.cancel();
     // leaving the bill sends whatever the kitchen doesn't have yet (best
     // effort, never blocks; the store already handles voids on its own).
@@ -268,6 +301,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       }
       setState(() => _check = check);
       _refreshKitchen();
+    } on AddCancelled {
+      return;
     } catch (e) {
       if (mounted) showApiError(context, e);
     }
@@ -295,12 +330,34 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       if (result == null) return;
       (variant, qty, note) = result;
     }
-    await _guarded(() => _addLine(item, variant, qty, note));
+    await _guarded(() async {
+      try {
+        return await _addLine(item, variant, qty, note);
+      } catch (e) {
+        // the menu changed under the screen: refresh it, and on a new price
+        // ask before adding at it (the line keeps the price it is added at)
+        if (isMenuChangeError(e)) unawaited(_reloadMenu());
+        if (!mounted) rethrow;
+        final repriced = await confirmNewPrice(
+          context,
+          e,
+          L.of(context).name(item.nameFr, item.nameEn, item.names),
+          variant,
+        );
+        if (repriced == null) rethrow;
+        return _addLine(item, repriced, qty, note);
+      }
+    });
   }
 
   /// Counter: the first item stores the new order (with that item); the
   /// taps made meanwhile wait for it, then add to it.
-  Future<Check> _addLine(Item item, Variant variant, int qty, String? note) async {
+  Future<Check> _addLine(
+    Item item,
+    Variant variant,
+    int qty,
+    String? note,
+  ) async {
     final create = widget.createOrder;
     if (_checkId == 0 && create != null) {
       final pending = _creating;
@@ -316,7 +373,14 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       }
       await pending;
     }
-    return Api.addLine(_checkId, item.id, variant.id, qty, note: note);
+    return Api.addLine(
+      _checkId,
+      item.id,
+      variant.id,
+      qty,
+      note: note,
+      expectedPriceCents: variant.priceCents,
+    );
   }
 
   /// Counter: drop this unpaid order (nothing was paid, nothing went to
@@ -452,8 +516,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) =>
-              BillPreviewScreen(checkId: _checkId, text: text),
+          builder: (_) => BillPreviewScreen(checkId: _checkId, text: text),
         ),
       );
     } catch (e) {
@@ -1279,9 +1342,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                               : () async {
                                   if (KitchenApi.enabled &&
                                       !widget.counterOrder) {
-                                    unawaited(
-                                      KitchenApi.sendQuietly(_checkId),
-                                    );
+                                    unawaited(KitchenApi.sendQuietly(_checkId));
                                   }
                                   final closed = await Navigator.of(context)
                                       .push<bool>(
@@ -1492,11 +1553,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                         LucideIcons.minus,
                         () => _guarded(
                           () => line.qty > 1
-                              ? Api.setLineQty(
-                                  _checkId,
-                                  line.id,
-                                  line.qty - 1,
-                                )
+                              ? Api.setLineQty(_checkId, line.id, line.qty - 1)
                               : Api.removeLine(_checkId, line.id),
                         ),
                         width: 48,
@@ -1514,11 +1571,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       _stepBtn(
                         LucideIcons.plus,
                         () => _guarded(
-                          () => Api.setLineQty(
-                            _checkId,
-                            line.id,
-                            line.qty + 1,
-                          ),
+                          () => Api.setLineQty(_checkId, line.id, line.qty + 1),
                         ),
                         width: 48,
                         height: 48,
@@ -1556,8 +1609,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(LucideIcons.trash2, color: T.destructive),
       ),
-      onDismissed: (_) =>
-          _guarded(() => Api.removeLine(_checkId, line.id)),
+      onDismissed: (_) => _guarded(() => Api.removeLine(_checkId, line.id)),
       child: row,
     );
   }

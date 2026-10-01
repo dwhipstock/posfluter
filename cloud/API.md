@@ -231,10 +231,10 @@ counts 0.
                              "lineTotalCents" } ] } ] }
   ```
 
-## Menu (session-authed; READ-ONLY mirror of each store's menu)
+## Menu (session-authed; two-way with each store, CONTRACT.md §10)
 
-Each store's tablet owns its menu (one-way sync, CONTRACT.md). The portal only
-displays what the stores pushed up; there are no menu write endpoints.
+The menu syncs both ways: the stores push their menus up, and owners and
+managers can edit them here. Reads below; edits under "Menu edits".
 
 - `GET /v1/menu` →
   ```json
@@ -262,6 +262,37 @@ displays what the stores pushed up; there are no menu write endpoints.
   parameter = the whole menu, as before. 400 `bad_param` for a bad number.
   The portal's export uses `limit=10000` with the page's filters.
 - `GET /v1/menu/items/{id}/photo` — binary, ETag = photoVersion
+
+### Menu edits (owners and managers; viewers get 403 `menu_edit_forbidden`)
+
+Scope follows the store picker: `?venue=<id>` edits that store; no venue =
+**All stores**, applied to every store that has the thing (a new item or
+category goes to every store). Each edit is stamped by the cloud's clock,
+merged, and queued for each store (it applies it on its next sync). Every
+call may send `Idempotency-Key: <uuid>`: a retry with the same key answers the
+first result with `"duplicate": true` and changes nothing.
+
+Every edit answers `MenuEditResult`:
+`{ "applied": ["plateau"], "skipped": [{ "venueId": "vieux-port", "reason": "store_not_upgraded" }], "id": "nachos-x7k2", "duplicate": false }`.
+Reasons: `store_not_upgraded` (the store's app predates two-way sync),
+`not_found`, `category_not_found`, `last_variant`, `category_not_empty`. When
+no store could take it, the call fails with that reason as its `code`
+(404 `not_found`, 400 `category_not_found`, 409 for the others).
+
+- `POST /v1/menu/items` `{ nameEn, nameFr?, names?: {lang: text}, descriptionEn?, descriptionFr?, categoryId, isAlcohol?, active?, abbrev?, variants: [{ labelEn, labelFr?, priceCents, names? }] }` → 201. The id is the cloud's (`nachos-x7k2`), the same at every store.
+- `PATCH /v1/menu/items/{id}` — any of `nameEn, nameFr, names (lang → text, "" removes), descriptionEn, descriptionFr, categoryId, isAlcohol, active (86), abbrev`.
+- `DELETE /v1/menu/items/{id}` — soft; history keeps it.
+- `POST /v1/menu/items/{id}/variants` `{ labelEn, labelFr?, priceCents, names? }` → 201;
+  `PATCH /v1/menu/items/{id}/variants/{variantId}` `{ labelEn?, labelFr?, priceCents?, sortOrder?, names? }`;
+  `DELETE …/variants/{variantId}` (not the last size: 409 `last_variant`).
+- `POST /v1/menu/categories` `{ nameEn, nameFr?, names? }` → 201;
+  `PATCH /v1/menu/categories/{id}` `{ nameEn?, nameFr?, names?, sortOrder? }`;
+  `DELETE /v1/menu/categories/{id}` (only when empty: 409 `category_not_empty`);
+  `PUT /v1/menu/categories/order` `{ orderedIds }` (unlisted categories follow).
+- `GET /v1/menu/sync-status` → `{ canEdit, role, stores: [{ venueId, name, editable, lastPullAt, pending }] }`:
+  `editable` = the store takes portal edits; `pending` = edits it hasn't applied yet.
+
+`GET /v1/auth/me` also returns `role` (`owner | manager | viewer`) and `canEditMenu`.
 
 ## Staff (session-authed; READ-ONLY mirror of each store's staff)
 

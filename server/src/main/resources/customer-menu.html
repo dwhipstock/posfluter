@@ -84,6 +84,9 @@
   .bline { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
   .bline .note { color: #888; font-size: 12px; }
   .bline button { border: 0; background: none; color: var(--ink); font-size: 16px; }
+  .bline.changed { background: #fff4e5; border-radius: 8px; padding: 8px; }
+  .bline .chg { color: #9a4b00; font-size: 13px; font-weight: 700; margin-top: 4px; }
+  .bline button.fix { background: var(--ink); color: #fff; border-radius: 6px; font-size: 13px; padding: 4px 8px; margin-top: 4px; }
   .bqty { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .bqty .step { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px;
                 background: var(--paper); font-size: 18px; line-height: 1; }
@@ -186,6 +189,7 @@ const STR = {
     noOrders: "Aucune commande pour l’instant — parcourez le menu pour commencer.", billPaying: "Addition en cours de paiement",
     billLoading: "Chargement de votre addition…",
     menuLoading: "Chargement du menu…", menuUnavailable: "Le menu n’est pas disponible pour le moment. Veuillez réessayer.",
+    gone: n => `${n} n’est plus offert`, priceNow: (n, p) => `${n}\u00a0: le prix est maintenant ${p}`, addAt: p => `Ajouter à ${p}`, removeLine: "Retirer", menuChanged: "Le menu a changé — vérifiez votre panier.", someSent: "Vos autres articles ont été envoyés. Vérifiez ceux qui restent dans le panier.",
   },
   en: {
     orderFromPhone: "Table " + TABLE_LABEL + " — order from your phone",
@@ -202,6 +206,7 @@ const STR = {
     noOrders: "No orders yet — browse the menu to start.", billPaying: "Bill is being paid",
     billLoading: "Loading your bill…",
     menuLoading: "Loading menu…", menuUnavailable: "The menu is unavailable right now. Please try again.",
+    gone: n => `${n} is no longer available`, priceNow: (n, p) => `${n}: price changed to ${p}`, addAt: p => `Add at ${p}`, removeLine: "Remove", menuChanged: "The menu changed — please check your basket.", someSent: "Your other items were sent. Please check what is left in your basket.",
   },
   es: {
     orderFromPhone: "Mesa " + TABLE_LABEL + " — pida desde su teléfono",
@@ -218,6 +223,7 @@ const STR = {
     noOrders: "Aún no hay pedidos: consulte el menú para empezar.", billPaying: "La cuenta se está pagando",
     billLoading: "Cargando su cuenta…",
     menuLoading: "Cargando el menú…", menuUnavailable: "El menú no está disponible en este momento. Inténtelo de nuevo.",
+    gone: n => `${n} ya no está disponible`, priceNow: (n, p) => `${n}: el precio cambió a ${p}`, addAt: p => `Agregar a ${p}`, removeLine: "Quitar", menuChanged: "El menú cambió: revise su carrito.", someSent: "Sus otros artículos se enviaron. Revise lo que quedó en el carrito.",
   },
   de: {
     orderFromPhone: "Tisch " + TABLE_LABEL + " – bestellen Sie per Handy",
@@ -234,6 +240,7 @@ const STR = {
     noOrders: "Noch keine Bestellungen – stöbern Sie in der Speisekarte.", billPaying: "Rechnung wird bezahlt",
     billLoading: "Ihre Rechnung wird geladen…",
     menuLoading: "Speisekarte wird geladen…", menuUnavailable: "Die Speisekarte ist gerade nicht verfügbar. Bitte versuchen Sie es erneut.",
+    gone: n => `${n} ist nicht mehr erhältlich`, priceNow: (n, p) => `${n}: Preis geändert auf ${p}`, addAt: p => `Für ${p} hinzufügen`, removeLine: "Entfernen", menuChanged: "Die Speisekarte hat sich geändert – bitte prüfen Sie Ihren Warenkorb.", someSent: "Ihre anderen Artikel wurden gesendet. Bitte prüfen Sie, was noch im Warenkorb liegt.",
   },
   af: {
     orderFromPhone: "Tafel " + TABLE_LABEL + " – bestel met u foon",
@@ -250,6 +257,7 @@ const STR = {
     noOrders: "Nog geen bestellings nie – blaai deur die spyskaart om te begin.", billPaying: "Rekening word betaal",
     billLoading: "U rekening laai tans…",
     menuLoading: "Spyskaart laai tans…", menuUnavailable: "Die spyskaart is tans nie beskikbaar nie. Probeer asseblief weer.",
+    gone: n => `${n} is nie meer beskikbaar nie`, priceNow: (n, p) => `${n}: prys verander na ${p}`, addAt: p => `Voeg by teen ${p}`, removeLine: "Verwyder", menuChanged: "Die spyskaart het verander – kyk asseblief na u mandjie.", someSent: "U ander items is gestuur. Kyk asseblief wat in u mandjie oorbly.",
   },
 };
 const T = () => STR[lang] || STR.en;
@@ -382,8 +390,8 @@ function renderCart() {
   document.getElementById("cart-summary").textContent =
     `🛒 ${T().basket} (${count}) · ${cad(cartSubtotal())}`;
   document.getElementById("cart-lines").innerHTML = basket.map((b, ix) => `
-    <div class="bline">
-      <span>${esc(nm(b, b.nameFr, b.nameEn))}${b.variantId && b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
+    <div class="bline${b.status ? " changed" : ""}">
+      <span>${esc(nm(b, b.nameFr, b.nameEn))}${b.variantId && b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}${lineChange(b, ix)}</span>
       <span class="bqty">
         <button class="step" onclick="bumpQty(${ix},-1)">−</button>
         <b>${b.qty}</b>
@@ -393,6 +401,99 @@ function renderCart() {
       </span>
     </div>`).join("");
   document.getElementById("cart-sub").textContent = cad(cartSubtotal());
+}
+
+// --- the menu can change under the basket (an item taken off or 86'd, a new
+// price — at the bar or from the owner's portal): such a line is held back
+// with a message until the guest removes it or accepts the new price.
+const lineDisplayName = b => esc(nm(b, b.nameFr, b.nameEn));
+function lineChange(b, ix) {
+  if (b.status === "gone") return `<div class="chg">${T().gone(lineDisplayName(b))}</div>
+    <button class="fix" onclick="basket.splice(${ix},1);render()">${T().removeLine}</button>`;
+  if (b.status === "repriced") return `<div class="chg">${T().priceNow(lineDisplayName(b), cad(b.newPriceCents))}</div>
+    <button class="fix" onclick="acceptPrice(${ix})">${T().addAt(cad(b.newPriceCents))}</button>`;
+  return "";
+}
+function acceptPrice(ix) {
+  const b = basket[ix];
+  if (!b || b.status !== "repriced") return;
+  b.priceCents = b.newPriceCents;
+  b.variant = Object.assign({}, b.variant, { priceCents: b.newPriceCents });
+  delete b.status;
+  delete b.newPriceCents;
+  render();
+  // nothing else waiting on the guest: send it straight away
+  if (basket.length && !basket.some(x => x.status)) submitBasket();
+}
+/** Mark the lines the store refused ([{index, code, priceCents}]) against the lines sent. */
+function markRejected(sent, rejected) {
+  const keep = [];
+  for (const r of rejected) {
+    const b = sent[r.index];
+    if (!b) continue;
+    if (r.code === "price_changed" && typeof r.priceCents === "number") {
+      b.status = "repriced"; b.newPriceCents = r.priceCents;
+    } else {
+      b.status = "gone";
+    }
+    keep.push(b);
+  }
+  return keep;
+}
+/** A fresh menu against the basket: gone items and new prices are marked. */
+function checkBasket() {
+  let changed = false;
+  for (const b of basket) {
+    const item = items.find(i => i.id === b.itemId);
+    const v = item && item.variants.find(x => x.id === b.variantId);
+    if (!item || item.active === false || !v) {
+      if (b.status !== "gone") { b.status = "gone"; changed = true; }
+    } else if (v.priceCents !== b.priceCents) {
+      if (b.status !== "repriced" || b.newPriceCents !== v.priceCents) {
+        b.status = "repriced"; b.newPriceCents = v.priceCents; changed = true;
+      }
+    } else if (b.status) {
+      delete b.status; delete b.newPriceCents; changed = true; // back as it was
+    }
+  }
+  return changed;
+}
+let menuVersion = null, versionTimer = null;
+async function pollMenuVersion() {
+  try {
+    const r = await fetch("/menu/version", { cache: "no-store" });
+    if (!r.ok) return; // an older store: no version, keep the menu as loaded
+    const v = (await r.json()).version;
+    if (menuVersion !== null && v !== menuVersion) await reloadMenu();
+    menuVersion = v;
+  } catch (_) {}
+}
+async function reloadMenu() {
+  try {
+    const [ir, cr] = await Promise.all([fetch("/items"), fetch("/categories")]);
+    if (!ir.ok || !cr.ok) return;
+    [items, categories] = await Promise.all([ir.json(), cr.json()]);
+    menuError = false;
+    if (!items.some(i => i.category === cat)) cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
+  } catch (_) { return; }
+  const changed = checkBasket();
+  render();
+  if (changed) { showToast(T().menuChanged, 3500); openCart(); }
+}
+// only while the guest is looking: a pocketed phone polls nothing
+function startVersionPoll() {
+  if (versionTimer) return;
+  pollMenuVersion();
+  versionTimer = setInterval(pollMenuVersion, 15000);
+}
+function stopVersionPoll() { clearInterval(versionTimer); versionTimer = null; }
+document.addEventListener("visibilitychange", () => document.hidden ? stopVersionPoll() : startVersionPoll());
+function showToast(text, ms) {
+  const t = document.getElementById("toast");
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), ms || 1400);
 }
 
 function openCart() {
@@ -443,16 +544,42 @@ function add(itemId) {
   addFeedback();
 }
 
-document.getElementById("submit").onclick = async () => {
-  const res = await fetch(`/m/t/${TABLE_TOKEN}/pending-lines`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lines: basket.map(b => ({ itemId: b.itemId, variantId: b.variantId, qty: b.qty, note: b.note })) }),
-  });
+document.getElementById("submit").onclick = () => submitBasket();
+
+async function submitBasket() {
+  if (!basket.length) return;
+  // a line held back by a menu change waits for the guest (remove / accept the price)
+  if (basket.some(b => b.status)) { renderCart(); openCart(); showToast(T().menuChanged, 3500); return; }
+  const sent = basket.slice();
+  let res;
+  try {
+    res = await fetch(`/m/t/${TABLE_TOKEN}/pending-lines`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      // the price the guest saw: the store refuses a line whose price moved since
+      body: JSON.stringify({ lines: sent.map(b => ({ itemId: b.itemId, variantId: b.variantId, qty: b.qty, note: b.note,
+                                                    expectedPriceCents: b.priceCents })) }),
+    });
+  } catch (_) { alert(T().failed); return; }
+  let body = null;
+  try { body = await res.json(); } catch (_) {}
+  const rejected = (body && Array.isArray(body.rejected)) ? body.rejected : [];
   if (!res.ok) {
     // server errors carry a machine code; translate here, never on the server
-    let code = null;
-    try { code = (await res.json()).code; } catch (_) {}
+    const code = body && body.code;
+    if (code === "lines_rejected" && rejected.length) {
+      basket = markRejected(sent, rejected);
+      reloadMenu();
+      render(); openCart(); showToast(T().menuChanged, 3500);
+      return;
+    }
     alert(code === "bill_locked" ? T().billLocked : T().failed);
+    return;
+  }
+  if (rejected.length) {
+    // the rest went to the staff; only the refused lines stay, each with why
+    basket = markRejected(sent, rejected);
+    reloadMenu();
+    render(); openCart(); showToast(T().someSent, 4000);
     return;
   }
   basket = [];
@@ -460,7 +587,7 @@ document.getElementById("submit").onclick = async () => {
   renderCart(); // hides the bar for when the menu comes back
   document.getElementById("menu").style.display = "none";
   document.getElementById("done").style.display = "block";
-};
+}
 
 function reset() {
   showTab("menu");
@@ -561,6 +688,7 @@ function renderBill() {
 
 render();
 load();
+startVersionPoll();
 if (location.hash === "#bill") showTab("bill"); // deep-link straight to the bill
 </script>
 </body>

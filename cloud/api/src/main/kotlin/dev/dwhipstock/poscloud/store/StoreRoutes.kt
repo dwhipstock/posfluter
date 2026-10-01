@@ -139,7 +139,17 @@ data class CapabilitiesResponse(
     val revocationsPath: String = "/v1/store/revocations",
     /** The on-hand feed for a retail store's "expected qty" hint (§9). */
     val stockPath: String = "/v1/store/stock",
+    /** The per-store menu feed (two-way menu sync, §10). */
+    val menuSyncPath: String = "/v1/store/menu/changes",
 )
+
+/** One menu feed entry (§10): an item or category's full state, with its clocks. */
+@Serializable
+data class MenuChangeDto(val seq: Long, val entity: String, val id: String, val data: JsonElement)
+
+/** [serverTimeMs]: the cloud's clock when it answered, so the store can correct its own. */
+@Serializable
+data class MenuChangesResponse(val cursor: Long, val serverTimeMs: Long, val changes: List<MenuChangeDto>)
 
 /** One product's on hand, for the store's count screen (CONTRACT §9). */
 @Serializable
@@ -148,8 +158,8 @@ data class OnHandDto(val itemId: String, val onHand: Long)
 @Serializable
 data class OnHandResponse(val retail: Boolean, val asOf: String, val items: List<OnHandDto>)
 
-/** The store ⇄ cloud contract version this API speaks (cloud/CONTRACT.md). */
-const val CONTRACT_VERSION = 2
+/** The store ⇄ cloud contract version this API speaks (cloud/CONTRACT.md); 3 = two-way menu sync. */
+const val CONTRACT_VERSION = 3
 
 @Serializable
 data class ChangeDto(val version: Long, val kind: String, val op: String, val data: JsonElement)
@@ -222,8 +232,8 @@ fun Route.storeRoutes(config: CloudConfig) {
     }
 
     /**
-     * Revocation feed (CONTRACT §4) — the ONLY cloud → store data (one-way sync:
-     * menu and staff are tablet-owned). Cursor = last version in the page, or
+     * Revocation feed (CONTRACT §4): device revocations only (staff are
+     * tablet-owned; the menu comes down through its own feed, §10). Cursor = last version in the page, or
      * `since` when empty. The legacy `/store/catalog/changes` path serves the
      * same revocation-only feed so a not-yet-updated tablet keeps its remote lock.
      */
@@ -256,6 +266,40 @@ fun Route.storeRoutes(config: CloudConfig) {
         call.respond(response)
     }
     get("/store/revocations", revocations)
+
+    /**
+     * The menu feed (CONTRACT §10): the manager portal's menu edits for THIS
+     * store, in seq order, after `since`. Pulling it is how a store says it
+     * takes portal edits (venues.menu_sync_at); the cursor it asks from is
+     * what it has applied (the portal's "waiting for the store" count).
+     */
+    get("/store/menu/changes") {
+        val scope = requireStore(call)
+        val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0
+        val response = transaction {
+            Venues.update({ (Venues.tenantId eq scope.tenantId) and (Venues.id eq scope.venueId) }) {
+                it[menuSyncAt] = dev.dwhipstock.poscloud.CloudTime.now()
+                it[menuCursor] = since
+            }
+            val rows = dev.dwhipstock.poscloud.db.MenuFeed.selectAll().where {
+                (dev.dwhipstock.poscloud.db.MenuFeed.tenantId eq scope.tenantId) and
+                    (dev.dwhipstock.poscloud.db.MenuFeed.venueId eq scope.venueId) and
+                    (dev.dwhipstock.poscloud.db.MenuFeed.seq greater since)
+            }.orderBy(dev.dwhipstock.poscloud.db.MenuFeed.seq).limit(CHANGES_PAGE).toList()
+            MenuChangesResponse(
+                cursor = rows.lastOrNull()?.get(dev.dwhipstock.poscloud.db.MenuFeed.seq) ?: since,
+                serverTimeMs = System.currentTimeMillis(),
+                changes = rows.map {
+                    MenuChangeDto(
+                        it[dev.dwhipstock.poscloud.db.MenuFeed.seq], it[dev.dwhipstock.poscloud.db.MenuFeed.entity],
+                        it[dev.dwhipstock.poscloud.db.MenuFeed.entityId],
+                        Json.parseToJsonElement(it[dev.dwhipstock.poscloud.db.MenuFeed.data]),
+                    )
+                },
+            )
+        }
+        call.respond(response)
+    }
     get("/store/catalog/changes", revocations)
 
     /**

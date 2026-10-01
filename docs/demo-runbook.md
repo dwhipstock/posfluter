@@ -41,8 +41,9 @@ It (idempotently):
 
 Open the portal at `http://<Mac LAN IP>:3000`. The header's store picker offers
 **All stores** (default, combined, with a per-store breakdown on sales and
-reports) or one store; the choice is kept in the URL (`?store=plateau`). Menu
-and staff are read-only in the portal — each store edits them on its own POS.
+reports) or one store; the choice is kept in the URL (`?store=plateau`). Staff
+are read-only in the portal; the **menu can be edited in the portal** too (see
+[Editing the menu from the portal](#editing-the-menu-from-the-portal)).
 
 Portal sign-in enrolls MFA (TOTP) on first login by default. For a local demo
 only, set `TOTP_REQUIRED=false` in `.env.local` (passed to the API by
@@ -55,6 +56,43 @@ server `9999`.
 The old Mac `store` container is no longer started (compose profile
 `mac-store`). Do not start it next to the tablet: the tablet was imported from
 that database, so both would push as the same store.
+
+## Editing the menu from the portal
+
+The menu syncs both ways (docs/architecture.md, "Sync direction"). In the
+portal's **Menu** page an owner or manager gets **Add item** and
+**Categories**, and can click any item to edit its names (every language),
+description, category, availability (86), alcohol flag and sizes/prices, or
+delete it. With one store picked the change is for that store; with **All
+stores** it goes to every store that carries the item.
+
+Demo, with Plateau running (`scripts/demo-up.sh`):
+
+1. Portal → Menu → pick **Plateau** → click *Copper Amber Ale* → change the
+   pint to $9.25 → Save. The banner says "1 change waiting for the store"
+   until the store's next sync (10 s), then it clears.
+2. On the POS (`flutter run -d macos`) the new price is on the item; a check
+   that already had the ale keeps the old price on that line. A guest QR
+   menu or staff phone that is open refreshes within 15 s.
+3. On the POS change the ale's name; the portal shows it after the next sync.
+4. Same field on both sides: the later edit wins in both places.
+5. Delete an item in the portal that is on an open check: the check keeps it
+   and can be paid; the POS can't ring it again ("no longer available").
+6. Stop the store (`scripts/demo-down.sh` or kill the Plateau process), edit
+   in the portal, start it again: it catches up. Offline tablet edits reach
+   the portal once the Mac is online again.
+
+A store whose app predates this (the tablet before its update) shows "this
+store's app needs an update" and its menu stays tablet-only until it is
+updated — **deploy the cloud first, then update the stores**.
+
+Local end-to-end check of all of this against throwaway servers (local
+Postgres, a temp SQLite; nothing hosted is touched):
+
+```sh
+(cd cloud/api && ./gradlew installDist) && (cd server && ./gradlew installDist)
+python3 scripts/e2e/menu_sync_local.py
+```
 
 ## Copper Lantern moved to Raleigh (existing devices)
 

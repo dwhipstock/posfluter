@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../api.dart' show Item, Category;
+import '../menu_changes.dart' show RejectedLine;
 
 /// What a kiosk order came back as: the guest's order number (#101), the
 /// same one they pay with at the counter and are called by at pickup.
@@ -16,12 +17,17 @@ class KioskOrderResult {
 
   /// The store printed the guest a ticket: "Take your ticket to the counter".
   final bool ticket;
+
+  /// Lines the store left out because the menu changed under the order
+  /// (taken off, or a new price); the totals cover only what was placed.
+  final List<RejectedLine> rejected;
   const KioskOrderResult(
     this.orderNumber,
     this.totalCents,
     this.idCheckAtCounter, {
     this.displayNumber,
     this.ticket = false,
+    this.rejected = const [],
   });
   factory KioskOrderResult.fromJson(Map<String, dynamic> j) => KioskOrderResult(
     (j['orderNumber'] as num).toInt(),
@@ -29,6 +35,7 @@ class KioskOrderResult {
     j['idCheckAtCounter'] == true,
     displayNumber: j['displayNumber'] as String?,
     ticket: j['ticket'] == true,
+    rejected: RejectedLine.listFrom(j),
   );
 
   String get label => displayNumber ?? '$orderNumber';
@@ -77,7 +84,15 @@ class KioskApiException implements Exception {
   final int status;
   final String? code;
   final String message;
-  const KioskApiException(this.status, this.code, this.message);
+
+  /// lines_rejected: every line the store refused (nothing was placed).
+  final List<RejectedLine> rejected;
+  const KioskApiException(
+    this.status,
+    this.code,
+    this.message, {
+    this.rejected = const [],
+  });
 
   /// The store no longer knows this kiosk (never paired, or revoked).
   bool get notPaired => status == 401;
@@ -128,6 +143,7 @@ class KioskApi {
       res.statusCode,
       m['code'] as String?,
       m['error'] as String? ?? 'HTTP ${res.statusCode}',
+      rejected: RejectedLine.listFrom(m),
     );
   }
 
@@ -170,6 +186,22 @@ class KioskApi {
     for (final c in (await _send('GET', '/categories')) as List)
       Category.fromJson(c as Map<String, dynamic>),
   ];
+
+  /// The store's menu version (it moves on any menu change); null when the
+  /// store is too old to say or can't be reached.
+  Future<int?> menuVersion() async {
+    try {
+      final j = await _send(
+        'GET',
+        '/menu/version',
+        null,
+        const Duration(seconds: 4),
+      );
+      return j is Map ? (j['version'] as num?)?.toInt() : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// [mode] DINE_IN | TAKE_OUT. Lines: itemId, variantId, qty. [lang]: the
   /// guest's language, for the ticket the store prints.

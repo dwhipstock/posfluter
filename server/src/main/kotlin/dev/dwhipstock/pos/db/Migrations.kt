@@ -33,6 +33,7 @@ object Migrations {
         Script(MenuCategoryMigration.VERSION, MenuCategoryMigration.NAME, "") { MenuCategoryMigration.run(this) },
         Script(MenuPriceMigration.VERSION, MenuPriceMigration.NAME, "") { MenuPriceMigration.run(this) },
         Script(MenuTextMigration.VERSION, MenuTextMigration.NAME, "") { MenuTextMigration.run(this) },
+        Script(MenuClockBaselineMigration.VERSION, MenuClockBaselineMigration.NAME, "") { MenuClockBaselineMigration.run(this) },
     )
 
     /** [through] is a test seam: stop after that version to build an older database. */

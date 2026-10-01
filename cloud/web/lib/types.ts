@@ -7,6 +7,10 @@ export interface Me {
   /** The tenant's first store; prefer tenantName for the group. */
   venueName: string;
   tenantName: string;
+  /** owner | manager | viewer; absent from older servers (read as owner). */
+  role?: "owner" | "manager" | "viewer";
+  /** Owners and managers may edit the menu; absent from older servers. */
+  canEditMenu?: boolean;
 }
 
 /** ISO 4217 code: "CAD", "USD". An older API omits it on rows → CAD. */
@@ -592,6 +596,8 @@ export interface MenuItem {
   id: string;
   nameFr: string;
   nameEn: string;
+  descriptionFr?: string;
+  descriptionEn?: string;
   categoryId: string;
   abbrev: string;
   isAlcohol: boolean;
@@ -641,6 +647,37 @@ export interface PagedList {
   limit?: number | null;
   /** Present on a paged / filtered request. */
   facets?: CatalogFacets | null;
+}
+
+/** Two-way menu sync (CONTRACT §10): whether the portal may edit, per store. */
+export interface MenuSyncStore {
+  venueId: string;
+  name: string;
+  /** false = the store's app predates two-way sync; edits would never reach it. */
+  editable: boolean;
+  lastPullAt: string | null;
+  /** Portal edits the store has not pulled yet (it's offline, or about to sync). */
+  pending: number;
+}
+
+export interface MenuSyncStatus {
+  canEdit: boolean;
+  role: string;
+  stores: MenuSyncStore[];
+}
+
+export type MenuSkipReason =
+  | "store_not_upgraded"
+  | "not_found"
+  | "category_not_found"
+  | "last_variant"
+  | "category_not_empty";
+
+export interface MenuEditResult {
+  applied: string[];
+  skipped: { venueId: string; reason: MenuSkipReason | string }[];
+  id?: string | null;
+  duplicate?: boolean;
 }
 
 export interface MenuResponse extends PagedList {

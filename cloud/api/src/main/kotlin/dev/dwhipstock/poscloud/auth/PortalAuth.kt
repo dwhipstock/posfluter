@@ -97,7 +97,13 @@ fun sweepExpiredSessions(policy: SessionPolicy, now: OffsetDateTime = dev.dwhips
             (lastUsedAt less now.minusMinutes(policy.idleMinutes))
     }
 
-data class Principal(val tenantId: String, val userId: Long, val email: String, val displayName: String)
+data class Principal(
+    val tenantId: String, val userId: Long, val email: String, val displayName: String,
+    /** owner | manager | viewer (027): owners and managers may edit the menu. */
+    val role: String = "owner",
+) {
+    val canEditMenu: Boolean get() = role == "owner" || role == "manager"
+}
 
 fun hashPassword(password: String): String =
     BCrypt.withDefaults().hashToString(BCRYPT_COST, password.toCharArray())
@@ -175,7 +181,7 @@ private fun resolveSession(hash: String, policy: SessionPolicy, background: Bool
         ?: throw UnauthorizedException()
     return Principal(
         row[PortalSessions.tenantId], user[PortalUsers.id],
-        user[PortalUsers.email], user[PortalUsers.displayName],
+        user[PortalUsers.email], user[PortalUsers.displayName], user[PortalUsers.role],
     )
 }
 
@@ -260,7 +266,10 @@ private data class ConfirmResponse(val ok: Boolean = true, val backupCodes: List
 
 @Serializable
 /** venueName = the tenant's first store (kept for older portals); tenantName = the group. */
-private data class MeResponse(val email: String, val displayName: String, val venueName: String, val tenantName: String)
+private data class MeResponse(
+    val email: String, val displayName: String, val venueName: String, val tenantName: String,
+    val role: String = "owner", val canEditMenu: Boolean = true,
+)
 
 fun Route.authRoutes(config: CloudConfig) {
     val policy = SessionPolicy.from(config)
@@ -355,7 +364,8 @@ fun Route.authRoutes(config: CloudConfig) {
         val principal = requirePortal(call)
         val venueName = transaction { venueNameOf(principal.tenantId) } ?: config.venueName
         val tenantName = transaction { tenantNameOf(principal.tenantId) } ?: venueName
-        call.respond(MeResponse(principal.email, principal.displayName, venueName, tenantName))
+        call.respond(MeResponse(principal.email, principal.displayName, venueName, tenantName,
+            principal.role, principal.canEditMenu))
     }
 }
 

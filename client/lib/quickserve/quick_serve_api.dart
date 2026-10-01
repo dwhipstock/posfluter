@@ -92,6 +92,7 @@ class QuickServeApi {
     String variantId,
     int qty, {
     String? note,
+    int? expectedPriceCents,
   }) async => CounterOrder.fromJson(
     await Api._post('/counter/orders', {
       'serviceMode': mode,
@@ -99,6 +100,7 @@ class QuickServeApi {
       'variantId': variantId,
       'qty': qty,
       'note': ?note,
+      'expectedPriceCents': ?expectedPriceCents,
     }),
   );
 

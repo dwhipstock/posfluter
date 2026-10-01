@@ -306,10 +306,11 @@ object Projections {
     }
 
     /**
-     * Store menu edit → mirror it for display (one-way sync: the tablet owns the
-     * menu, nothing is redistributed). Legacy origin:"cloud" echoes (from the
-     * era when the portal edited the menu) are audit-only: the state they carry
-     * already landed in the mirror when the portal edit was made.
+     * Store menu edit → merged field by field into the cloud's copy (two-way
+     * menu sync, CONTRACT §10). `origin: "cloud"` events are the store's
+     * record of applying a portal edit (or a legacy echo from before one-way
+     * sync): audit-only, never applied — the state they carry is already here,
+     * and applying them would be an echo.
      */
     private fun itemEvent(scope: Scope, p: JsonObject) {
         if (p.str("origin") == "cloud") return
@@ -325,7 +326,7 @@ object Projections {
 
     private fun categoriesReordered(scope: Scope, p: JsonObject) {
         if (p.str("origin") == "cloud") return
-        p.arr("categories")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyCategorySnapshot(scope, it) }
+        p.arr("categories")?.filterIsInstance<JsonObject>()?.let { Catalog.applyCategorySnapshots(scope, it) }
     }
 
     /**
@@ -335,7 +336,8 @@ object Projections {
      * removed (deletions arrive as item.deleted snapshots).
      */
     private fun catalogSnapshot(scope: Scope, p: JsonObject) {
-        p.arr("categories")?.filterIsInstance<JsonObject>()?.forEach { Catalog.applyCategorySnapshot(scope, it) }
+        if (p.str("origin") == "cloud") return
+        p.arr("categories")?.filterIsInstance<JsonObject>()?.let { Catalog.applyCategorySnapshots(scope, it) }
         p.arr("items")?.filterIsInstance<JsonObject>()?.let { Catalog.applyItemSnapshots(scope, it) }
         p.arr("zones")?.filterIsInstance<JsonObject>()?.forEach { zone ->
             zone.str("id")?.let { Catalog.applyZoneNames(scope, it, zone) }

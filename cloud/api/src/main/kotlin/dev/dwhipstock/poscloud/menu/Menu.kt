@@ -21,9 +21,9 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 
 /**
- * The portal's menu view: a READ-ONLY mirror of what each store pushes up
- * (one-way sync — the tablet owns its menu; CONTRACT §2). Nothing here writes
- * the catalog or sends anything down to a store.
+ * The portal's menu view: each store's menu as the cloud knows it — what the
+ * store pushed up merged with the portal's own edits (two-way menu sync,
+ * CONTRACT §10; the edits are in MenuEdits.kt). Reads only.
  */
 
 @Serializable

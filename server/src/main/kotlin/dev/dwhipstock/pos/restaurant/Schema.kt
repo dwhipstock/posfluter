@@ -124,6 +124,17 @@ object CheckLines : IntIdTable("check_lines") {
     val fuelSaleId = integer("fuel_sale_id").nullable().databaseGenerated()
     // the variant's cost at ring-up (047), like the price; NULL = unknown
     val unitCostCents = long("unit_cost_cents").nullable().databaseGenerated()
+    // the menu as rung (059, LineSnapshot): names, size labels, category,
+    // extra-language names (JSON {lang: text}) and whether the size is shown.
+    // databaseGenerated: an insert that doesn't set them works on any schema version
+    val nameFr = varchar("name_fr", 200).nullable().databaseGenerated()
+    val nameEn = varchar("name_en", 200).nullable().databaseGenerated()
+    val variantLabelFr = varchar("variant_label_fr", 100).nullable().databaseGenerated()
+    val variantLabelEn = varchar("variant_label_en", 100).nullable().databaseGenerated()
+    val categoryId = varchar("category_id", 64).nullable().databaseGenerated()
+    val namesJson = text("names_json").nullable().databaseGenerated()
+    val variantNamesJson = text("variant_names_json").nullable().databaseGenerated()
+    val showVariant = bool("show_variant").nullable().databaseGenerated()
 }
 
 /**

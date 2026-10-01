@@ -143,14 +143,17 @@ class CatalogCrudTest {
         c.delete("/items/lantern-lager/variants/lantern-lager:pitcher")
             .let { assertEquals(HttpStatusCode.OK, it.status) }
 
-        // ordering the deleted size now 404s; the surviving sizes still work
+        // ordering the deleted size is now refused as no longer available; the surviving sizes still work
         assertEquals(HttpStatusCode.Created, c.postJson("/tables/t2/checks", "{}").status)
         val newCheck = json.parseToJsonElement(c.get("/zones").bodyAsText()).jsonArray
         assertTrue(newCheck.isNotEmpty()) // sanity
         val open = json.parseToJsonElement(c.postJson("/tables/t2/checks", "{}").bodyAsText())
             .jsonObject["id"]!!.jsonPrimitive.int
-        assertEquals(HttpStatusCode.NotFound, c.postJson("/checks/$open/lines",
-            """{"itemId":"lantern-lager","variantId":"lantern-lager:pitcher","qty":1}""").status)
+        c.postJson("/checks/$open/lines",
+            """{"itemId":"lantern-lager","variantId":"lantern-lager:pitcher","qty":1}""").let {
+            assertEquals(HttpStatusCode.Conflict, it.status)
+            assertTrue("item_unavailable" in it.bodyAsText())
+        }
         assertEquals(HttpStatusCode.Created, c.postJson("/checks/$open/lines",
             """{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}""").status)
     }

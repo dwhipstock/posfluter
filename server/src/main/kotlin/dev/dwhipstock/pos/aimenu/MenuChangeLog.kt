@@ -278,7 +278,8 @@ internal object MenuChangeLog {
                         descriptionFr = before.s("descriptionFr"), descriptionEn = before.s("descriptionEn"),
                         categoryId = before.s("categoryId"), active = before["active"]!!.jsonPrimitive.boolean))
                 }
-                "variant" to "update" -> CatalogOps.patchVariant(before!!.s("itemId"), id,
+                // a size deleted since (e.g. from the manager portal) stays deleted
+                "variant" to "update" -> if (variantLive(id)) CatalogOps.patchVariant(before!!.s("itemId"), id,
                     VariantPatchRequest(priceCents = before["priceCents"]!!.jsonPrimitive.long))
                 "category" to "update" -> CatalogOps.patchCategory(id,
                     CategoryPatchRequest(nameFr = before!!.s("nameFr"), nameEn = before.s("nameEn")))
@@ -305,6 +306,9 @@ internal object MenuChangeLog {
         }
         return rows.size
     }
+
+    private fun variantLive(variantId: String): Boolean =
+        ItemVariants.selectAll().where { (ItemVariants.id eq variantId) and ItemVariants.deletedAt.isNull() }.any()
 
     private fun restoreIfDeleted(itemId: String, before: JsonObject) {
         val deletedNow = itemState(itemId)?.get("deleted")?.jsonPrimitive?.boolean ?: return

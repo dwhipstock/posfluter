@@ -176,6 +176,8 @@ private fun isOpenRoute(path: String, method: HttpMethod): Boolean =
         (method == HttpMethod.Post && (path == "/staff-app/login" || path == "/staff-app/totp")) ||
         path.startsWith("/m/") ||
         (method == HttpMethod.Get && path == "/items") ||
+        // the menu's change counter: guest, kiosk and staff menus poll it to refresh
+        (method == HttpMethod.Get && path == "/menu/version") ||
         (method == HttpMethod.Get && path == "/categories") ||
         (method == HttpMethod.Get && path == "/staff") ||
         (method == HttpMethod.Get && path.matches(Regex("/photos/[^/]+"))) ||

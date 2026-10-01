@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api.dart' show Item, Category, Variant;
+import '../menu_changes.dart';
 import 'kiosk_api.dart';
 
 enum KioskStage {
@@ -31,11 +32,25 @@ enum KioskStage {
 }
 
 class KioskLine {
-  final Item item;
-  final Variant variant;
+  Item item;
+  Variant variant;
   int qty;
+
+  /// The price changed since the guest added it: shown, and confirmed before
+  /// the order can go.
+  bool repriced = false;
   KioskLine(this.item, this.variant, this.qty);
   int get totalCents => variant.priceCents * qty;
+}
+
+/// Something the menu change did to the cart, told to the guest.
+class KioskNotice {
+  /// removed | repriced
+  final String kind;
+  final Item? item;
+  final String fallbackName;
+  final int? priceCents;
+  const KioskNotice(this.kind, this.item, this.fallbackName, [this.priceCents]);
 }
 
 /// One row of the "Add a drink?" step: the store's reason ("drink", "side",
@@ -92,6 +107,15 @@ class KioskController extends ChangeNotifier {
   /// The "Add a drink?" rows being shown; asked for once per order.
   List<KioskOffer> offers = const [];
   bool _offered = false;
+
+  /// What a menu change did to this cart (removed items, new prices).
+  final List<KioskNotice> notices = [];
+
+  /// A line's price changed: the guest confirms before placing the order.
+  bool get needsPriceConfirm => cart.any((l) => l.repriced);
+
+  /// Polls the store's menu version while an order is open.
+  MenuVersionPoller? _menuPoll;
 
   KioskApi? _api;
   KioskApi? get api => _api;
@@ -227,6 +251,8 @@ class KioskController extends ChangeNotifier {
   void _toWelcome() {
     _idle?.cancel();
     _done?.cancel();
+    _menuPoll?.pause();
+    notices.clear();
     cart.clear();
     mode = null;
     result = null;
@@ -267,7 +293,128 @@ class KioskController extends ChangeNotifier {
     }
     stage = KioskStage.mode;
     touch();
+    // the menu can change mid-order (the counter 86es something, the
+    // manager portal edits a price): keep the menu and the cart current
+    final api = _api;
+    if (api != null) {
+      _menuPoll ??= MenuVersionPoller(
+        fetch: api.menuVersion,
+        onChange: refreshMenu,
+      );
+      _menuPoll!.start();
+    }
     _changed();
+  }
+
+  /// Reload the menu and line the cart up with it: gone items leave the cart
+  /// (with a notice), new prices are shown and need a confirm; the upsell
+  /// only offers what is still on sale.
+  Future<void> refreshMenu() async {
+    if (_api == null) return;
+    try {
+      await _loadMenu();
+    } catch (_) {
+      return; // offline: the next poll tries again
+    }
+    applyMenuToCart();
+    if (category != null && !shownCategories.any((c) => c.id == category)) {
+      final shown = shownCategories;
+      category = shown.isEmpty ? null : shown.first.id;
+    }
+    _changed();
+  }
+
+  /// The cart against [items] (just loaded). Public for tests.
+  void applyMenuToCart() {
+    final checks = checkAgainstMenu([
+      for (final l in cart)
+        (
+          itemId: l.item.id,
+          variantId: l.variant.id,
+          priceCents: l.variant.priceCents,
+        ),
+    ], items);
+    final gone = <KioskLine>[];
+    for (var i = 0; i < cart.length; i++) {
+      final l = cart[i];
+      final c = checks[i];
+      switch (c.fate) {
+        case LineFate.unavailable:
+          gone.add(l);
+          notices.add(KioskNotice('removed', l.item, l.item.nameEn));
+        case LineFate.repriced:
+          l.item = c.item!;
+          l.variant = c.variant!;
+          l.repriced = true;
+          notices.add(
+            KioskNotice(
+              'repriced',
+              l.item,
+              l.item.nameEn,
+              c.variant!.priceCents,
+            ),
+          );
+        case LineFate.ok:
+          l.item = c.item!;
+          l.variant = c.variant!;
+      }
+    }
+    cart.removeWhere(gone.contains);
+    // suggestions: only items still on sale
+    final byId = {for (final i in items) i.id: i};
+    offers = [
+      for (final o in offers)
+        if ([
+              for (final i in o.items)
+                if (byId[i.id] case final n?
+                    when n.active && n.variants.isNotEmpty)
+                  n,
+            ]
+            case final shown when shown.isNotEmpty)
+          KioskOffer(o.reason, o.categoryId, shown),
+    ];
+    if (stage == KioskStage.upsell && offers.isEmpty) {
+      stage = cart.isEmpty ? KioskStage.menu : KioskStage.cart;
+    }
+    if (cart.isEmpty && stage == KioskStage.cart) stage = KioskStage.menu;
+  }
+
+  /// The guest saw the new prices: the order can go.
+  void acceptNewPrices() {
+    for (final l in cart) {
+      l.repriced = false;
+    }
+    notices.clear();
+    _changed();
+  }
+
+  /// Notices read (the removed-items note): clear them.
+  void dismissNotices() {
+    notices.removeWhere((n) => n.kind == 'removed');
+    _changed();
+  }
+
+  /// The store refused lines (nothing placed): drop the gone ones, reprice
+  /// the others for a confirm.
+  void _applyRejected(List<RejectedLine> rejected) {
+    final lines = List.of(cart);
+    for (final r in rejected) {
+      final l = r.index >= 0 && r.index < lines.length ? lines[r.index] : null;
+      if (l == null) continue;
+      if (r.isPriceChange) {
+        l.variant = Variant(
+          l.variant.id,
+          l.variant.labelFr,
+          l.variant.labelEn,
+          r.priceCents!,
+        );
+        l.repriced = true;
+        notices.add(KioskNotice('repriced', l.item, r.nameEn, r.priceCents));
+      } else {
+        cart.remove(l);
+        notices.add(KioskNotice('removed', l.item, r.nameEn));
+      }
+    }
   }
 
   void chooseMode(String m) {
@@ -308,7 +455,13 @@ class KioskController extends ChangeNotifier {
 
   List<Map<String, dynamic>> get _lines => [
     for (final l in cart)
-      {'itemId': l.item.id, 'variantId': l.variant.id, 'qty': l.qty},
+      {
+        'itemId': l.item.id,
+        'variantId': l.variant.id,
+        'qty': l.qty,
+        // the price the guest saw: a change since is refused, never charged
+        'expectedPriceCents': l.variant.priceCents,
+      },
   ];
 
   /// To the cart. The first time in an order, the store is asked what to
@@ -387,7 +540,7 @@ class KioskController extends ChangeNotifier {
   /// Sends at once — no review, no confirmation. The number, then welcome.
   Future<void> placeOrder() async {
     final api = _api;
-    if (api == null || cart.isEmpty || busy) return;
+    if (api == null || cart.isEmpty || busy || needsPriceConfirm) return;
     busy = true;
     message = null;
     _changed();
@@ -395,9 +548,26 @@ class KioskController extends ChangeNotifier {
       result = await api.placeOrder(mode ?? 'TAKE_OUT', _lines, lang: lang);
       busy = false;
       _idle?.cancel();
+      _menuPoll?.pause();
       cart.clear();
+      notices.clear();
       stage = KioskStage.done;
-      _done = Timer(doneFor, _toWelcome);
+      // a few seconds more to read what was left out
+      _done = Timer(
+        result!.rejected.isEmpty ? doneFor : doneFor * 2,
+        _toWelcome,
+      );
+      _changed();
+    } on KioskApiException catch (e) {
+      busy = false;
+      if (e.code == 'lines_rejected' && e.rejected.isNotEmpty) {
+        // nothing was placed: show what changed, keep the rest for a retry
+        _applyRejected(e.rejected);
+        if (cart.isEmpty) stage = KioskStage.menu;
+        unawaited(refreshMenu());
+      } else {
+        message = 'send_failed';
+      }
       _changed();
     } catch (_) {
       busy = false;
@@ -411,6 +581,7 @@ class KioskController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _menuPoll?.dispose();
     _idle?.cancel();
     _done?.cancel();
     super.dispose();

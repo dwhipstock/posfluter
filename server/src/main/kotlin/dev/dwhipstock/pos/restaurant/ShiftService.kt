@@ -310,23 +310,27 @@ class ShiftService(private val config: CustomerConfig) {
 
         // item mix over ACTIVE lines of closed checks. TODO: separate top-by-qty view
         // inner join to Items: open lines (null item_id) drop out of the mix on
-        // purpose (revenue still counts them via the locked grand total)
+        // purpose (revenue still counts them via the locked grand total).
+        // Named as rung (LineSnapshot, 059): a renamed or deleted item reports
+        // under the name it was sold as.
         val qty = CheckLines.qty.sum()
         val lineRevenue = with(SqlExpressionBuilder) {
             CheckLines.unitPriceCents.times(CheckLines.qty.castTo<Long>(LongColumnType()))
         }.sum()
         val firstLine = CheckLines.id.min()
+        val soldFr = org.jetbrains.exposed.sql.Coalesce(CheckLines.nameFr, Items.nameFr)
+        val soldEn = org.jetbrains.exposed.sql.Coalesce(CheckLines.nameEn, Items.nameEn)
         val itemMix = (CheckLines innerJoin Items)
-            .select(CheckLines.itemId, Items.nameFr, Items.nameEn, qty, lineRevenue, firstLine)
+            .select(CheckLines.itemId, soldFr, soldEn, qty, lineRevenue, firstLine)
             .where { (CheckLines.checkId inSubQuery ids) and (CheckLines.status eq "ACTIVE") }
-            .groupBy(CheckLines.itemId, Items.nameFr, Items.nameEn)
+            .groupBy(CheckLines.itemId, soldFr, soldEn)
             .toList()
             .sortedBy { it[firstLine]?.value ?: 0 }
             .map {
                 ItemMixEntry(
                     itemId = it[CheckLines.itemId]!!,
-                    nameFr = it[Items.nameFr],
-                    nameEn = it[Items.nameEn],
+                    nameFr = it[soldFr] ?: "?",
+                    nameEn = it[soldEn] ?: "?",
                     qty = it[qty] ?: 0,
                     revenueCents = it[lineRevenue] ?: 0L,
                 )
