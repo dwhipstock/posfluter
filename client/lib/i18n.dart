@@ -4078,12 +4078,19 @@ class L {
       'Nicht gefunden',
       'Nie gevind nie',
     ),
-    'bad_request' => _t(
+    'bad_request' || 'bad_body' => _t(
       'Demande invalide',
       'Invalid request',
       'Solicitud no válida',
       'Ungültige Anfrage',
       'Ongeldige versoek',
+    ),
+    'kiosk_not_found' => _t(
+      'Cette borne n’est plus jumelée',
+      'This kiosk is no longer paired',
+      'Este quiosco ya no está vinculado',
+      'Dieses Bestellterminal ist nicht mehr gekoppelt',
+      'Hierdie kiosk is nie meer gekoppel nie',
     ),
     'rate_limited' => _t(
       'Trop de tentatives échouées — réessayez plus tard',

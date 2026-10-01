@@ -316,4 +316,77 @@ class CloudSyncTest {
         sync.tick()
         assertTrue(t.inner.batches.flatten().any { it.eventType == "check.closed" })
     }
+
+    // ------------------------------------------------------------ poison pill (redteam/inputs)
+
+    /** A cloud that answers 500 to any batch holding a [poisoned] aggregate (an older cloud, or any event it cannot store). */
+    private class PoisonTransport(private val poisoned: String, var down: Boolean = false) : CloudTransport by FakeTransport() {
+        val delivered = mutableListOf<PushEvent>()
+        override fun push(installId: String, events: List<PushEvent>): PushResult {
+            if (down || events.any { it.aggregateId == poisoned }) return PushResult(false, "HTTP 500 internal", 500)
+            delivered += events
+            return PushResult(true, status = 200)
+        }
+    }
+
+    @Test
+    fun aNulInANoteNeverReachesTheCloud() {
+        freshDb()
+        transaction {
+            Outbox.write("check.pending_line_submitted", "check", "1", buildJsonObject {
+                put("checkId", 1); put("note", "gravy\u0000 please"); put("text", "two\nlines")
+            })
+        }
+        val t = FakeTransport()
+        CloudSync(t, InMemoryPhotoStore()).drainOnce()
+        val p = t.batches.flatten().single { it.eventType == "check.pending_line_submitted" }.payload
+        assertEquals("gravy please", p["note"]!!.jsonPrimitive.content)
+        assertEquals("two\nlines", p["text"]!!.jsonPrimitive.content) // line breaks are not the problem: kept
+    }
+
+    @Test
+    fun anEventTheCloudKeepsRefusingIsSetAsideAndTheEventsAfterItSync() {
+        freshDb()
+        seedEvent("check.closed", "1")
+        seedEvent("check.line_added", "poison")
+        seedEvent("check.closed", "3")
+        seedEvent("check.closed", "4")
+        val t = PoisonTransport("poison")
+        val sync = CloudSync(t, InMemoryPhotoStore())
+        // refused: the outbox waits, a few ticks, as for any outage
+        repeat(CloudSync.ISOLATE_AFTER_FAILURES - 1) { sync.drainOnce() }
+        assertTrue(t.delivered.isEmpty())
+        assertEquals(null, state(CloudSync.PUSH_QUARANTINE))
+        // still refused: one event at a time, the poison set aside, the rest delivered
+        sync.drainOnce()
+        val ids = t.delivered.filter { it.eventType.startsWith("check.") }.map { it.aggregateId }
+        assertEquals(listOf("1", "3", "4"), ids)
+        val poisonSeq = transaction {
+            SyncOutbox.selectAll().single { it[SyncOutbox.aggregateId] == "poison" }[SyncOutbox.id].value
+        }
+        assertEquals(poisonSeq.toString(), state(CloudSync.PUSH_QUARANTINE))
+        val lastSeq = transaction { SyncOutbox.selectAll().maxOf { it[SyncOutbox.id].value } }
+        assertEquals(lastSeq.toString(), state(CloudSync.PUSH_HWM))
+        // later sales sync as normal
+        seedEvent("check.closed", "5")
+        sync.drainOnce()
+        assertEquals("5", t.delivered.last().aggregateId)
+    }
+
+    @Test
+    fun aCloudThatRefusesEverythingSetsNothingAside() {
+        freshDb()
+        seedEvent("check.closed", "1")
+        seedEvent("check.closed", "2")
+        val t = PoisonTransport("none", down = true)
+        val sync = CloudSync(t, InMemoryPhotoStore())
+        repeat(CloudSync.ISOLATE_AFTER_FAILURES + 3) { sync.drainOnce() }
+        assertTrue(t.delivered.isEmpty())
+        assertEquals(null, state(CloudSync.PUSH_QUARANTINE))
+        assertEquals(null, state(CloudSync.PUSH_HWM))
+        // back up: everything goes, in order, nothing lost
+        t.down = false
+        sync.drainOnce()
+        assertEquals(listOf("1", "2"), t.delivered.filter { it.eventType == "check.closed" }.map { it.aggregateId })
+    }
 }

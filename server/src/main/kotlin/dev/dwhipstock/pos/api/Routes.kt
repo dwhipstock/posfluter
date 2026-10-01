@@ -295,7 +295,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
     post("/m/t/{token}/pending-lines") {
         val tableId = customerTable(call)
             ?: throw NotFoundException("unknown table link", "table_link_invalid")
-        val req = call.receive<SubmitPendingRequest>()
+        val req = call.receivePublic<SubmitPendingRequest>()
         call.respond(HttpStatusCode.Created, checkService.submitPendingLines(tableId, req.lines))
     }
 

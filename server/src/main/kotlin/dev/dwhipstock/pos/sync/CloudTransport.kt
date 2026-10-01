@@ -13,7 +13,8 @@ data class PushEvent(
     val payload: JsonObject,
 )
 
-data class PushResult(val ok: Boolean, val detail: String = "")
+/** [status]: the cloud's HTTP answer when it answered (null = no answer: offline, timeout). */
+data class PushResult(val ok: Boolean, val detail: String = "", val status: Int? = null)
 
 /** One cloud → store change (§4). Only `device_revocation` is ever applied. */
 data class CloudChange(val version: Long, val kind: String, val op: String, val data: JsonObject)

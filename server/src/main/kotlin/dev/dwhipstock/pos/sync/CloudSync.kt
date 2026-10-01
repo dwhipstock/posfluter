@@ -64,6 +64,10 @@ class CloudSync(
         const val BATCH_LIMIT = 200
         /** A push also stops at about this much payload (a catalog chunk is ~100 KB). */
         const val BATCH_MAX_BYTES = 900_000
+        /** Seqs of outbox events the cloud kept refusing while later ones went through (comma separated). */
+        const val PUSH_QUARANTINE = "push_quarantine"
+        /** Refused this many ticks running (about 30 s), a batch is checked one event at a time. */
+        const val ISOLATE_AFTER_FAILURES = 3
     }
 
     /** Set by [capBatchBytes]: the last batch was cut by size, so more may be waiting. */
@@ -242,13 +246,14 @@ class CloudSync(
                             aggregateType = row[SyncOutbox.aggregateType],
                             aggregateId = row[SyncOutbox.aggregateId],
                             createdAt = VenueClock.iso(row[SyncOutbox.createdAt]),
-                            payload = parsePayload(row[SyncOutbox.payload]),
+                            // printable text only: one control character (a guest's
+                            // note with U+0000) once failed every batch it rode in
+                            payload = cleanPayload(parsePayload(row[SyncOutbox.payload])),
                         )
                     }
             }
             if (batch.isEmpty()) return
-            val result = runCatching { transport.push(installId(), batch) }
-                .getOrElse { PushResult(false, it.message ?: "transport error") }
+            val result = push(batch)
             if (!result.ok) {
                 if ("install_mismatch" in result.detail) {
                     // this database is not the one the cloud knows for this key —
@@ -256,15 +261,89 @@ class CloudSync(
                     // (restore the right DB, or reset the cloud's install id).
                     log.error("cloud refused push: install id mismatch — sync halted until resolved " +
                         "(see cloud/infra/README.md troubleshooting)")
-                } else {
-                    log.warn("push failed at hwm $hwm (${result.detail}); retrying next tick")
+                    return
                 }
+                log.warn("push failed at hwm $hwm (${result.detail}); retrying next tick")
+                failedTicks = if (failedAtHwm == hwm) failedTicks + 1 else 1
+                failedAtHwm = hwm
+                // the cloud answers but keeps refusing this batch: find out whether
+                // one event is to blame, so it cannot hold back every later sale
+                if (result.status != null && failedTicks >= ISOLATE_AFTER_FAILURES && isolate(batch)) continue
                 return
             }
+            failedTicks = 0
             setState(PUSH_HWM, batch.last().seq.toString())
             pushPhotosFor(batch)
             if (batch.size < BATCH_LIMIT && !batchWasCapped) return
         }
+    }
+
+    private fun push(events: List<PushEvent>): PushResult =
+        runCatching { transport.push(installId(), events) }
+            .getOrElse { PushResult(false, it.message ?: "transport error") }
+
+    /** Consecutive failed ticks at [failedAtHwm] (the same batch refused again and again). */
+    private var failedTicks = 0
+    private var failedAtHwm = -1L
+
+    /**
+     * The cloud answered but refused the same batch [ISOLATE_AFTER_FAILURES]
+     * ticks running: its events are sent one at a time. One delivered alone →
+     * on to the next. One refused alone → the event after it is sent alone,
+     * and only if THAT one goes through is the refused one to blame: it is set
+     * aside ([PUSH_QUARANTINE], logged as an error, still in the outbox to
+     * replay) and the drain goes on past it. If the next one is refused too,
+     * the cloud itself is in trouble and nothing is set aside: the outbox
+     * waits, as always. Returns true when the HWM moved.
+     */
+    private fun isolate(batch: List<PushEvent>): Boolean {
+        var moved = false
+        var i = 0
+        while (i < batch.size) {
+            val event = batch[i]
+            val alone = push(listOf(event))
+            if (alone.ok) {
+                delivered(listOf(event)); moved = true; i++
+                continue
+            }
+            val next = batch.getOrNull(i + 1) ?: break // nothing to compare with yet: wait for the next event
+            if (!push(listOf(next)).ok) break
+            transaction {
+                val before = SyncState.get(PUSH_QUARANTINE)?.takeIf { it.isNotBlank() }
+                SyncState.set(PUSH_QUARANTINE, listOfNotNull(before, event.seq.toString()).joinToString(","))
+            }
+            log.error("sync: event seq ${event.seq} (${event.eventType} ${event.aggregateType}/${event.aggregateId}) " +
+                "is refused by the cloud (${alone.detail.take(200)}) while the events after it go through; set aside " +
+                "(sync_state '$PUSH_QUARANTINE') so the rest keep syncing")
+            delivered(listOf(next)); moved = true; i += 2
+        }
+        if (moved) log.info("push: refused batch sent one event at a time; hwm now ${stateLong(PUSH_HWM)}")
+        return moved
+    }
+
+    private fun delivered(events: List<PushEvent>) {
+        failedTicks = 0
+        setState(PUSH_HWM, events.last().seq.toString())
+        pushPhotosFor(events)
+    }
+
+    /**
+     * Every string in [payload], however deep, without what Postgres cannot
+     * store (U+0000, lone surrogates: [dev.dwhipstock.pos.base.CleanText.storable]).
+     * Keys too. Everything else goes up exactly as written.
+     */
+    private fun cleanPayload(payload: JsonObject): JsonObject = cleanJson(payload) as JsonObject
+
+    private fun cleanJson(e: kotlinx.serialization.json.JsonElement): kotlinx.serialization.json.JsonElement = when (e) {
+        is JsonObject -> JsonObject(e.entries.associate { (k, v) ->
+            dev.dwhipstock.pos.base.CleanText.storable(k) to cleanJson(v)
+        })
+        is kotlinx.serialization.json.JsonArray -> kotlinx.serialization.json.JsonArray(e.map(::cleanJson))
+        is kotlinx.serialization.json.JsonPrimitive ->
+            if (e.isString) dev.dwhipstock.pos.base.CleanText.storable(e.content).let {
+                if (it === e.content) e else kotlinx.serialization.json.JsonPrimitive(it)
+            } else e
+        else -> e
     }
 
     /**

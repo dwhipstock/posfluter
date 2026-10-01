@@ -71,9 +71,9 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
             }
         }
         val res = postJson("/v1/ingest", body.toString())
-        return if (res.status == 200) PushResult(true)
+        return if (res.status == 200) PushResult(true, status = 200)
         // body carries the machine code (e.g. install_mismatch) — the loop keys off it
-        else PushResult(false, "HTTP ${res.status} ${res.text.take(200)}")
+        else PushResult(false, "HTTP ${res.status} ${res.text.take(200)}", res.status)
     }
 
     override fun heartbeat(

@@ -191,6 +191,8 @@ object CopperLanternExpressSeed {
                 it[id] = m.id; it[nameFr] = m.fr; it[nameEn] = m.en
                 it[descriptionFr] = m.dfr; it[descriptionEn] = m.den
                 it[categoryId] = m.category; it[abbrev] = m.abbrev; it[isAlcohol] = m.alcohol
+                // beer and wine are paid at the counter after an ID check (21+), kiosk orders too
+                it[ageRestricted] = m.alcohol
             }
             Translations.set(Translations.ITEM, m.id, "es", m.es, sync = false)
             Translations.set(Translations.ITEM, m.id, "de", m.de, sync = false)

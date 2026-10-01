@@ -529,6 +529,23 @@ fun Application.module(
             call.respond(HttpStatusCode.TooManyRequests,
                 mapOf("error" to (cause.message ?: "rate limited"), "code" to "rate_limited"))
         }
+        // a kiosk (or any keyed flood guard) sending faster than a person could
+        exception<dev.dwhipstock.pos.base.TooManyRequestsException> { call, cause ->
+            call.response.header(HttpHeaders.RetryAfter, cause.retryAfterSeconds.toString())
+            call.respond(HttpStatusCode.TooManyRequests,
+                mapOf("error" to (cause.message ?: "rate limited"), "code" to "rate_limited"))
+        }
+        // a body Ktor could not read as the route's type (not JSON, a missing
+        // or mistyped field, a bad parameter): the caller's mistake, a calm 400
+        // with no stack trace in the log
+        exception<io.ktor.server.plugins.BadRequestException> { call, _ ->
+            call.respond(HttpStatusCode.BadRequest,
+                mapOf("error" to "malformed request", "code" to "bad_body"))
+        }
+        exception<io.ktor.server.plugins.ContentTransformationException> { call, _ ->
+            call.respond(HttpStatusCode.BadRequest,
+                mapOf("error" to "malformed request body", "code" to "bad_body"))
+        }
         exception<IllegalArgumentException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest,
                 mapOf("error" to (cause.message ?: "bad request"), "code" to "bad_request"))

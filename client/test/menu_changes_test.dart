@@ -17,6 +17,7 @@ class _Store extends KioskApi {
   static int version = 1;
   static Object? orderAnswer;
   static final placed = <List<Map<String, dynamic>>>[];
+  static final orderIds = <String?>[];
 
   @override
   Future<KioskConfig> config() async =>
@@ -37,8 +38,10 @@ class _Store extends KioskApi {
     String mode,
     List<Map<String, dynamic>> lines, {
     String? lang,
+    String? clientOrderId,
   }) async {
     placed.add(lines);
+    orderIds.add(clientOrderId);
     final a = orderAnswer;
     if (a is KioskApiException) throw a;
     return a as KioskOrderResult;
@@ -138,6 +141,7 @@ void main() {
       ];
       _Store.version = 1;
       _Store.placed.clear();
+      _Store.orderIds.clear();
       c = KioskController(
         discover: () async => null,
         apiFactory: (u, t) => _Store(u, token: t),
@@ -208,6 +212,25 @@ void main() {
           1195,
           395,
         ]);
+      },
+    );
+
+    test(
+      'a retry of the same cart sends the same order id; a changed cart a new one',
+      () async {
+        _Store.orderAnswer = const KioskApiException(503, null, 'no answer');
+        await c.placeOrder();
+        await c.placeOrder();
+        expect(c.message, 'send_failed');
+        expect(_Store.orderIds, hasLength(2));
+        expect(_Store.orderIds[0], isNotNull);
+        expect(_Store.orderIds[1], _Store.orderIds[0]);
+        // the guest adds a burger: a different order
+        c.add(c.items[0], c.items[0].variants.first);
+        _Store.orderAnswer = const KioskOrderResult(103, 2390, false);
+        await c.placeOrder();
+        expect(_Store.orderIds[2], isNot(_Store.orderIds[0]));
+        expect(c.stage, KioskStage.done);
       },
     );
 

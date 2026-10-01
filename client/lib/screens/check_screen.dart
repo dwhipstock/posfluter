@@ -12,6 +12,7 @@ import '../kitchen/kitchen_i18n.dart';
 import '../menu_changes.dart';
 import '../widgets/menu_change_dialogs.dart';
 import '../quickserve/quick_serve_i18n.dart';
+import '../retail/age_check_dialog.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/print_language_picker.dart';
@@ -283,6 +284,35 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
+  }
+
+  /// Alcohol (any age-restricted line, e.g. a kiosk order's beer at the
+  /// counter) is paid only after an ID check: the same check as the shop's
+  /// register (scan, or date of birth with "I have seen the ID"); the store
+  /// records only the outcome and refuses the payment without it. A failed
+  /// check takes the restricted items off; the rest of the order is paid.
+  /// True when payment can go ahead.
+  Future<bool> _idChecked(Check check) async {
+    if (!check.ageCheckRequired || check.ageCleared) return true;
+    final result = await AgeCheckDialog.show(
+      context,
+      saleId: check.id,
+      legalAge: StoreProfile.current.legalAge,
+      looksOver: StoreProfile.current.looksOverAge,
+    );
+    if (result == null || !mounted) return false;
+    if (result.passed) {
+      setState(() => _check = result.check);
+      return result.check.ageCleared;
+    }
+    await _guarded(() async {
+      var c = result.check;
+      for (final l in c.lines.where((l) => l.ageRestricted).toList()) {
+        c = await Api.removeLine(_checkId, l.id);
+      }
+      return c;
+    });
+    return false;
   }
 
   Future<void> _guarded(Future<Check> Function() op) async {
@@ -1344,11 +1374,14 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                       !widget.counterOrder) {
                                     unawaited(KitchenApi.sendQuietly(_checkId));
                                   }
+                                  if (!await _idChecked(check) || !mounted) {
+                                    return;
+                                  }
                                   final closed = await Navigator.of(context)
                                       .push<bool>(
                                         MaterialPageRoute(
                                           builder: (_) => TenderScreen(
-                                            check: check,
+                                            check: _check ?? check,
                                             counterOrder: widget.counterOrder,
                                           ),
                                         ),
