@@ -42,8 +42,12 @@ import org.jetbrains.exposed.sql.update
  */
 object Hlc {
     const val LEGACY = ""
+    const val MAX_COUNTER = 9999
     fun of(physicalMs: Long, counter: Int, node: String): String =
-        "%013d-%04d-%s".format(physicalMs, counter.coerceIn(0, 9999), node)
+        "%013d-%04d-%s".format(physicalMs, counter.coerceIn(0, MAX_COUNTER), node)
+    /** The stamp right after (physicalMs, counter): past 9,999 the time part moves on 1 ms (never a tie). */
+    fun next(physicalMs: Long, counter: Int, node: String): String =
+        if (counter >= MAX_COUNTER) of(physicalMs + 1, 0, node) else of(physicalMs, counter + 1, node)
     fun physical(stamp: String): Long? = stamp.substringBefore('-', "").toLongOrNull()
     fun counter(stamp: String): Int? = stamp.split('-').getOrNull(1)?.toIntOrNull()
     fun max(a: String, b: String): String = if (a >= b) a else b
@@ -61,9 +65,19 @@ object CloudHlc {
         val pt = System.currentTimeMillis()
         val lastPt = last?.let(Hlc::physical)
         val stamp = if (last == null || lastPt == null || lastPt < pt) Hlc.of(pt, 0, NODE)
-            else Hlc.of(lastPt, (Hlc.counter(last) ?: 0) + 1, NODE)
+            else Hlc.next(lastPt, Hlc.counter(last) ?: 0, NODE)
         store(tenantId, stamp)
         return stamp
+    }
+
+    /**
+     * Take the tenant's menu lock (the clock row, FOR UPDATE) until the
+     * transaction ends. Every menu writer — portal edits and store ingest —
+     * takes it BEFORE reading the menu, so no one merges into a copy another
+     * writer is about to replace (a lost update).
+     */
+    fun lock(tenantId: String) {
+        lockedLast(tenantId)
     }
 
     /** Later cloud stamps sort after [remote] (callers clamp implausible ones first). */
@@ -413,6 +427,69 @@ object MenuState {
         }
     }
 
+    /**
+     * This database's feed epoch (029): `<database oid>-<random id>`. A
+     * restore into a new database changes the oid; a reset that empties the
+     * tables re-creates the id. Inside a transaction.
+     */
+    fun feedEpoch(): String {
+        val tx = TransactionManager.current()
+        var oid = ""
+        tx.exec("SELECT oid::text FROM pg_database WHERE datname = current_database()") { rs -> if (rs.next()) oid = rs.getString(1) }
+        tx.exec("INSERT INTO menu_feed_epoch (id, epoch) VALUES (1, md5(random()::text || clock_timestamp()::text)) " +
+            "ON CONFLICT (id) DO NOTHING")
+        var id = ""
+        tx.exec("SELECT epoch FROM menu_feed_epoch WHERE id = 1") { rs -> if (rs.next()) id = rs.getString(1) }
+        return "$oid-$id"
+    }
+
+    data class FeedRow(val seq: Long, val entity: String, val id: String, val data: String)
+
+    /**
+     * One page of a store's feed after [since], in seq order. An entry is the
+     * thing's FULL merged state, so an entry with a newer one of the same
+     * thing after it is superseded and left out (the newer one carries all of
+     * it): a store catching up — or replaying the whole feed after a restore —
+     * applies each thing once, not once per edit. Restamp entries are always
+     * kept (their `restamp` flag changes how the store merges).
+     */
+    fun feedRows(scope: Scope, since: Long, limit: Int): List<FeedRow> {
+        val out = mutableListOf<FeedRow>()
+        TransactionManager.current().exec(
+            """SELECT f.seq, f.entity, f.entity_id, f.data::text FROM menu_feed f
+               WHERE f.tenant_id = ? AND f.venue_id = ? AND f.seq > ?
+                 AND (f.origin = 'restamp' OR NOT EXISTS (
+                   SELECT 1 FROM menu_feed g
+                   WHERE g.tenant_id = f.tenant_id AND g.venue_id = f.venue_id
+                     AND g.entity = f.entity AND g.entity_id = f.entity_id AND g.seq > f.seq))
+               ORDER BY f.seq LIMIT $limit""",
+            listOf(org.jetbrains.exposed.sql.TextColumnType() to scope.tenantId,
+                org.jetbrains.exposed.sql.TextColumnType() to scope.venueId,
+                org.jetbrains.exposed.sql.LongColumnType() to since)) { rs ->
+            while (rs.next()) out += FeedRow(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4))
+        }
+        return out
+    }
+
+    /** The newest feed entry for one store (0: none). */
+    fun newestFeedSeq(scope: Scope): Long {
+        var newest = 0L
+        TransactionManager.current().exec(
+            "SELECT COALESCE(MAX(seq), 0) FROM menu_feed WHERE tenant_id = ? AND venue_id = ?",
+            listOf(org.jetbrains.exposed.sql.TextColumnType() to scope.tenantId,
+                org.jetbrains.exposed.sql.TextColumnType() to scope.venueId)) { rs -> if (rs.next()) newest = rs.getLong(1) }
+        return newest
+    }
+
+    /**
+     * Where a store's feed pull really starts: from the start (0) when the
+     * store's cursor belongs to another epoch (this database was restored or
+     * reset since) or is past the newest entry (the feed went back) — a
+     * replay is a merge, so starting over is always safe; otherwise [since].
+     */
+    fun feedStart(scope: Scope, since: Long, storeEpoch: String?, epoch: String): Long =
+        if ((storeEpoch != null && storeEpoch != epoch) || since > newestFeedSeq(scope)) 0L else since
+
     // --- store snapshots in (ingest) ---
 
     /**
@@ -425,8 +502,10 @@ object MenuState {
         val byId = LinkedHashMap<String, JsonObject>()
         for (s in snapshots) ((s["id"] as? JsonPrimitive)?.contentOrNull)?.let { byId[it] = s }
         if (byId.isEmpty()) return
+        CloudHlc.lock(scope.tenantId) // before reading: a portal edit committing meanwhile is not overwritten
         val stored = loadItems(scope, byId.keys)
         val restamped = mutableListOf<String>()
+        val corrected = mutableListOf<String>()
         var eventStamp: String? = null
         val now = { eventStamp ?: CloudHlc.now(scope.tenantId).also { eventStamp = it } }
         val out = byId.map { (id, snap) ->
@@ -439,6 +518,7 @@ object MenuState {
             if (clocked) clamped = clamp(scope, inItem, now) || clamped
             else stampLegacy(existing?.item, inItem, namesComplete, now)
             merge(state.item, inItem, namesComplete)
+            val inVariants = mutableListOf<Pair<Regs, Regs>>()
             (snap["variants"] as? JsonArray)?.filterIsInstance<JsonObject>()?.forEach { v ->
                 val vid = (v["id"] as? JsonPrimitive)?.contentOrNull ?: return@forEach
                 val target = state.variants.getOrPut(vid) { Regs(vid) }
@@ -447,41 +527,62 @@ object MenuState {
                 if (clocked) clamped = clamp(scope, inV, now) || clamped
                 else stampLegacy(existingVariant, inV, "names" in v, now)
                 merge(target, inV, "names" in v)
+                inVariants += inV to target
             }
             state.canonicalize()
             state.extras = extrasOf(snap, existing?.extras)
             if (clamped) restamped += id
+            else if (clocked && existing != null &&
+                (lost(inItem, state.item) || inVariants.any { (inV, target) -> lost(inV, target) })) corrected += id
             state
         }
         saveItems(scope, out)
         for (id in restamped) appendFeed(scope, MenuFields.ITEM, id,
             JsonObject(out.first { it.item.id == id }.wire() + ("restamp" to JsonPrimitive(true))), "restamp")
+        for (id in corrected) appendFeed(scope, MenuFields.ITEM, id, out.first { it.item.id == id }.wire(), "correction")
+    }
+
+    /**
+     * Did a store write lose here? A field the store stamped (non-empty
+     * stamp) whose merged value is not the store's: an older write than one
+     * the cloud has — e.g. a store whose clock was set back. The store must
+     * be told the winner (a `correction` feed entry with the merged state), or
+     * it keeps its own value forever: the cloud never sends what it already
+     * had, and the store never re-sends what it already pushed.
+     */
+    private fun lost(incoming: Regs, merged: Regs): Boolean = incoming.clock.any { (f, stamp) ->
+        stamp.isNotEmpty() && MenuFields.canon(incoming.fields[f]) != MenuFields.canon(merged.fields[f])
     }
 
     fun ingestCategories(scope: Scope, snapshots: List<JsonObject>) {
         val byId = LinkedHashMap<String, JsonObject>()
         for (s in snapshots) ((s["id"] as? JsonPrimitive)?.contentOrNull)?.let { byId[it] = s }
         if (byId.isEmpty()) return
+        CloudHlc.lock(scope.tenantId) // before reading (see ingestItems)
         val stored = loadCategories(scope, byId.keys)
         var eventStamp: String? = null
         val now = { eventStamp ?: CloudHlc.now(scope.tenantId).also { eventStamp = it } }
         val restamped = mutableListOf<Regs>()
+        val corrected = mutableListOf<Regs>()
         val out = byId.map { (id, snap) ->
             val existing = stored[id]
             val target = existing ?: Regs(id)
             val inC = regsOf(MenuFields.CATEGORY, snap, id)
             val namesComplete = "names" in snap
             var clamped = false
-            if (MenuFields.clock(snap) != null) clamped = clamp(scope, inC, now)
+            val clocked = MenuFields.clock(snap) != null
+            if (clocked) clamped = clamp(scope, inC, now)
             else stampLegacy(existing, inC, namesComplete, now)
             merge(target, inC, namesComplete)
             target.canonicalize()
             if (clamped) restamped += target
+            else if (clocked && existing != null && lost(inC, target)) corrected += target
             target
         }
         saveCategories(scope, out)
         for (c in restamped) appendFeed(scope, MenuFields.CATEGORY, c.id,
             JsonObject(c.wire(MenuFields.CATEGORY) + ("restamp" to JsonPrimitive(true))), "restamp")
+        for (c in corrected) appendFeed(scope, MenuFields.CATEGORY, c.id, JsonObject(c.wire(MenuFields.CATEGORY)), "correction")
     }
 
     /** Observe a store's stamps; re-stamp the implausible ones. True when any was. */

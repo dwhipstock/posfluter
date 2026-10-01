@@ -166,14 +166,20 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
         }
     }
 
-    override fun fetchMenuChanges(since: Long): MenuPage? {
-        val res = request("/v1/store/menu/changes?since=$since")
+    override fun fetchMenuChanges(since: Long, epoch: String?, failed: Int): MenuPage? {
+        val query = buildString {
+            append("since=").append(since)
+            epoch?.let { append("&epoch=").append(java.net.URLEncoder.encode(it, Charsets.UTF_8)) }
+            if (failed > 0) append("&failed=").append(failed)
+        }
+        val res = request("/v1/store/menu/changes?$query")
         if (res.status == 404) return null // an older cloud: the menu stays one-way
         check(res.status == 200) { "HTTP ${res.status} from menu changes" }
         val obj = Json.parseToJsonElement(res.text).jsonObject
         return MenuPage(
             cursor = obj["cursor"]!!.jsonPrimitive.long,
             serverTimeMs = obj["serverTimeMs"]?.jsonPrimitive?.contentOrNull?.toLongOrNull(),
+            epoch = obj["epoch"]?.jsonPrimitive?.contentOrNull,
             changes = (obj["changes"]?.jsonArray ?: emptyList()).map { el ->
                 val c = el.jsonObject
                 MenuChange(

@@ -15,6 +15,8 @@ object Outbox {
     fun write(eventType: String, aggregateType: String, aggregateId: String, payload: JsonObject) {
         // menu snapshots carry their last-write-wins clocks (two-way menu sync, CONTRACT §10)
         val body = dev.dwhipstock.pos.sync.MenuClock.stampPayload(eventType, payload).toString()
+        // applying the cloud's own menu change: nothing to tell the cloud (no echo, CONTRACT §10)
+        if (dev.dwhipstock.pos.sync.MenuClock.isEcho(eventType)) return
         SyncOutbox.insert {
             it[eventId] = UUID.randomUUID().toString()
             it[SyncOutbox.eventType] = eventType

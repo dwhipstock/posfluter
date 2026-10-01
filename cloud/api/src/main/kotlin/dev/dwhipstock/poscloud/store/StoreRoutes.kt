@@ -147,9 +147,14 @@ data class CapabilitiesResponse(
 @Serializable
 data class MenuChangeDto(val seq: Long, val entity: String, val id: String, val data: JsonElement)
 
-/** [serverTimeMs]: the cloud's clock when it answered, so the store can correct its own. */
+/**
+ * [serverTimeMs]: the cloud's clock when it answered, so the store can correct its own.
+ * [epoch]: this database's feed (029); it changes on a restore or reset, and the feed then starts over.
+ */
 @Serializable
-data class MenuChangesResponse(val cursor: Long, val serverTimeMs: Long, val changes: List<MenuChangeDto>)
+data class MenuChangesResponse(
+    val cursor: Long, val serverTimeMs: Long, val changes: List<MenuChangeDto>, val epoch: String? = null,
+)
 
 /** One product's on hand, for the store's count screen (CONTRACT §9). */
 @Serializable
@@ -275,27 +280,24 @@ fun Route.storeRoutes(config: CloudConfig) {
      */
     get("/store/menu/changes") {
         val scope = requireStore(call)
-        val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0
+        val asked = call.request.queryParameters["since"]?.toLongOrNull() ?: 0
+        val storeEpoch = call.request.queryParameters["epoch"]?.takeIf { it.isNotBlank() }
+        val failed = call.request.queryParameters["failed"]?.toIntOrNull()?.coerceIn(0, 1_000_000)
         val response = transaction {
+            // a restored / reset database: the store's cursor means nothing here any more
+            val epoch = dev.dwhipstock.poscloud.menu.MenuState.feedEpoch()
+            val since = dev.dwhipstock.poscloud.menu.MenuState.feedStart(scope, asked, storeEpoch, epoch)
             Venues.update({ (Venues.tenantId eq scope.tenantId) and (Venues.id eq scope.venueId) }) {
                 it[menuSyncAt] = dev.dwhipstock.poscloud.CloudTime.now()
                 it[menuCursor] = since
+                it[menuFailed] = failed ?: 0
             }
-            val rows = dev.dwhipstock.poscloud.db.MenuFeed.selectAll().where {
-                (dev.dwhipstock.poscloud.db.MenuFeed.tenantId eq scope.tenantId) and
-                    (dev.dwhipstock.poscloud.db.MenuFeed.venueId eq scope.venueId) and
-                    (dev.dwhipstock.poscloud.db.MenuFeed.seq greater since)
-            }.orderBy(dev.dwhipstock.poscloud.db.MenuFeed.seq).limit(CHANGES_PAGE).toList()
+            val rows = dev.dwhipstock.poscloud.menu.MenuState.feedRows(scope, since, CHANGES_PAGE)
             MenuChangesResponse(
-                cursor = rows.lastOrNull()?.get(dev.dwhipstock.poscloud.db.MenuFeed.seq) ?: since,
+                cursor = rows.lastOrNull()?.seq ?: since,
                 serverTimeMs = System.currentTimeMillis(),
-                changes = rows.map {
-                    MenuChangeDto(
-                        it[dev.dwhipstock.poscloud.db.MenuFeed.seq], it[dev.dwhipstock.poscloud.db.MenuFeed.entity],
-                        it[dev.dwhipstock.poscloud.db.MenuFeed.entityId],
-                        Json.parseToJsonElement(it[dev.dwhipstock.poscloud.db.MenuFeed.data]),
-                    )
-                },
+                epoch = epoch,
+                changes = rows.map { MenuChangeDto(it.seq, it.entity, it.id, Json.parseToJsonElement(it.data)) },
             )
         }
         call.respond(response)

@@ -323,9 +323,12 @@ class MenuTwoWaySyncTest {
         assertEquals(HttpStatusCode.OK, portal(HttpMethod.Patch, "/v1/menu/categories/$c?venue=vieux-port",
             """{"nameEn":"Bar snacks"}""").status)
         assertEquals(HttpStatusCode.OK, portal(HttpMethod.Delete, "/v1/menu/categories/$c?venue=vieux-port").status)
-        // every edit went down the feed, in order
-        val kinds = pull()["changes"]!!.jsonArray.map { it.jsonObject.str("entity") }
-        assertEquals(listOf("item", "category", "category", "category", "category", "category"), kinds)
+        // every edit went down the feed, in order; each thing once, at its newest full state
+        val changes = pull()["changes"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("item", "category", "category"), changes.map { it.str("entity") })
+        assertEquals(listOf(id, "beer", c), changes.map { it.str("id") })
+        assertEquals("true", changes.last()["data"]!!.jsonObject.str("deleted"))
+        assertEquals(6L, feedCount()) // the feed itself keeps every edit
     }
 
     /** An offline store sold an item the portal had deleted meanwhile: the sale counts, under its name as sold. */

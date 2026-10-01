@@ -45,11 +45,13 @@ class MenuFeedTransport(val fake: FakeTransport = FakeTransport()) : CloudTransp
     var pulls = 0
     override fun push(installId: String, events: List<dev.dwhipstock.pos.sync.PushEvent>) =
         if (offline) dev.dwhipstock.pos.sync.PushResult(false, "offline") else fake.push(installId, events)
-    override fun fetchMenuChanges(since: Long): MenuPage? {
+    override fun fetchMenuChanges(since: Long, epoch: String?, failed: Int): MenuPage? {
         pulls++
         if (offline) throw java.net.ConnectException("no internet")
         if (legacyCloud) return null
-        return pages.removeFirstOrNull()?.takeIf { it.cursor > since } ?: MenuPage(since, System.currentTimeMillis(), emptyList())
+        // (a page of another epoch is the cloud serving its feed from the start: any cursor)
+        return pages.removeFirstOrNull()?.takeIf { it.cursor > since || (it.epoch != null && it.epoch != epoch) }
+            ?: MenuPage(since, System.currentTimeMillis(), emptyList())
     }
 }
 
@@ -95,22 +97,18 @@ class MenuTwoWaySyncStoreTest {
     fun appliedCloudChangesAreNeverEchoedAsNewEdits() {
         freshDb()
         val before = lastOutboxId()
+        val versionBefore = transaction { MenuClock.menuVersion() }
         val stamp = CloudMenu.stamp()
         CloudMenu.apply(CloudMenu.item("lantern-lager", fields = mapOf("nameEn" to s("Lantern Lager"), "names.es" to s("Lager Linterna")),
             variants = mapOf("lantern-lager:pint" to mapOf("priceCents" to n(900))), stamp = stamp))
-        val events = outboxSince(before)
-        assertTrue(events.isNotEmpty())
-        // every event written while applying is tagged origin cloud (the cloud ignores those)…
-        assertTrue(events.all { it.second["origin"]?.jsonPrimitive?.content == "cloud" }, events.toString())
-        // …and carries the cloud's stamps, never fresh store ones
-        val last = events.last().second["item"]!!.jsonObject
-        assertEquals(stamp, last["clock"]!!.jsonObject["nameEn"]!!.jsonPrimitive.content)
+        // nothing written while applying goes back to the cloud: it already has that state (no echo)
+        assertEquals(emptyList(), outboxSince(before))
         assertEquals("Lager Linterna", transaction { Translations.get(Translations.ITEM, "lantern-lager", "es") })
-        // the drain still sends them (audit), but no store-stamped field among them
-        val storeStamped = events.flatMap { (_, p) ->
-            (p["item"] as? JsonObject)?.get("clock")?.jsonObject?.values?.map { it.jsonPrimitive.content }.orEmpty()
-        }.filter { it.isNotEmpty() && !it.endsWith("-cloud") }
-        assertEquals(emptyList(), storeStamped)
+        // the registers hold the cloud's stamps, never fresh store ones
+        assertEquals(stamp, regStamp("item", "lantern-lager", "names.es"))
+        assertEquals(stamp, regStamp("variant", "lantern-lager:pint", "priceCents"))
+        // the tablets still see a new menu version
+        assertTrue(transaction { MenuClock.menuVersion() } > versionBefore)
     }
 
     @Test
