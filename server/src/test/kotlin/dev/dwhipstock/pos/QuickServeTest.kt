@@ -462,6 +462,11 @@ class QuickServeTest {
 
         // the counter takes the money: numbered, to the kitchen and the board
         staff.postJson("/shifts", """{"openingFloatCents":0,"managerPin":"1234"}""")
+        // the IPA: not without an ID check (21+), then paid
+        assertEquals(HttpStatusCode.Conflict,
+            staff.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":100000}""").status)
+        assertEquals(HttpStatusCode.OK, staff.postJson("/retail/sales/$checkId/age-check",
+            """{"method":"MANUAL","dateOfBirth":"1990-05-01","cashierSawId":true}""").status)
         assertTrue(staff.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":100000}""").status.isSuccess())
         assertEquals(HttpStatusCode.OK, staff.post("/checks/$checkId/finalize").status)
         val paid = obj(staff.get("/counter/orders/$checkId").bodyAsText())

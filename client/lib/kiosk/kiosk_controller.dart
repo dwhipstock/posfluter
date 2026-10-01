@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert' show jsonEncode;
+import 'dart:math' show Random;
 
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -537,6 +539,26 @@ class KioskController extends ChangeNotifier {
 
   void cancelOrder() => _toWelcome();
 
+  /// The id of the order being sent, and the cart it was made for. The same
+  /// cart sent again (a retry after "could not send", a second tap) carries
+  /// the same id, so the store answers with the order it already placed
+  /// rather than placing it twice; a changed cart is a new order, a new id.
+  String? _orderId;
+  String? _orderIdCart;
+
+  String _orderIdFor(String mode) {
+    final cartKey = jsonEncode([mode, _lines]);
+    if (_orderId == null || _orderIdCart != cartKey) {
+      final r = Random.secure();
+      _orderId = List.generate(
+        16,
+        (_) => r.nextInt(16).toRadixString(16),
+      ).join();
+      _orderIdCart = cartKey;
+    }
+    return _orderId!;
+  }
+
   /// Sends at once — no review, no confirmation. The number, then welcome.
   Future<void> placeOrder() async {
     final api = _api;
@@ -545,7 +567,14 @@ class KioskController extends ChangeNotifier {
     message = null;
     _changed();
     try {
-      result = await api.placeOrder(mode ?? 'TAKE_OUT', _lines, lang: lang);
+      final m = mode ?? 'TAKE_OUT';
+      result = await api.placeOrder(
+        m,
+        _lines,
+        lang: lang,
+        clientOrderId: _orderIdFor(m),
+      );
+      _orderId = null;
       busy = false;
       _idle?.cancel();
       _menuPoll?.pause();

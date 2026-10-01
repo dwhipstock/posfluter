@@ -204,16 +204,20 @@ class KioskApi {
   }
 
   /// [mode] DINE_IN | TAKE_OUT. Lines: itemId, variantId, qty. [lang]: the
-  /// guest's language, for the ticket the store prints.
+  /// guest's language, for the ticket the store prints. [clientOrderId]: this
+  /// order's own id; sent again, the store returns the order it already
+  /// placed instead of a second one (a double tap, a retry).
   Future<KioskOrderResult> placeOrder(
     String mode,
     List<Map<String, dynamic>> lines, {
     String? lang,
+    String? clientOrderId,
   }) async => KioskOrderResult.fromJson(
     await _send('POST', '/kiosk/orders', {
           'serviceMode': mode,
           'lines': lines,
           'lang': ?lang,
+          'clientOrderId': ?clientOrderId,
         })
         as Map<String, dynamic>,
   );

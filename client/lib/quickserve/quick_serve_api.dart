@@ -64,6 +64,19 @@ class CounterOrder {
       : '';
 }
 
+/// A self-order kiosk paired with this store.
+class PairedKiosk {
+  final String deviceId, name, pairedAt;
+  final String? lastSeenAt;
+  const PairedKiosk(this.deviceId, this.name, this.pairedAt, {this.lastSeenAt});
+  factory PairedKiosk.fromJson(Map<String, dynamic> j) => PairedKiosk(
+    j['deviceId'] as String,
+    j['name'] as String? ?? '',
+    j['pairedAt'] as String? ?? '',
+    lastSeenAt: j['lastSeenAt'] as String?,
+  );
+}
+
 /// The quick-serve counter's routes (only on a quick-serve store).
 class QuickServeApi {
   QuickServeApi._();
@@ -145,6 +158,22 @@ class QuickServeApi {
             as Map<String, dynamic>;
     return j['defaultServiceMode'] as String? ?? mode;
   }
+
+  /// The paired kiosks (manager).
+  static Future<List<PairedKiosk>> kiosks() async => [
+    for (final k in await Api._get('/counter/kiosks') as List)
+      PairedKiosk.fromJson(k as Map<String, dynamic>),
+  ];
+
+  /// Unpair a kiosk (manager): its token stops working at once. The kiosks left.
+  static Future<List<PairedKiosk>> unpairKiosk(String deviceId) async => [
+    for (final k
+        in await Api._post(
+              '/counter/kiosks/${Uri.encodeComponent(deviceId)}/unpair',
+            )
+            as List)
+      PairedKiosk.fromJson(k as Map<String, dynamic>),
+  ];
 
   /// A one-time code for pairing a self-order kiosk (manager).
   static Future<({String code, int expiresInSeconds})> kioskCode() async {

@@ -110,7 +110,11 @@ data class IngestEvent(
 data class IngestRequest(val events: List<IngestEvent>, val installId: String? = null)
 
 @Serializable
-data class IngestResponse(val accepted: Int, val duplicates: Int, val highWaterMark: Long)
+data class IngestResponse(
+    val accepted: Int, val duplicates: Int, val highWaterMark: Long,
+    /** Events set aside in ingest_quarantine (not stored, not projected); still acknowledged. */
+    val quarantined: Int = 0,
+)
 
 @Serializable
 data class HeartbeatDevice(
@@ -186,40 +190,59 @@ fun Route.storeRoutes(config: CloudConfig) {
      * At-least-once idempotent ingest (CONTRACT §1): one transaction per batch,
      * dedup on (tenant, event_id); only newly inserted events are projected,
      * in seq order.
+     *
+     * One bad event never fails its batch: its text is first cleaned of what
+     * Postgres cannot store ([IngestText]); an event that still cannot be
+     * stored or projected is rolled back alone (a savepoint), set aside in
+     * ingest_quarantine with the error and logged, and the rest of the batch
+     * is stored and acknowledged. If even setting it aside fails, the
+     * database itself is in trouble: the batch fails as before and the store
+     * resends it, so nothing is acknowledged that was not kept.
      */
     post("/ingest") {
         val scope = requireStore(call)
         val req = call.receive<IngestRequest>()
         var accepted = 0
         var duplicates = 0
+        var quarantined = 0
         transaction {
             requireKnownInstall(scope, req.installId)
             val zone = dev.dwhipstock.poscloud.CloudTime.venueZone(scope.tenantId, scope.venueId)
             val venueCurrency = Venues.selectAll()
                 .where { (Venues.tenantId eq scope.tenantId) and (Venues.id eq scope.venueId) }
                 .firstOrNull()?.get(Venues.currency) ?: "CAD"
-            for (event in req.events.sortedBy { it.seq }) {
-                val inserted = Events.insertIgnore {
-                    it[tenantId] = scope.tenantId
-                    it[venueId] = scope.venueId
-                    it[eventId] = event.eventId
-                    it[eventType] = event.eventType
-                    it[aggregateType] = event.aggregateType
-                    it[aggregateId] = event.aggregateId
-                    it[payload] = event.payload.toString()
-                    it[storeSeq] = event.seq
-                    it[storeCreatedAt] = parseCreatedAt(event.createdAt, zone)
-                    it[receivedAt] = dev.dwhipstock.poscloud.CloudTime.now()
-                }.insertedCount
-                if (inserted == 0) {
-                    duplicates++
-                } else {
-                    accepted++
-                    Projections.apply(scope, event, zone, venueCurrency)
+            val jdbc = connection.connection as java.sql.Connection
+            for (raw in req.events.sortedBy { it.seq }) {
+                val event = IngestText.clean(raw)
+                val savepoint = jdbc.setSavepoint()
+                try {
+                    val inserted = Events.insertIgnore {
+                        it[tenantId] = scope.tenantId
+                        it[venueId] = scope.venueId
+                        it[eventId] = event.eventId
+                        it[eventType] = event.eventType
+                        it[aggregateType] = event.aggregateType
+                        it[aggregateId] = event.aggregateId
+                        it[payload] = event.payload.toString()
+                        it[storeSeq] = event.seq
+                        it[storeCreatedAt] = parseCreatedAt(event.createdAt, zone)
+                        it[receivedAt] = dev.dwhipstock.poscloud.CloudTime.now()
+                    }.insertedCount
+                    if (inserted == 0) {
+                        duplicates++
+                    } else {
+                        Projections.apply(scope, event, zone, venueCurrency)
+                        accepted++
+                    }
+                    jdbc.releaseSavepoint(savepoint)
+                } catch (e: Exception) {
+                    jdbc.rollback(savepoint)
+                    quarantine(scope.tenantId, scope.venueId, raw, event, e)
+                    quarantined++
                 }
             }
         }
-        call.respond(IngestResponse(accepted, duplicates, req.events.maxOfOrNull { it.seq } ?: 0))
+        call.respond(IngestResponse(accepted, duplicates, req.events.maxOfOrNull { it.seq } ?: 0, quarantined))
     }
 
     /** Photo sideband (CONTRACT §3): binary for an already-ingested item.photo_uploaded. */

@@ -95,7 +95,7 @@ fun Application.installAuthGate(auth: AuthService, requireDeviceToken: Boolean =
         if (presented != null && !presented.revoked) call.attributes.put(PairedDeviceKey, presented)
 
         if (requireDeviceToken && isTerminalPreAuthRoute(path, method)) {
-            val device = call.attributes.getOrNull(PairedDeviceKey)
+            val device = staffTerminal(call)
             if (device == null) {
                 call.respond(HttpStatusCode.Unauthorized, deviceError(presented))
                 return@intercept finish()
@@ -140,6 +140,19 @@ fun Application.installAuthGate(auth: AuthService, requireDeviceToken: Boolean =
         call.attributes.put(SessionUserKey, user)
     }
 }
+
+/**
+ * The paired device on this call when it is a staff terminal. A self-order
+ * kiosk's token (quick-serve) only opens the /kiosk routes: it never counts
+ * as a terminal for the PIN login, the staff tiles or the staff-app login.
+ */
+private fun staffTerminal(call: ApplicationCall): DeviceRegistry.PairedDevice? =
+    call.attributes.getOrNull(PairedDeviceKey)?.takeUnless { d ->
+        transaction {
+            !dev.dwhipstock.pos.restaurant.KioskDevices.selectAll()
+                .where { dev.dwhipstock.pos.restaurant.KioskDevices.deviceId eq d.id }.empty()
+        }
+    }
 
 /** device_revoked tells the terminal to wipe its pairing and re-pair; device_required just to pair. */
 private fun deviceError(presented: DeviceRegistry.PairedDevice?): Map<String, String> =

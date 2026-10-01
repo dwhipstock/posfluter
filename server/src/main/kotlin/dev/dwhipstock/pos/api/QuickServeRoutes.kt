@@ -103,6 +103,15 @@ fun Route.quickServeRoutes(
         requireManagerSession(call)
         call.respond(qs.newPairingCode())
     }
+    // the paired kiosks, and unpairing one (lost, stolen, replaced) without the portal
+    get("/counter/kiosks") {
+        requireManagerSession(call)
+        call.respond(qs.kiosks())
+    }
+    post("/counter/kiosks/{deviceId}/unpair") {
+        requireManagerSession(call)
+        call.respond(qs.unpairKiosk(call.parameters["deviceId"]!!, call.sessionUser().userId))
+    }
 
     get("/pickup") {
         call.response.header(HttpHeaders.CacheControl, "no-store")
@@ -114,7 +123,7 @@ fun Route.quickServeRoutes(
     }
 
     post("/kiosk/pair") {
-        val req = call.receive<KioskPairRequest>()
+        val req = call.receivePublic<KioskPairRequest>()
         call.respond(qs.pairKiosk(req.code, req.deviceName))
     }
     get("/kiosk/config") {
@@ -123,11 +132,11 @@ fun Route.quickServeRoutes(
     }
     post("/kiosk/upsell") {
         kioskDevice(call, qs) ?: return@post
-        call.respond(qs.kioskUpsell(qsJson.decodeFromString<KioskUpsellRequest>(call.receiveText())))
+        call.respond(qs.kioskUpsell(call.receivePublic<KioskUpsellRequest>()))
     }
     post("/kiosk/orders") {
         val device = kioskDevice(call, qs) ?: return@post
-        call.respond(qs.placeKioskOrder(call.receive<KioskOrderRequest>(), device.name))
+        call.respond(qs.placeKioskOrder(call.receivePublic<KioskOrderRequest>(), device.name, device.id))
     }
 }
 

@@ -112,8 +112,14 @@ class _FakeStore extends KioskApi {
     String mode,
     List<Map<String, dynamic>> lines, {
     String? lang,
+    String? clientOrderId,
   }) async {
-    placed.add({'mode': mode, 'lines': lines, 'lang': lang});
+    placed.add({
+      'mode': mode,
+      'lines': lines,
+      'lang': lang,
+      'clientOrderId': clientOrderId,
+    });
     final alcohol = lines.any((l) => l['itemId'] == 'north-ipa');
     final n = next++;
     // the store prints the guest's ticket, numbered #101...
