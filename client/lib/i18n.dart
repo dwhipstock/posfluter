@@ -2804,14 +2804,14 @@ class L {
     'Dit is ’n groot verandering: $removes item(s) verwyder en $prices prys(e) verander. Pas in elk geval toe?',
   );
   String get aiMenuBigChangeConfirm => _t(
-    'C’est un gros changement : des produits retirés de la caisse ou des prix réduits de moitié ou plus. Appliquer quand même ?',
+    'C’est un gros changement : des produits retirés de la caisse ou des prix réduits de moitié ou plus. Appliquer quand même ?',
     'This is a big change: items taken off the till, or prices cut by half or more. Apply anyway?',
     'Es un cambio grande: productos retirados de la caja o precios rebajados a la mitad o más. ¿Aplicar de todos modos?',
     'Das ist eine große Änderung: Artikel von der Kasse genommen oder Preise um die Hälfte oder mehr gesenkt. Trotzdem übernehmen?',
     'Dit is ’n groot verandering: items van die kasregister afgehaal, of pryse met die helfte of meer verlaag. Pas in elk geval toe?',
   );
   String floorEditBulkConfirm(int n) => _t(
-    'L’IA retirerait $n table(s) ou élément(s) de cette salle. Appliquer quand même ?',
+    'L’IA retirerait $n table(s) ou élément(s) de cette salle. Appliquer quand même ?',
     'The AI would remove $n table(s) or object(s) from this room. Apply anyway?',
     'La IA quitaría $n mesa(s) o elemento(s) de esta sala. ¿Aplicar de todos modos?',
     'Die KI würde $n Tisch(e) oder Element(e) aus diesem Raum entfernen. Trotzdem übernehmen?',
