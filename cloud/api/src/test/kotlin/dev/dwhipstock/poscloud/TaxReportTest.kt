@@ -181,4 +181,77 @@ class TaxReportTest {
         assertEquals(0L, totals.long("gstCents"))
         assertEquals(0L, totals.long("qstCents"))
     }
+
+    /** One NC tax entry as the store sends it (with who it is paid to). */
+    private fun ncTax(code: String, label: String, rate: String, cents: Long, remitTo: String?) = buildJsonObject {
+        put("code", code); put("labelFr", label); put("labelEn", label); put("ratePercent", rate)
+        put("registrationNumber", ""); put("amountCents", cents)
+        remitTo?.let { put("remitTo", it) }
+    }
+
+    private fun ncCheck(checkId: Int, subtotal: Long, closedAt: String, vararg taxes: JsonObject): JsonObject {
+        val tax = taxes.sumOf { it["amountCents"]!!.jsonPrimitive.content.toLong() }
+        return buildJsonObject {
+            checkClosedPayload(checkId, subtotal + tax, tax, closedAt).forEach { (k, v) -> put(k, v) }
+            put("subtotalCents", subtotal)
+            put("taxes", kotlinx.serialization.json.JsonArray(taxes.toList()))
+        }
+    }
+
+    /**
+     * Copper Lantern's NC taxes for remittance: NC sales tax and the Wake
+     * prepared food tax on their own rows, with who each is paid to; a rate
+     * change (6.75% → 7.25%) keeps the old rate on its own row instead of
+     * folding it into the new one; a refund nets out of its own rate's row.
+     */
+    @Test
+    fun ncTaxesReportPerRateWithTheirAuthority() = testApplication {
+        application { module(TestSupport.config) }
+        ingest(
+            key,
+            // before the fix: 6.75% + 1% on $10.00, no authority sent
+            event("check.closed", ncCheck(1, 1000, "2026-07-01T19:00:00.000-04:00",
+                ncTax("NC_SALES", "NC sales tax", "6.75", 68, null),
+                ncTax("WAKE_FOOD", "Wake prepared food tax", "1", 10, null)), seq = 1),
+            // after: $20.25 → Tax (8.25%) 1.67 = NC 1.47 + Wake 0.20
+            event("check.closed", ncCheck(2, 2025, "2026-07-01T20:00:00.000-04:00",
+                ncTax("NC_SALES", "NC sales tax", "7.25", 147, "NCDOR"),
+                ncTax("WAKE_FOOD", "Wake prepared food tax", "1", 20, "Wake County")), seq = 2),
+            // $10.00 → 0.83 = NC 0.73 + Wake 0.10, then refunded in full
+            event("check.closed", ncCheck(3, 1000, "2026-07-01T21:00:00.000-04:00",
+                ncTax("NC_SALES", "NC sales tax", "7.25", 73, "NCDOR"),
+                ncTax("WAKE_FOOD", "Wake prepared food tax", "1", 10, "Wake County")), seq = 3),
+            event("refund.created", buildJsonObject {
+                put("refundId", 1); put("checkId", 3)
+                put("grossCents", 1083); put("netCents", 1000); put("taxIncludedCents", 83)
+                put("tenderType", "CASH"); put("reason", "Order error")
+                put("createdAt", "2026-07-01T22:00:00.000-04:00")
+                put("taxes", kotlinx.serialization.json.JsonArray(listOf(
+                    ncTax("NC_SALES", "NC sales tax", "7.25", 73, "NCDOR"),
+                    ncTax("WAKE_FOOD", "Wake prepared food tax", "1", 10, "Wake County"))))
+            }, seq = 4),
+        )
+        val body = report("venue=vieux-port&from=2026-07-01&to=2026-07-01")
+        val byTax = body["byTax"]!!.jsonArray.map { it.jsonObject }
+        fun JsonObject.s(k: String) = this[k]!!.jsonPrimitive.content
+        assertEquals(
+            listOf(
+                listOf("NC_SALES", "6.75", "", "68"),
+                listOf("NC_SALES", "7.25", "NCDOR", "147"),
+                listOf("WAKE_FOOD", "1", "Wake County", "30"),
+            ),
+            byTax.map { listOf(it.s("code"), it.s("ratePercent"), it.s("remitTo"), it.s("amountCents")) },
+        )
+        // the rows add up to the tax the receipts charged, less the refund
+        assertEquals(body["totals"]!!.jsonObject.long("taxCents"), byTax.sumOf { it.long("amountCents") })
+        assertEquals(78L + 167L, body["totals"]!!.jsonObject.long("taxCents"))
+        // the rates list says who each is paid to too
+        assertEquals(
+            setOf("NC_SALES/6.75/", "NC_SALES/7.25/NCDOR", "WAKE_FOOD/1/Wake County"),
+            body["rates"]!!.jsonArray.map {
+                val o = it.jsonObject
+                "${o.s("code")}/${o.s("ratePercent")}/${o.s("remitTo")}"
+            }.toSet(),
+        )
+    }
 }

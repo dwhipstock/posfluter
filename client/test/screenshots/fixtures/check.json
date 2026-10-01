@@ -75,10 +75,10 @@
  ],
  "itemsSubtotalCents": 6400,
  "fees": [],
- "grandTotalCents": 6896,
+ "grandTotalCents": 6928,
  "taxIncludedCents": 0,
  "paidCents": 0,
- "outstandingCents": 6896,
+ "outstandingCents": 6928,
  "tenders": [],
  "split": null,
  "subtotalCents": 6400,
@@ -87,9 +87,9 @@
    "code": "NC_SALES",
    "labelFr": "NC sales tax",
    "labelEn": "NC sales tax",
-   "ratePercent": "6.75",
+   "ratePercent": "7.25",
    "registrationNumber": "",
-   "amountCents": 432
+   "amountCents": 464
   },
   {
    "code": "WAKE_FOOD",

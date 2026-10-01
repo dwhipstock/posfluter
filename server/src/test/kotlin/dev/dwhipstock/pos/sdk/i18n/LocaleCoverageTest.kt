@@ -34,7 +34,7 @@ class LocaleCoverageTest {
 
     /** Identical in English and the other language, legitimately. */
     private val sameAsEnglish = setOf(
-        "Total", "Table", "Tables", "Subtotal", "Menu", "Terminal", "{0} {1}%", "#{0}",
+        "Total", "Table", "Tables", "Subtotal", "Menu", "Terminal", "{0} {1}%", "{0} ({1}%)", "#{0}",
         "Tel. {0}", // the phone label: "Tel." in Spanish too
         "Table {0}", // the kitchen ticket's table line: "Table" in French too
     )

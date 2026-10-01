@@ -30,6 +30,14 @@ class StoreProfile {
   /// every time (the default).
   final int? looksOverAge;
 
+  /// `taxDisplay: combined` (Copper Lantern): guests see the added taxes as
+  /// ONE line at the summed rate, "Tax (8.25%)", like the printed receipt;
+  /// the reports still itemise them. False = one row per tax.
+  final bool taxCombined;
+
+  /// The combined line's own word instead of the language's "Tax"; '' = the language's.
+  final String taxLabel;
+
   const StoreProfile({
     this.venueId = '',
     this.brand = 'copper-lantern',
@@ -41,6 +49,8 @@ class StoreProfile {
     this.kitchenPrinting = false,
     this.forecourt = false,
     this.looksOverAge,
+    this.taxCombined = false,
+    this.taxLabel = '',
   });
 
   /// The Copper Lantern pubs (Raleigh, NC: US, USD, 21) and any store too old
@@ -96,6 +106,8 @@ class StoreProfile {
       kitchenPrinting: j['kitchenPrinting'] == true,
       forecourt: j['forecourt'] == true,
       looksOverAge: j['looksOverAge'] is int ? j['looksOverAge'] as int : null,
+      taxCombined: j['taxDisplay'] == 'combined',
+      taxLabel: j['taxLabel'] is String ? (j['taxLabel'] as String).trim() : '',
     );
   }
 }

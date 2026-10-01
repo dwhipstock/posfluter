@@ -106,15 +106,17 @@ class CustomerBillTest {
         assertEquals(1, fees.size)
         assertEquals("Corkage", fees[0]["labelEn"]!!.jsonPrimitive.content)
         assertEquals(2500L, fees[0]["amountCents"]!!.jsonPrimitive.long)
-        // subtotal 40.90; NC sales tax 6.75% 2.76075 → 2.76, Wake 1% 0.409 → 0.41 (half-up); total 44.07
+        // subtotal 40.90; the guest sees ONE tax: 8.25% of 40.90 = 3.37425 → 3.37 (half-up, once); total 44.27
         assertEquals(4090L, accepted["subtotalCents"]!!.jsonPrimitive.long)
         val taxes = accepted["taxes"]!!.jsonArray.map { it.jsonObject }
-        assertEquals(listOf("NC sales tax" to 276L, "Wake prepared food tax" to 41L), taxes.map {
-            it["labelEn"]!!.jsonPrimitive.content to it["amountCents"]!!.jsonPrimitive.long })
-        assertEquals(listOf("6.75", "1"), taxes.map { it["ratePercent"]!!.jsonPrimitive.content })
-        assertEquals(4407L, accepted["grandTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(1, taxes.size, "one combined tax line on the guest's bill: $taxes")
+        assertEquals("TAX", taxes[0]["code"]!!.jsonPrimitive.content)
+        assertEquals("8.25", taxes[0]["ratePercent"]!!.jsonPrimitive.content)
+        assertEquals(337L, taxes[0]["amountCents"]!!.jsonPrimitive.long)
+        assertEquals(4427L, accepted["grandTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(4427L, accepted["subtotalCents"]!!.jsonPrimitive.long + taxes.sumOf { it["amountCents"]!!.jsonPrimitive.long })
         assertFalse(accepted["locked"]!!.jsonPrimitive.boolean)
-        // tax lines are display fields only, like the rest of the customer DTO
-        assertTrue(taxes.all { it.keys == setOf("labelFr", "labelEn", "ratePercent", "amountCents") })
+        // tax lines are display fields only, like the rest of the customer DTO (never the remittance split)
+        assertTrue(taxes.all { it.keys.all { k -> k in setOf("code", "labelFr", "labelEn", "ratePercent", "amountCents") } })
     }
 }

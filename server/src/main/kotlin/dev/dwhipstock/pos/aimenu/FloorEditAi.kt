@@ -197,7 +197,7 @@ internal object FloorEditAi {
           unless a number is asked for.
         - Tables with "openBill": true have guests: never move, reshape, renumber or remove them.
         - Object types: BAR_FRONT (the bar counter), POOL (pool table), PILLAR, ENTRANCE, HOST_STAND, KITCHEN,
-          RESTROOMS, STAGE. Anything else (a jukebox, a piano, a window) is CUSTOM with a short name (1 to 3 words)
+          RESTROOMS, STAGE (a stage or bandstand for live music). Anything else (a jukebox, a piano, a window) is CUSTOM with a short name (1 to 3 words)
           and an icon from: ${FLOOR_OBJECT_ICONS.joinToString(", ")} ("star" if none fits).
           ${if (bilingual) "The store is bilingual: give nameEn and nameFr (Québec French) for CUSTOM objects."
             else "Write nameEn; leave nameFr \"\"."}

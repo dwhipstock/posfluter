@@ -149,6 +149,7 @@ internal object RoomLayoutRules {
         "BAR" to "BAR_FRONT", "BAR_COUNTER" to "BAR_FRONT", "POOL_TABLE" to "POOL", "BILLIARDS" to "POOL",
         "COLUMN" to "PILLAR", "DOOR" to "ENTRANCE", "EXIT" to "ENTRANCE", "HOST" to "HOST_STAND",
         "TOILETS" to "RESTROOMS", "WC" to "RESTROOMS", "RESTROOM" to "RESTROOMS", "BATHROOM" to "RESTROOMS",
+        "BANDSTAND" to "STAGE", "LIVE_MUSIC" to "STAGE", "MUSIC_STAGE" to "STAGE", "BAND" to "STAGE",
     )
 
     class Result(val tables: List<RoomTableDto>, val objects: List<RoomObjectDto>, val rejected: List<String>)
@@ -339,7 +340,7 @@ internal object RoomLayoutAi {
           a booth about 160 x 100. Tables never overlap. Seats 1 to 20: count the chairs, else guess from the size.
         - "number": the table number written on a plan or sketch, else null.
         - Object types: BAR_FRONT (the bar counter), POOL (pool table), PILLAR, ENTRANCE, HOST_STAND, KITCHEN,
-          RESTROOMS, STAGE. Anything else fixed in the room (a jukebox, a piano, a fireplace) is CUSTOM with a short
+          RESTROOMS, STAGE (a stage or bandstand for live music). Anything else fixed in the room (a jukebox, a piano, a fireplace) is CUSTOM with a short
           name (1 to 3 words) and an icon from: ${FLOOR_OBJECT_ICONS.joinToString(", ")} ("star" if none fits).
           ${if (bilingual) "The store is bilingual: give nameEn and nameFr (Québec French) for CUSTOM objects."
             else "Write nameEn; leave nameFr \"\"."} Leave the names "" on the other types.

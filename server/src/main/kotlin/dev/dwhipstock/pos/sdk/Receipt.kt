@@ -56,9 +56,14 @@ data class Receipt(
     val discounts: List<ReceiptDiscount> = emptyList(),
     /** Quick-serve: the customer's order number and dine in / take out ("#101 · Take out"). */
     val order: ReceiptOrder? = null,
+    /** How [taxes] print for the guest: each line, or one combined line ([TaxPolicy.AddedTaxes.display]). */
+    val taxDisplay: TaxDisplay = TaxDisplay.Itemized,
 ) {
     /** Pre-tax subtotal: the total less the taxes added on top. */
     val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
+
+    /** The tax lines the guest sees ([guestTaxLines]): same total as [taxes]. */
+    val guestTaxes: List<TaxLine> get() = guestTaxLines(taxes, taxDisplay)
 }
 
 /**
@@ -273,10 +278,10 @@ object ReceiptRenderer {
         add(PrintLine.Divider)
 
         // taxes added on top always print (they change the total): subtotal,
-        // one line per tax with its rate, then the total
+        // one line per tax with its rate (or one combined "Tax (8.25%)"), then the total
         if (receipt.taxes.isNotEmpty()) {
             add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), receipt.subtotal.let(policy::money)))
-            receipt.taxes.forEach { add(PrintLine.KeyValue(taxLineLabel(it.component, locale), it.amount.let(policy::money))) }
+            receipt.guestTaxes.forEach { add(PrintLine.KeyValue(taxLineLabel(it.component, locale), it.amount.let(policy::money))) }
         }
         add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.let(policy::money), emphasized = true))
         if (policy.showTax && receipt.taxRatePercent != null) {
@@ -388,9 +393,18 @@ object ReceiptRenderer {
         return locale.dataText("${tax.labelFr}/${tax.labelEn}", "${tax.labelEn}/${tax.labelFr}")
     }
 
-    /** "GST/TPS 5%", "TVQ/QST 9,975 %". */
-    fun taxLineLabel(tax: TaxComponent, locale: LocaleCode): String =
-        Messages.get(RECEIPT_TAX_LINE, locale, taxName(tax, locale), rateText(tax, locale))
+    /**
+     * "GST/TPS 5%", "TVQ/QST 9,975 %"; the one combined line of
+     * [dev.dwhipstock.pos.sdk.guestTaxLines]: "Tax (8.25%)", "Taxes (8,25 %)".
+     */
+    fun taxLineLabel(tax: TaxComponent, locale: LocaleCode): String {
+        if (tax.code == dev.dwhipstock.pos.sdk.COMBINED_TAX_CODE) {
+            val word = locale.dataText(tax.labelFr, tax.labelEn)
+            return if (word.isBlank()) Messages.get(MessageKey.RECEIPT_TAX_COMBINED, locale, rateText(tax, locale))
+            else Messages.get(MessageKey.RECEIPT_TAX_COMBINED_NAMED, locale, word, rateText(tax, locale))
+        }
+        return Messages.get(RECEIPT_TAX_LINE, locale, taxName(tax, locale), rateText(tax, locale))
+    }
 
     /** "GST/TPS no. 123456789 RT0001". */
     fun taxRegistrationLine(tax: TaxComponent, locale: LocaleCode): String =

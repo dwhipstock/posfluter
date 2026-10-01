@@ -22,9 +22,9 @@ Map<String, dynamic> _check() => {
         ).readAsStringSync(),
       )
       as Map<String, dynamic>,
-  // $68.96 due; cash rounds to $68.95
-  'cashDueCents': 6895,
-  'cashRoundingCents': -1,
+  // $69.28 due; cash rounds to $69.30
+  'cashDueCents': 6930,
+  'cashRoundingCents': 2,
 };
 
 http.Response _json(Object b, [int s = 200]) => http.Response.bytes(
@@ -126,7 +126,25 @@ void main() {
     await type(tester, '⌫');
     await type(tester, '⌫');
     await type(tester, '70');
-    expect(find.text('Change due \$1.05'), findsOneWidget);
+    expect(find.text('Change due \$0.70'), findsOneWidget);
+  });
+
+  testWidgets('cash is capped at what is due + \$1,000, like the server', (
+    tester,
+  ) async {
+    await pump(tester);
+    // $69.30 due in cash: at most $1,069.30 — the 4th "9" is kept out
+    await type(tester, '9999999');
+    expect(find.text('\$999.00'), findsOneWidget);
+    expect(find.text('Change due \$929.70'), findsOneWidget);
+    expect(find.textContaining('9,999'), findsNothing);
+    expect(
+      find.text('At most \$1,069.30 in cash for this bill'),
+      findsOneWidget,
+    );
+    // the next key clears the note
+    await type(tester, '⌫');
+    expect(find.byKey(const Key('cash-capped')), findsNothing);
   });
 
   testWidgets('card terminal not set up: the button says why and is off', (

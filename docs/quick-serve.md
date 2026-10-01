@@ -11,7 +11,7 @@ Plateau. Sync is one-way, store to portal, as for every store.
 |---|---|
 | Store | `POS_VENUE=express` (desktop), or `store.venue=express` in the Copper Lantern POS app's `store.properties` (tablet) |
 | Kind | `quick-serve` (`GET /health` → `"kind":"quick-serve"`) |
-| Country, money, languages | US (Raleigh, NC; 418 Lantern Row, fictional), USD, NC sales tax 6.75% + Wake prepared food tax 1% added on top; en first, fr / es / de / af selectable |
+| Country, money, languages | US (Raleigh, NC; 418 Lantern Row, fictional), USD, 8.25% tax added on top (NC sales tax 7.25% + Wake prepared food tax 1%; one "Tax (8.25%)" line for guests); en first, fr / es / de / af selectable |
 | Legal age | 21: the kiosk's ID note and a 21+ badge on kiosk orders with alcohol at the counter |
 | Existing counters | moved from Montréal in place on their next start: see [Copper Lantern moved to Raleigh](demo-runbook.md#copper-lantern-moved-to-raleigh-existing-devices) |
 | Menu | 22 items: burgers, chicken, fries and sides, salads, desserts, soft drinks, and beer and wine only (no cocktails). Sizes on fries, soft drinks, wings and tenders |

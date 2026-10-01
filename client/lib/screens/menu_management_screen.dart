@@ -517,6 +517,70 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
         ];
   bool _busy = false;
 
+  /// The store's own language first (English in a US store, French in a
+  /// French-first one): name and size fields follow it.
+  bool get _enFirst => StoreProfile.current.defaultLocale != 'fr';
+
+  /// Everything the manager can edit, as one string: unsaved changes show
+  /// as a difference from the opening [_initial].
+  String _snapshot() => [
+    _nameFr.text,
+    _nameEn.text,
+    _abbrev.text,
+    _categoryId,
+    _isAlcohol,
+    _active,
+    for (final v in _variants) ...[
+      v.id,
+      v.labelFr.text,
+      v.labelEn.text,
+      v.priceCAD.text,
+    ],
+  ].join('\u0000');
+  late final String _initial;
+
+  @override
+  void initState() {
+    super.initState();
+    _initial = _snapshot(); // the opening state
+  }
+
+  bool get _dirty => _snapshot() != _initial;
+
+  /// Esc, a tap outside or back: close at once when nothing changed, else
+  /// ask before throwing the edits away. Cancel / Save close directly.
+  Future<void> _confirmClose(bool didPop, Object? _) async {
+    if (didPop) return;
+    if (_busy) return;
+    if (!_dirty) {
+      Navigator.pop(context, false);
+      return;
+    }
+    final l = L.of(context);
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.unsavedItemTitle),
+        content: Text(l.unsavedItemBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.keepEditing),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: T.destructive,
+              foregroundColor: T.onDestructive,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l.discard),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) Navigator.pop(context, false);
+  }
+
   Future<void> _guard(Future<void> Function() op) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -690,201 +754,219 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
   Widget build(BuildContext context) {
     final l = L.of(context);
     final isNew = widget.item == null;
-    return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: T.radiusLarge,
-        side: const BorderSide(color: T.border),
-      ),
-      child: SizedBox(
-        width: 560,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(isNew ? l.addItem : l.editItem, style: T.headline()),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: _field(_nameFr, l.nameFrLabel)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _field(_nameEn, l.nameEnLabel)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _categoryId,
-                        // a long category name ellipsizes instead of
-                        // overflowing the field
-                        isExpanded: true,
-                        decoration: InputDecoration(labelText: l.categoryLabel),
-                        items: [
-                          for (final c in widget.categories)
-                            DropdownMenuItem(
-                              value: c.id,
-                              child: Text(
-                                l.name(c.nameFr, c.nameEn, c.names),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+    final nameFields = [
+      Expanded(child: _field(_nameFr, l.nameFrLabel)),
+      Expanded(child: _field(_nameEn, l.nameEnLabel)),
+    ];
+    if (_enFirst) nameFields.setAll(0, nameFields.reversed.toList());
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _confirmClose,
+      child: Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: T.radiusLarge,
+          side: const BorderSide(color: T.border),
+        ),
+        child: SizedBox(
+          width: 560,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(isNew ? l.addItem : l.editItem, style: T.headline()),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      nameFields[0],
+                      const SizedBox(width: 10),
+                      nameFields[1],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _categoryId,
+                          // a long category name ellipsizes instead of
+                          // overflowing the field
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: l.categoryLabel,
+                          ),
+                          items: [
+                            for (final c in widget.categories)
+                              DropdownMenuItem(
+                                value: c.id,
+                                child: Text(
+                                  l.name(c.nameFr, c.nameEn, c.names),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _categoryId = v ?? _categoryId),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _categoryId = v ?? _categoryId),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    SizedBox(
-                      width: 130,
-                      child: _field(_abbrev, l.abbrevLabel, maxLength: 4),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(l.isAlcoholLabel, style: T.text(size: 15)),
-                        value: _isAlcohol,
-                        onChanged: (v) => setState(() => _isAlcohol = v),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 130,
+                        child: _field(_abbrev, l.abbrevLabel, maxLength: 4),
                       ),
-                    ),
-                    if (!isNew)
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
                       Expanded(
                         child: SwitchListTile(
                           contentPadding: EdgeInsets.zero,
-                          title: Text(l.activeLabel, style: T.text(size: 15)),
-                          value: _active,
-                          onChanged: (v) => setState(() => _active = v),
+                          title: Text(
+                            l.isAlcoholLabel,
+                            style: T.text(size: 15),
+                          ),
+                          value: _isAlcohol,
+                          onChanged: (v) => setState(() => _isAlcohol = v),
                         ),
                       ),
-                  ],
-                ),
-                SectionLabel(l.sizesLabel),
-                for (final v in _variants)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
+                      if (!isNew)
                         Expanded(
-                          flex: 3,
-                          child: _field(v.labelFr, l.sizeLabelFr),
+                          child: SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(l.activeLabel, style: T.text(size: 15)),
+                            value: _active,
+                            onChanged: (v) => setState(() => _active = v),
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 3,
-                          child: _field(v.labelEn, l.sizeLabelEn),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: _field(
-                            v.priceCAD,
-                            l.priceCAD,
-                            keyboard: const TextInputType.numberWithOptions(
-                              decimal: true,
+                    ],
+                  ),
+                  SectionLabel(l.sizesLabel),
+                  for (final v in _variants)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: _enFirst
+                                ? _field(v.labelEn, l.sizeLabelEn)
+                                : _field(v.labelFr, l.sizeLabelFr),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: _enFirst
+                                ? _field(v.labelFr, l.sizeLabelFr)
+                                : _field(v.labelEn, l.sizeLabelEn),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: _field(
+                              v.priceCAD,
+                              l.priceCAD,
+                              keyboard: const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              formatters: moneyInputFormatters,
                             ),
-                            formatters: moneyInputFormatters,
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            LucideIcons.x,
-                            size: 18,
-                            color: T.destructive,
+                          IconButton(
+                            icon: const Icon(
+                              LucideIcons.x,
+                              size: 18,
+                              color: T.destructive,
+                            ),
+                            tooltip: l.deleteLine,
+                            constraints: const BoxConstraints(
+                              minWidth: 44,
+                              minHeight: T.minTouch,
+                            ),
+                            onPressed: _busy ? null : () => _removeVariant(v),
                           ),
-                          tooltip: l.deleteLine,
-                          constraints: const BoxConstraints(
-                            minWidth: 44,
-                            minHeight: T.minTouch,
-                          ),
-                          onPressed: _busy ? null : () => _removeVariant(v),
-                        ),
-                      ],
-                    ),
-                  ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    icon: const Icon(LucideIcons.plus, size: 18),
-                    label: Text(l.addSize),
-                    onPressed: _busy
-                        ? null
-                        : () => setState(() => _variants.add(_VariantEdit())),
-                  ),
-                ),
-                if (!isNew) ...[
-                  const SizedBox(height: 4),
-                  OutlinedButton.icon(
-                    icon: const Icon(LucideIcons.imagePlus, size: 18),
-                    label: Text(l.uploadPhoto),
-                    onPressed: _busy
-                        ? null
-                        : () {
-                            Navigator.pop(context, false);
-                            widget.onUploadPhoto?.call();
-                          },
-                  ),
-                  if (widget.aiStatus.configured) ...[
-                    const SizedBox(height: 8),
-                    AiPhotoActions(
-                      status: widget.aiStatus,
-                      busy: _busy,
-                      onGenerate: () {
-                        Navigator.pop(context, false);
-                        widget.onAiGenerate?.call();
-                      },
-                      onEnhance: () {
-                        Navigator.pop(context, false);
-                        widget.onAiEnhance?.call();
-                      },
-                    ),
-                  ],
-                ],
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    // Delete gives way (ellipsizes) before Cancel/Save do
-                    if (!isNew)
-                      Flexible(
-                        child: TextButton.icon(
-                          icon: const Icon(
-                            LucideIcons.trash2,
-                            size: 18,
-                            color: T.destructive,
-                          ),
-                          label: Text(
-                            l.deleteItem,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: T.destructive),
-                          ),
-                          onPressed: _busy ? null : _deleteItem,
-                        ),
+                        ],
                       ),
-                    const Spacer(),
-                    TextButton(
+                    ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      icon: const Icon(LucideIcons.plus, size: 18),
+                      label: Text(l.addSize),
                       onPressed: _busy
                           ? null
-                          : () => Navigator.pop(context, false),
-                      child: Text(l.cancel),
+                          : () => setState(() => _variants.add(_VariantEdit())),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      icon: const Icon(LucideIcons.save, size: 18),
-                      label: Text(l.save),
-                      onPressed: _busy ? null : _save,
+                  ),
+                  if (!isNew) ...[
+                    const SizedBox(height: 4),
+                    OutlinedButton.icon(
+                      icon: const Icon(LucideIcons.imagePlus, size: 18),
+                      label: Text(l.uploadPhoto),
+                      onPressed: _busy
+                          ? null
+                          : () {
+                              Navigator.pop(context, false);
+                              widget.onUploadPhoto?.call();
+                            },
                     ),
+                    if (widget.aiStatus.configured) ...[
+                      const SizedBox(height: 8),
+                      AiPhotoActions(
+                        status: widget.aiStatus,
+                        busy: _busy,
+                        onGenerate: () {
+                          Navigator.pop(context, false);
+                          widget.onAiGenerate?.call();
+                        },
+                        onEnhance: () {
+                          Navigator.pop(context, false);
+                          widget.onAiEnhance?.call();
+                        },
+                      ),
+                    ],
                   ],
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      // Delete gives way (ellipsizes) before Cancel/Save do
+                      if (!isNew)
+                        Flexible(
+                          child: TextButton.icon(
+                            icon: const Icon(
+                              LucideIcons.trash2,
+                              size: 18,
+                              color: T.destructive,
+                            ),
+                            label: Text(
+                              l.deleteItem,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: T.destructive),
+                            ),
+                            onPressed: _busy ? null : _deleteItem,
+                          ),
+                        ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: _busy
+                            ? null
+                            : () => Navigator.pop(context, false),
+                        child: Text(l.cancel),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        icon: const Icon(LucideIcons.save, size: 18),
+                        label: Text(l.save),
+                        onPressed: _busy ? null : _save,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -951,16 +1033,18 @@ class _CategoriesEditorDialogState extends State<_CategoriesEditorDialog> {
         title: Text(category == null ? l.addCategory : l.editCategories),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          // the store's own language first (English in a US store)
           children: [
-            TextField(
-              controller: nameFr,
-              decoration: InputDecoration(labelText: l.nameFrLabel),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: nameEn,
-              decoration: InputDecoration(labelText: l.nameEnLabel),
-            ),
+            for (final (i, (c, label))
+                in [(nameFr, l.nameFrLabel), (nameEn, l.nameEnLabel)]
+                    .reversedIf(StoreProfile.current.defaultLocale != 'fr')
+                    .indexed) ...[
+              if (i > 0) const SizedBox(height: 8),
+              TextField(
+                controller: c,
+                decoration: InputDecoration(labelText: label),
+              ),
+            ],
           ],
         ),
         actions: [
@@ -1129,4 +1213,10 @@ class _CategoriesEditorDialogState extends State<_CategoriesEditorDialog> {
       ),
     );
   }
+}
+
+extension<T> on List<T> {
+  /// This list back to front when [flip] (French / English field pairs in
+  /// the store's own language order).
+  List<T> reversedIf(bool flip) => flip ? reversed.toList() : this;
 }

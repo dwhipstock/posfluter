@@ -49,9 +49,9 @@ class CashRoundingFlowTest {
         postJson("/shifts", """{"openingFloatCents":$float,"managerPin":"1234"}""")
             .also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }
 
-    /** A Raleigh total (price + NC sales tax 6.75% + Wake prepared food tax 1%, each half-up) for a pre-tax price. */
-    private fun ncTotal(price: Long): Long =
-        price + CopperLanternConfig.NC_TAXES.sumOf { it.on(Money(price)).cents }
+    /** A Raleigh total (price + Tax 8.25%, rounded half-up once) for a pre-tax price: the store's own policy. */
+    private val ncPolicy = CopperLanternConfig(settings = dev.dwhipstock.pos.base.SettingsRepository(), printer = dev.dwhipstock.pos.sdk.PrinterAdapter.VirtualPrinter("build/tmp/receipts"), publicBaseUrl = "http://localhost").taxPolicy
+    private fun ncTotal(price: Long): Long = price + ncPolicy.assess(Money(price)).taxAdded.cents
 
     /** The smallest pre-tax price ≥ [from] whose Raleigh total ends in [digit]. */
     private fun priceEndingIn(digit: Int, from: Long = 1000): Long =

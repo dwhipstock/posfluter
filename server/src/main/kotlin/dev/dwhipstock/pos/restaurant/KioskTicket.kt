@@ -45,7 +45,7 @@ object KioskTicket {
         add(PrintLine.Divider)
         if (bill.taxes.isNotEmpty()) {
             add(PrintLine.KeyValue(Messages.get(MessageKey.RECEIPT_SUBTOTAL, locale), money(bill.subtotal)))
-            bill.taxes.forEach { add(PrintLine.KeyValue(ReceiptRenderer.taxLineLabel(it.component, locale), money(it.amount))) }
+            bill.guestTaxes.forEach { add(PrintLine.KeyValue(ReceiptRenderer.taxLineLabel(it.component, locale), money(it.amount))) }
         }
         add(PrintLine.KeyValue(Messages.get(MessageKey.RECEIPT_TOTAL, locale), money(bill.grandTotal), emphasized = true))
         val cash = bill.cashDue

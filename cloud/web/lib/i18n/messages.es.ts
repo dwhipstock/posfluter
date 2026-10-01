@@ -453,6 +453,7 @@ export const es: Record<MsgKey, string> = {
   tax_col_rate: "{label} {rate}%",
   tax_by_code: "Por impuesto",
   tax_col_tax: "Impuesto",
+  tax_col_remit: "Se paga a",
   nav_stock: "Inventario",
   stock_title: "Inventario",
   stock_sub: "Existencias = último conteo + recibido − vendido ± ajustes + devoluciones, según las ventas y los conteos sincronizados.",

@@ -2717,6 +2717,18 @@ class TableInfo {
   final int? openCheckTotalCents;
   final String? openCheckOpenedAt;
 
+  /// A part-paid bill (one split bill paid, a partial payment): what is still
+  /// owed and what is paid; null when nothing is paid yet.
+  final int? openCheckOutstandingCents, openCheckPaidCents;
+
+  /// Money is on the bill but some is still owed: the tile shows the balance.
+  bool get partPaid =>
+      (openCheckPaidCents ?? 0) > 0 && openCheckOutstandingCents != null;
+
+  /// What the floor plan shows for an open bill: the balance once part paid.
+  int get openCheckShownCents =>
+      partPaid ? openCheckOutstandingCents! : (openCheckTotalCents ?? 0);
+
   /// Floor-plan geometry: logical units on the server's 0–1000 canvas.
   final int x, y, width, height, rotation, seats;
   final String shape; // ROUND | SQUARE | RECT | BAR
@@ -2742,6 +2754,8 @@ class TableInfo {
     this.shape,
     this.seats, {
     this.menuPath,
+    this.openCheckOutstandingCents,
+    this.openCheckPaidCents,
   });
   factory TableInfo.fromJson(Map<String, dynamic> j) => TableInfo(
     j['id'],
@@ -2762,6 +2776,8 @@ class TableInfo {
     j['shape'] ?? 'SQUARE',
     j['seats'] ?? 4,
     menuPath: j['menuPath'],
+    openCheckOutstandingCents: j['openCheckOutstandingCents'],
+    openCheckPaidCents: j['openCheckPaidCents'],
   );
   String get displayLabel => nameOverride ?? label;
   bool get isVip => nameOverride != null;
@@ -2797,6 +2813,8 @@ class TableInfo {
     shape ?? this.shape,
     seats ?? this.seats,
     menuPath: menuPath,
+    openCheckOutstandingCents: openCheckOutstandingCents,
+    openCheckPaidCents: openCheckPaidCents,
   );
 
   /// The geometry slice the batch "save layout" endpoint expects.
@@ -3033,23 +3051,70 @@ class FeeLine {
 class TaxLine {
   final String code, labelFr, labelEn, ratePercent;
   final int amountCents;
+
+  /// Who the tax is paid to ("NCDOR", "Wake County"); back office only.
+  final String remitTo;
   TaxLine(
     this.code,
     this.labelFr,
     this.labelEn,
     this.ratePercent,
-    this.amountCents,
-  );
+    this.amountCents, {
+    this.remitTo = '',
+  });
   factory TaxLine.fromJson(Map<String, dynamic> j) => TaxLine(
     j['code'] ?? '',
     j['labelFr'] ?? '',
     j['labelEn'] ?? '',
     j['ratePercent'] ?? '',
     j['amountCents'] ?? 0,
+    remitTo: j['remitTo'] ?? '',
   );
 
   static List<TaxLine> listFrom(dynamic json) =>
       ((json ?? []) as List).map((t) => TaxLine.fromJson(t)).toList();
+
+  /// The code of the one combined line [forGuests] makes.
+  static const combinedCode = 'TAX';
+
+  bool get isCombined => code == combinedCode;
+
+  /// What a guest-facing screen shows for [taxes] (check, pay, split,
+  /// counter): as they are, or — when the store shows its taxes as one line
+  /// ([StoreProfile.taxCombined], Copper Lantern) — one "Tax (8.25%)" line
+  /// whose amount is the itemised amounts added up, so it always matches the
+  /// printed receipt and the reports to the cent.
+  static List<TaxLine> forGuests(List<TaxLine> taxes, {StoreProfile? profile}) {
+    final p = profile ?? StoreProfile.current;
+    if (!p.taxCombined || taxes.length < 2) return taxes;
+    return [
+      TaxLine(
+        combinedCode,
+        p.taxLabel,
+        p.taxLabel,
+        sumRates([for (final t in taxes) t.ratePercent]),
+        taxes.fold(0, (s, t) => s + t.amountCents),
+      ),
+    ];
+  }
+
+  /// Decimal rate strings added up exactly ("7.25" + "1" = "8.25"), in
+  /// thousandths of a percent so no float error creeps in.
+  static String sumRates(List<String> rates) {
+    var milli = 0;
+    for (final r in rates) {
+      final parts = r.trim().split('.');
+      final whole = int.tryParse(parts[0].isEmpty ? '0' : parts[0]) ?? 0;
+      final frac = parts.length > 1
+          ? int.tryParse(parts[1].padRight(3, '0').substring(0, 3)) ?? 0
+          : 0;
+      milli += whole * 1000 + frac;
+    }
+    final whole = milli ~/ 1000;
+    final frac = (milli % 1000).toString().padLeft(3, '0');
+    final trimmed = frac.replaceFirst(RegExp(r'0+$'), '');
+    return trimmed.isEmpty ? '$whole' : '$whole.$trimmed';
+  }
 }
 
 class Tender {
@@ -3390,6 +3455,12 @@ class ShiftReport {
   /// Card tips on top of the bills (reader / Stripe), and per server.
   final int tipsCents;
   final List<ServerTips> tipsByServer;
+
+  /// The added taxes collected (sales less refunds), one row per tax and
+  /// rate with who it is paid to — NC sales tax 7.25% (NCDOR), Wake
+  /// prepared food tax 1% (Wake County). Itemised even where guests see one
+  /// combined "Tax (8.25%)" line; empty without added taxes.
+  final List<TaxLine> taxes;
   ShiftReport(
     this.shiftId,
     this.shiftStatus,
@@ -3415,6 +3486,7 @@ class ShiftReport {
     this.takeOutCount = 0,
     this.tipsCents = 0,
     this.tipsByServer = const [],
+    this.taxes = const [],
   });
   factory ShiftReport.fromJson(Map<String, dynamic> j) => ShiftReport(
     j['shiftId'],
@@ -3445,6 +3517,7 @@ class ShiftReport {
     tipsByServer: ((j['tipsByServer'] as List?) ?? const [])
         .map((t) => ServerTips.fromJson(t))
         .toList(),
+    taxes: TaxLine.listFrom(j['taxes']),
   );
 }
 

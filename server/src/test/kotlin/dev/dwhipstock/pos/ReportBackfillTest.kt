@@ -85,8 +85,8 @@ class ReportBackfillTest {
         assertEquals(
             original["grandTotalCents"]!!.jsonPrimitive.content.toLong(),
             backfilled["grandTotalCents"]!!.jsonPrimitive.content.toLong())
-        // NC sales tax 1.37 + Wake 0.20 on the $20.25 pitcher, with the per-tax breakdown
-        assertEquals(157L, backfilled["taxIncludedCents"]!!.jsonPrimitive.content.toLong())
+        // Tax 8.25% 1.67 (NC sales tax 1.47 + Wake 0.20) on the $20.25 pitcher, with the per-tax breakdown
+        assertEquals(167L, backfilled["taxIncludedCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(2025L, backfilled["subtotalCents"]!!.jsonPrimitive.content.toLong())
         assertEquals(original["taxes"], backfilled["taxes"])
         assertEquals(listOf("NC_SALES", "WAKE_FOOD"), backfilled["taxes"]!!.jsonArray.map {

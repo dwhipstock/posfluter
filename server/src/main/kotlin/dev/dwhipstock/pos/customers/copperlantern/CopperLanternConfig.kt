@@ -14,7 +14,9 @@ import dev.dwhipstock.pos.sdk.ReceiptPolicy
 import dev.dwhipstock.pos.sdk.RoundingPolicy
 import dev.dwhipstock.pos.sdk.StoreProfile
 import dev.dwhipstock.pos.sdk.TaxComponent
+import dev.dwhipstock.pos.sdk.TaxDisplay
 import dev.dwhipstock.pos.sdk.TaxPolicy
+import dev.dwhipstock.pos.sdk.TaxRounding
 import dev.dwhipstock.pos.sdk.TenderMethod
 import dev.dwhipstock.pos.sdk.UpsellConfig
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
@@ -58,11 +60,13 @@ class CopperLanternConfig(
     override val guestSlipLocales = listOf(LocaleCode.EN)
 
     // ---- policy: typed, changing these is a deploy, on purpose ----
-    // North Carolina: menu prices are pre-tax; the state + Wake County sales
-    // tax and Wake County's prepared food & beverage tax are added on top of
-    // everything a pub sells (its food and drinks are all prepared food and
-    // beverages). US receipts print no tax registration number.
-    override val taxPolicy = TaxPolicy.AddedTaxes(NC_TAXES)
+    // North Carolina: menu prices are pre-tax; the state + Wake County + Wake
+    // Transit sales tax and Wake County's prepared food & beverage tax are added
+    // on top of everything a pub sells (its food and drinks are all prepared
+    // food and beverages). Guests see one "Tax (8.25%)" line, rounded once at
+    // 8.25%; the reports keep the two taxes apart for remittance ([NC_TAXES]).
+    // US receipts print no tax registration number.
+    override val taxPolicy = TaxPolicy.AddedTaxes(NC_TAXES, rounding = TaxRounding.COMBINED, display = TaxDisplay.Combined())
     // the US no longer makes pennies either: a cash payment rounds to the
     // nearest five cents, card is exact (cash.rounding=off charges cash to the cent)
     override val roundingPolicy: RoundingPolicy = cashRounding.policy
@@ -129,19 +133,22 @@ class CopperLanternConfig(
 
         /**
          * Raleigh (Wake County), both on the same pre-tax base, never compounded:
-         * - sales tax 6.75% = North Carolina's 4.75% + Wake County's 2%;
+         * - sales tax 7.25% = North Carolina's 4.75% + Wake County's 2% +
+         *   the Wake Transit 0.5% (Raleigh adds none), remitted to the NC
+         *   Department of Revenue (NCDOR);
          * - Wake County's 1% prepared food and beverage tax on restaurant food
-         *   and drinks — so a pub check pays 7.75% in all.
-         * The same shape as the other US stores' sales tax (no registration
-         * number); the codes are what reports and sync group by.
+         *   and drinks, remitted to Wake County — so a pub check pays 8.25%.
+         * Guests see "Tax (8.25%)"; the reports show the two apart. The codes
+         * are what reports and sync group by (with the rate: a check closed
+         * before this change keeps its 6.75%).
          */
         val NC_SALES_TAX = TaxComponent(
             code = "NC_SALES", labelFr = "NC sales tax", labelEn = "NC sales tax",
-            ratePercent = BigDecimal("6.75"), registrationNumber = "",
+            ratePercent = BigDecimal("7.25"), registrationNumber = "", remitTo = "NCDOR",
         )
         val WAKE_FOOD_TAX = TaxComponent(
             code = "WAKE_FOOD", labelFr = "Wake prepared food tax", labelEn = "Wake prepared food tax",
-            ratePercent = BigDecimal("1"), registrationNumber = "",
+            ratePercent = BigDecimal("1"), registrationNumber = "", remitTo = "Wake County",
         )
         val NC_TAXES = listOf(NC_SALES_TAX, WAKE_FOOD_TAX)
     }

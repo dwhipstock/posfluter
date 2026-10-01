@@ -456,6 +456,7 @@ export const af: Record<MsgKey, string> = {
   tax_col_rate: "{label} {rate}%",
   tax_by_code: "Per belasting",
   tax_col_tax: "Belasting",
+  tax_col_remit: "Betaalbaar aan",
   nav_stock: "Voorraad",
   stock_title: "Voorraad",
   stock_sub: "Op hande = laaste telling + ontvang − verkoop ± aanpassings + terugsendings, uit die gesinkroniseerde verkope en tellings.",

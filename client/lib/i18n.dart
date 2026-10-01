@@ -544,6 +544,27 @@ class L {
     'Verschobene Tische gehen verloren, wenn Sie jetzt verlassen.',
     'Tafelposisies wat jy geskuif het, sal verlore gaan as jy nou uitgaan.',
   );
+  String get unsavedItemTitle => _t(
+    'Abandonner les modifications\u00A0?',
+    'Discard changes?',
+    '¿Descartar los cambios?',
+    'Änderungen verwerfen?',
+    'Gooi veranderinge weg?',
+  );
+  String get unsavedItemBody => _t(
+    'Les modifications de cet article ne sont pas enregistrées.',
+    'Your changes to this item are not saved.',
+    'Los cambios de este artículo no están guardados.',
+    'Die Änderungen an diesem Artikel sind nicht gespeichert.',
+    'Jou veranderinge aan hierdie item is nie gestoor nie.',
+  );
+  String get keepEditing => _t(
+    'Continuer',
+    'Keep editing',
+    'Seguir editando',
+    'Weiter bearbeiten',
+    'Hou aan wysig',
+  );
   String get discard => _t(
     'Quitter sans enregistrer',
     'Discard',
@@ -993,9 +1014,51 @@ class L {
   String get subtotal =>
       _t('Sous-total', 'Subtotal', 'Subtotal', 'Zwischensumme', 'Subtotaal');
 
-  /// A tax added on top, e.g. "NC sales tax 6.75%" / "NC sales tax 6,75 %" (rate is a decimal string).
+  /// A tax added on top, e.g. "NC sales tax 7.25%" / "NC sales tax 7,25 %" (rate is a decimal string).
   /// Data, not a string table: the tax names come from the store.
-  String taxLine(TaxLine tax) => switch (lang) {
+  /// The report's tax section: each tax collected, for remittance.
+  String get taxCollected => _t(
+    'Taxes perçues',
+    'Tax collected',
+    'Impuestos cobrados',
+    'Eingenommene Steuern',
+    'Belasting ingevorder',
+  );
+  String get taxTotal => _t(
+    'Total des taxes',
+    'Total tax',
+    'Total de impuestos',
+    'Steuern gesamt',
+    'Totale belasting',
+  );
+
+  /// Who a tax is paid to: "remit to NCDOR".
+  String remitTo(String who) => _t(
+    'à verser à $who',
+    'remit to $who',
+    'a pagar a $who',
+    'abzuführen an $who',
+    'betaalbaar aan $who',
+  );
+
+  /// The one combined line ([TaxLine.forGuests]): "Tax (8.25%)", "Taxes (8,25 %)"
+  /// — the store's own word when it set one.
+  String taxLine(TaxLine tax) =>
+      tax.isCombined ? _taxCombined(tax) : _taxItem(tax);
+
+  String _taxCombined(TaxLine tax) {
+    final own = lang == 'fr' ? tax.labelFr : tax.labelEn;
+    final word = own.trim().isNotEmpty
+        ? own
+        : _t('Taxes', 'Tax', 'Impuesto', 'Steuer', 'Belasting');
+    final r = tax.ratePercent;
+    return switch (lang) {
+      'fr' || 'de' => '$word (${r.replaceAll('.', ',')} %)',
+      _ => '$word ($r%)',
+    };
+  }
+
+  String _taxItem(TaxLine tax) => switch (lang) {
     'fr' => '${tax.labelFr} ${tax.ratePercent.replaceAll('.', ',')} %',
     'de' => '${tax.labelEn} ${tax.ratePercent.replaceAll('.', ',')} %',
     _ => '${tax.labelEn} ${tax.ratePercent}%',
@@ -1788,6 +1851,33 @@ class L {
     'Rückgeld $amount',
     'Kleingeld verskuldig $amount',
   );
+
+  /// A floor-plan table whose bill is partly paid (a split bill settled).
+  String get partPaid => _t(
+    'Payé en partie',
+    'Part paid',
+    'Pagado en parte',
+    'Teilweise bezahlt',
+    'Deels betaal',
+  );
+
+  /// A part-paid table's tile: what is still owed ("$15.57 left").
+  String balanceLeft(String amount) => _t(
+    'Reste $amount',
+    '$amount left',
+    'Faltan $amount',
+    'Noch $amount',
+    '$amount oor',
+  );
+
+  /// The pay screen kept a digit out: the cash would be more than due + $1,000.
+  String cashEntryCapped(String max) => _t(
+    'Au plus $max en comptant pour cette addition',
+    'At most $max in cash for this bill',
+    'Como máximo $max en efectivo para esta cuenta',
+    'Höchstens $max in bar für diese Rechnung',
+    'Hoogstens $max kontant vir hierdie rekening',
+  );
   String get overDueTitle => _t(
     'Montant plus élevé que le solde',
     'Amount is more than the bill',
@@ -2571,6 +2661,35 @@ class L {
     'Creando fotos… (hasta un minuto)',
     'Fotos werden erstellt… (bis zu einer Minute)',
     'Maak foto’s… (tot ’n minuut)',
+  );
+  // the AI menu dialog's spinner: what it is doing right now
+  String get aiMenuThinking => _t(
+    'Lecture de votre demande…',
+    'Working on your request…',
+    'Procesando tu solicitud…',
+    'Ihre Anfrage wird bearbeitet…',
+    'Besig met jou versoek…',
+  );
+  String get aiMenuReadingPhotos => _t(
+    'Lecture des photos du menu… (jusqu’à une minute)',
+    'Reading the menu photos… (up to a minute)',
+    'Leyendo las fotos del menú… (hasta un minuto)',
+    'Menüfotos werden gelesen… (bis zu einer Minute)',
+    'Lees die spyskaartfoto’s… (tot ’n minuut)',
+  );
+  String get aiMenuTranslating => _t(
+    'Traduction du menu…',
+    'Translating the menu…',
+    'Traduciendo el menú…',
+    'Menü wird übersetzt…',
+    'Vertaal die spyskaart…',
+  );
+  String get aiMenuApplying => _t(
+    'Mise à jour du menu…',
+    'Updating the menu…',
+    'Actualizando el menú…',
+    'Menü wird aktualisiert…',
+    'Werk die spyskaart by…',
   );
   String get aiPickOne => _t(
     'Touchez la photo à garder',

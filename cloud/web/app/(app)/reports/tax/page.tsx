@@ -64,6 +64,8 @@ function TaxPage() {
   // scope shows its own tax in the "by tax" table instead of two zero columns
   const rates = data?.rates ?? [];
   const byTax: TaxCodeRow[] = data?.byTax ?? [];
+  // who each tax is paid to (NCDOR, Wake County), when the store says
+  const hasRemit = byTax.some((r) => !!r.remitTo);
   const showQc = !(
     (rates.length > 0 || byTax.length > 0) &&
     rates.every((r) => !CANADIAN.has(r.code)) &&
@@ -124,6 +126,7 @@ function TaxPage() {
           title: t("tax_by_code"),
           columns: [
             col.text<TaxCodeRow>(t("tax_col_tax"), (r) => taxLabel(r)),
+            ...(hasRemit ? [col.text<TaxCodeRow>(t("tax_col_remit"), (r) => r.remitTo ?? "")] : []),
             col.money(t("col_amount"), (r) => r.amountCents),
           ],
           rows: byTax,
@@ -181,6 +184,7 @@ function TaxPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("tax_col_tax")}</TableHead>
+                    {hasRemit && <TableHead>{t("tax_col_remit")}</TableHead>}
                     {combined && m.multi && <TableHead>{t("col_currency")}</TableHead>}
                     {combined && <TableHead className="hidden md:table-cell">{t("col_store")}</TableHead>}
                     <TableHead className="text-right">{t("col_amount")}</TableHead>
@@ -188,10 +192,16 @@ function TaxPage() {
                 </TableHeader>
                 <TableBody>
                   {byTax.map((r) => {
-                    const stores = data?.byVenue.filter((v) => v.taxes?.some((x) => x.code === r.code && x.currency === r.currency)) ?? [];
+                    const stores =
+                      data?.byVenue.filter((v) =>
+                        v.taxes?.some(
+                          (x) => x.code === r.code && x.ratePercent === r.ratePercent && x.currency === r.currency
+                        )
+                      ) ?? [];
                     return (
-                      <TableRow key={`${r.code}-${r.currency}`}>
+                      <TableRow key={`${r.code}-${r.ratePercent}-${r.currency}`}>
                         <TableCell className="font-medium">{taxLabel(r)}</TableCell>
+                        {hasRemit && <TableCell className="text-neutral-600">{r.remitTo ?? ""}</TableCell>}
                         {combined && m.multi && <TableCell>{r.currency}</TableCell>}
                         {combined && (
                           <TableCell className="hidden text-neutral-600 md:table-cell">

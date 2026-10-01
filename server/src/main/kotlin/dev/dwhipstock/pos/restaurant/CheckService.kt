@@ -347,6 +347,18 @@ class CheckService(private val config: CustomerConfig) {
             variant[ItemVariants.costCents]?.let { c -> it[unitCostCents] = c }
         }.value
 
+        // the same item tapped again: one line, qty 2 — never two lines of 1
+        mergeTarget(checkId, lineId, qty)?.let { (target, merged) ->
+            CheckLines.deleteWhere { CheckLines.id eq lineId }
+            CheckLines.update({ CheckLines.id eq target }) { it[CheckLines.qty] = merged }
+            Outbox.write("check.line_qty_changed", "check", checkId.toString(), buildJsonObject {
+                put("checkId", checkId)
+                put("lineId", target)
+                put("qty", merged)
+            })
+            return@transaction loadCheck(checkId)
+        }
+
         Outbox.write("check.line_added", "check", checkId.toString(), buildJsonObject {
             put("checkId", checkId)
             put("lineId", lineId)
@@ -357,6 +369,40 @@ class CheckService(private val config: CustomerConfig) {
             note?.let { n -> put("note", n) }
         })
         loadCheck(checkId)
+    }
+
+    /**
+     * The line the just-inserted [newLineId] folds into, and its new qty: an
+     * earlier ACTIVE line on the check that is the very same thing as rung —
+     * same item and size, no note on either, the same price and the same
+     * snapshot (names, sizes, category, translations, tax / deposit / ID
+     * facts, cost: [LineSnapshot]) — and still only on the bill: not sent to
+     * the kitchen, not handed out to a split bill, not a fuel line. A line the
+     * menu changed under (repriced, renamed) stays its own line, and so does
+     * everything already in the kitchen. Null = keep the new line.
+     */
+    private fun mergeTarget(checkId: Int, newLineId: Int, addQty: Int): Pair<Int, Int>? {
+        val new = CheckLines.selectAll().where { CheckLines.id eq newLineId }.first()
+        if (new[CheckLines.note] != null || new[CheckLines.itemId] == null) return null
+        val same = listOf(
+            CheckLines.itemId, CheckLines.variantId, CheckLines.displayName, CheckLines.unitPriceCents,
+            CheckLines.taxable, CheckLines.depositCents, CheckLines.ageRestricted, CheckLines.unitCostCents,
+            CheckLines.nameFr, CheckLines.nameEn, CheckLines.variantLabelFr, CheckLines.variantLabelEn,
+            CheckLines.categoryId, CheckLines.namesJson, CheckLines.variantNamesJson, CheckLines.showVariant,
+        )
+        val sent = KitchenSentLines.select(KitchenSentLines.lineId)
+            .where { KitchenSentLines.checkId eq checkId }.map { it[KitchenSentLines.lineId] }.toSet()
+        return CheckLines.selectAll().where {
+            (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") and
+                (CheckLines.id neq newLineId) and CheckLines.note.isNull() and
+                (CheckLines.itemId eq new[CheckLines.itemId]) and (CheckLines.variantId eq new[CheckLines.variantId])
+        }.orderBy(CheckLines.id).firstOrNull { row ->
+            row[CheckLines.fuelSaleId] == null &&
+                row[CheckLines.id].value !in sent &&
+                same.all { col -> row[col] == new[col] } &&
+                allocatedQtyForLine(row[CheckLines.id].value) == 0 &&
+                row[CheckLines.qty] + addQty <= MoneyLimits.MAX_LINE_QTY
+        }?.let { it[CheckLines.id].value to it[CheckLines.qty] + addQty }
     }
 
     /**
@@ -1184,6 +1230,7 @@ class CheckService(private val config: CustomerConfig) {
             taxRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent,
             tenders = tenders,
             taxes = groupTaxLines(group, totals),
+            taxDisplay = config.taxPolicy.guestDisplay,
         )
     }
 
@@ -1297,6 +1344,7 @@ class CheckService(private val config: CustomerConfig) {
             taxIncluded = Money(check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents),
             taxRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent,
             tenders = tenders,
+            taxDisplay = config.taxPolicy.guestDisplay,
             taxes = taxLinesOf(check, totals),
             ageVerifiedAt = AgeGate.passedAt(checkId),
             discounts = discountsOf(check, totals).map { dev.dwhipstock.pos.sdk.ReceiptDiscount(it.label, it.labelEs, Money(it.amountCents)) },
@@ -1915,7 +1963,7 @@ class CheckService(private val config: CustomerConfig) {
             if (addedTaxes.isNotEmpty()) {
                 val reversed = addedTaxes.sumOf { it.amount.cents }
                 add(PrintLine.KeyValue(msg(RECEIPT_SUBTOTAL), policy.money(Money(gross - reversed))))
-                addedTaxes.forEach {
+                dev.dwhipstock.pos.sdk.guestTaxLines(addedTaxes, config.taxPolicy.guestDisplay).forEach {
                     add(PrintLine.KeyValue(ReceiptRenderer.taxLineLabel(it.component, locale), policy.money(it.amount)))
                 }
             }
@@ -2744,17 +2792,27 @@ data class TaxView(
     val ratePercent: String,
     val registrationNumber: String,
     val amountCents: Long,
+    /** Who the tax is paid to ("NCDOR"); empty = not said. Back office only. */
+    val remitTo: String = "",
 )
 
 fun TaxLine.toView() = TaxView(
     component.code, component.labelFr, component.labelEn, component.rateText, component.registrationNumber, amount.cents,
+    component.remitTo,
 )
+
+/** [views] as a guest sees them under [display] ([dev.dwhipstock.pos.sdk.guestTaxLines]). */
+fun guestTaxViews(views: List<TaxView>, display: dev.dwhipstock.pos.sdk.TaxDisplay): List<TaxView> =
+    if (display !is dev.dwhipstock.pos.sdk.TaxDisplay.Combined || views.size < 2) views
+    else dev.dwhipstock.pos.sdk.guestTaxLines(views.map { v ->
+        TaxLine(TaxComponent(v.code, v.labelFr, v.labelEn, v.ratePercent.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO, v.registrationNumber), Money(v.amountCents))
+    }, display).map { it.toView() }
 
 /**
  * The stored / synced form of a tax breakdown (checks.locked_taxes_json,
  * bill_groups.locked_taxes_json, refunds.taxes_json and the outbox payloads):
- * [{code, labelFr, labelEn, ratePercent, registrationNumber, amountCents}].
- * Labels, rate and number travel with the amount, so history reads as charged.
+ * [{code, labelFr, labelEn, ratePercent, registrationNumber, amountCents, remitTo?}].
+ * Labels, rate, number and remittance authority travel with the amount, so history reads as charged.
  */
 fun taxLinesToJson(lines: List<TaxLine>): JsonArray = JsonArray(lines.map { t ->
     buildJsonObject {
@@ -2763,6 +2821,7 @@ fun taxLinesToJson(lines: List<TaxLine>): JsonArray = JsonArray(lines.map { t ->
         put("labelEn", t.component.labelEn)
         put("ratePercent", t.component.rateText)
         put("registrationNumber", t.component.registrationNumber)
+        if (t.component.remitTo.isNotEmpty()) put("remitTo", t.component.remitTo)
         put("amountCents", t.amount.cents)
     }
 })
@@ -2772,7 +2831,7 @@ fun taxLinesFromJson(text: String): List<TaxLine> = Json.parseToJsonElement(text
     fun s(key: String) = o[key]?.jsonPrimitive?.contentOrNull ?: ""
     TaxLine(
         TaxComponent(s("code"), s("labelFr"), s("labelEn"), s("ratePercent").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
-            s("registrationNumber")),
+            s("registrationNumber"), s("remitTo")),
         Money(o["amountCents"]?.jsonPrimitive?.longOrNull ?: 0L),
     )
 }

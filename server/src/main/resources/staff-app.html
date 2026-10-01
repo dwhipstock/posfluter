@@ -337,7 +337,7 @@
 // fr/en (+ es/de/af) at the pubs, en/es at the US store. Every table carries every key
 // (LocaleCoverageTest). French: vous, no-break space before : ; ! ? and ».
 let lang = localStorage.getItem("staff_lang") || "en";
-let store = { locales: ["fr", "en"], currency: "CAD", country: "CA", kitchen: false };
+let store = { locales: ["fr", "en"], currency: "CAD", country: "CA", kitchen: false, taxCombined: false, taxLabel: "" };
 const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans" };
 const STR = {
   fr: {
@@ -347,7 +347,7 @@ const STR = {
     addItems: "＋ Ajouter des articles", onCheck: "Sur l’addition", pendingHd: "⏳ Commandes des clients à confirmer",
     rounding: "Arrondi", cashTotal: "Total comptant",
     total: "Total", emptyCheck: "Aucun article — touchez « Ajouter des articles » pour commencer.",
-    basket: "Panier", addToCheck: "Ajouter à l’addition", subtotal: "Sous-total", note: "Note (facultative)",
+    basket: "Panier", addToCheck: "Ajouter à l’addition", subtotal: "Sous-total", taxWord: "Taxes", note: "Note (facultative)",
     add: "＋ Ajouter", sizes: "formats", viewBasket: "Voir le panier", addedOne: "Ajouté ✓",
     linesAdded: "Ajouté à l’addition ✓", accepted: "Confirmé ✓", rejected: "Refusé",
     noPending: "Rien à confirmer", pendingSub: "Les commandes passées par les clients sur leur téléphone s’affichent ici.",
@@ -370,7 +370,7 @@ const STR = {
     addItems: "＋ Add items", onCheck: "On the bill", pendingHd: "⏳ Customer orders (to confirm)",
     rounding: "Rounding", cashTotal: "Cash total",
     total: "Total", emptyCheck: "No items yet — tap Add items to start",
-    basket: "Basket", addToCheck: "Add to bill", subtotal: "Subtotal", note: "Note (optional)",
+    basket: "Basket", addToCheck: "Add to bill", subtotal: "Subtotal", taxWord: "Tax", note: "Note (optional)",
     add: "＋ Add", sizes: "sizes", viewBasket: "View basket", addedOne: "Added ✓",
     linesAdded: "Added to bill ✓", accepted: "Confirmed ✓", rejected: "Rejected",
     noPending: "Nothing to confirm", pendingSub: "Customer phone orders arrive here.",
@@ -393,7 +393,7 @@ const STR = {
     addItems: "＋ Agregar productos", onCheck: "En la cuenta", pendingHd: "⏳ Pedidos de clientes por confirmar",
     rounding: "Redondeo", cashTotal: "Total en efectivo",
     total: "Total", emptyCheck: "Todavía no hay productos: toca Agregar productos para empezar",
-    basket: "Carrito", addToCheck: "Agregar a la cuenta", subtotal: "Subtotal", note: "Nota (opcional)",
+    basket: "Carrito", addToCheck: "Agregar a la cuenta", subtotal: "Subtotal", taxWord: "Impuesto", note: "Nota (opcional)",
     add: "＋ Agregar", sizes: "tamaños", viewBasket: "Ver carrito", addedOne: "Agregado ✓",
     linesAdded: "Agregado a la cuenta ✓", accepted: "Confirmado ✓", rejected: "Rechazado",
     noPending: "Nada por confirmar", pendingSub: "Aquí llegan los pedidos que los clientes hacen desde su teléfono.",
@@ -416,7 +416,7 @@ const STR = {
     addItems: "＋ Artikel hinzufügen", onCheck: "Auf der Rechnung", pendingHd: "⏳ Gästebestellungen (zu bestätigen)",
     rounding: "Rundung", cashTotal: "Summe bar",
     total: "Summe", emptyCheck: "Noch keine Artikel – „Artikel hinzufügen“ tippen",
-    basket: "Warenkorb", addToCheck: "Auf die Rechnung", subtotal: "Zwischensumme", note: "Notiz (optional)",
+    basket: "Warenkorb", addToCheck: "Auf die Rechnung", subtotal: "Zwischensumme", taxWord: "Steuer", note: "Notiz (optional)",
     add: "＋ Hinzufügen", sizes: "Größen", viewBasket: "Warenkorb ansehen", addedOne: "Hinzugefügt ✓",
     linesAdded: "Auf die Rechnung gebucht ✓", accepted: "Bestätigt ✓", rejected: "Abgelehnt",
     noPending: "Nichts zu bestätigen", pendingSub: "Bestellungen der Gäste per Handy erscheinen hier.",
@@ -439,7 +439,7 @@ const STR = {
     addItems: "＋ Voeg items by", onCheck: "Op die rekening", pendingHd: "⏳ Gastebestellings (om te bevestig)",
     rounding: "Afronding", cashTotal: "Totaal kontant",
     total: "Totaal", emptyCheck: "Nog geen items nie – tik “Voeg items by” om te begin",
-    basket: "Mandjie", addToCheck: "Voeg by rekening", subtotal: "Subtotaal", note: "Nota (opsioneel)",
+    basket: "Mandjie", addToCheck: "Voeg by rekening", subtotal: "Subtotaal", taxWord: "Belasting", note: "Nota (opsioneel)",
     add: "＋ Voeg by", sizes: "groottes", viewBasket: "Bekyk mandjie", addedOne: "Bygevoeg ✓",
     linesAdded: "By rekening gevoeg ✓", accepted: "Bevestig ✓", rejected: "Afgekeur",
     noPending: "Niks om te bevestig nie", pendingSub: "Bestellings wat gaste op hul foon plaas, verskyn hier.",
@@ -665,6 +665,8 @@ async function loadStore() {
     if (h && h.currency) store.currency = h.currency;
     if (h && h.country) store.country = h.country;
     if (h) store.kitchen = h.kitchenPrinting === true;
+    // "combined": the added taxes show as one line, "Tax (8.25%)", like the receipt
+    if (h) { store.taxCombined = h.taxDisplay === "combined"; store.taxLabel = h.taxLabel || ""; }
   } catch (_) {}
   lang = supportedLang(lang);
 }
@@ -1043,10 +1045,19 @@ function renderCheck() {
     : lang === "de"
     ? `${t.labelEn} ${String(t.ratePercent).replace(".", ",")}\u00a0%`
     : `${lang === "es" && t.labelEn === "Sales Tax" ? "Impuesto sobre las ventas" : t.labelEn} ${t.ratePercent}%`;
-  const taxRows = (check.taxes || []).length ? `
+  const rateOf = r => lang === "fr" || lang === "de" ? `${r.replace(".", ",")} %` : `${r}%`;
+  // a store that shows its taxes as one line ("Tax (8.25%)"): the server's
+  // itemised amounts added up, the rates summed in thousandths (no float drift)
+  const taxes = store.taxCombined && (check.taxes || []).length > 1 ? (() => {
+    const milli = check.taxes.reduce((n, t) => n + Math.round(parseFloat(t.ratePercent) * 1000), 0);
+    const rate = String(milli / 1000);
+    return [{ combined: true, ratePercent: rate, amountCents: check.taxes.reduce((n, t) => n + t.amountCents, 0) }];
+  })() : (check.taxes || []);
+  const label = t => t.combined ? `${store.taxLabel || T().taxWord} (${rateOf(t.ratePercent)})` : taxLabel(t);
+  const taxRows = taxes.length ? `
     <div class="row"><span class="nm">${T().subtotal}</span><span>${money(check.subtotalCents)}</span></div>
-    ${check.taxes.map(t => `
-    <div class="row"><span class="nm">${esc(taxLabel(t))}</span><span>${money(t.amountCents)}</span></div>`).join("")}` : "";
+    ${taxes.map(t => `
+    <div class="row"><span class="nm">${esc(label(t))}</span><span>${money(t.amountCents)}</span></div>`).join("")}` : "";
 
   const pendingSec = check.pendingLines.length ? `
     <div class="sec">
