@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../api.dart';
 import '../quickserve/counter_screen.dart';
@@ -11,6 +10,7 @@ import '../kitchen/kitchen_i18n.dart';
 import '../kitchen/kitchen_setup_screen.dart';
 import '../payments/terminal_settings.dart';
 import '../server_discovery.dart';
+import '../widgets/url_qr.dart';
 
 /// Manager-only venue settings: the DATA the owner tunes at runtime
 /// (payments, fees, receipt identity). Policy lives in code, not here.
@@ -233,6 +233,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? l.printerNotConfigured
           : status.online
           ? l.printerTestSent
+          : l.printerOffline;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Demo mode only: save the form (so the Wi-Fi block matches the screen),
+  /// then print the one-slip demo QR sheet in the POS's current language.
+  Future<void> _printDemoSheet() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final l = L.of(context);
+    try {
+      await _persist();
+      final status = await Api.printDemoSheet(l.lang);
+      if (!mounted) return;
+      final msg = !status.configured
+          ? l.printerNotConfigured
+          : status.online
+          ? l.demoSheetPrinted
           : l.printerOffline;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
@@ -511,21 +534,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Text(l.staffAppQrLabel, style: T.small()),
                     ),
                     if (_staffAppUrl != null)
-                      Center(
-                        child: Container(
-                          color: Colors.white,
-                          padding: const EdgeInsets.all(12),
-                          child: QrImageView(data: _staffAppUrl!, size: 200),
-                        ),
-                      ),
-                    if (_staffAppUrl != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 8),
-                        child: Text(
-                          _staffAppUrl!,
-                          style: T.small(),
-                          textAlign: TextAlign.center,
-                        ),
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Center(child: UrlQr(_staffAppUrl!, size: 200)),
                       ),
                     if (_portalLoaded && _staffAppUrl == null)
                       Text(l.staffAppNeedsWifi, style: T.small()),
@@ -541,20 +552,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Text(l.reportsPortalQrLabel, style: T.small()),
                         ),
-                        Center(
-                          child: Container(
-                            color: Colors.white,
-                            padding: const EdgeInsets.all(12),
-                            child: QrImageView(data: _portalUrl!, size: 200),
-                          ),
-                        ),
                         Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 8),
-                          child: Text(
-                            _portalUrl!,
-                            style: T.small(),
-                            textAlign: TextAlign.center,
-                          ),
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Center(child: UrlQr(_portalUrl!, size: 200)),
                         ),
                       ] else
                         Padding(
@@ -689,6 +689,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 16),
+                    // demo.mode (store.properties, read-only here): the demo
+                    // QR sheet for the pitch demo; never printed in normal use
+                    SectionLabel(l.sectionDemoMode),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        _settings!.demoMode ? l.demoModeOn : l.demoModeOff,
+                        key: const ValueKey('demo-mode-status'),
+                        style: T.small(),
+                      ),
+                    ),
+                    if (_settings!.demoMode)
+                      SizedBox(
+                        height: T.minTouch,
+                        child: OutlinedButton.icon(
+                          key: const ValueKey('print-demo-sheet'),
+                          icon: const Icon(LucideIcons.qrCode),
+                          label: Text(l.printDemoSheet),
+                          onPressed: _busy ? null : _printDemoSheet,
+                        ),
+                      ),
                     const SizedBox(height: 16),
                     // quick-serve: a new counter order starts as take out or dine in
                     if (QuickServeApi.enabled) const CounterModeSetting(),

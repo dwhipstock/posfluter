@@ -56,6 +56,7 @@ import dev.dwhipstock.pos.payments.simulator.simulatorRoutes
 import dev.dwhipstock.pos.api.printerRoutes
 import dev.dwhipstock.pos.api.kitchenRoutes
 import dev.dwhipstock.pos.api.quickServeRoutes
+import dev.dwhipstock.pos.api.demoSheetRoutes
 import dev.dwhipstock.pos.api.forecourtRoutes
 import dev.dwhipstock.pos.restaurant.BadRequestException
 import dev.dwhipstock.pos.restaurant.ConflictException
@@ -129,6 +130,10 @@ fun Application.module(
     // staff.app.mfa=on|off (POS_STAFF_APP_MFA / POS_CONFIG_FILE; the tablet
     // passes its store.properties). Default on; off = staff-app sign-in by PIN only.
     staffAppMfa: dev.dwhipstock.pos.sdk.StaffAppMfa.Resolved = dev.dwhipstock.pos.sdk.StaffAppMfa.fromEnv(),
+    // demo.mode=on|off (POS_DEMO_MODE / POS_CONFIG_FILE; the tablet passes its
+    // store.properties). Default off. On: staff-app MFA forced off, and the
+    // manager's "Print demo QR sheet" (with demo.portal.* sign-in) appears.
+    demoMode: dev.dwhipstock.pos.sdk.DemoMode = dev.dwhipstock.pos.sdk.DemoMode.fromEnv(),
     // print.receipts=paper|digital (POS_PRINT_RECEIPTS / POS_CONFIG_FILE; the
     // tablet passes its store.properties). Local config only, never the network.
     receiptPrintMode: ReceiptPrintMode.Resolved = ReceiptPrintMode.fromEnv(),
@@ -394,9 +399,12 @@ fun Application.module(
     // stock counting / receiving in the store (retail); on hand stays the cloud's
     val stockService = dev.dwhipstock.pos.retail.StockService(config)
     val shiftService = ShiftService(config)
+    demoMode.warning?.let { log.warn("Demo mode config ignored: $it") }
+    log.info(demoMode.describe())
     staffAppMfa.warning?.let { log.warn("Staff app MFA config ignored: $it") }
-    log.info(staffAppMfa.describe())
-    val authService = AuthService(settingsRepo, staffAppMfa.required)
+    val effectiveMfa = demoMode.staffAppMfa(staffAppMfa)
+    log.info(effectiveMfa.describe())
+    val authService = AuthService(settingsRepo, effectiveMfa.required)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
     val aiPhotos = dev.dwhipstock.pos.aiphotos.AiPhotoService(
         imageGenConfig, config.brand,
@@ -587,8 +595,9 @@ fun Application.module(
         aiPhotoRoutes(aiPhotos, photoStore, authService)
         menuAiRoutes(menuAi, authService)
         shiftRoutes(shiftService, authService)
-        settingsRoutes(settingsRepo)
+        settingsRoutes(settingsRepo, demoMode.on)
         printerRoutes(thermalPrinter, config, settingsRepo)
+        demoSheetRoutes(thermalPrinter, config, settingsRepo, demoMode, kitchenOn = kitchenService != null)
         kitchenRoutes(kitchenService)
         quickServe?.let {
             quickServeRoutes(it, config.displayName, config.venueId, config.profile.currency,

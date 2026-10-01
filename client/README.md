@@ -48,3 +48,7 @@ packages `android/app/src/demo/assets/copperlantern-demo.properties`, whose
 key. There is no in-app switch. The owner/manager web portal is unaffected, and
 existing staff authenticator enrollments are kept for when MFA is back on.
 See docs/demo-runbook.md ("Staff app MFA").
+
+`demo.mode=on` (`scripts/tablet-demo-mode.sh on`; built into a demo APK)
+forces staff-app MFA off and adds "Print demo QR sheet" to Venue settings.
+See docs/demo-runbook.md ("Demo mode").

@@ -3,11 +3,10 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../api.dart';
-import '../design/tokens.dart';
 import '../i18n.dart';
+import '../widgets/url_qr.dart';
 import 'kitchen_i18n.dart';
 
 /// The kitchen screen inside the POS: orders arrive as cards (one per check
@@ -134,14 +133,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
           children: [
             Text(k.webScreenHint),
             const SizedBox(height: 16),
-            if (url != null) ...[
-              QrImageView(data: url, size: 200),
-              const SizedBox(height: 8),
-              SelectableText(
-                url,
-                style: T.text(size: 18, weight: FontWeight.w700),
-              ),
-            ],
+            if (url != null) UrlQr(url, textSize: 18),
           ],
         ),
         actions: [

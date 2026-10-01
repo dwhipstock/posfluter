@@ -178,12 +178,12 @@ class Q {
     'Abholanzeige',
     'Afhaalbord',
   );
-  String pickupBoardBody(String url) => _t(
-    'Ouvrez $url sur la télé ou dans un navigateur.',
-    'Open $url on the TV or in any browser.',
-    'Abra $url en la tele o en cualquier navegador.',
-    'Öffnen Sie $url auf dem Fernseher oder in einem Browser.',
-    'Maak $url oop op die TV of in enige blaaier.',
+  String get pickupBoardBody => _t(
+    'Ouvrez cette adresse sur la télé ou dans un navigateur, ou balayez le code.',
+    'Open this address on the TV or in any browser, or scan the code.',
+    'Abra esta dirección en la tele o en cualquier navegador, o escanee el código.',
+    'Öffnen Sie diese Adresse auf dem Fernseher oder in einem Browser, oder scannen Sie den Code.',
+    'Maak hierdie adres oop op die TV of in enige blaaier, of skandeer die kode.',
   );
 
   /// Alcohol on an order: check the guest's ID against the store's legal age.

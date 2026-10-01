@@ -5,6 +5,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../widgets/url_qr.dart';
 import 'terminal.dart';
 
 /// Settings → Card terminal (manager): which terminal the store uses, its
@@ -23,6 +24,9 @@ class CardTerminalSettings extends StatefulWidget {
 class _CardTerminalSettingsState extends State<CardTerminalSettings> {
   TerminalStatus? _status;
   bool _busy = false;
+  // the built-in reader's page (/terminal) on the store's LAN address, so a
+  // phone can play the card reader; null until known (never a loopback URL)
+  String? _readerPageUrl;
 
   @override
   void initState() {
@@ -34,7 +38,23 @@ class _CardTerminalSettingsState extends State<CardTerminalSettings> {
     try {
       final st = await widget.client.status();
       if (mounted) setState(() => _status = st);
+      if (st.embedded && st.kind == 'simulator') await _loadReaderPageUrl();
     } catch (_) {}
+  }
+
+  Future<void> _loadReaderPageUrl() async {
+    // the store's LAN address (what a phone can reach); a remote store's
+    // own address as the fallback, never a loopback one
+    String? base;
+    try {
+      base = Api.phoneQrBaseUrl((await Api.cloudInfo())['storeUrl'] as String?);
+    } catch (_) {}
+    if (base == null && !Api.usesEmbeddedStore) {
+      base = Api.phoneQrBaseUrl(Api.baseUrl);
+    }
+    if (mounted && base != null) {
+      setState(() => _readerPageUrl = '$base/terminal');
+    }
   }
 
   Future<void> _pair() async {
@@ -93,6 +113,12 @@ class _CardTerminalSettingsState extends State<CardTerminalSettings> {
           key: const ValueKey('card-terminal-where'),
           style: T.small(),
         ),
+        if (st.embedded && _readerPageUrl != null) ...[
+          const SizedBox(height: 8),
+          Text(l.terminalPageQrLabel, style: T.small()),
+          const SizedBox(height: 8),
+          Center(child: UrlQr(_readerPageUrl!, size: 200)),
+        ],
         if (!st.available && st.reason != null) ...[
           const SizedBox(height: 4),
           Text(l.terminalUnavailableHint(st.reason), style: T.small()),

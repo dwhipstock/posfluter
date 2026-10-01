@@ -15,6 +15,7 @@ import dev.dwhipstock.pos.sdk.MenuAiConfig
 import dev.dwhipstock.pos.sdk.KitchenPrinting
 import dev.dwhipstock.pos.sdk.PaymentTerminalConfig
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
+import dev.dwhipstock.pos.sdk.DemoMode
 import dev.dwhipstock.pos.sdk.StaffAppMfa
 import dev.dwhipstock.pos.sdk.StripeConfig
 import io.ktor.server.cio.CIO
@@ -103,6 +104,9 @@ class TabletStoreService : Service() {
             cashRounding.warning?.let { Log.w("TabletStore", "Cash rounding config ignored: $it") }
             if (venueId != null) Log.i("TabletStore", "Store: $venueId (port ${BuildConfig.STORE_PORT})")
             val staffAppMfa = readStaffAppMfa(storeProps)
+            // demo.mode=on|off (+ demo.portal.*); unset → the demo APK's own
+            // demo.mode → off. On forces staff-app MFA off. Never logs the password.
+            val demoMode = readDemoMode(storeProps)
             // AI menu photos: image.generation / image.provider / image.<provider>.apiKey
             // (scripts/tablet-ai-photos.sh). Missing → off; the key is never logged.
             val imageGenConfig = runCatching { ImageGenConfig.fromProperties(storeProps) }
@@ -140,6 +144,7 @@ class TabletStoreService : Service() {
                     reportingPortalUrl = if (cloudReady) cloud.getProperty("portal.url") else null,
                     physicalPrinterEnabled = !isolatedTest,
                     staffAppMfa = staffAppMfa,
+                    demoMode = demoMode,
                     receiptPrintMode = receiptPrintMode,
                     stripeConfig = stripeConfig,
                     venueId = venueId,
@@ -195,8 +200,28 @@ class TabletStoreService : Service() {
     }
 
     /**
+     * `demo.mode=on|off` (+ `demo.portal.url/user/password`) in the external
+     * store.properties (scripts/tablet-demo-mode.sh). Unset there → the demo
+     * APK's baked-in `demo.mode` (copperlantern-demo.properties, only in a
+     * POS_DEMO_BUILD) → off. A bad value → off with a warning; never fails
+     * startup. [DemoMode.describe] never includes the portal sign-in.
+     */
+    private fun readDemoMode(storeProps: java.util.Properties?): DemoMode {
+        val fromStore = runCatching { DemoMode.fromProperties(storeProps) }.getOrDefault(DemoMode.OFF)
+        val resolved = if (fromStore.source != "default" || fromStore.warning != null) fromStore else {
+            runCatching {
+                val demo = Properties().apply { assets.open("copperlantern-demo.properties").use(::load) }
+                DemoMode.resolve(demo.getProperty(DemoMode.KEY), "demo build") { storeProps?.getProperty(it) }
+            }.getOrDefault(fromStore)
+        }
+        resolved.warning?.let { Log.w("TabletStore", "Demo mode config ignored: $it") }
+        Log.i("TabletStore", resolved.describe())
+        return resolved
+    }
+
+    /**
      * The external store.properties itself, for the store switches that are
-     * plain values: `store.venue`, `legal.age`, `cash.rounding`, `staff.app.mfa`,
+     * plain values: `store.venue`, `legal.age`, `cash.rounding`, `staff.app.mfa`, `demo.*`,
      * `kitchen.printing` and the AI photo settings (`image.*`). Missing/unreadable → null;
      * never fails startup.
      */

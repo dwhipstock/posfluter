@@ -188,7 +188,7 @@ private fun bilingualLines(key: MessageKey, locales: List<LocaleCode>): List<Pri
  * camera won't read it. Printed straight to the thermal printer (printNow), never
  * spooled to disk, so the password isn't left in receipts/ or bills/.
  */
-private fun wifiJoinBlock(wifi: GuestWifi, locales: List<LocaleCode>): List<PrintLine> = buildList {
+internal fun wifiJoinBlock(wifi: GuestWifi, locales: List<LocaleCode>): List<PrintLine> = buildList {
     add(PrintLine.QrCode(wifi.qrPayload()))
     add(PrintLine.Text(bilingual(MessageKey.WIFI_NETWORK, locales).joinToString(" / "), Align.CENTER))
     add(PrintLine.Header(wifi.ssid, exact = true))
