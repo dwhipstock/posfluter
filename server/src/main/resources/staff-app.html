@@ -175,6 +175,9 @@
   .cqty { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .cqty .step { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 18px; line-height: 1; }
   .cline .rm { border: 0; background: none; font-size: 16px; }
+  .cline.changed { background: #fff4e5; border-radius: 8px; padding: 8px; }
+  .cline .chg { color: #9a4b00; font-size: 13px; font-weight: 700; margin-top: 4px; }
+  .cline .fix { border: 0; background: #17263a; color: #fff; border-radius: 6px; font-size: 13px; padding: 4px 8px; margin-top: 4px; }
   .sfoot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
   .sfoot .st { display: flex; justify-content: space-between; padding-bottom: 10px; font-weight: 700; }
 
@@ -356,6 +359,7 @@ const STR = {
     cantReach: "Impossible de joindre le système de caisse — vérifiez le Wi-Fi et réessayez", retry: "Réessayer",
     roleManager: "Gérant", roleServer: "Serveur",
     spKicker: "Sage & Poppy · Boutique d’alcools", spWelcome: "Bon retour",
+    gone: n => `${n} n’est plus offert`, priceNow: (n, p) => `${n}\u00a0: le prix est maintenant ${p}`, addAt: p => `Ajouter à ${p}`, menuChanged: "Le menu a changé — vérifiez le panier",
   },
   en: {
     whoClockingIn: "Who's clocking in?", enterPin: "Enter your PIN", pinWrong: "Incorrect PIN",
@@ -378,6 +382,7 @@ const STR = {
     cantReach: "Can't reach the store — check Wi-Fi and try again", retry: "Try again",
     roleManager: "Manager", roleServer: "Server",
     spKicker: "Sage & Poppy · Bottle Shop", spWelcome: "Welcome back",
+    gone: n => `${n} is no longer available`, priceNow: (n, p) => `${n}: price changed to ${p}`, addAt: p => `Add at ${p}`, menuChanged: "The menu changed — check the basket",
   },
   es: {
     whoClockingIn: "¿Quién empieza su turno?", enterPin: "Ingresa tu PIN", pinWrong: "PIN incorrecto",
@@ -400,6 +405,7 @@ const STR = {
     cantReach: "No se puede conectar con la tienda: revisa el Wi-Fi e inténtalo de nuevo", retry: "Reintentar",
     roleManager: "Gerente", roleServer: "Cajero",
     spKicker: "Sage & Poppy · Tienda de licores", spWelcome: "Hola de nuevo",
+    gone: n => `${n} ya no está disponible`, priceNow: (n, p) => `${n}: el precio cambió a ${p}`, addAt: p => `Agregar a ${p}`, menuChanged: "El menú cambió: revisa el carrito",
   },
   de: {
     whoClockingIn: "Wer beginnt die Schicht?", enterPin: "PIN eingeben", pinWrong: "Falsche PIN",
@@ -422,6 +428,7 @@ const STR = {
     cantReach: "Kasse nicht erreichbar – WLAN prüfen und erneut versuchen", retry: "Erneut versuchen",
     roleManager: "Leitung", roleServer: "Bedienung",
     spKicker: "Sage & Poppy · Spirituosenladen", spWelcome: "Willkommen zurück",
+    gone: n => `${n} ist nicht mehr erhältlich`, priceNow: (n, p) => `${n}: Preis geändert auf ${p}`, addAt: p => `Für ${p} hinzufügen`, menuChanged: "Die Karte hat sich geändert – Warenkorb prüfen",
   },
   af: {
     whoClockingIn: "Wie begin die skof?", enterPin: "Tik jou PIN in", pinWrong: "Verkeerde PIN",
@@ -444,6 +451,7 @@ const STR = {
     cantReach: "Kan nie die winkel bereik nie – kyk die Wi-Fi na en probeer weer", retry: "Probeer weer",
     roleManager: "Bestuurder", roleServer: "Kelner",
     spKicker: "Sage & Poppy · Drankwinkel", spWelcome: "Welkom terug",
+    gone: n => `${n} is nie meer beskikbaar nie`, priceNow: (n, p) => `${n}: prys verander na ${p}`, addAt: p => `Voeg by teen ${p}`, menuChanged: "Die spyskaart het verander – kyk na die mandjie",
   },
 };
 // Department and zone names in US Spanish (the shop's catalog is English
@@ -512,11 +520,67 @@ function lineName(l) {
 // outside French and English the check's lines read their names off the menu:
 // fetch it once (no sign-in needed), then draw again
 const extraLang = () => lang !== "fr" && lang !== "en";
-async function loadMenu() {
-  if (items.length) return;
+async function loadMenu(force = false) {
+  if (items.length && !force) return;
   [items, categories] = await Promise.all([
     api("/items", { auth: false }), api("/categories", { auth: false }),
   ]);
+}
+
+// ---- menu changes under the cart -------------------------------------------
+// The menu can change while a server is ordering (an item 86'd or taken off,
+// a new price — at the till or from the owner's portal). The store's menu
+// version is polled while the app is visible; on a change the menu reloads and
+// cart lines it affects are held with a message until fixed.
+let menuVersion = null, versionTimer = null;
+async function pollMenuVersion() {
+  let v;
+  try { v = (await api("/menu/version", { auth: false })).version; } catch (_) { return; } // older store / offline
+  const changed = menuVersion !== null && v !== menuVersion;
+  menuVersion = v;
+  if (!changed || !items.length) return;
+  try { await loadMenu(true); } catch (_) { return; }
+  if (!items.some(i => i.category === cat)) cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
+  const affected = checkCart();
+  renderMenu();
+  renderCart();
+  if (affected) { toast(T().menuChanged, true); openSheet(); }
+}
+function startVersionPoll() {
+  if (versionTimer) return;
+  pollMenuVersion();
+  versionTimer = setInterval(pollMenuVersion, 15000);
+}
+function stopVersionPoll() { clearInterval(versionTimer); versionTimer = null; }
+document.addEventListener("visibilitychange", () => document.hidden ? stopVersionPoll() : startVersionPoll());
+/** The cart against the freshly loaded menu: gone items and new prices are held. */
+function checkCart() {
+  let changed = false;
+  for (const c of cart) {
+    const item = items.find(i => i.id === c.itemId);
+    const v = item && item.variants.find(x => x.id === c.variantId);
+    if (!item || item.active === false || !v) {
+      if (c.status !== "gone") { c.status = "gone"; changed = true; }
+    } else if (v.priceCents !== c.priceCents) {
+      if (c.status !== "repriced" || c.newPriceCents !== v.priceCents) { c.status = "repriced"; c.newPriceCents = v.priceCents; changed = true; }
+    } else if (c.status) { delete c.status; delete c.newPriceCents; changed = true; }
+  }
+  return changed;
+}
+function cartLineChange(c, ix) {
+  const n = esc(extra(c) || pick(c.nameFr, c.nameEn));
+  if (c.status === "gone") return `<div class="chg">${T().gone(n)}</div>`;
+  if (c.status === "repriced") return `<div class="chg">${T().priceNow(n, money(c.newPriceCents))}</div>
+    <button class="fix" onclick="acceptCartPrice(${ix})">${T().addAt(money(c.newPriceCents))}</button>`;
+  return "";
+}
+function acceptCartPrice(ix) {
+  const c = cart[ix];
+  if (!c || c.status !== "repriced") return;
+  c.priceCents = c.newPriceCents;
+  c.variant = Object.assign({}, c.variant, { priceCents: c.newPriceCents });
+  delete c.status; delete c.newPriceCents;
+  renderCart();
 }
 function menuThen(redraw) {
   if (!extraLang() || items.length) return;
@@ -542,7 +606,7 @@ let selectedTile = null;
 let pollTimer = null;
 
 // ---- API -------------------------------------------------------------------
-class ApiError extends Error { constructor(code, status) { super(code || "error"); this.code = code; this.status = status; } }
+class ApiError extends Error { constructor(code, status, body) { super(code || "error"); this.code = code; this.status = status; this.body = body || null; } }
 
 async function api(path, { method = "GET", body = null, auth = true } = {}) {
   const headers = {};
@@ -563,9 +627,9 @@ async function api(path, { method = "GET", body = null, auth = true } = {}) {
   }
   if (res.status === 401 && auth) { forceLogout(); throw new ApiError("login_required", 401); }
   if (!res.ok) {
-    let code = null;
-    try { code = (await res.json()).code; } catch (_) {}
-    throw new ApiError(code, res.status);
+    let code = null, errBody = null;
+    try { errBody = await res.json(); code = errBody.code; } catch (_) {}
+    throw new ApiError(code, res.status, errBody);
   }
   if (res.status === 204) return null;
   const ct = res.headers.get("content-type") || "";
@@ -604,6 +668,7 @@ async function loadStore() {
 }
 
 async function boot() {
+  startVersionPoll();
   await loadStore();
   applyStaticLabels();
   if (token) {
@@ -1097,8 +1162,8 @@ function renderCart() {
   bar.classList.add("show");
   document.getElementById("cart-sum").textContent = `🛒 ${count} · ${money(cartSubtotal())}`;
   document.getElementById("cart-lines").innerHTML = cart.map((b, ix) => `
-    <div class="cline">
-      <span>${esc(extra(b) || pick(b.nameFr, b.nameEn))}${b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}</span>
+    <div class="cline${b.status ? " changed" : ""}">
+      <span>${esc(extra(b) || pick(b.nameFr, b.nameEn))}${b.multiSize ? " (" + esc(vlabel(b.variant)) + ")" : ""}${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}${cartLineChange(b, ix)}</span>
       <span class="cqty">
         <button class="step" onclick="bumpCart(${ix},-1)">−</button><b>${b.qty}</b>
         <button class="step" onclick="bumpCart(${ix},1)">＋</button>
@@ -1123,11 +1188,35 @@ async function submitCart() {
     // cart as it lands. A mid-batch failure therefore leaves ONLY the un-committed
     // lines behind — re-tapping submit can never double-post what's already on the
     // bill (there's no server-side idempotency key on POST /lines).
-    while (cart.length) {
-      const c = cart[0];
-      check = await api(`/checks/${check.id}/lines`, { method: "POST",
-        body: { itemId: c.itemId, variantId: c.variantId, qty: c.qty, note: c.note } });
-      cart.shift();
+    // A line the menu changed under (taken off, new price) is held in the cart
+    // with its message; the others keep flowing.
+    let ix = 0, added = 0;
+    while (ix < cart.length) {
+      const c = cart[ix];
+      if (c.status) { ix++; continue; }
+      try {
+        check = await api(`/checks/${check.id}/lines`, { method: "POST",
+          // the price the server saw: the store refuses it if the menu moved since
+          body: { itemId: c.itemId, variantId: c.variantId, qty: c.qty, note: c.note, expectedPriceCents: c.priceCents } });
+        cart.splice(ix, 1);
+        added++;
+      } catch (e) {
+        if (!(e instanceof ApiError) || (e.code !== "item_unavailable" && e.code !== "price_changed")) throw e;
+        if (e.code === "price_changed" && e.body && typeof e.body.priceCents === "number") {
+          c.status = "repriced"; c.newPriceCents = e.body.priceCents;
+        } else {
+          c.status = "gone";
+        }
+        ix++;
+      }
+    }
+    if (cart.length) {
+      // something is held: refresh the menu behind it, keep the basket open
+      loadMenu(true).then(() => { checkCart(); renderMenu(); renderCart(); }).catch(() => {});
+      renderCart();
+      toast(T().menuChanged, true);
+      if (added) sendToKitchen(check.id);
+      return;
     }
     renderCart();
     closeSheet();

@@ -195,9 +195,8 @@ fun Application.module(
     // boot, not on the first printed receipt
     dev.dwhipstock.pos.sdk.i18n.Messages.ensureLoaded()
     // POS_SEED=none starts a store with an EMPTY menu and floor plan, which the
-    // owner builds on the tablet (sync is one-way: the tablet owns its menu and
-    // staff; anything present at first sync is pushed UP by the bootstrap
-    // snapshots). Skipping CopperLanternSeed is not enough: migrations
+    // owner builds on the tablet (or in the portal: the menu syncs both ways;
+    // anything present at first sync is pushed UP by the bootstrap snapshots). Skipping CopperLanternSeed is not enough: migrations
     // 005/008/011/… INSERT the CopperLantern menu + floor plan directly (they
     // mirror the seed for existing installs), so a never-synced empty-mode store
     // also wipes that residue. Gate = no install_id yet: once a store has synced,
@@ -478,6 +477,19 @@ fun Application.module(
         exception<BadRequestException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest,
                 mapOf("error" to (cause.message ?: "bad request"), "code" to cause.code))
+        }
+        // a menu line refused because the menu changed under the order (two-way menu sync)
+        exception<dev.dwhipstock.pos.restaurant.LineRejectedException> { call, cause ->
+            call.respond(HttpStatusCode.Conflict, kotlinx.serialization.json.buildJsonObject {
+                put("error", kotlinx.serialization.json.JsonPrimitive(cause.message))
+                put("code", kotlinx.serialization.json.JsonPrimitive(cause.code))
+                if (cause.rejected.size == 1) cause.rejected[0].priceCents?.let {
+                    put("priceCents", kotlinx.serialization.json.JsonPrimitive(it))
+                }
+                put("rejected", kotlinx.serialization.json.Json.encodeToJsonElement(
+                    kotlinx.serialization.builtins.ListSerializer(dev.dwhipstock.pos.restaurant.RejectedLine.serializer()),
+                    cause.rejected))
+            })
         }
         exception<SlipTicketException> { call, _ ->
             call.respond(HttpStatusCode.Unauthorized,

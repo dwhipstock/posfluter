@@ -14,5 +14,8 @@ class UnauthorizedException(message: String = "not authenticated", val code: Str
 class RateLimitException(message: String = "too many attempts", val retryAfterSeconds: Long = 60) :
     RuntimeException(message)
 
+/** Signed in, but this portal user's role may not do that (403). */
+class ForbiddenException(message: String, val code: String = "forbidden") : RuntimeException(message)
+
 class PayloadTooLargeException(message: String, val code: String = "payload_too_large") :
     RuntimeException(message)

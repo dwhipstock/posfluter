@@ -63,4 +63,7 @@ interface CloudTransport {
     /** The cloud's on-hand per product for this retail store (§9); null when
      *  the cloud has no such feed (older cloud). Throws on a transport error. */
     fun fetchOnHand(): List<dev.dwhipstock.pos.retail.CloudOnHand>? = null
+    /** The menu feed after [since] (two-way menu sync, §10); null when the
+     *  cloud has no such feed (an older cloud). Throws on a transport error. */
+    fun fetchMenuChanges(since: Long): MenuPage? = null
 }

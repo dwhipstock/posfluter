@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +10,7 @@ import '../forecourt/forecourt_i18n.dart';
 import '../forecourt/food_panel.dart';
 import '../forecourt/pump_grid.dart';
 import '../i18n.dart';
+import '../menu_changes.dart';
 import '../payments/terminal_settings.dart';
 import '../screens/login_screen.dart';
 import '../screens/receipt_screen.dart';
@@ -16,6 +19,7 @@ import '../stock/barcode_scanner.dart';
 import '../stock/count_screens.dart';
 import '../stock/receive_screen.dart';
 import '../widgets/brand.dart';
+import '../widgets/menu_change_dialogs.dart';
 import '../widgets/pin_pad.dart';
 import 'add_product_dialog.dart';
 import 'age_check_dialog.dart';
@@ -108,11 +112,31 @@ class _RetailScreenState extends State<RetailScreen> {
     }
     if (ForecourtApi.enabled) _fc = ForecourtController()..start();
     _load();
+    // the shelf can change under the till (portal or back-office edits):
+    // reload the catalog when the store's menu version moves
+    _menuPoll = MenuVersionPoller(
+      fetch: Api.menuVersion,
+      onChange: _reloadCatalog,
+    )..start();
+  }
+
+  MenuVersionPoller? _menuPoll;
+
+  Future<void> _reloadCatalog() async {
+    try {
+      final results = await Future.wait([Api.catalog(), Api.categories()]);
+      if (!mounted) return;
+      setState(() {
+        _setItems(results[0] as List<Item>);
+        _categories = results[1] as List<Category>;
+      });
+    } catch (_) {} // offline: next poll
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _menuPoll?.dispose();
     for (final s in _subs) {
       s.cancel();
     }
@@ -293,10 +317,40 @@ class _RetailScreenState extends State<RetailScreen> {
             (l) => l.itemId == item.id && l.variantId == v.id && l.note == null,
           )
           .firstOrNull;
-      final updated = existing != null
-          ? await Api.setLineQty(sale.id, existing.id, existing.qty + 1)
-          : await Api.addLine(sale.id, item.id, v.id, 1);
+      Check updated;
+      if (existing != null) {
+        updated = await Api.setLineQty(sale.id, existing.id, existing.qty + 1);
+      } else {
+        try {
+          updated = await Api.addLine(
+            sale.id,
+            item.id,
+            v.id,
+            1,
+            expectedPriceCents: v.priceCents,
+          );
+        } catch (e) {
+          if (isMenuChangeError(e)) unawaited(_reloadCatalog());
+          if (!mounted) rethrow;
+          final repriced = await confirmNewPrice(
+            context,
+            e,
+            L.of(context).name(item.nameFr, item.nameEn, item.names),
+            v,
+          );
+          if (repriced == null) rethrow;
+          updated = await Api.addLine(
+            sale.id,
+            item.id,
+            v.id,
+            1,
+            expectedPriceCents: repriced.priceCents,
+          );
+        }
+      }
       if (mounted) setState(() => _sale = updated);
+    } on AddCancelled {
+      // the new price was declined: nothing added
     } catch (e) {
       if (mounted) showApiError(context, e);
     } finally {
@@ -904,6 +958,7 @@ class _RetailScreenState extends State<RetailScreen> {
           p.variant.id,
           1,
           note: p.note,
+          expectedPriceCents: p.variant.priceCents,
         );
       }
       if (mounted) setState(() => _sale = sale);

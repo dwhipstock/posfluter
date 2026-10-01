@@ -451,18 +451,19 @@ class KitchenService(
             .orderBy(CheckLines.id to SortOrder.ASC)
             .map { row ->
                 val itemId = row[CheckLines.itemId]
-                val showVariant = (variantCounts[itemId] ?: 1) > 1
-                val open = row[CheckLines.displayName]
+                // the menu as rung (LineSnapshot): a rename or a size added/removed
+                // in the portal never re-prints a sent line as VOID + ADD
+                val showVariant = LineSnapshot.showVariant(row, variantCounts)
                 Cur(
                     lineId = row[CheckLines.id].value,
                     itemId = itemId,
-                    categoryId = row.getOrNull(Items.categoryId),
+                    categoryId = LineSnapshot.categoryId(row),
                     qty = row[CheckLines.qty],
                     snap = Snap(
-                        nameFr = row.getOrNull(Items.nameFr) ?: open ?: "?",
-                        nameEn = row.getOrNull(Items.nameEn) ?: open ?: "?",
-                        variantFr = if (showVariant) row.getOrNull(ItemVariants.labelFr) else null,
-                        variantEn = if (showVariant) row.getOrNull(ItemVariants.labelEn) else null,
+                        nameFr = LineSnapshot.nameFr(row),
+                        nameEn = LineSnapshot.nameEn(row),
+                        variantFr = if (showVariant) LineSnapshot.labelFr(row) else null,
+                        variantEn = if (showVariant) LineSnapshot.labelEn(row) else null,
                         note = row[CheckLines.note]?.trim()?.takeIf { it.isNotEmpty() },
                     ),
                 )

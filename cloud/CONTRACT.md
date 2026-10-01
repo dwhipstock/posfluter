@@ -17,14 +17,17 @@ Hard rules this contract encodes:
   policy (`TaxPolicy.InclusiveTax`) decomposes the tax out of the price instead.
   Events carry those cents figures; cloud reports are sums of them.
   `net = gross − taxIncluded`, per check, computed by the store.
-- **Sync is one-way: store → cloud.** Each store's tablet is authoritative for
-  its own menu (items, variants, categories, photos), staff and grants. Edits
-  happen on the tablet, offline, and are pushed up as events so the portal can
-  *display* them; the cloud never edits or redistributes them. Two small,
-  best-effort pulls are the only exceptions: **device revocations** (§4), the
-  owner's remote lock for a lost terminal, and a retail store's **on hand per
-  product** (§9), a read-only hint for the count screen. Sync never blocks
-  startup, a sale, a count or a login — with no internet only sync pauses.
+- **Sync is one-way, store → cloud, for everything but the menu.** Sales,
+  receipts, closed checks, shifts, refunds, stock, staff and grants are owned
+  by each store's tablet and pushed up as events so the portal can report on
+  and *display* them. **The menu (items, sizes, categories) syncs both ways
+  (§10)**: tablet edits go up through the outbox; manager-portal edits come
+  down through a per-store menu feed; both are merged field by field, last
+  write wins. Photos stay tablet → cloud. The other pulls are **device
+  revocations** (§4), the owner's remote lock for a lost terminal, and a retail
+  store's **on hand per product** (§9), a read-only hint for the count screen.
+  Sync never blocks startup, a sale, a count or a login — with no internet
+  only sync pauses.
 - **All money is integer cents.**
 - **Timestamps are instants (contract v2).** Every timestamp on the wire is an
   ISO-8601 instant WITH an offset — the store sends its venue's offset at that
@@ -41,16 +44,18 @@ Hard rules this contract encodes:
   occurrence (daylight time). Stored v1 rows were converted with the same rule
   (store migration 031, cloud migration 013).
 
-Contract version: **2** (v1 → v2: zone-less venue-local timestamps became
-offset-carrying instants; sync became one-way).
+Contract version: **3** (v1 → v2: zone-less venue-local timestamps became
+offset-carrying instants; sync became one-way. v2 → v3: the menu syncs both
+ways, §10 — additive: a v2 store keeps working against a v3 cloud, one-way).
 
 ## 0. Capability handshake (before any push)
 
 `GET {CLOUD_SYNC_URL}/v1/store/capabilities` — `Authorization: Bearer {key}`
 
 ```json
-{ "contractVersion": 2, "timestampFormat": "instant",
-  "revocationsPath": "/v1/store/revocations" }
+{ "contractVersion": 3, "timestampFormat": "instant",
+  "revocationsPath": "/v1/store/revocations", "stockPath": "/v1/store/stock",
+  "menuSyncPath": "/v1/store/menu/changes" }
 ```
 
 A v2 store sends instants a v1 cloud cannot read (it parsed zone-less
@@ -413,7 +418,10 @@ value) for the audit trail. The portal Menu page shows a small "AI" badge on
 the two AI values.
 
 (`variants` includes soft-deleted rows with `deleted: true` so the cloud can
-mirror deletions.) Every `category.*` event gains
+mirror deletions.) A current store (contract v3) adds `"clock": { field: stamp }`
+to every item, variant and category snapshot — the write stamp of each synced
+field (§10); the cloud merges by it. A snapshot without `clock` (an older
+store) is mirrored as before: what it says wins. Every `category.*` event gains
 `"category": { "id", "nameFr", "nameEn", "sortOrder", "deleted" }`;
 `categories.reordered` gains `"categories": [ …full list… ]`.
 
@@ -449,11 +457,13 @@ leaves out (deletions arrive as `item.deleted` / `category.deleted`). A
 product listed twice in one chunk keeps its last copy. An older cloud already
 applied snapshots this way, so chunked stores work with it unchanged.
 
-### Legacy echo tag
-Before sync became one-way, a store that applied a portal menu edit wrote the
-matching `item.*`/`category.*` event with `"origin": "cloud"`. Such events may
-still sit in older outboxes; the cloud stores them (audit) and does not apply
-them. Current stores never write `origin`.
+### The `origin: "cloud"` tag
+A store that applies a portal menu edit (§10) writes the matching
+`item.*`/`category.*` events with `"origin": "cloud"` (they carry the cloud's
+stamps, maybe an intermediate state while it applies). The cloud stores them
+(audit) and never applies them: that would be an echo. Events from before
+one-way sync carry the same tag and are treated the same way. Every other
+event has no `origin`.
 
 ## 3. Photo up-sync (sideband binary, event-triggered)
 
@@ -500,9 +510,10 @@ The same store loop polls:
   until a handshake (§0) confirms a current cloud.
 - A failed pull is logged and retried next tick; it never blocks anything.
 
-There is no catalog, photo, staff or grant download any more: the portal is
-read-only for menu and staff, and `GET /v1/store/photos/{itemId}` is gone.
-The only other pull is a retail store's on-hand hint (§9).
+There is no photo, staff or grant download: the portal is read-only for
+staff, and `GET /v1/store/photos/{itemId}` is gone. The menu comes down
+through its own feed (§10), not this one; the other pull is a retail store's
+on-hand hint (§9).
 
 ## 5. Store configuration
 
@@ -517,8 +528,11 @@ The only other pull is a retail store's on-hand hint (§9).
 
 State lives in the store DB table `sync_state (key TEXT PK, value TEXT)`:
 `push_hwm` (last acked outbox row id), `catalog_cursor` (last applied
-revocation version), `catalog_snapshot_seq` / `staff_snapshot_seq` (one-time
-bootstrap markers) and `install_id`. The §9 hint is cached in the store
+revocation version), `menu_cursor` (last applied menu feed seq, §10),
+`menu_hlc` / `menu_node` / `menu_clock_offset_ms` (the menu clock, §10),
+`menu_version` (bumped by every menu change; `GET /menu/version`),
+`catalog_snapshot_seq` / `staff_snapshot_seq` (one-time bootstrap markers) and
+`install_id`. The menu registers are in the store table `menu_sync_clocks`. The §9 hint is cached in the store
 table `stock_expected` (replaced on every successful pull).
 
 ## 7. Staff + grants (store-owned, pushed up)
@@ -673,3 +687,102 @@ flags variances. The figure comes from the cloud's ledger, pulled slowly:
   waits for it. Offline, never synced, an older cloud (`404`) or a product
   with no history → the app says "no expected qty" and counting goes on.
 - A restaurant gets `{ "retail": false, "items": [] }`.
+
+## 10. Two-way menu sync (contract v3)
+
+The menu — items (names in every language, descriptions, category,
+availability, alcohol flag, abbreviation), their sizes (labels, price, order)
+and categories (names, order) — can be edited on the tablet and in the
+manager portal. Photos, retail shelf facts (barcode, brand, CRV…) and costs
+stay tablet-owned (one-way, §2/§3).
+
+### Registers and stamps
+Every synced field is a **last-write-wins register**: its value and the stamp
+of the write that set it. Fields:
+
+| thing | fields |
+| --- | --- |
+| item | `nameFr nameEn descriptionFr descriptionEn categoryId abbrev isAlcohol active deleted` |
+| variant | `labelFr labelEn priceCents sortOrder deleted` |
+| category | `nameFr nameEn sortOrder deleted` |
+
+plus `names.<lang>` for every name beyond fr/en (a removed name is `null`).
+Granularity is per field: concurrent edits of different fields both land.
+
+A stamp is a **hybrid logical clock**, `<13-digit ms>-<4-digit counter>-<node>`,
+compared as plain strings; `""` means "set before two-way sync" (store
+migration 058 / cloud migration 027 baselines). The cloud's node is `cloud`;
+a store's is `s<random>`, so two writers never tie.
+- The **cloud** stamps a portal edit with its own clock (persisted per tenant,
+  `menu_hlc`), after every stamp it has issued or seen.
+- A **store** stamps with its own clock **plus the offset to the cloud's**
+  (`serverTimeMs` of every feed page, half the round trip each way), never
+  below a stamp it has seen, and starts again from now if its remembered stamp
+  is more than 10 minutes ahead (a clock that was broken).
+- **Skew guard:** a store stamp more than 2 minutes ahead of the cloud's clock
+  is re-stamped with the cloud's on ingest, and the store gets a feed entry
+  with `"restamp": true`; for an equal value it adopts the cloud's stamp.
+
+### Merge
+For each field, the write with the greater stamp wins (two `""` stamps: the
+store's value, as the one-way mirror always did). **Deletes** are the
+`deleted` register; a thing is deleted while its `deleted` write is newer than
+every other write to it — an item counts its sizes' writes — so a later edit
+on the other side brings it back (`deleted` becomes `false` at that edit's
+stamp, the same on both sides), an earlier one stays deleted. Merging is
+idempotent, commutative and order-independent: replays and duplicates are
+harmless.
+
+### Up: store → cloud
+Unchanged events (§2) with `clock` on every snapshot. The store stamps, in
+the outbox writer, exactly the fields whose value changed — whatever code path
+changed them (menu editor, 86, AI menu setup or revert, translations, a seed
+upgrade). A `catalog.snapshot` stamps a never-seen field `""` (baseline).
+
+### Down: cloud → store
+`GET {CLOUD_SYNC_URL}/v1/store/menu/changes?since={cursor}` — `Authorization: Bearer {key}`
+
+```json
+{ "cursor": 57, "serverTimeMs": 1790000000000,
+  "changes": [
+    { "seq": 57, "entity": "item", "id": "nachos-x7k2",
+      "data": { "id": "nachos-x7k2", "nameFr": "Nachos", "nameEn": "Nachos", "descriptionFr": "",
+                "descriptionEn": "", "categoryId": "starters", "abbrev": "NA", "isAlcohol": false,
+                "active": true, "deleted": false, "names": { "es": "Nachos" },
+                "clock": { "nameEn": "1790000000000-0000-cloud", "...": "..." },
+                "variants": [ { "id": "nachos-x7k2:regular", "labelFr": "Régulier", "labelEn": "Regular",
+                                "priceCents": 1200, "sortOrder": 0, "deleted": false, "names": {},
+                                "clock": { "priceCents": "1790000000000-0000-cloud" } } ] } },
+    { "seq": 58, "entity": "category", "id": "starters", "data": { "id": "starters", "...": "...", "clock": {} } }
+  ] }
+```
+- Per store (`menu_feed`), in `seq` order, ≤ 200 per page; empty `changes` →
+  cursor unchanged. Each entry is the thing's **full state with clocks** after
+  a portal edit (or a restamp), so applying is a merge and a replay is a no-op.
+- Pulled every sync tick after the drain; the store pages until caught up,
+  applies each page in one transaction with its cursor (`sync_state`
+  `menu_cursor`), merges per field and brings its rows to the merged state
+  **through the tablet's own menu code** (`CatalogOps`, `Translations`), so
+  translations, photos, prices and kitchen routing stay consistent. Menu
+  events it writes meanwhile carry `origin: "cloud"` and the cloud's stamps
+  (no echo, §2).
+- A change the store can't take — a category that still has items, a size
+  that would be the item's last — is refused there; the store re-stamps its
+  own state now, so its state wins everywhere. A portal delete of an item or
+  size that is on an open check **is** taken: the check line keeps it as rung
+  (store migration 059).
+- Asking for the feed is how a store says it speaks v3: the cloud records
+  `venues.menu_sync_at` / `menu_cursor` (portal "waiting for the store" count).
+- An older cloud answers 404: the store asks again in 5 minutes and stays
+  one-way meanwhile.
+
+### Portal edits
+API.md, Menu. The portal refuses (409 `store_not_upgraded`) edits for a store
+that has never pulled the feed (an older store app): it would never receive
+them. In "All stores" mode such stores are skipped and listed.
+
+### Deploy order
+Cloud first (migration 027 is additive; a v2 store keeps working one-way),
+then the stores (store migrations 057–059 are additive; 058 baselines the
+existing menu with `""` stamps, so nothing is re-sent and the first portal
+edit wins over the old values).

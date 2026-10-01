@@ -271,4 +271,55 @@ class KioskText {
     'Bestellterminal offline — bitte an der Kasse bestellen.',
     'Kiosk vanlyn — bestel asseblief by die toonbank.',
   );
+
+  // the menu changed during the order (an item taken off, a new price)
+  String get menuChanged => _t(
+    'Le menu vient de changer',
+    'The menu just changed',
+    'El menú acaba de cambiar',
+    'Die Speisekarte hat sich gerade geändert',
+    'Die spyskaart het pas verander',
+  );
+  String removedFromOrder(String name) => _t(
+    '$name n’est plus offert et a été retiré de votre commande.',
+    '$name is no longer available and was removed from your order.',
+    '$name ya no está disponible y se quitó de su pedido.',
+    '$name ist nicht mehr erhältlich und wurde aus Ihrer Bestellung entfernt.',
+    '$name is nie meer beskikbaar nie en is uit u bestelling verwyder.',
+  );
+  String priceNowIs(String name, String price) => _t(
+    'Le prix de $name est maintenant $price.',
+    'The price of $name is now $price.',
+    'El precio de $name ahora es $price.',
+    'Der Preis von $name beträgt jetzt $price.',
+    'Die prys van $name is nou $price.',
+  );
+  String get keepNewPrices => _t(
+    'OK, garder les nouveaux prix',
+    'OK, keep the new prices',
+    'De acuerdo, mantener los precios nuevos',
+    'OK, neue Preise übernehmen',
+    'Goed, hou die nuwe pryse',
+  );
+  String get notInYourOrder => _t(
+    'Pas dans votre commande :',
+    'Not in your order:',
+    'No incluido en su pedido:',
+    'Nicht in Ihrer Bestellung:',
+    'Nie in u bestelling nie:',
+  );
+  String noLongerAvailable(String name) => _t(
+    '$name — n’est plus offert',
+    '$name — no longer available',
+    '$name — ya no está disponible',
+    '$name — nicht mehr erhältlich',
+    '$name — nie meer beskikbaar nie',
+  );
+  String priceChangedAskCounter(String name, String price) => _t(
+    '$name — nouveau prix $price, demandez au comptoir',
+    '$name — new price $price, ask at the counter',
+    '$name — nuevo precio $price, pregunte en el mostrador',
+    '$name — neuer Preis $price, bitte an der Kasse fragen',
+    '$name — nuwe prys $price, vra by die toonbank',
+  );
 }

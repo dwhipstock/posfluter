@@ -4,6 +4,7 @@ import dev.dwhipstock.poscloud.auth.authRoutes
 import dev.dwhipstock.poscloud.auth.installPortalSessions
 import dev.dwhipstock.poscloud.db.Db
 import dev.dwhipstock.poscloud.db.Migrations
+import dev.dwhipstock.poscloud.menu.menuEditRoutes
 import dev.dwhipstock.poscloud.menu.menuRoutes
 import dev.dwhipstock.poscloud.reports.reportRoutes
 import dev.dwhipstock.poscloud.staff.staffRoutes
@@ -64,6 +65,10 @@ fun Application.module(config: CloudConfig = CloudConfig()) {
             call.respond(HttpStatusCode.Unauthorized,
                 mapOf("error" to (cause.message ?: "not authenticated"), "code" to cause.code))
         }
+        exception<ForbiddenException> { call, cause ->
+            call.respond(HttpStatusCode.Forbidden,
+                mapOf("error" to (cause.message ?: "forbidden"), "code" to cause.code))
+        }
         exception<PayloadTooLargeException> { call, cause ->
             call.respond(HttpStatusCode.PayloadTooLarge,
                 mapOf("error" to (cause.message ?: "payload too large"), "code" to cause.code))
@@ -96,6 +101,7 @@ fun Application.module(config: CloudConfig = CloudConfig()) {
             reportRoutes(config.fxRates)
             stockRoutes()
             menuRoutes()
+            menuEditRoutes()
             staffRoutes()
             venueRoutes(config)
         }

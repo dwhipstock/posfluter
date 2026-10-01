@@ -166,6 +166,26 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
         }
     }
 
+    override fun fetchMenuChanges(since: Long): MenuPage? {
+        val res = request("/v1/store/menu/changes?since=$since")
+        if (res.status == 404) return null // an older cloud: the menu stays one-way
+        check(res.status == 200) { "HTTP ${res.status} from menu changes" }
+        val obj = Json.parseToJsonElement(res.text).jsonObject
+        return MenuPage(
+            cursor = obj["cursor"]!!.jsonPrimitive.long,
+            serverTimeMs = obj["serverTimeMs"]?.jsonPrimitive?.contentOrNull?.toLongOrNull(),
+            changes = (obj["changes"]?.jsonArray ?: emptyList()).map { el ->
+                val c = el.jsonObject
+                MenuChange(
+                    seq = c["seq"]!!.jsonPrimitive.long,
+                    entity = c["entity"]!!.jsonPrimitive.content,
+                    id = c["id"]!!.jsonPrimitive.content,
+                    data = c["data"]!!.jsonObject,
+                )
+            },
+        )
+    }
+
     private fun revocationsPath() =
         if (legacyRevocations) "/v1/store/catalog/changes" else "/v1/store/revocations"
 

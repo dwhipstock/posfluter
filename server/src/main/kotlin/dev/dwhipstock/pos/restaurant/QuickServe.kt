@@ -95,7 +95,11 @@ data class CounterOrderView(
 )
 
 @Serializable
-data class KioskOrderLine(val itemId: String, val variantId: String, val qty: Int = 1, val note: String? = null)
+data class KioskOrderLine(
+    val itemId: String, val variantId: String, val qty: Int = 1, val note: String? = null,
+    /** The unit price the kiosk / counter showed (price_changed when it moved since). */
+    val expectedPriceCents: Long? = null,
+)
 
 @Serializable
 data class KioskOrderRequest(
@@ -118,6 +122,8 @@ data class KioskOrderResult(
     val displayNumber: String = "#$orderNumber",
     /** The store prints the guest a ticket for this order (the counter setting): the kiosk says to take it. */
     val ticket: Boolean = false,
+    /** Lines the menu refused (deleted / 86'd / repriced since the kiosk loaded it); the order has the rest. */
+    val rejected: List<RejectedLine> = emptyList(),
 )
 
 @Serializable
@@ -279,8 +285,10 @@ class QuickServeService(
     }
 
     /** The POS rings the first item of a new order: that is when it is stored (DRAFT). */
-    fun createAtPos(mode: String, first: KioskOrderLine, userId: String): CounterOrderView =
-        view(create(mode, "POS", userId, listOf(first)))
+    fun createAtPos(mode: String, first: KioskOrderLine, userId: String): CounterOrderView {
+        transaction { MenuGuard.require(first.itemId, first.variantId, first.expectedPriceCents) }
+        return view(create(mode, "POS", userId, listOf(first)))
+    }
 
     /**
      * A kiosk order: a new check with its lines live on the bill (never
@@ -288,11 +296,20 @@ class QuickServeService(
      * goes to the kitchen only once it is paid, like any order.
      */
     fun placeKioskOrder(req: KioskOrderRequest, deviceName: String): KioskOrderResult {
-        val v = view(create(req.serviceMode, "KIOSK", "kiosk", req.lines))
+        // the menu may have changed since the kiosk loaded it: refuse only the
+        // lines it hit, take the rest (all refused → 409 lines_rejected)
+        require(req.lines.isNotEmpty()) { "empty order" }
+        val rejected = transaction {
+            req.lines.mapIndexedNotNull { i, l -> MenuGuard.check(i, l.itemId, l.variantId, l.expectedPriceCents) }
+        }
+        if (rejected.size == req.lines.size) throw LineRejectedException(rejected, "lines_rejected")
+        val refused = rejected.map { it.index }.toSet()
+        val v = view(create(req.serviceMode, "KIOSK", "kiosk", req.lines.filterIndexed { i, _ -> i !in refused }))
         log.info("Kiosk order #${v.orderNumber} (${v.serviceMode}, ${v.itemCount} items) from '$deviceName', waiting to pay")
         val ticket = settings().kioskTicket
         if (ticket) printTicket(v, req.lang)
-        return KioskOrderResult(v.orderNumber!!, v.checkId, v.serviceMode, v.totalCents, v.hasAlcohol, ticket = ticket)
+        return KioskOrderResult(v.orderNumber!!, v.checkId, v.serviceMode, v.totalCents, v.hasAlcohol, ticket = ticket,
+            rejected = rejected)
     }
 
     /**

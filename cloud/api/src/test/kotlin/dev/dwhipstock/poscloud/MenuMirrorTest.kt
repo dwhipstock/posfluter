@@ -19,7 +19,7 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** One-way sync: the portal menu is a read-only mirror of what the store pushes. */
+/** The store-pushed half of the menu mirror (two-way sync is MenuTwoWaySyncTest). */
 class MenuMirrorTest {
 
     private val key = "store-key-menu"
@@ -113,8 +113,9 @@ class MenuMirrorTest {
         assertEquals("original", source()!!.jsonPrimitive.content)
     }
 
+    /** An older store (it never pulled the menu feed) can't take portal edits: refused, nothing queued. */
     @Test
-    fun portalCannotEditTheMenu() = testApplication {
+    fun portalCannotEditAnOlderStoresMenu() = testApplication {
         application { module(TestSupport.config) }
         val attempts = listOf(
             client.post("/v1/menu/items") {
@@ -133,7 +134,10 @@ class MenuMirrorTest {
                 setBody("""{"nameFr":"x","nameEn":"x"}""")
             },
         )
-        assertTrue(attempts.all { it.status == HttpStatusCode.NotFound || it.status == HttpStatusCode.MethodNotAllowed })
+        assertEquals(listOf(HttpStatusCode.BadRequest, HttpStatusCode.Conflict, HttpStatusCode.Conflict),
+            attempts.map { it.status })
+        assertTrue("store_not_upgraded" in attempts[2].bodyAsText())
         assertEquals(0, changeCount())
+        assertEquals(0, transaction { dev.dwhipstock.poscloud.db.MenuFeed.selectAll().count() })
     }
 }

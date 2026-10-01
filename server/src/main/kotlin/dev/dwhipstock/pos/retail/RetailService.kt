@@ -31,6 +31,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.transaction
 
 /**
@@ -212,6 +213,9 @@ class RetailService(
             ?: throw NotFoundException("category ${req.categoryId} not found")
         if (Items.selectAll().where { (Items.barcode eq code) and Items.deletedAt.isNull() }.any())
             throw ConflictException("barcode $code already belongs to a product", "barcode_taken")
+        // a deleted product keeps its history but gives up its barcode (the
+        // unique index covers deleted rows too): re-adding it is a new product
+        Items.update({ (Items.barcode eq code) and Items.deletedAt.isNotNull() }) { it[barcode] = null }
         val base = "p-" + name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(40).ifEmpty { "item" }
         var itemId = base
         var n = 2

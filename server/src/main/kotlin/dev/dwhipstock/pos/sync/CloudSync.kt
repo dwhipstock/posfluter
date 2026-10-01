@@ -25,13 +25,15 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 
 /**
- * The store → cloud sync loop (CONTRACT.md §1, §3, §4). Sync is ONE-WAY: the
- * tablet owns its menu, staff and grants and drains its outbox up so the portal
- * can report on and display them. The only thing pulled down is device
- * revocations (remote lock of a lost terminal). The outbox stays the ONLY
- * up-sync source. Never constructed unless CLOUD_SYNC_URL + CLOUD_SYNC_API_KEY
- * are set — offline-first is the default, and a failing tick never blocks a
- * sale, a login or startup.
+ * The store ⇄ cloud sync loop (CONTRACT.md §1, §3, §4, §10). Sales, staff and
+ * everything else go ONE-WAY up: the outbox is drained so the portal can
+ * report on and display them. The MENU syncs both ways (§10): the store's menu
+ * edits go up through the same outbox, and the manager portal's menu edits
+ * come down from the cloud's per-store menu feed, merged field by field (last
+ * write wins). Device revocations (remote lock of a lost terminal) are pulled
+ * too. The outbox stays the ONLY up-sync source. Never constructed unless
+ * CLOUD_SYNC_URL + CLOUD_SYNC_API_KEY are set — offline-first is the default,
+ * and a failing tick never blocks a sale, a login or startup.
  */
 class CloudSync(
     private val transport: CloudTransport,
@@ -99,6 +101,7 @@ class CloudSync(
         heartbeatOnce()
         drainOnce(capable)
         pullOnce()
+        pullMenuOnce()
         if (stock != null && System.nanoTime() >= nextStockPullNanos) {
             // due again after the interval whatever the outcome: a slow hint, never a retry storm
             nextStockPullNanos = System.nanoTime() + stockIntervalSeconds * 1_000_000_000
@@ -107,6 +110,38 @@ class CloudSync(
     }
 
     @Volatile private var nextStockPullNanos = Long.MIN_VALUE
+    @Volatile private var nextMenuPullNanos = Long.MIN_VALUE
+
+    /**
+     * The menu pull (§10): the manager portal's menu edits for THIS store,
+     * applied through the tablet's own menu code and merged field by field
+     * (last write wins). Pages until caught up. An older cloud (404) has no
+     * feed: asked again in 5 minutes. Offline: nothing happens, and the store
+     * catches up from its cursor once it is back.
+     */
+    fun pullMenuOnce() {
+        if (System.nanoTime() < nextMenuPullNanos) return
+        var pages = 0
+        while (pages++ < 50) {
+            val since = stateLong(MenuSync.MENU_CURSOR) ?: 0L
+            val sentAt = System.currentTimeMillis()
+            val page = runCatching { transport.fetchMenuChanges(since) }
+                .getOrElse { log.warn("menu pull failed: ${it.message}"); return }
+            if (page == null) {
+                nextMenuPullNanos = System.nanoTime() + 300L * 1_000_000_000
+                return
+            }
+            val receivedAt = System.currentTimeMillis()
+            page.serverTimeMs?.let { server ->
+                // the cloud's clock minus ours (half the round trip each way)
+                setState(MenuClock.OFFSET_KEY, (server - (sentAt + receivedAt) / 2).toString())
+            }
+            if (page.changes.isEmpty()) return
+            MenuSync.applyPage(page)
+            log.info("menu sync: applied ${page.changes.size} change(s) from the portal (cursor ${page.cursor})")
+            if (page.cursor <= since) return
+        }
+    }
 
     /**
      * The on-hand pull (§9): the second, and last, thing the store reads from
@@ -300,7 +335,7 @@ class CloudSync(
     // --- revocation pull (§4) ---
 
     /**
-     * The single thing the store still pulls: DEVICE REVOCATIONS — the owner's
+     * DEVICE REVOCATIONS (one of the store's pulls, with the menu feed) — the owner's
      * remote lock for a lost terminal. A failed pull is logged and retried next
      * tick; it never blocks anything local.
      */
@@ -316,7 +351,8 @@ class CloudSync(
      * Apply a page in version order inside ONE transaction; the cursor persists
      * with it, so a mid-page crash re-applies the page (revocation is idempotent).
      * Any other change kind — catalog/staff rows an older cloud may still serve —
-     * is ignored on purpose: the tablet owns that data.
+     * is ignored on purpose: staff are the tablet's, and portal menu edits come
+     * down through the menu feed ([pullMenuOnce]), never this one.
      */
     fun applyChanges(page: ChangesPage) {
         transaction {
@@ -325,7 +361,7 @@ class CloudSync(
                     // portal revoke (M8): flag the device + kill its sessions at once
                     "device_revocation" -> dev.dwhipstock.pos.base.DeviceRegistry.applyRevocation(change.data.str("deviceId"))
                     else -> log.info("ignoring cloud change kind '${change.kind}' (v${change.version}); " +
-                        "menu and staff are owned by this tablet")
+                        "staff are owned by this tablet and the menu comes down through its own feed")
                 }
             }
             SyncState.set(CHANGES_CURSOR, page.cursor.toString())

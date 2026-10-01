@@ -82,7 +82,11 @@ class ConflictException(message: String, val code: String = "conflict") : Runtim
 class BadRequestException(message: String, val code: String = "bad_request") : RuntimeException(message)
 
 @kotlinx.serialization.Serializable
-data class PendingLineRequest(val itemId: String, val variantId: String, val qty: Int = 1, val note: String? = null)
+data class PendingLineRequest(
+    val itemId: String, val variantId: String, val qty: Int = 1, val note: String? = null,
+    /** The unit price the guest saw; a different price now refuses the line (price_changed). */
+    val expectedPriceCents: Long? = null,
+)
 
 /** One line + qty to refund (by-line refund). */
 @kotlinx.serialization.Serializable
@@ -275,10 +279,20 @@ class CheckService(private val config: CustomerConfig) {
         return checkId
     }
 
-    fun addLine(checkId: Int, itemId: String, variantId: String, qty: Int, note: String?): CheckView = transaction {
+    /**
+     * Ring a menu item. The store checks it against the menu as it is NOW: an
+     * item deleted or 86'd (maybe from the manager portal, synced down) or a
+     * deleted size is refused (409 item_unavailable), and with
+     * [expectedPriceCents] a price that changed since the client showed it is
+     * refused too (409 price_changed + the new price) — never rung silently.
+     */
+    fun addLine(
+        checkId: Int, itemId: String, variantId: String, qty: Int, note: String?, expectedPriceCents: Long? = null,
+    ): CheckView = transaction {
         require(qty > 0) { "qty must be positive" }
         val check = requireCheck(checkId)
         if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
+        MenuGuard.require(itemId, variantId, expectedPriceCents)
 
         val variant = ItemVariants.selectAll()
             .where { (ItemVariants.id eq variantId) and (ItemVariants.itemId eq itemId) and
@@ -295,6 +309,7 @@ class CheckService(private val config: CustomerConfig) {
             it[CheckLines.note] = note
             it[createdAt] = VenueClock.now()
             captureShelfFacts(it, item)
+            LineSnapshot.capture(it, item, variant)
             variant[ItemVariants.costCents]?.let { c -> it[unitCostCents] = c }
         }.value
 
@@ -368,6 +383,7 @@ class CheckService(private val config: CustomerConfig) {
             it[createdAt] = VenueClock.now()
             it[CheckLines.fuelSaleId] = fuelSaleId
             captureShelfFacts(it, item)
+            LineSnapshot.capture(it, item, ItemVariants.selectAll().where { ItemVariants.id eq variantId }.firstOrNull())
             unitCostCents?.let { c -> it[CheckLines.unitCostCents] = c }
         }.value
         dev.dwhipstock.pos.forecourt.FuelSales.update({ dev.dwhipstock.pos.forecourt.FuelSales.id eq fuelSaleId }) {
@@ -389,16 +405,24 @@ class CheckService(private val config: CustomerConfig) {
      * Customer scan-to-order (M3): submitted basket lands as PENDING lines on the
      * table's open check (auto-opened if none). Staff accept-before-fire — pending
      * lines don't count, don't print, and block tendering until resolved.
+     *
+     * Partial: a line whose item was deleted / 86'd or repriced since the
+     * guest's menu loaded is refused on its own ([CheckView.rejected]) and the
+     * rest go through; every line refused → 409 lines_rejected, nothing added.
      */
     fun submitPendingLines(tableId: String, lines: List<PendingLineRequest>): CheckView = transaction {
         require(lines.isNotEmpty()) { "empty basket" }
+        lines.forEach { require(it.qty > 0) { "qty must be positive" } }
         // machine surface: reject QR orders for a closed zone outright (the customer
         // menu already hides ordering, this guards the raw endpoint)
         requireZoneOpenForTable(tableId)
+        val rejected = lines.mapIndexedNotNull { i, l -> MenuGuard.check(i, l.itemId, l.variantId, l.expectedPriceCents) }
+        if (rejected.size == lines.size) throw LineRejectedException(rejected, "lines_rejected")
+        val refused = rejected.map { it.index }.toSet()
         val check = openCheck(tableId, userId = "qr-customer")
         if (check.status != "OPEN") throw ConflictException("table $tableId bill is being paid; ask staff", "bill_locked")
-        for (line in lines) {
-            require(line.qty > 0) { "qty must be positive" }
+        for ((index, line) in lines.withIndex()) {
+            if (index in refused) continue
             val variant = ItemVariants.selectAll()
                 .where { (ItemVariants.id eq line.variantId) and (ItemVariants.itemId eq line.itemId) and
                     ItemVariants.deletedAt.isNull() }
@@ -414,6 +438,7 @@ class CheckService(private val config: CustomerConfig) {
                 it[status] = "PENDING"
                 it[createdAt] = VenueClock.now()
                 captureShelfFacts(it, item)
+                LineSnapshot.capture(it, item, variant)
             }.value
             Outbox.write("check.pending_line_submitted", "check", check.id.toString(), buildJsonObject {
                 put("checkId", check.id)
@@ -424,7 +449,7 @@ class CheckService(private val config: CustomerConfig) {
                 line.note?.let { n -> put("note", n) }
             })
         }
-        loadCheck(check.id)
+        loadCheck(check.id).copy(rejected = rejected)
     }
 
     fun acceptPendingLine(checkId: Int, lineId: Int): CheckView = transaction {
@@ -1015,19 +1040,18 @@ class CheckService(private val config: CustomerConfig) {
             .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
             .selectAll().where { BillGroupAllocations.groupId eq groupId }
             .map { row ->
-                val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
-                val open = row[CheckLines.displayName]
+                val showVariant = LineSnapshot.showVariant(row, variantCounts)
                 ReceiptItem(
-                    nameFr = row.getOrNull(Items.nameFr) ?: open ?: "?",
-                    nameEn = row.getOrNull(Items.nameEn) ?: open ?: "?",
-                    variantLabelFr = if (showVariant) row.getOrNull(ItemVariants.labelFr) else null,
-                    variantLabelEn = if (showVariant) row.getOrNull(ItemVariants.labelEn) else null,
+                    nameFr = LineSnapshot.nameFr(row),
+                    nameEn = LineSnapshot.nameEn(row),
+                    variantLabelFr = if (showVariant) LineSnapshot.labelFr(row) else null,
+                    variantLabelEn = if (showVariant) LineSnapshot.labelEn(row) else null,
                     qty = row[BillGroupAllocations.qty],
                     unitPrice = Money(row[CheckLines.unitPriceCents]),
                     lineTotal = Money(row[CheckLines.unitPriceCents] * row[BillGroupAllocations.qty]),
                     note = row[CheckLines.note],
-                    names = row[CheckLines.itemId]?.let { itemNames[it] }.orEmpty(),
-                    variantNames = if (showVariant) row[CheckLines.variantId]?.let { variantNames[it] }.orEmpty() else emptyMap(),
+                    names = LineSnapshot.names(row, itemNames),
+                    variantNames = if (showVariant) LineSnapshot.variantNames(row, variantNames) else emptyMap(),
                 )
             }
         val tenders = Tenders.selectAll()
@@ -1129,13 +1153,12 @@ class CheckService(private val config: CustomerConfig) {
         val variantNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.VARIANT)
         val items = itemRows
             .map { row ->
-                val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
-                val open = row[CheckLines.displayName]
+                val showVariant = LineSnapshot.showVariant(row, variantCounts)
                 ReceiptItem(
-                    nameFr = row.getOrNull(Items.nameFr) ?: open ?: "?",
-                    nameEn = row.getOrNull(Items.nameEn) ?: open ?: "?",
-                    variantLabelFr = if (showVariant) row.getOrNull(ItemVariants.labelFr) else null,
-                    variantLabelEn = if (showVariant) row.getOrNull(ItemVariants.labelEn) else null,
+                    nameFr = LineSnapshot.nameFr(row),
+                    nameEn = LineSnapshot.nameEn(row),
+                    variantLabelFr = if (showVariant) LineSnapshot.labelFr(row) else null,
+                    variantLabelEn = if (showVariant) LineSnapshot.labelEn(row) else null,
                     qty = row[CheckLines.qty],
                     unitPrice = Money(row[CheckLines.unitPriceCents]),
                     lineTotal = Money(row[CheckLines.unitPriceCents] * row[CheckLines.qty]),
@@ -1143,8 +1166,8 @@ class CheckService(private val config: CustomerConfig) {
                     fuel = row[CheckLines.fuelSaleId]?.let { fuel[it] }?.let { f ->
                         dev.dwhipstock.pos.sdk.ReceiptFuel(f.pump, f.mode == "PREPAY", f.volumeMilli, f.priceMills)
                     },
-                    names = row[CheckLines.itemId]?.let { itemNames[it] }.orEmpty(),
-                    variantNames = if (showVariant) row[CheckLines.variantId]?.let { variantNames[it] }.orEmpty() else emptyMap(),
+                    names = LineSnapshot.names(row, itemNames),
+                    variantNames = if (showVariant) LineSnapshot.variantNames(row, variantNames) else emptyMap(),
                 )
             }
         val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->
@@ -1888,16 +1911,17 @@ class CheckService(private val config: CustomerConfig) {
                     val itemId = row[CheckLines.itemId]
                     put("itemId", itemId)
                     put("variantId", row[CheckLines.variantId])
-                    put("categoryId", if (itemId == null) null else row.getOrNull(Items.categoryId))
+                    // the menu as rung (LineSnapshot): a later rename / delete doesn't retell the sale
+                    put("categoryId", LineSnapshot.categoryId(row))
                     if (itemId == null) {
                         // off-menu open line: null ids, displayName instead of names
                         put("displayName", row[CheckLines.displayName] ?: "?")
                     } else {
-                        put("nameFr", row.getOrNull(Items.nameFr) ?: "?")
-                        put("nameEn", row.getOrNull(Items.nameEn) ?: "?")
-                        if ((liveVariantCounts[itemId] ?: 0) > 1) {
-                            put("variantLabelFr", row.getOrNull(ItemVariants.labelFr))
-                            put("variantLabelEn", row.getOrNull(ItemVariants.labelEn))
+                        put("nameFr", LineSnapshot.nameFr(row))
+                        put("nameEn", LineSnapshot.nameEn(row))
+                        if (row[CheckLines.showVariant] ?: ((liveVariantCounts[itemId] ?: 0) > 1)) {
+                            put("variantLabelFr", LineSnapshot.labelFr(row))
+                            put("variantLabelEn", LineSnapshot.labelEn(row))
                         }
                     }
                     put("qty", row[CheckLines.qty])
@@ -2169,10 +2193,10 @@ class CheckService(private val config: CustomerConfig) {
             dev.dwhipstock.pos.sdk.PromoItem(
                 lineId = r[CheckLines.id].value,
                 itemId = r[CheckLines.itemId],
-                category = r.getOrNull(Items.categoryId),
+                category = LineSnapshot.categoryId(r),
                 subcategory = r.getOrNull(Items.subcategory),
                 size = r.getOrNull(Items.sizeLabel),
-                variantLabel = r.getOrNull(ItemVariants.labelEn),
+                variantLabel = LineSnapshot.labelEn(r),
                 qty = r[CheckLines.qty],
                 unitPriceCents = r[CheckLines.unitPriceCents],
                 taxable = r[CheckLines.taxable],
@@ -2259,6 +2283,8 @@ class CheckService(private val config: CustomerConfig) {
         // same rule as the receipt: the variant label only disambiguates when
         // the item actually has multiple sizes (bottle/pitcher/tower)
         val variantCounts = variantCountsOnCheck(checkId)
+        val itemNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ITEM)
+        val variantNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.VARIANT)
         val lineRows = CheckLines
             .join(Items, JoinType.LEFT, CheckLines.itemId, Items.id)
             .join(ItemVariants, JoinType.LEFT, CheckLines.variantId, ItemVariants.id)
@@ -2268,16 +2294,15 @@ class CheckService(private val config: CustomerConfig) {
         val fuel = dev.dwhipstock.pos.forecourt.fuelLineViews(lineRows.mapNotNull { it[CheckLines.fuelSaleId] })
         val allLines = lineRows
             .map { row ->
-                val showVariant = (variantCounts[row[CheckLines.itemId]] ?: 1) > 1
-                val open = row[CheckLines.displayName]
+                val showVariant = LineSnapshot.showVariant(row, variantCounts)
                 Pair(row[CheckLines.status], LineView(
                     id = row[CheckLines.id].value,
                     itemId = row[CheckLines.itemId],
                     variantId = row[CheckLines.variantId],
-                    nameFr = row.getOrNull(Items.nameFr) ?: open ?: "?",
-                    nameEn = row.getOrNull(Items.nameEn) ?: open ?: "?",
-                    variantLabelFr = if (showVariant) row.getOrNull(ItemVariants.labelFr) else null,
-                    variantLabelEn = if (showVariant) row.getOrNull(ItemVariants.labelEn) else null,
+                    nameFr = LineSnapshot.nameFr(row),
+                    nameEn = LineSnapshot.nameEn(row),
+                    variantLabelFr = if (showVariant) LineSnapshot.labelFr(row) else null,
+                    variantLabelEn = if (showVariant) LineSnapshot.labelEn(row) else null,
                     qty = row[CheckLines.qty],
                     unitPriceCents = row[CheckLines.unitPriceCents],
                     lineTotalCents = row[CheckLines.unitPriceCents] * row[CheckLines.qty],
@@ -2286,6 +2311,8 @@ class CheckService(private val config: CustomerConfig) {
                     depositCents = row[CheckLines.depositCents],
                     taxable = row[CheckLines.taxable],
                     fuel = row[CheckLines.fuelSaleId]?.let { fuel[it] },
+                    names = LineSnapshot.names(row, itemNames),
+                    variantNames = if (showVariant) LineSnapshot.variantNames(row, variantNames) else emptyMap(),
                 ))
             }
         val lines = allLines.filter { it.first == "ACTIVE" }.map { it.second }
@@ -2361,6 +2388,8 @@ data class CheckView(
     val taxes: List<TaxView> = emptyList(),
     /** Promotions taken off before tax (a c-store's deals); their sum is inside the total. */
     val discounts: List<DiscountView> = emptyList(),
+    /** Lines of the request just made that the menu refused (a partial guest basket); empty otherwise. */
+    val rejected: List<RejectedLine> = emptyList(),
     /** Retail: an age-restricted line is on the sale, so payment needs an ID check. */
     val ageCheckRequired: Boolean = false,
     /** No ID check needed, or one passed. */
@@ -2426,6 +2455,9 @@ data class LineView(
     val taxable: Boolean = true,
     /** A fuel or prepay line (a gas station): pump, grade, gallons, price per gallon. */
     val fuel: dev.dwhipstock.pos.forecourt.FuelLineView? = null,
+    /** The item's / size's names in the store's other languages, as rung. */
+    val names: Map<String, String> = emptyMap(),
+    val variantNames: Map<String, String> = emptyMap(),
 )
 
 /** One promotion on a sale: [amountCents] off, [taxableCents] of it off taxable goods. */

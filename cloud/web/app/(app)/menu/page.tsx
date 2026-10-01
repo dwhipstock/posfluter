@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Wine } from "lucide-react";
+import { useMemo, useState } from "react";
+import { FolderTree, Plus, Wine } from "lucide-react";
 import { useApi } from "@/lib/hooks";
 import { useMoney, type MoneyApi } from "@/lib/money";
 import { useI18n, useT } from "@/lib/i18n/context";
@@ -20,11 +20,15 @@ import { count } from "@/lib/format";
 import { scopeApiPath, useStoreId } from "@/lib/store";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
 import { col, type ExportDoc } from "@/lib/export/doc";
+import { Button } from "@/components/ui/button";
+import { CategoriesSheet, ItemSheet, MenuSyncBanner, useMenuEditing } from "@/components/menu-editor";
 
 const PAGE_SIZE = 100;
 
 /**
- * Read-only: each store's tablet owns its menu and pushes it up (one-way sync).
+ * Each store's menu as the cloud knows it. Owners and managers can edit it
+ * here (two-way menu sync: the store gets the change on its next sync, last
+ * write wins against a tablet edit); everyone else sees it read-only.
  * A retail store can carry ~5,000 products, so the list is paged by the API
  * (100 products a page, grouped by category) with a search and the 2-way
  * category → subcategory filter plus size; the export fetches every match.
@@ -37,6 +41,14 @@ export default function MenuPage() {
   const storeId = useStoreId();
   const filters = useCatalogFilters(PAGE_SIZE);
   const { data, error, isLoading, mutate } = useApi<MenuResponse>(`/v1/menu?${filters.pageQuery}`);
+  const { status, canEdit, refreshStatus } = useMenuEditing();
+  const [editing, setEditing] = useState<MenuItem | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const refresh = () => {
+    mutate();
+    refreshStatus();
+  };
   // category names from the unfiltered menu shape (every page lists them all)
   const categoryName = (id: string) => {
     const c = data?.categories.find((x) => x.id === id);
@@ -99,8 +111,42 @@ export default function MenuPage() {
       <PageHeader
         title={t("menu_title")}
         sub={t("menu_sub")}
-        action={<ExportMenu build={buildDoc} disabled={!data || total === 0} />}
+        action={
+          <div className="flex items-center gap-2">
+            {canEdit && data && (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setCategoriesOpen(true)}>
+                  <FolderTree /> {t("menu_categories")}
+                </Button>
+                <Button size="sm" disabled={data.categories.length === 0} onClick={() => setCreating(true)}>
+                  <Plus /> {t("menu_add_item")}
+                </Button>
+              </>
+            )}
+            <ExportMenu build={buildDoc} disabled={!data || total === 0} />
+          </div>
+        }
       />
+
+      <MenuSyncBanner status={status} />
+
+      {canEdit && data && (
+        <>
+          <ItemSheet
+            open={creating || editing !== null}
+            onOpenChange={(o) => {
+              if (!o) {
+                setCreating(false);
+                setEditing(null);
+              }
+            }}
+            item={editing}
+            categories={data.categories}
+            onSaved={refresh}
+          />
+          <CategoriesSheet open={categoriesOpen} onOpenChange={setCategoriesOpen} categories={data.categories} onSaved={refresh} />
+        </>
+      )}
 
       {data && (total > 0 || filters.active) && (
         <Card>
@@ -139,7 +185,7 @@ export default function MenuPage() {
               {items.length > 0 ? (
                 <div className="divide-y divide-neutral-100">
                   {items.map((row) => (
-                    <ItemRow key={row.item.id} row={row} />
+                    <ItemRow key={row.item.id} row={row} onEdit={canEdit ? () => setEditing(row.item) : undefined} />
                   ))}
                 </div>
               ) : (
@@ -198,7 +244,7 @@ function priceRange(items: MenuItem[], m: MoneyApi): string {
   return ranges.length ? ranges.join(" · ") : "—";
 }
 
-function ItemRow({ row }: { row: MergedItem }) {
+function ItemRow({ row, onEdit }: { row: MergedItem; onEdit?: () => void }) {
   const t = useT();
   const { name, nameAlt } = useI18n();
   const { combined, venues, nameOf, colorOf } = useStores();
@@ -206,8 +252,12 @@ function ItemRow({ row }: { row: MergedItem }) {
   const m = useMoney();
   // an item on every store's menu needs no tag; a store-specific one names its store(s)
   const storeSpecific = combined && copies.length < venues.length;
+  const Row = onEdit ? "button" : "div";
   return (
-    <div className="flex w-full items-center gap-3 px-4 py-2.5">
+    <Row
+      {...(onEdit ? { type: "button" as const, onClick: onEdit } : {})}
+      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left${onEdit ? " transition-colors hover:bg-neutral-50 focus-visible:bg-neutral-50 focus-visible:outline-none" : ""}`}
+    >
       <Thumb item={item} />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-1.5">
@@ -235,7 +285,7 @@ function ItemRow({ row }: { row: MergedItem }) {
       ) : (
         <span className="shrink-0 text-sm font-medium tabular-nums">{priceRange(copies, m)}</span>
       )}
-    </div>
+    </Row>
   );
 }
 

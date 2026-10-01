@@ -56,9 +56,10 @@ fun JsonObject.instant(key: String, zone: java.time.ZoneId): java.time.OffsetDat
     dev.dwhipstock.poscloud.CloudTime.parse(str(key), zone)
 
 /**
- * Display mirror of each store's catalog: full-snapshot upserts (CONTRACT §2)
- * from the ingest path only — the tablet owns its menu (one-way sync). The
- * change feed ([appendChange]) now only carries device revocations down.
+ * Each store's catalog as the cloud knows it: store snapshots (CONTRACT §2)
+ * and manager-portal edits merged field by field (two-way menu sync, §10; see
+ * menu/MenuState.kt). The change feed ([appendChange]) carries device
+ * revocations down; menu edits go down through the menu feed (MenuState.appendFeed).
  */
 object Catalog {
     /** The provenance values a store may send (anything else is ignored). */
@@ -69,89 +70,18 @@ object Catalog {
 
     /**
      * Apply many item snapshots at once (a `catalog.snapshot` chunk of a few
-     * hundred products): one read of the stored photo versions, one batched
-     * upsert of the items and one of their variants — not three statements
-     * per product. Additive: products absent from [items] are left as they are
-     * (a snapshot is one chunk of the catalog, never "the whole menu").
-     * A product listed twice keeps its last snapshot.
+     * hundred products), merged field by field with what the cloud has (two-way
+     * menu sync, CONTRACT §10: last write wins). One load and one batched
+     * upsert, not statements per product. Additive: products absent from
+     * [items] are left as they are. A product listed twice keeps its last copy.
      */
-    fun applyItemSnapshots(scope: Scope, items: List<JsonObject>) {
-        val byId = LinkedHashMap<String, JsonObject>()
-        for (item in items) item.str("id")?.let { byId[it] = item }
-        if (byId.isEmpty()) return
-        // photoVersion is an optional hint most POS snapshots omit — the upsert
-        // covers every column, so an absent key must not wipe the stored version
-        // (portal thumbnails would vanish on any POS edit of the item)
-        // (photoSource, the photo's provenance, rides with it and is kept the same way)
-        val missingPhoto = byId.filterValues { it.long("photoVersion") == null || it.str("photoSource") !in PHOTO_SOURCES }.keys
-        val stored = if (missingPhoto.isEmpty()) emptyMap() else
-            missingPhoto.chunked(1000).flatMap { ids ->
-                CatalogItems.select(CatalogItems.id, CatalogItems.photoVersion, CatalogItems.photoSource).where {
-                    (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and
-                        (CatalogItems.id inList ids) and CatalogItems.photoVersion.isNotNull()
-                }.map { it[CatalogItems.id] to (it[CatalogItems.photoVersion] to it[CatalogItems.photoSource]) }
-            }.toMap()
-        CatalogItems.batchUpsert(byId.entries, shouldReturnGeneratedValues = false) { (itemId, item) ->
-            this[CatalogItems.tenantId] = scope.tenantId
-            this[CatalogItems.venueId] = scope.venueId
-            this[CatalogItems.id] = itemId
-            this[CatalogItems.nameFr] = item.str("nameFr") ?: ""
-            this[CatalogItems.nameEn] = item.str("nameEn") ?: ""
-            this[CatalogItems.descriptionFr] = item.str("descriptionFr") ?: ""
-            this[CatalogItems.descriptionEn] = item.str("descriptionEn") ?: ""
-            this[CatalogItems.categoryId] = item.str("categoryId") ?: ""
-            this[CatalogItems.abbrev] = item.str("abbrev")
-            this[CatalogItems.isAlcohol] = item.bool("isAlcohol") ?: false
-            this[CatalogItems.active] = item.bool("active") ?: true
-            this[CatalogItems.deleted] = item.bool("deleted") ?: false
-            this[CatalogItems.photoVersion] = item.long("photoVersion") ?: stored[itemId]?.first
-            this[CatalogItems.photoSource] = item.str("photoSource")?.takeIf { it in PHOTO_SOURCES }
-                ?: stored[itemId]?.second
-            this[CatalogItems.barcode] = item.str("barcode")
-            this[CatalogItems.brand] = item.str("brand")?.trim()?.takeIf { it.isNotEmpty() }
-            this[CatalogItems.subcategory] = item.str("subcategory")?.trim()?.takeIf { it.isNotEmpty() }
-            this[CatalogItems.sizeLabel] = item.str("size")?.trim()?.takeIf { it.isNotEmpty() }
-            this[CatalogItems.costCents] = item.long("costCents")
-        }
-        replaceNames(scope, "item", byId.mapNotNull { (id, item) -> namesOf(item)?.let { id to it } }.toMap())
-        val variants = LinkedHashMap<String, Pair<String, JsonObject>>()
-        for ((itemId, item) in byId) {
-            item.arr("variants")?.forEach { element ->
-                val variant = element as? JsonObject ?: return@forEach
-                val variantId = variant.str("id") ?: return@forEach
-                variants[variantId] = itemId to variant
-            }
-        }
-        if (variants.isEmpty()) return
-        replaceNames(scope, "variant",
-            variants.mapNotNull { (id, pair) -> namesOf(pair.second)?.let { id to it } }.toMap())
-        CatalogVariants.batchUpsert(variants.entries, shouldReturnGeneratedValues = false) { (variantId, pair) ->
-            val (itemId, variant) = pair
-            this[CatalogVariants.tenantId] = scope.tenantId
-            this[CatalogVariants.venueId] = scope.venueId
-            this[CatalogVariants.id] = variantId
-            this[CatalogVariants.itemId] = itemId
-            this[CatalogVariants.labelFr] = variant.str("labelFr") ?: ""
-            this[CatalogVariants.labelEn] = variant.str("labelEn") ?: ""
-            this[CatalogVariants.priceCents] = variant.long("priceCents") ?: 0
-            this[CatalogVariants.sortOrder] = variant.int("sortOrder") ?: 0
-            this[CatalogVariants.deleted] = variant.bool("deleted") ?: false
-        }
-    }
+    fun applyItemSnapshots(scope: Scope, items: List<JsonObject>) =
+        dev.dwhipstock.poscloud.menu.MenuState.ingestItems(scope, items)
 
-    fun applyCategorySnapshot(scope: Scope, category: JsonObject) {
-        val categoryId = category.str("id") ?: return
-        CatalogCategories.upsert {
-            it[tenantId] = scope.tenantId
-            it[venueId] = scope.venueId
-            it[id] = categoryId
-            it[nameFr] = category.str("nameFr") ?: ""
-            it[nameEn] = category.str("nameEn") ?: ""
-            it[sortOrder] = category.int("sortOrder") ?: 0
-            it[deleted] = category.bool("deleted") ?: false
-        }
-        namesOf(category)?.let { replaceNames(scope, "category", mapOf(categoryId to it)) }
-    }
+    fun applyCategorySnapshot(scope: Scope, category: JsonObject) = applyCategorySnapshots(scope, listOf(category))
+
+    fun applyCategorySnapshots(scope: Scope, categories: List<JsonObject>) =
+        dev.dwhipstock.poscloud.menu.MenuState.ingestCategories(scope, categories)
 
     /** A zone's extra names (catalog.snapshot `zones`, zone.* events); no-op without `names`. */
     fun applyZoneNames(scope: Scope, zoneId: String, zone: JsonObject) {

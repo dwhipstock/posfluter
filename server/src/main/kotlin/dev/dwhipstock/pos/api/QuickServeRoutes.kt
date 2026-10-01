@@ -30,6 +30,7 @@ data class NewCounterOrderRequest(
     val variantId: String,
     val qty: Int = 1,
     val note: String? = null,
+    val expectedPriceCents: Long? = null,
 )
 
 @Serializable
@@ -79,7 +80,7 @@ fun Route.quickServeRoutes(
     get("/counter/waiting") { call.respond(qs.waiting()) }
     post("/counter/orders") {
         val req = qsJson.decodeFromString<NewCounterOrderRequest>(call.receiveText())
-        call.respond(qs.createAtPos(req.serviceMode, KioskOrderLine(req.itemId, req.variantId, req.qty, req.note),
+        call.respond(qs.createAtPos(req.serviceMode, KioskOrderLine(req.itemId, req.variantId, req.qty, req.note, req.expectedPriceCents),
             call.sessionUser().userId))
     }
     get("/counter/orders/{id}") { call.respond(qs.view(orderId(call))) }
