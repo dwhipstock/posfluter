@@ -57,8 +57,6 @@ fun Route.demoSheetRoutes(
     post("/printer/demo-sheet/print") {
         requireManagerSession(call)
         if (!demo.on) throw ConflictException("demo mode is off", "demo_mode_off")
-        val locale = call.request.queryParameters["lang"]?.let(LocaleCode::of)
-            ?.takeIf(Messages::supports) ?: LocaleCode.EN
         val quickServe = config.profile.kind == StoreProfile.Kind.QUICK_SERVE
         val firstTable = if (quickServe) null else transaction {
             DiningTables.join(Zones, JoinType.INNER, DiningTables.zoneId, Zones.id)
@@ -80,7 +78,8 @@ fun Route.demoSheetRoutes(
             demo = demo,
             wifi = settings.guestWifi(),
         )
-        call.respond(printer.printNow(demoSheetLines(sheet, locale)))
+        // always English: the demo audience reads English; the other languages are shown on the POS itself
+        call.respond(printer.printNow(demoSheetLines(sheet, LocaleCode.EN)))
     }
 }
 
