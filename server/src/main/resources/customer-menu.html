@@ -184,6 +184,7 @@ const STR = {
     doneTitle: "Commande envoyée !", doneText: "Notre équipe confirmera votre commande sous peu.",
     orderMore: "Commander autre chose", failed: "L’envoi a échoué. Veuillez réessayer.",
     billLocked: "Votre addition est en cours de paiement — adressez-vous au personnel.",
+    tooMuch: "Commande trop grande — demandez au personnel.",
     viewCart: "Voir le panier", addedToast: "Ajouté au panier ✓", subtotal: "Sous-total (taxes en sus)", billSubtotal: "Sous-total",
     tabMenu: "Menu", tabBill: "Votre addition", seeBill: "Voir l’addition",
     onBill: "Sur votre addition", beingConfirmed: "En attente de confirmation", total: "Total",
@@ -201,6 +202,7 @@ const STR = {
     doneTitle: "Order sent!", doneText: "Staff will confirm your order shortly.",
     orderMore: "Order more", failed: "Failed to send, please retry",
     billLocked: "Bill is being paid — please ask staff",
+    tooMuch: "That order is too big — please ask staff",
     viewCart: "View basket", addedToast: "Added ✓", subtotal: "Subtotal (plus tax)", billSubtotal: "Subtotal",
     tabMenu: "Menu", tabBill: "Your bill", seeBill: "View bill",
     onBill: "On your bill", beingConfirmed: "Being confirmed", total: "Total",
@@ -218,6 +220,7 @@ const STR = {
     doneTitle: "¡Pedido enviado!", doneText: "El personal confirmará su pedido en breve.",
     orderMore: "Pedir algo más", failed: "No se pudo enviar. Inténtelo de nuevo.",
     billLocked: "Su cuenta se está pagando; consulte al personal.",
+    tooMuch: "El pedido es demasiado grande; consulte al personal.",
     viewCart: "Ver carrito", addedToast: "Añadido ✓", subtotal: "Subtotal (impuestos aparte)", billSubtotal: "Subtotal",
     tabMenu: "Menú", tabBill: "Su cuenta", seeBill: "Ver la cuenta",
     onBill: "En su cuenta", beingConfirmed: "Pendiente de confirmación", total: "Total",
@@ -235,6 +238,7 @@ const STR = {
     doneTitle: "Bestellung gesendet!", doneText: "Unser Team bestätigt Ihre Bestellung in Kürze.",
     orderMore: "Mehr bestellen", failed: "Senden fehlgeschlagen. Bitte versuchen Sie es erneut.",
     billLocked: "Ihre Rechnung wird gerade bezahlt – bitte wenden Sie sich an das Personal.",
+    tooMuch: "Die Bestellung ist zu groß – bitte wenden Sie sich an das Personal.",
     viewCart: "Warenkorb ansehen", addedToast: "Hinzugefügt ✓", subtotal: "Zwischensumme (zzgl. Steuern)", billSubtotal: "Zwischensumme",
     tabMenu: "Speisekarte", tabBill: "Ihre Rechnung", seeBill: "Rechnung ansehen",
     onBill: "Auf Ihrer Rechnung", beingConfirmed: "Wird bestätigt", total: "Summe",
@@ -252,6 +256,7 @@ const STR = {
     doneTitle: "Bestelling gestuur!", doneText: "Ons personeel sal u bestelling binnekort bevestig.",
     orderMore: "Bestel nog", failed: "Kon nie stuur nie. Probeer asseblief weer.",
     billLocked: "U rekening word tans betaal – vra asseblief die personeel.",
+    tooMuch: "Die bestelling is te groot – vra asseblief die personeel.",
     viewCart: "Bekyk mandjie", addedToast: "Bygevoeg ✓", subtotal: "Subtotaal (belasting uitgesluit)", billSubtotal: "Subtotaal",
     tabMenu: "Spyskaart", tabBill: "U rekening", seeBill: "Bekyk rekening",
     onBill: "Op u rekening", beingConfirmed: "Word bevestig", total: "Totaal",
@@ -574,7 +579,8 @@ async function submitBasket() {
       render(); openCart(); showToast(T().menuChanged, 3500);
       return;
     }
-    alert(code === "bill_locked" ? T().billLocked : T().failed);
+    alert(code === "bill_locked" ? T().billLocked
+      : ["too_many_lines", "too_many_pending", "qty_out_of_range"].includes(code) ? T().tooMuch : T().failed);
     return;
   }
   if (rejected.length) {

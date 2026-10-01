@@ -13,6 +13,7 @@ import kotlinx.serialization.json.long
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ScanToOrderAndShiftTest {
@@ -63,7 +64,10 @@ class ScanToOrderAndShiftTest {
                          {"itemId":"late-fries","variantId":"late-fries:regular","qty":1,"note":"plus léger aussi"}]}""")
         assertEquals(HttpStatusCode.Created, submitted.status)
         val check = json.parseToJsonElement(submitted.bodyAsText()).jsonObject
-        val checkId = check["id"]!!.jsonPrimitive.int
+        // the guest's reply is their own bill (no ids, no tenders); staff see the check
+        assertNull(check["id"])
+        val staffView = c.staffCheckAt("t5-5")
+        val checkId = staffView["id"]!!.jsonPrimitive.int
         assertEquals(0L, check["grandTotalCents"]!!.jsonPrimitive.long)
         assertEquals(2, check["pendingLines"]!!.jsonArray.size)
 
@@ -72,7 +76,7 @@ class ScanToOrderAndShiftTest {
             c.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":100000}""").status)
 
         // c. staff accepts the pitcher and rejects the late-night snack
-        val pending = check["pendingLines"]!!.jsonArray.map { it.jsonObject }
+        val pending = staffView["pendingLines"]!!.jsonArray.map { it.jsonObject }
         val towerLine = pending.first { it["itemId"]!!.jsonPrimitive.content == "lantern-lager" }["id"]!!.jsonPrimitive.int
         val cigLine = pending.first { it["itemId"]!!.jsonPrimitive.content == "late-fries" }["id"]!!.jsonPrimitive.int
         c.post("/checks/$checkId/pending-lines/$towerLine/accept").let { assertEquals(HttpStatusCode.OK, it.status) }

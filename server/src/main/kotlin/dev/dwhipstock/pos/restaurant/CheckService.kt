@@ -12,6 +12,8 @@ import dev.dwhipstock.pos.sdk.BasketLine
 import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.FeeLine
 import dev.dwhipstock.pos.sdk.Money
+import dev.dwhipstock.pos.sdk.MoneyLimits
+import dev.dwhipstock.pos.sdk.sumOfExact
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.PrintJob
 import dev.dwhipstock.pos.sdk.PrinterAdapter
@@ -78,7 +80,11 @@ import org.slf4j.LoggerFactory
  * developer-facing English for logs/debugging — never shown to staff verbatim.
  */
 class NotFoundException(message: String, val code: String = "not_found") : RuntimeException(message)
-class ConflictException(message: String, val code: String = "conflict") : RuntimeException(message)
+class ConflictException(
+    message: String, val code: String = "conflict",
+    /** Extra machine-readable fields for the error body (e.g. which bills block a shift close). */
+    val details: JsonObject? = null,
+) : RuntimeException(message)
 class BadRequestException(message: String, val code: String = "bad_request") : RuntimeException(message)
 
 @kotlinx.serialization.Serializable
@@ -185,6 +191,21 @@ interface CounterHook {
     fun receiptOrder(checkId: Int): dev.dwhipstock.pos.sdk.ReceiptOrder?
 }
 
+/**
+ * Free text a guest or staff member typed (notes, open-item names), made safe
+ * to store, print and sync: control characters (NUL wedges the cloud's
+ * Postgres JSONB; ESC sequences reach the printer) and bidi overrides are
+ * dropped, line breaks and tabs become spaces, and it is cut to [max]
+ * characters. Blank → null. Built on the shared [dev.dwhipstock.pos.base.CleanText.line]
+ * (which also drops lone surrogate halves), plus the LRM/RLM marks.
+ */
+internal fun cleanText(raw: String?, max: Int = 200): String? {
+    if (raw == null) return null
+    return dev.dwhipstock.pos.base.CleanText.line(raw)
+        .filter { it != '\u200E' && it != '\u200F' }
+        .trim().take(max).trim().takeIf { it.isNotEmpty() }
+}
+
 class CheckService(private val config: CustomerConfig) {
 
     private val log = LoggerFactory.getLogger(CheckService::class.java)
@@ -221,6 +242,18 @@ class CheckService(private val config: CustomerConfig) {
             try { hook.checkEnded(view.id) } catch (e: Exception) { log.warn("kitchen hook failed: ${e.message}") }
         }
         return view
+    }
+
+    /** A line quantity within 1..[max] (400 qty_out_of_range): a typo can't ring 2 billion of anything. */
+    private fun requireQty(qty: Int, max: Int = MoneyLimits.MAX_LINE_QTY) {
+        if (qty !in 1..max) throw BadRequestException("qty must be 1-$max", "qty_out_of_range")
+    }
+
+    /** One unit at most $99,999.99 (400 price_too_high): no line total can overflow into a negative bill. */
+    private fun requireUnitPrice(cents: Long) {
+        if (cents <= 0) throw BadRequestException("price must be positive", "price_non_positive")
+        if (cents > MoneyLimits.MAX_UNIT_PRICE_CENTS)
+            throw BadRequestException("price must be at most ${MoneyLimits.MAX_UNIT_PRICE_CENTS} cents", "price_too_high")
     }
 
     /** Refuse when the table's zone is CLOSED. Call inside a transaction. */
@@ -289,7 +322,8 @@ class CheckService(private val config: CustomerConfig) {
     fun addLine(
         checkId: Int, itemId: String, variantId: String, qty: Int, note: String?, expectedPriceCents: Long? = null,
     ): CheckView = transaction {
-        require(qty > 0) { "qty must be positive" }
+        requireQty(qty)
+        val note = cleanText(note)
         val check = requireCheck(checkId)
         if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
         MenuGuard.require(itemId, variantId, expectedPriceCents)
@@ -332,16 +366,18 @@ class CheckService(private val config: CustomerConfig) {
      * line would show the item name. No manager gate in v1 — the outbox event
      * is the audit trail. TODO: manager-gate behind a venue setting if abused.
      */
-    fun addOpenLine(checkId: Int, name: String, unitPriceCents: Long, qty: Int, note: String?): CheckView = transaction {
-        require(qty > 0) { "qty must be positive" }
-        require(name.isNotBlank()) { "name is required" }
-        require(unitPriceCents > 0) { "price must be positive" }
+    fun addOpenLine(checkId: Int, rawName: String, unitPriceCents: Long, qty: Int, rawNote: String?): CheckView = transaction {
+        requireQty(qty)
+        val name = cleanText(rawName, max = 100) ?: throw IllegalArgumentException("name is required")
+        val note = cleanText(rawNote)
+        // capped, so unit × qty can never wrap past Long into a negative line (a free "−$12 gift card")
+        requireUnitPrice(unitPriceCents)
         val check = requireCheck(checkId)
         if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
 
         val lineId = CheckLines.insertAndGetId {
             it[CheckLines.checkId] = checkId
-            it[displayName] = name.trim()
+            it[displayName] = name
             it[CheckLines.qty] = qty
             it[CheckLines.unitPriceCents] = unitPriceCents
             it[CheckLines.note] = note
@@ -351,7 +387,7 @@ class CheckService(private val config: CustomerConfig) {
         Outbox.write("check.line_open_added", "check", checkId.toString(), buildJsonObject {
             put("checkId", checkId)
             put("lineId", lineId)
-            put("name", name.trim())
+            put("name", name)
             put("qty", qty)
             put("unitPriceCents", unitPriceCents)
             note?.let { n -> put("note", n) }
@@ -412,7 +448,10 @@ class CheckService(private val config: CustomerConfig) {
      */
     fun submitPendingLines(tableId: String, lines: List<PendingLineRequest>): CheckView = transaction {
         require(lines.isNotEmpty()) { "empty basket" }
-        lines.forEach { require(it.qty > 0) { "qty must be positive" } }
+        // an unauthenticated phone: kiosk-sized baskets only (red team 2026-10-01)
+        if (lines.size > MoneyLimits.MAX_GUEST_BASKET_LINES)
+            throw BadRequestException("at most ${MoneyLimits.MAX_GUEST_BASKET_LINES} lines per order", "too_many_lines")
+        lines.forEach { requireQty(it.qty, MoneyLimits.MAX_GUEST_LINE_QTY) }
         // machine surface: reject QR orders for a closed zone outright (the customer
         // menu already hides ordering, this guards the raw endpoint)
         requireZoneOpenForTable(tableId)
@@ -421,6 +460,9 @@ class CheckService(private val config: CustomerConfig) {
         val refused = rejected.map { it.index }.toSet()
         val check = openCheck(tableId, userId = "qr-customer")
         if (check.status != "OPEN") throw ConflictException("table $tableId bill is being paid; ask staff", "bill_locked")
+        // pending lines block paying the bill until staff resolve them: never a wall of them
+        if (check.pendingLines.size + lines.size - refused.size > MoneyLimits.MAX_PENDING_LINES_PER_CHECK)
+            throw ConflictException("too many orders waiting on this table; ask staff", "too_many_pending")
         for ((index, line) in lines.withIndex()) {
             if (index in refused) continue
             val variant = ItemVariants.selectAll()
@@ -434,7 +476,7 @@ class CheckService(private val config: CustomerConfig) {
                 it[variantId] = line.variantId
                 it[qty] = line.qty
                 it[unitPriceCents] = variant[ItemVariants.priceCents]
-                it[note] = line.note
+                it[note] = cleanText(line.note)
                 it[status] = "PENDING"
                 it[createdAt] = VenueClock.now()
                 captureShelfFacts(it, item)
@@ -446,7 +488,7 @@ class CheckService(private val config: CustomerConfig) {
                 put("itemId", line.itemId)
                 put("variantId", line.variantId)
                 put("qty", line.qty)
-                line.note?.let { n -> put("note", n) }
+                cleanText(line.note)?.let { n -> put("note", n) }
             })
         }
         loadCheck(check.id).copy(rejected = rejected)
@@ -481,11 +523,37 @@ class CheckService(private val config: CustomerConfig) {
         loadCheck(checkId)
     }
 
+    /** Staff turn away every guest line still waiting on this check at once (a flood of QR orders). */
+    fun rejectAllPendingLines(checkId: Int): CheckView = afterKitchen(transaction {
+        requireCheck(checkId)
+        val ids = CheckLines.selectAll()
+            .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "PENDING") }
+            .map { it[CheckLines.id].value }
+        if (ids.isNotEmpty()) {
+            CheckLines.deleteWhere { (CheckLines.id inList ids) and (CheckLines.status eq "PENDING") }
+            Outbox.write("check.pending_lines_rejected", "check", checkId.toString(), buildJsonObject {
+                put("checkId", checkId)
+                put("lineIds", JsonArray(ids.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            })
+            cancelIfEmpty(checkId)
+        }
+        loadCheck(checkId)
+    })
+
     /** Stage-1 basket edit: change quantity on an ACTIVE line while OPEN. */
     fun setLineQty(checkId: Int, lineId: Int, qty: Int): CheckView = transaction {
-        require(qty > 0) { "qty must be positive; use delete to remove the line" }
+        requireQty(qty)
         val check = requireCheck(checkId)
         if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
+        // more of an item that has since been 86'd or deleted is refused like a new line
+        // (409 item_unavailable); fewer is always fine
+        CheckLines.selectAll().where { (CheckLines.id eq lineId) and (CheckLines.checkId eq checkId) }.firstOrNull()
+            ?.let { row ->
+                val itemId = row[CheckLines.itemId]
+                val variantId = row[CheckLines.variantId]
+                if (qty > row[CheckLines.qty] && itemId != null && variantId != null && row[CheckLines.fuelSaleId] == null)
+                    MenuGuard.require(itemId, variantId, expectedPriceCents = null)
+            }
         // can't shrink below what the split has already handed out — unassign first
         val allocated = allocatedQtyForLine(lineId)
         if (qty < allocated)
@@ -569,16 +637,19 @@ class CheckService(private val config: CustomerConfig) {
     }
 
     /**
-     * Even split ÷N: money-only groups, no line assignment. floor(total/N) each,
-     * remainder to group 1 (the explicit cents-drop rule from the spec). Group
-     * totals always sum exactly to the check's grand total.
+     * Even split ÷N: money-only groups, no line assignment. floor(total/N)
+     * each, and the leftover cents one each to the first guests (never all on
+     * guest 1), so no two shares differ by more than 1¢. Group totals always
+     * sum exactly to the check's grand total; paid in cash, the shares round
+     * once for the whole bill ([TransactionPipeline.evenSplitCashDue]).
      */
     fun createEvenSplit(checkId: Int, groups: Int): CheckView = transaction {
         requireSplittable(checkId, groups)
         val total = computeTotals(requireCheck(checkId)).grandTotal.cents
         val share = total / groups
+        val leftover = total - share * groups
         for (n in 1..groups) {
-            val amount = if (n == 1) total - share * (groups - 1) else share
+            val amount = share + if (n <= leftover) 1 else 0
             insertGroup(checkId, n, includesCorkage = n == 1, fixedAmountCents = amount)
         }
         Outbox.write("split.created", "check", checkId.toString(), buildJsonObject {
@@ -770,9 +841,31 @@ class CheckService(private val config: CustomerConfig) {
      */
     fun tenderCash(checkId: Int, amountTenderedCents: Long, groupId: Int? = null): TenderView = transaction {
         val outstanding = lockAndOutstanding(checkId, groupId)
-        val result = TransactionPipeline.tenderCash(outstanding, Money(amountTenderedCents), config)
+        val cashDue = groupId?.let { evenShareCashDue(checkId, it) }
+        val due = cashDue ?: config.roundingPolicy.roundCashDue(outstanding)
+        // a sane bound on the change: one fat-fingered amount used to be recorded and
+        // overflow the X / Z reports for the rest of the shift (the whole call rolls back)
+        if (amountTenderedCents > due.cents + MoneyLimits.MAX_CASH_OVER_DUE_CENTS)
+            throw BadRequestException("cash tendered is more than ${MoneyLimits.MAX_CASH_OVER_DUE_CENTS} cents over the amount due",
+                "cash_amount_too_high")
+        val result = TransactionPipeline.tenderCash(outstanding, Money(amountTenderedCents), config, cashDue)
         recordTender(checkId, TenderType.CASH, "check.tendered",
             amountTenderedCents, result.amountApplied, result.roundingAdjustment, result.change, groupId)
+    }
+
+    /**
+     * An even ÷N group's cash due while nothing is paid on it yet: its share
+     * of the bill rounded once for the whole table
+     * ([TransactionPipeline.evenSplitCashDue]). Null = round its balance as usual
+     * (a by-item group, or a group already partly paid).
+     */
+    private fun evenShareCashDue(checkId: Int, groupId: Int): Money? {
+        val groups = splitGroups(checkId)
+        if (groups.none { it[BillGroups.fixedAmountCents] != null }) return null
+        val index = groups.indexOfFirst { it[BillGroups.id].value == groupId }
+        if (index < 0 || !groupTenderedSoFar(groupId).isZero) return null
+        val shares = groups.map { Money(it[BillGroups.lockedTotalCents] ?: it[BillGroups.fixedAmountCents] ?: 0L) }
+        return TransactionPipeline.evenSplitCashDue(shares, config.roundingPolicy)[index]
     }
 
     /**
@@ -826,7 +919,7 @@ class CheckService(private val config: CustomerConfig) {
         val outstanding = lockAndOutstanding(checkId, groupId)
         val applied = TransactionPipeline.tenderElectronic(outstanding, Money(amountCents))
         recordTender(checkId, TenderType.STRIPE, "check.tender_confirmed", amountCents, applied,
-            Money.ZERO, Money.ZERO, groupId, stripePaymentIntentId = paymentIntentId, card = card)
+            Money.ZERO, Money.ZERO, groupId, stripePaymentIntentId = paymentIntentId, card = card, tipCents = card?.tipCents ?: 0L)
     }
 
     /**
@@ -841,7 +934,7 @@ class CheckService(private val config: CustomerConfig) {
         val outstanding = lockAndOutstanding(checkId, groupId)
         val applied = TransactionPipeline.tenderElectronic(outstanding, Money(amountCents))
         recordTender(checkId, TenderType.TERMINAL, "check.tender_confirmed", amountCents, applied,
-            Money.ZERO, Money.ZERO, groupId, terminalPaymentRef = terminalRef, terminalProvider = provider, card = card)
+            Money.ZERO, Money.ZERO, groupId, terminalPaymentRef = terminalRef, terminalProvider = provider, card = card, tipCents = card?.tipCents ?: 0L)
     }
 
     private fun lockAndOutstanding(checkId: Int, groupId: Int? = null): Money {
@@ -884,8 +977,12 @@ class CheckService(private val config: CustomerConfig) {
         terminalPaymentRef: String? = null,
         terminalProvider: String? = null,
         card: dev.dwhipstock.pos.payments.terminal.CardDetails? = null,
+        /** A card tip on top of the bill (reader / Stripe); never part of [applied]. */
+        tipCents: Long = 0,
     ): TenderView {
+        require(tipCents >= 0) { "tip must not be negative" }
         val tenderId = Tenders.insertAndGetId {
+            it[Tenders.tipCents] = tipCents
             it[Tenders.stripePaymentIntentId] = stripePaymentIntentId
             it[Tenders.terminalPaymentRef] = terminalPaymentRef
             it[Tenders.cardJson] = card?.let(::encodeCard)
@@ -907,6 +1004,7 @@ class CheckService(private val config: CustomerConfig) {
             put("roundingAdjustmentCents", rounding.cents)
             put("changeCents", change.cents)
             groupId?.let { g -> put("groupId", g) }
+            if (tipCents > 0) put("tipCents", tipCents)
             // processor reference only — never a key, card data or client secret
             stripePaymentIntentId?.let { pi -> put("processor", "stripe"); put("stripePaymentIntentId", pi) }
             terminalPaymentRef?.let { ref -> put("processor", terminalProvider ?: "terminal"); put("terminalPaymentRef", ref) }
@@ -924,7 +1022,7 @@ class CheckService(private val config: CustomerConfig) {
                 put("groupOutstandingCents", outstanding.cents)
             })
         }
-        return TenderView(tenderId, type.name, tenderedCents, applied.cents, rounding.cents, change.cents, groupId)
+        return TenderView(tenderId, type.name, tenderedCents, applied.cents, rounding.cents, change.cents, groupId, tipCents)
     }
 
     fun finalizeCheck(checkId: Int): CheckView = afterForecourt(finalizeCheckTx(checkId)).also { view ->
@@ -947,7 +1045,10 @@ class CheckService(private val config: CustomerConfig) {
             if (!due.isZero) throw ConflictException("group $gid has ${due.cents} cents outstanding", "group_outstanding")
         }
 
-        val shift = currentOpenShiftId() // null = closed outside any shift (allowed; report skips it)
+        // a sale closes into a shift, like every tender: one closed outside any
+        // shift was in no Z report ever (red team 2026-10-01)
+        val shift = currentOpenShiftId()
+            ?: throw ConflictException("no open shift; open a shift before closing a bill", "no_open_shift")
         val now = VenueClock.now()
         Checks.update({ Checks.id eq checkId }) {
             it[status] = "CLOSED"
@@ -1003,9 +1104,10 @@ class CheckService(private val config: CustomerConfig) {
         // what is still due, and what it comes to in cash (to the nickel)
         val paid = if (groupId == null) tenderedSoFar(checkId) else groupTenderedSoFar(groupId)
         val due = built.grandTotal - paid
+        val cashDue = groupId?.let { evenShareCashDue(checkId, it) } ?: config.roundingPolicy.roundCashDue(due)
         val receipt = built.copy(
-            cashDue = config.roundingPolicy.roundCashDue(due),
-            cashRounding = config.roundingPolicy.cashAdjustment(due),
+            cashDue = cashDue,
+            cashRounding = cashDue - due,
         )
         val lines = ReceiptRenderer.render(receipt, receiptPolicyFor(check, lang), ReceiptKind.PROVISIONAL)
         val text = config.printer.printProvisional(PrintJob(checkId, lines))
@@ -1202,12 +1304,18 @@ class CheckService(private val config: CustomerConfig) {
     }
 
     /**
-     * Void with reason, manager-gated. Allowed while OPEN or TOTAL_LOCKED with no
-     * money applied. TODO: full manager-override framework (approval on someone
-     * else's terminal session, discount gating) — this is the minimal honest gate.
+     * Void with reason, manager-gated. Allowed while OPEN or TOTAL_LOCKED. With
+     * money already applied (a partly paid bill the guests walked away from)
+     * the void needs [reverseTenders]: the payments are handed back first —
+     * cash out of the drawer, a hand-keyed card or transfer refunded on its own
+     * terminal / bank — and the approver needs the refund grant too. A card
+     * taken on the integrated reader or through Stripe can't be given back
+     * here (409 void_card_on_reader): finish the bill and refund that card.
+     * The tenders stay on the check, stamped reversed; a VOID check's money is
+     * never in the drawer math, so the cash in and the cash back cancel out.
      */
-    fun voidCheck(checkId: Int, reason: String, managerId: String): CheckView =
-        afterKitchen(voidCheckTx(checkId, reason, managerId))
+    fun voidCheck(checkId: Int, reason: String, managerId: String, reverseTenders: Boolean = false): CheckView =
+        afterKitchen(voidCheckTx(checkId, reason, managerId, reverseTenders = reverseTenders))
 
     /** The store itself voids a check (no one signed in approves it): old test orders being cleaned up. */
     fun systemVoid(checkId: Int, reason: String): CheckView =
@@ -1238,7 +1346,9 @@ class CheckService(private val config: CustomerConfig) {
     /** Money already applied to [checkId] (quick-serve: an unpaid order with a tender can't just expire). */
     fun hasTenders(checkId: Int): Boolean = transaction { !tenderedSoFar(checkId).isZero }
 
-    private fun voidCheckTx(checkId: Int, reason: String, managerId: String, system: Boolean = false): CheckView = transaction {
+    private fun voidCheckTx(
+        checkId: Int, reason: String, managerId: String, system: Boolean = false, reverseTenders: Boolean = false,
+    ): CheckView = transaction {
         require(reason.isNotBlank()) { "void reason is required" }
         // defense-in-depth: the route already authorized this; re-check the grant on the authorizer
         if (!system && !GrantsRepo.has(managerId, Permissions.VOID))
@@ -1248,12 +1358,41 @@ class CheckService(private val config: CustomerConfig) {
         if (check[Checks.status] !in listOf("OPEN", "TOTAL_LOCKED")) {
             throw ConflictException("check $checkId is ${check[Checks.status]}")
         }
-        if (!tenderedSoFar(checkId).isZero) {
-            throw ConflictException("check $checkId has tenders applied; refund flow TODO", "void_has_tenders")
+        val now = VenueClock.now()
+        val paid = Tenders.selectAll()
+            .where { (Tenders.transactionId eq checkId) and Tenders.reversedAt.isNull() }.toList()
+        if (paid.isNotEmpty() && !reverseTenders)
+            throw ConflictException("check $checkId has payments; void with reverseTenders to hand them back", "void_has_tenders")
+        if (paid.isNotEmpty()) {
+            if (system || !GrantsRepo.has(managerId, Permissions.REFUND))
+                throw ConflictException("handing payments back needs the refund grant or a manager's approval", "manager_approval_required")
+            currentOpenShiftId()
+                ?: throw ConflictException("no open shift; open a shift before handing money back", "no_open_shift")
+            if (paid.any { it[Tenders.type] == TenderType.STRIPE.name || it[Tenders.type] == TenderType.TERMINAL.name })
+                throw ConflictException("a card taken on the reader can't be handed back from an open bill; " +
+                    "finish the bill and refund the card", "void_card_on_reader")
+        }
+        val reversed = paid.map { row ->
+            Tenders.update({ Tenders.id eq row[Tenders.id] }) { it[reversedAt] = now }
+            // what goes back to the guest: what the drawer kept (tendered − change)
+            val back = row[Tenders.amountTenderedCents] - row[Tenders.changeCents]
+            val entry = buildJsonObject {
+                put("tenderId", row[Tenders.id].value)
+                put("type", row[Tenders.type])
+                put("amountAppliedCents", row[Tenders.amountAppliedCents])
+                put("amountReturnedCents", back)
+                row[Tenders.billGroupId]?.let { g -> put("groupId", g) }
+            }
+            Outbox.write("check.tender_reversed", "check", checkId.toString(), buildJsonObject {
+                put("checkId", checkId)
+                entry.forEach { (k, v) -> put(k, v) }
+                put("authorizedBy", managerId)
+                put("reversedAt", VenueClock.iso(now))
+            })
+            entry
         }
 
         val shift = currentOpenShiftId()
-        val now = VenueClock.now()
         // TOTAL_LOCKED (tender initiated, no money confirmed): the locked totals
         // are what the screen showed — live math would re-price a settings change
         // and re-floor a split. Only an OPEN void computes fresh.
@@ -1286,6 +1425,7 @@ class CheckService(private val config: CustomerConfig) {
             put("amountCents", voidAmount)
             put("taxIncludedCents", voidTax)
             put("taxes", taxLinesToJson(voidTaxes))
+            if (reversed.isNotEmpty()) put("reversedTenders", JsonArray(reversed))
         })
         loadCheck(checkId)
     }
@@ -1310,8 +1450,10 @@ class CheckService(private val config: CustomerConfig) {
         tenderType: String,
         reason: String,
         managerId: String,
+        /** A manager approved giving it back another way than the guest paid (see [planRefund]). */
+        overrideTender: Boolean = false,
     ): RefundResult = transaction {
-        val plan = planRefund(checkId, amountCents, lines, tenderType, reason, managerId)
+        val plan = planRefund(checkId, amountCents, lines, tenderType, reason, managerId, overrideTender)
         // a card refund through Stripe must happen AT Stripe first — see payments.StripePayments.refund
         if (plan.tenderType == TenderType.STRIPE)
             throw ConflictException("Stripe refunds go through the Stripe refund path", "stripe_refund_via_stripe")
@@ -1335,6 +1477,8 @@ class CheckService(private val config: CustomerConfig) {
         val taxLines: List<TaxLine> = emptyList(),
         /** CASH only: cash handed back − [gross] (to the nickel); 0 otherwise. */
         val rounding: Long = 0,
+        /** The manager who let it go back another way than the guest paid; null = the way they paid. */
+        val overrideBy: String? = null,
     ) {
         /** What actually goes back to the customer. */
         val paidOut: Long get() = gross + rounding
@@ -1353,6 +1497,11 @@ class CheckService(private val config: CustomerConfig) {
         tenderType: String,
         reason: String,
         managerId: String,
+        /**
+         * Give it back another way than the guest paid (a card sale in cash):
+         * only a manager (role MANAGER) may approve it, and it is recorded.
+         */
+        overrideTender: Boolean = false,
     ): RefundPlan = transaction {
         require(reason.isNotBlank()) { "refund reason is required" }
         // defense-in-depth: the route already authorized this; re-check the grant on the authorizer
@@ -1360,6 +1509,9 @@ class CheckService(private val config: CustomerConfig) {
             throw ConflictException("refund requires the refund grant or a manager's approval", "manager_approval_required")
         val tt = runCatching { TenderType.valueOf(tenderType) }.getOrNull()
             ?: throw BadRequestException("unknown tender type $tenderType", "refund_bad_tender")
+        // money leaves the store into a shift's books, like every tender
+        currentOpenShiftId()
+            ?: throw ConflictException("no open shift; open a shift before refunding", "no_open_shift")
 
         val check = requireCheck(checkId)
         if (check[Checks.status] != "CLOSED")
@@ -1369,19 +1521,47 @@ class CheckService(private val config: CustomerConfig) {
         val checkTax = check[Checks.lockedTaxIncludedCents] ?: 0L
 
         val already = refundedSoFar(checkId)
+        val remaining = grandTotal - already
         // by-line takes precedence when present; otherwise a flat amount
         val (refundGross, linesJson) = if (!lines.isNullOrEmpty()) {
             val (preTax, json) = computeLineRefund(checkId, lines)
-            withAddedTax(check, preTax, grandTotal - already) to json
+            withAddedTax(check, preTax, remaining) to json
         } else {
             (amountCents ?: throw BadRequestException("refund needs an amount or lines", "refund_no_amount")) to null
         }
         if (refundGross <= 0) throw BadRequestException("refund amount must be positive", "refund_non_positive")
-        if (already + refundGross > grandTotal)
+        // compared against what is left, never summed: already + a huge amount wrapped
+        // past Long and let a $92-quadrillion refund through (red team 2026-10-01)
+        if (refundGross > remaining)
             throw ConflictException(
                 "refund exceeds remaining refundable (${grandTotal - already} cents left on check $checkId)",
                 "refund_exceeds_total",
             )
+
+        // back the way the guest paid: a card sale to the card, cash to cash. What
+        // each payment type took less what already went back that way bounds it,
+        // unless a manager approves another way (recorded on the refund)
+        val overrideBy = if (tt == TenderType.STRIPE || tt == TenderType.TERMINAL) {
+            null // back to the card through Stripe / the reader: their own per-payment caps apply
+        } else if (overrideTender) {
+            val role = Users.selectAll().where { Users.id eq managerId }.firstOrNull()?.get(Users.role)
+            if (role != "MANAGER")
+                throw ConflictException("refunding another way than the guest paid needs a manager", "manager_approval_required")
+            managerId
+        } else {
+            val paidThatWay = Tenders.selectAll()
+                .where { (Tenders.transactionId eq checkId) and (Tenders.type eq tt.name) and Tenders.reversedAt.isNull() }
+                .sumOfExact { it[Tenders.amountAppliedCents] }
+            val backThatWay = Refunds.selectAll()
+                .where { (Refunds.checkId eq checkId) and (Refunds.tenderType eq tt.name) }
+                .sumOfExact { it[Refunds.grossCents] }
+            if (refundGross > paidThatWay - backThatWay)
+                throw ConflictException(
+                    "check $checkId took ${paidThatWay - backThatWay} cents by ${tt.name} still refundable that way",
+                    "refund_tender_mismatch",
+                )
+            null
+        }
 
         // reverse the included tax proportionally against the LOCKED totals:
         // full refund → tax reverses exactly; partials stay bounded and additive.
@@ -1392,7 +1572,7 @@ class CheckService(private val config: CustomerConfig) {
         val refundNet = refundGross - refundTax
         // cash back rounds to the nickel like a cash sale; card refunds stay exact
         val rounding = if (tt == TenderType.CASH) config.roundingPolicy.cashAdjustment(Money(refundGross)).cents else 0L
-        RefundPlan(checkId, refundGross, refundNet, refundTax, tt, reason, managerId, linesJson, addedTaxes, rounding)
+        RefundPlan(checkId, refundGross, refundNet, refundTax, tt, reason, managerId, linesJson, addedTaxes, rounding, overrideBy)
     }
 
     /**
@@ -1449,11 +1629,18 @@ class CheckService(private val config: CustomerConfig) {
         val checkId = plan.checkId
         val check = requireCheck(checkId)
         val grandTotal = check[Checks.lockedGrandTotalCents] ?: 0L
-        if (stripeRefundId == null && terminalRefundRef == null && refundedSoFar(checkId) + plan.gross > grandTotal)
+        // money already back at Stripe / on the terminal must be recorded whatever
+        // happens; a refund the store pays out itself is re-checked here
+        val external = stripeRefundId != null || terminalRefundRef != null
+        if (!external && plan.gross > grandTotal - refundedSoFar(checkId))
             throw ConflictException(
                 "refund exceeds remaining refundable (${grandTotal - refundedSoFar(checkId)} cents left on check $checkId)",
                 "refund_exceeds_total",
             )
+        // a staff refund lands in a shift's books (the forecourt's automatic change
+        // for unused prepaid fuel may come after the shift closed: it still records)
+        if (!external && fuelSaleId == null && currentOpenShiftId() == null)
+            throw ConflictException("no open shift; open a shift before refunding", "no_open_shift")
         val refundGross = plan.gross
         val refundNet = plan.net
         val refundTax = plan.tax
@@ -1481,6 +1668,7 @@ class CheckService(private val config: CustomerConfig) {
             it[Refunds.terminalRefundRef] = terminalRefundRef
             it[taxesJson] = if (plan.taxLines.isEmpty()) null else taxLinesToJson(plan.taxLines).toString()
             it[roundingAdjustmentCents] = plan.rounding
+            it[Refunds.overrideBy] = plan.overrideBy
         }.value
 
         val tz = tableZoneRowOrNull(check[Checks.tableId])
@@ -1500,6 +1688,7 @@ class CheckService(private val config: CustomerConfig) {
             put("roundingAdjustmentCents", plan.rounding)
             put("reason", reason)
             put("refundedBy", managerId)
+            plan.overrideBy?.let { put("tenderOverrideBy", it) }
             put("tableId", check[Checks.tableId])
             put("tableLabel", tz?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] })
             put("zoneId", tz?.get(Zones.id))
@@ -1626,7 +1815,7 @@ class CheckService(private val config: CustomerConfig) {
         val r = Tenders.selectAll().where { Tenders.id eq tenderId }.firstOrNull()
             ?: throw NotFoundException("tender $tenderId not found", "tender_not_found")
         TenderView(tenderId, r[Tenders.type], r[Tenders.amountTenderedCents], r[Tenders.amountAppliedCents],
-            r[Tenders.roundingAdjustmentCents], r[Tenders.changeCents], r[Tenders.billGroupId])
+            r[Tenders.roundingAdjustmentCents], r[Tenders.changeCents], r[Tenders.billGroupId], r[Tenders.tipCents])
     }
 
     private fun refundedSoFar(checkId: Int): Long =
@@ -1641,6 +1830,18 @@ class CheckService(private val config: CustomerConfig) {
         val lineItems = CheckLines.selectAll()
             .where { (CheckLines.checkId eq checkId) and (CheckLines.status eq "ACTIVE") }
             .associate { it[CheckLines.id].value to it[CheckLines.itemId] }
+        // what earlier by-line refunds already gave back, per line: one beer is
+        // refundable once, not again and again (red team 2026-10-01)
+        val refundedQty = mutableMapOf<Int, Int>()
+        Refunds.selectAll().where { Refunds.checkId eq checkId }.forEach { r ->
+            val json = r[Refunds.linesJson] ?: return@forEach
+            runCatching { Json.parseToJsonElement(json).jsonArray }.getOrNull()?.forEach { e ->
+                val o = e.jsonObject
+                val id = o["lineId"]?.jsonPrimitive?.longOrNull?.toInt() ?: return@forEach
+                val q = o["qty"]?.jsonPrimitive?.longOrNull?.toInt() ?: return@forEach
+                refundedQty[id] = (refundedQty[id] ?: 0) + q
+            }
+        }
         var gross = 0L
         val arr = buildJsonArray {
             for (l in lines) {
@@ -1650,8 +1851,13 @@ class CheckService(private val config: CustomerConfig) {
                 val (origQty, unit) = row
                 if (l.qty > origQty)
                     throw BadRequestException("line ${l.lineId}: refund qty ${l.qty} exceeds $origQty", "refund_qty_too_high")
-                val amount = unit * l.qty
-                gross += amount
+                val before = refundedQty[l.lineId] ?: 0
+                if (before + l.qty > origQty)
+                    throw ConflictException(
+                        "line ${l.lineId}: ${origQty - before} of $origQty still refundable", "refund_line_already_refunded")
+                refundedQty[l.lineId] = before + l.qty
+                val amount = Math.multiplyExact(unit, l.qty.toLong())
+                gross = Math.addExact(gross, amount)
                 addJsonObject {
                     put("lineId", l.lineId)
                     lineItems[l.lineId]?.let { put("itemId", it) }
@@ -1794,6 +2000,7 @@ class CheckService(private val config: CustomerConfig) {
             it[status] = "MERGED"
             it[closedAt] = VenueClock.now()
         }
+        mergeCounterOrders(sourceCheckId, destCheckId)
         Outbox.write("check.merged", "check", destCheckId.toString(), buildJsonObject {
             put("sourceCheckId", sourceCheckId)
             put("destCheckId", destCheckId)
@@ -1801,6 +2008,37 @@ class CheckService(private val config: CustomerConfig) {
             put("corkageBottles", movedCorkage)
         })
         loadCheck(destCheckId)
+    }
+
+    /**
+     * Quick-serve: one number per guest. When a kiosk order (WAITING, its
+     * number already on the guest's ticket) is folded into another unpaid
+     * order, the bill they pay together carries the kiosk's number: an
+     * unnumbered counter order takes it over (and is WAITING like it), so the
+     * guest is called by the number they hold. If both already have a number
+     * the destination keeps its own. The source row never stays WAITING on a
+     * MERGED check: it closes out as CANCELLED (its number, if it still has
+     * one, stays taken for the day, a gap like an expired kiosk order).
+     * Inside the merge's transaction; nothing for a check that isn't a counter order.
+     */
+    private fun mergeCounterOrders(sourceCheckId: Int, destCheckId: Int) {
+        val src = CounterOrders.selectAll().where { CounterOrders.checkId eq sourceCheckId }.firstOrNull() ?: return
+        if (src[CounterOrders.status] !in QuickServeService.UNPAID) return
+        val dest = CounterOrders.selectAll().where { CounterOrders.checkId eq destCheckId }.firstOrNull()
+        val number = src[CounterOrders.orderNumber]
+        val handOver = number != null && dest != null && dest[CounterOrders.orderNumber] == null &&
+            dest[CounterOrders.status] in QuickServeService.UNPAID
+        if (number == null || handOver) {
+            // nothing on a ticket to keep (or the number moves on): the row goes,
+            // first, since a number is unique per day
+            CounterOrders.deleteWhere { CounterOrders.checkId eq sourceCheckId }
+        } else {
+            CounterOrders.update({ CounterOrders.checkId eq sourceCheckId }) { it[status] = QuickServeService.CANCELLED }
+        }
+        if (handOver) CounterOrders.update({ CounterOrders.checkId eq destCheckId }) {
+            it[orderNumber] = number
+            it[businessDate] = src[CounterOrders.businessDate]
+        }
     }
 
     /**
@@ -1961,6 +2199,7 @@ class CheckService(private val config: CustomerConfig) {
                 put("changeCents", row[Tenders.changeCents])
                 put("groupId", row[Tenders.billGroupId])
                 row[Tenders.stripePaymentIntentId]?.let { pi -> put("stripePaymentIntentId", pi) }
+                if (row[Tenders.tipCents] > 0) put("tipCents", row[Tenders.tipCents])
             }
         }
         return buildJsonObject {
@@ -2233,11 +2472,18 @@ class CheckService(private val config: CustomerConfig) {
         val allocationsByGroup = BillGroupAllocations.selectAll()
             .where { BillGroupAllocations.groupId inList groups.map { it[BillGroups.id].value } }
             .groupBy { it[BillGroupAllocations.groupId] }
-        val groupViews = groups.zip(groupTotals(check, groups)).map { (group, totals) ->
+        val even = groups.any { it[BillGroups.fixedAmountCents] != null }
+        // an even split's cash shares round once for the whole bill
+        val evenCash = if (!even) null else TransactionPipeline.evenSplitCashDue(
+            groups.map { Money(it[BillGroups.lockedTotalCents] ?: it[BillGroups.fixedAmountCents] ?: 0L) },
+            config.roundingPolicy)
+        val groupViews = groups.zip(groupTotals(check, groups)).mapIndexed { index, (group, totals) ->
             val gid = group[BillGroups.id].value
             val grand = group[BillGroups.lockedTotalCents] ?: totals.grandTotal.cents
             val taxes = groupTaxLines(group, totals)
             val paid = groupTenderedSoFar(gid).cents
+            val cashDue = evenCash?.takeIf { paid == 0L }?.get(index)?.cents
+                ?: config.roundingPolicy.roundCashDue(Money(grand - paid)).cents
             GroupView(
                 id = gid,
                 number = group[BillGroups.groupNumber],
@@ -2253,11 +2499,10 @@ class CheckService(private val config: CustomerConfig) {
                 outstandingCents = grand - paid,
                 subtotalCents = grand - taxes.sumOf { it.amount.cents },
                 taxes = taxes.map { it.toView() },
-                cashDueCents = config.roundingPolicy.roundCashDue(Money(grand - paid)).cents,
-                cashRoundingCents = config.roundingPolicy.cashAdjustment(Money(grand - paid)).cents,
+                cashDueCents = cashDue,
+                cashRoundingCents = cashDue - (grand - paid),
             )
         }
-        val even = groups.any { it[BillGroups.fixedAmountCents] != null }
         val allocatedByLine = allocationsByGroup.values.flatten()
             .groupBy({ it[BillGroupAllocations.lineId] }) { it[BillGroupAllocations.qty] }
             .mapValues { it.value.sum() }
@@ -2320,7 +2565,7 @@ class CheckService(private val config: CustomerConfig) {
         val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map {
             TenderView(it[Tenders.id].value, it[Tenders.type], it[Tenders.amountTenderedCents],
                 it[Tenders.amountAppliedCents], it[Tenders.roundingAdjustmentCents], it[Tenders.changeCents],
-                it[Tenders.billGroupId])
+                it[Tenders.billGroupId], it[Tenders.tipCents])
         }
         val grandTotal = check[Checks.lockedGrandTotalCents] ?: totals.grandTotal.cents
         val taxes = taxLinesOf(check, totals)
@@ -2551,6 +2796,8 @@ data class TenderView(
     val changeCents: Long,
     /** Bill group this tender paid into; null = whole-check tender. */
     val groupId: Int? = null,
+    /** A card tip taken on top of the bill (card reader / Stripe); not in [amountAppliedCents]. */
+    val tipCents: Long = 0,
 )
 
 /**

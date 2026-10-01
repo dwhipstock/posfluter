@@ -103,6 +103,10 @@ object Tenders : IntIdTable("tenders") {
     val terminalPaymentRef = varchar("terminal_payment_ref", 64).nullable()
     // card-present tenders (048): brand, last 4, entry mode, auth code, EMV fields (JSON)
     val cardJson = text("card_json").nullable()
+    // card tips (060): what the card took on top of the bill; never in amount_applied
+    val tipCents = long("tip_cents").default(0)
+    // handed back when a manager cancelled the partly paid check (060); null = kept
+    val reversedAt = utcTimestamp("reversed_at").nullable()
 }
 
 object Users : Table("users") {

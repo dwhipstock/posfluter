@@ -1083,6 +1083,35 @@ class L {
     'Anderer Grund',
     'Ander rede',
   );
+  // void a bill that already has payments: hand them back first
+  String get voidPaidTitle => _t(
+    'Cette addition a déjà des paiements',
+    'This bill already has payments',
+    'Esta cuenta ya tiene pagos',
+    'Diese Rechnung hat bereits Zahlungen',
+    'Hierdie rekening het reeds betalings',
+  );
+  String voidPaidBody(String amount) => _t(
+    '$amount a été payé. Rendez-le au client (comptant de la caisse, carte remboursée sur son terminal), puis l’addition est annulée. Un gérant doit approuver.',
+    '$amount was paid. Hand it back to the guest (cash from the drawer, a card refunded on its terminal), then the bill is voided. A manager must approve.',
+    'Se pagó $amount. Devuélvelo al cliente (efectivo de la caja, tarjeta reembolsada en su terminal) y luego se anula la cuenta. Debe aprobarlo un gerente.',
+    '$amount wurde bezahlt. Dem Gast zurückgeben (Bargeld aus der Kasse, Karte am Terminal erstatten), dann wird die Rechnung storniert. Ein Manager muss freigeben.',
+    '$amount is betaal. Gee dit terug aan die gas (kontant uit die laai, ’n kaart terugbetaal op sy terminaal), dan word die rekening gekanselleer. ’n Bestuurder moet goedkeur.',
+  );
+  String get handBackAndVoid => _t(
+    'Rendre et annuler',
+    'Hand back and void',
+    'Devolver y anular',
+    'Zurückgeben und stornieren',
+    'Gee terug en kanselleer',
+  );
+  String get rejectAllOrders => _t(
+    'Tout refuser',
+    'Reject all',
+    'Rechazar todo',
+    'Alle ablehnen',
+    'Weier alles',
+  );
   String voidedBill(int id) => _t(
     'Addition n° $id annulée',
     'Bill #$id voided',
@@ -1886,6 +1915,35 @@ class L {
     'Einlagen / Entnahmen',
     'Inbetaal / uitbetaal',
   );
+  // card tips on the X / Z / range reports
+  String get cardTips => _t(
+    'Pourboires par carte',
+    'Card tips',
+    'Propinas con tarjeta',
+    'Kartentrinkgeld',
+    'Kaartfooitjies',
+  );
+  String get tipsByServer => _t(
+    'Pourboires par serveur',
+    'Tips by server',
+    'Propinas por mesero',
+    'Trinkgeld pro Bedienung',
+    'Fooitjies per kelner',
+  );
+  String tipCount(int n) => _t(
+    '$n pourboire${n == 1 ? '' : 's'}',
+    '$n tip${n == 1 ? '' : 's'}',
+    '$n propina${n == 1 ? '' : 's'}',
+    '$n Trinkgeld${n == 1 ? '' : 'er'}',
+    '$n fooitjie${n == 1 ? '' : 's'}',
+  );
+  String voidReversed(String amount) => _t(
+    'paiements rendus $amount',
+    'payments handed back $amount',
+    'pagos devueltos $amount',
+    'Zahlungen zurückgegeben $amount',
+    'betalings teruggegee $amount',
+  );
   String get cashRefunds => _t(
     'Remboursements en comptant',
     'Cash refunds',
@@ -1922,6 +1980,27 @@ class L {
     'Reembolsar la cuenta',
     'Rechnung erstatten',
     'Betaal rekening terug',
+  );
+  String get refundOverrideTitle => _t(
+    'Rembourser autrement que le paiement ?',
+    'Refund another way than the guest paid?',
+    '¿Reembolsar de otra forma que el pago?',
+    'Anders erstatten als bezahlt?',
+    'Terugbetaal anders as wat die gas betaal het?',
+  );
+  String get refundOverrideBody => _t(
+    'Le client n’a pas payé ce montant de cette façon. Seul un gérant peut l’autoriser ; ce sera noté sur le remboursement.',
+    'The guest didn’t pay this much that way. Only a manager can allow it; it is noted on the refund.',
+    'El cliente no pagó tanto de esa forma. Solo un gerente puede permitirlo; quedará anotado en el reembolso.',
+    'Der Gast hat so viel nicht auf diese Art bezahlt. Nur ein Manager kann das erlauben; es wird bei der Erstattung vermerkt.',
+    'Die gas het nie soveel op dié manier betaal nie. Net ’n bestuurder kan dit toelaat; dit word op die terugbetaling aangeteken.',
+  );
+  String get managerOverride => _t(
+    'Autorisation du gérant',
+    'Manager override',
+    'Autorización del gerente',
+    'Manager-Freigabe',
+    'Bestuurder se magtiging',
   );
   String get refundApprovalTitle => _t(
     'Remboursement — approbation du gérant',
@@ -3984,11 +4063,11 @@ class L {
       'Saldo is nog uitstaande',
     ),
     'void_has_tenders' => _t(
-      'L’addition a des paiements : annulation impossible — faites plutôt un remboursement',
-      'Bill has payments; void not allowed — refund instead',
-      'La cuenta tiene pagos; no se puede anular: haz un reembolso',
-      'Rechnung hat bereits Zahlungen; Storno nicht möglich – stattdessen erstatten',
-      'Rekening het betalings; kansellasie nie toegelaat nie — betaal eerder terug',
+      'L’addition a des paiements : annulez-la pour les rendre d’abord',
+      'Bill has payments; void it to hand them back first',
+      'La cuenta tiene pagos; anúlala para devolver primero los pagos',
+      'Rechnung hat bereits Zahlungen; stornieren, um sie zuerst zurückzugeben',
+      'Rekening het betalings; kanselleer dit om hulle eers terug te gee',
     ),
     'refund_not_closed' => _t(
       'Seule une addition fermée peut être remboursée',
@@ -4038,6 +4117,76 @@ class L {
       'La cantidad supera la de la cuenta',
       'Erstattungsmenge übersteigt die Rechnung',
       'Terugbetalingshoeveelheid oorskry die rekening',
+    ),
+    'refund_line_already_refunded' => _t(
+      'Cet article a déjà été remboursé',
+      'This item was already refunded',
+      'Este artículo ya se reembolsó',
+      'Dieser Artikel wurde bereits erstattet',
+      'Hierdie item is reeds terugbetaal',
+    ),
+    'refund_tender_mismatch' => _t(
+      'Remboursez comme le client a payé (carte sur la carte, comptant en comptant) — sinon un gérant doit approuver',
+      'Refund the way the guest paid (card to card, cash to cash) — otherwise a manager must approve',
+      'Reembolsa como pagó el cliente (tarjeta a tarjeta, efectivo en efectivo); si no, debe aprobarlo un gerente',
+      'So erstatten, wie der Gast bezahlt hat (Karte auf Karte, bar in bar) – sonst muss ein Manager freigeben',
+      'Betaal terug soos die gas betaal het (kaart na kaart, kontant in kontant) — anders moet ’n bestuurder goedkeur',
+    ),
+    'qty_out_of_range' => _t(
+      'Quantité trop élevée',
+      'Quantity is too high',
+      'La cantidad es demasiado alta',
+      'Menge ist zu hoch',
+      'Hoeveelheid is te hoog',
+    ),
+    'price_too_high' => _t(
+      'Prix trop élevé (maximum 99 999,99 \$ par unité)',
+      'Price is too high (at most \$99,999.99 each)',
+      'El precio es demasiado alto (máximo \$99,999.99 por unidad)',
+      'Preis ist zu hoch (höchstens \$99,999.99 pro Stück)',
+      'Prys is te hoog (hoogstens \$99,999.99 elk)',
+    ),
+    'price_non_positive' => _t(
+      'Le prix doit être supérieur à zéro',
+      'Price must be more than zero',
+      'El precio debe ser mayor que cero',
+      'Preis muss größer als null sein',
+      'Prys moet meer as nul wees',
+    ),
+    'cash_amount_too_high' => _t(
+      'Montant trop élevé — vérifiez le comptant reçu',
+      'Amount is too high — check the cash received',
+      'El monto es demasiado alto: revisa el efectivo recibido',
+      'Betrag ist zu hoch – erhaltenes Bargeld prüfen',
+      'Bedrag is te hoog — kyk na die kontant ontvang',
+    ),
+    'too_many_lines' => _t(
+      'Trop d’articles dans une seule commande',
+      'Too many items in one order',
+      'Demasiados artículos en un solo pedido',
+      'Zu viele Artikel in einer Bestellung',
+      'Te veel items in een bestelling',
+    ),
+    'too_many_pending' => _t(
+      'Trop de commandes clients en attente — confirmez-les ou refusez-les',
+      'Too many customer orders waiting — accept or reject them',
+      'Demasiados pedidos de clientes en espera: acéptalos o recházalos',
+      'Zu viele Gästebestellungen offen – annehmen oder ablehnen',
+      'Te veel klantbestellings wag — aanvaar of weier hulle',
+    ),
+    'shift_has_paid_open_bills' => _t(
+      'Des additions encore ouvertes ont déjà des paiements — terminez-les ou annulez-les avant de fermer le quart',
+      'Some open bills already have payments — finish or cancel them before closing the shift',
+      'Hay cuentas abiertas que ya tienen pagos: termínalas o anúlalas antes de cerrar el turno',
+      'Offene Rechnungen haben bereits Zahlungen – vor dem Schichtabschluss abschließen oder stornieren',
+      'Sommige oop rekenings het reeds betalings — voltooi of kanselleer hulle voor die skof gesluit word',
+    ),
+    'void_card_on_reader' => _t(
+      'Un paiement par carte au terminal ne peut pas être rendu ici — terminez l’addition puis remboursez la carte',
+      'A card paid on the reader can’t be handed back here — finish the bill, then refund the card',
+      'Un pago con tarjeta en el lector no se puede devolver aquí: termina la cuenta y luego reembolsa la tarjeta',
+      'Eine Kartenzahlung am Terminal kann hier nicht zurückgegeben werden – Rechnung abschließen, dann Karte erstatten',
+      '’n Kaartbetaling op die leser kan nie hier teruggegee word nie — voltooi die rekening en betaal dan die kaart terug',
     ),
     'cash_bad_direction' => _t(
       'Sens invalide',

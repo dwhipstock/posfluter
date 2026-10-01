@@ -159,6 +159,8 @@ data class CustomerBillDto(
     /** Paying the balance in cash: rounded to the nickel, and the signed rounding inside it. */
     val cashDueCents: Long = 0,
     val cashRoundingCents: Long = 0,
+    /** Lines of the order just sent that the menu refused (a partial guest basket); empty otherwise. */
+    val rejected: List<dev.dwhipstock.pos.restaurant.RejectedLine> = emptyList(),
 )
 
 /**
@@ -244,7 +246,11 @@ data class OpenShiftRequest(val openingFloatCents: Long, val managerPin: String?
 data class CloseShiftRequest(val closingCountCents: Long, val managerPin: String? = null)
 
 @Serializable
-data class VoidRequest(val reason: String, val managerPin: String? = null)
+data class VoidRequest(
+    val reason: String, val managerPin: String? = null,
+    /** Hand back the payments already on the bill first (needs the refund grant too). */
+    val reverseTenders: Boolean = false,
+)
 
 @Serializable
 data class RefundRequest(
@@ -255,6 +261,8 @@ data class RefundRequest(
     val tenderType: String = "CASH", // CASH | CARD | BANK_TRANSFER | STRIPE
     val reason: String,
     val managerPin: String? = null,
+    /** Give it back another way than the guest paid; a manager (role MANAGER) must approve. */
+    val overrideTender: Boolean = false,
 )
 
 @Serializable
@@ -296,7 +304,9 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
         val tableId = customerTable(call)
             ?: throw NotFoundException("unknown table link", "table_link_invalid")
         val req = call.receivePublic<SubmitPendingRequest>()
-        call.respond(HttpStatusCode.Created, checkService.submitPendingLines(tableId, req.lines))
+        // the same guest-safe shape as the bill: never the staff view (ids, tenders)
+        val check = checkService.submitPendingLines(tableId, req.lines)
+        call.respond(HttpStatusCode.Created, customerBill(check).copy(rejected = check.rejected))
     }
 
     // Every other /m/... (the retired /m/{tableId}, /m/{zone}/{n} and
@@ -498,6 +508,11 @@ fun Route.posRoutes(
 
     post("/checks/{id}/pending-lines/{lineId}/reject") {
         call.respond(checkService.rejectPendingLine(checkId(call), lineIdParam(call)))
+    }
+
+    // turn away every guest line waiting on the bill at once (a flood of QR orders)
+    post("/checks/{id}/pending-lines/reject-all") {
+        call.respond(checkService.rejectAllPendingLines(checkId(call)))
     }
 
     /**
@@ -776,8 +791,11 @@ fun Route.posRoutes(
         val req = call.receive<VoidRequest>()
         // grant gate (CONTRACT §7): the acting user's `void` grant, else an inline
         // manager-PIN override collected on the staff screen. approverId = whoever authorized.
-        val approverId = requireGrant(auth, call, Permissions.VOID, req.managerPin)
-        call.respond(checkService.voidCheck(checkId(call), req.reason, approverId))
+        // handing payments back is a refund too: then the approver needs the refund
+        // grant (the service re-checks they hold both)
+        val approverId = requireGrant(auth, call,
+            if (req.reverseTenders) Permissions.REFUND else Permissions.VOID, req.managerPin)
+        call.respond(checkService.voidCheck(checkId(call), req.reason, approverId, req.reverseTenders))
     }
 
     // Refunds: return money on a finalized check. The picker lists recent CLOSED
@@ -792,6 +810,12 @@ fun Route.posRoutes(
     post("/checks/{id}/refund") {
         val req = call.receive<RefundRequest>()
         val approverId = requireGrant(auth, call, Permissions.REFUND, req.managerPin)
+            .let { actor ->
+                // back another way than the guest paid: a manager approves (their PIN when the
+                // signed-in user is not one); the service re-checks the role
+                if (!req.overrideTender || call.sessionUser().role == "MANAGER") actor
+                else auth.verifyApproverPin(req.managerPin, Permissions.REFUND) ?: throw ManagerApprovalException()
+            }
         // back to the Stripe card: refunded AT Stripe first, recorded only if Stripe did it
         if (req.tenderType == TenderType.STRIPE.name && stripe != null) {
             val id = checkId(call)
@@ -805,7 +829,7 @@ fun Route.posRoutes(
             return@post
         }
         call.respond(HttpStatusCode.Created, checkService.refundCheck(
-            checkId(call), req.amountCents, req.lines, req.tenderType, req.reason, approverId))
+            checkId(call), req.amountCents, req.lines, req.tenderType, req.reason, approverId, req.overrideTender))
     }
 
     // 86'ing: item disappears from ordering (GET /items filters active).

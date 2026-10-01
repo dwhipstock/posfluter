@@ -82,7 +82,7 @@ class ReportCompleteEventsTest {
 
         // pitcher 20.25 + poutine 13.00 + open item 123.45 + two corkage fees 200 = $356.70;
         // NC sales tax 24.07725 → 24.08, Wake 3.567 → 3.57; total $384.35 (cash: no rounding)
-        c.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":200000}""")
+        c.postJson("/checks/$checkId/tenders", """{"type":"CASH","amountTenderedCents":100000}""")
             .let { assertEquals(HttpStatusCode.Created, it.status) }
         c.post("/checks/$checkId/finalize").let { assertEquals(HttpStatusCode.OK, it.status) }
 
@@ -146,10 +146,10 @@ class ReportCompleteEventsTest {
         val tenders = closed["tenders"]!!.jsonArray.map { it.jsonObject }
         assertEquals(1, tenders.size)
         assertEquals("CASH", tenders[0]["type"]!!.jsonPrimitive.content)
-        assertEquals(200000L, tenders[0]["amountTenderedCents"]!!.jsonPrimitive.long)
+        assertEquals(100000L, tenders[0]["amountTenderedCents"]!!.jsonPrimitive.long)
         assertEquals(38435L, tenders[0]["amountAppliedCents"]!!.jsonPrimitive.long)
         assertEquals(0L, tenders[0]["roundingAdjustmentCents"]!!.jsonPrimitive.long)
-        assertEquals(161565L, tenders[0]["changeCents"]!!.jsonPrimitive.long)
+        assertEquals(61565L, tenders[0]["changeCents"]!!.jsonPrimitive.long)
         assertTrue(tenders[0]["groupId"] is JsonNull)
 
         // --- void: same table/zone context + store-computed totals at void time ---

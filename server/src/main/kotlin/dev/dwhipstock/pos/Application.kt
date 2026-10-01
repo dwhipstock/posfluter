@@ -471,8 +471,13 @@ fun Application.module(
                 mapOf("error" to (cause.message ?: "not found"), "code" to cause.code))
         }
         exception<ConflictException> { call, cause ->
-            call.respond(HttpStatusCode.Conflict,
+            val details = cause.details
+            if (details == null) call.respond(HttpStatusCode.Conflict,
                 mapOf("error" to (cause.message ?: "conflict"), "code" to cause.code))
+            else call.respond(HttpStatusCode.Conflict, kotlinx.serialization.json.JsonObject(details + mapOf(
+                "error" to kotlinx.serialization.json.JsonPrimitive(cause.message ?: "conflict"),
+                "code" to kotlinx.serialization.json.JsonPrimitive(cause.code),
+            )))
         }
         exception<BadRequestException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest,

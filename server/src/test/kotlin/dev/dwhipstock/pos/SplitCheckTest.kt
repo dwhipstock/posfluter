@@ -91,15 +91,16 @@ class SplitCheckTest {
 
         // per-group pre-tax from the pipeline: g1 = 2×7.95 + 25 corkage = 40.90,
         // g2 = 7.95 + 7.50 = 15.45. Tax is check-level: NC sales tax 6.75% of 56.35 =
-        // 3.8036 → 3.80, Wake 1% = 0.5635 → 0.56, shared by pre-tax (largest remainder):
-        // g1 NC 2.76 + Wake 0.41 = 44.07, g2 NC 1.04 + Wake 0.15 = 16.64
-        assertEquals(4407L, assigned.groupTotal(1))
-        assertEquals(1664L, assigned.groupTotal(2))
+        // 3.8036 → 3.80, Wake 1% = 0.5635 → 0.56. The 4.36 of tax is shared by pre-tax
+        // (largest remainder): g1 3.16, g2 1.20; then each group's into the two taxes:
+        // g1 NC 2.76 + Wake 0.40 = 44.06, g2 NC 1.04 + Wake 0.16 = 16.65
+        assertEquals(4406L, assigned.groupTotal(1))
+        assertEquals(1665L, assigned.groupTotal(2))
         assertTrue(assigned.split()["unassigned"]!!.jsonArray.isEmpty())
         fun JsonObject.groupTaxes(number: Int) = groups().first { it["number"]!!.jsonPrimitive.int == number }["taxes"]!!
             .jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long }
-        assertEquals(listOf(276L, 41L), assigned.groupTaxes(1))
-        assertEquals(listOf(104L, 15L), assigned.groupTaxes(2))
+        assertEquals(listOf(276L, 40L), assigned.groupTaxes(1))
+        assertEquals(listOf(104L, 16L), assigned.groupTaxes(2))
         // the groups add up exactly to the check: same total, same taxes as one bill
         val whole = assigned["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long }
         assertEquals(listOf(380L, 56L), whole)
@@ -113,7 +114,7 @@ class SplitCheckTest {
         assertTrue("CUSTOMER BILL" in bill)
         assertTrue("Copper Amber Ale" in bill || "Ale ambrée" in bill)
         assertTrue("Lantern House Lager" !in bill && "Lager de la Lanterne" !in bill, "group 1 bill must not show group 2's items")
-        assertTrue("44.07" in bill, "group bill total is the group's own")
+        assertTrue("44.06" in bill, "group bill total is the group's own")
         assertTrue("NC sales tax 6.75%" in bill && "2.76" in bill, "group bill itemises its share of the taxes")
 
         // pay g1 → check locks, g2 still owes; finalize refused until every group covered
@@ -123,7 +124,7 @@ class SplitCheckTest {
         val afterT1 = c.check(checkId)
         assertEquals("TOTAL_LOCKED", afterT1["status"]!!.jsonPrimitive.content)
         assertEquals(0L, afterT1.groupOutstanding(1))
-        assertEquals(1664L, afterT1.groupOutstanding(2))
+        assertEquals(1665L, afterT1.groupOutstanding(2))
         assertEquals(HttpStatusCode.Conflict, c.post("/checks/$checkId/finalize").status)
 
         // pay g2 → all groups covered → finalize closes the check
@@ -240,7 +241,7 @@ class SplitCheckTest {
     }
 
     @Test
-    fun evenSplitFloorsSharesRemainderToGroup1AndRoundsPerGroupCash() = testApplication {
+    fun evenSplitSpreadsTheCentsAndRoundsTheCashOnceForTheTable() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
         // 31.35 pre-tax + NC sales tax 2.116 → 2.12 + Wake 0.3135 → 0.31 = $33.78
@@ -252,9 +253,8 @@ class SplitCheckTest {
         // money-only split: no line assignment, so no unassigned pool (the client
         // gates Pay on the pool being empty)
         assertTrue(created.split()["unassigned"]!!.jsonArray.isEmpty())
-        // floor(3378 / 4) = 844 each, the 2-cent remainder to group 1
-        assertEquals(846L, created.groupTotal(1))
-        for (n in 2..4) assertEquals(844L, created.groupTotal(n))
+        // floor(3378 / 4) = 844 each, the 2 leftover cents one each to guests 1 and 2
+        assertEquals(listOf(845L, 845L, 844L, 844L), (1..4).map { created.groupTotal(it) })
         assertEquals(created["grandTotalCents"]!!.jsonPrimitive.long, (1..4).sumOf { created.groupTotal(it) })
         // each share carries its part of the check's taxes; the parts add back up
         val shareTaxes = (1..4).map { n ->
@@ -269,8 +269,10 @@ class SplitCheckTest {
             "/checks/$checkId/split/groups/${created.groupId(1)}/lines", """{"lineId":1,"qty":1}""")
         assertEquals("even_split", errorCode(assign))
 
-        // each group's cash due rounds to the nickel on its own: 8.46 → 8.45, 8.44 → 8.45
-        for ((n, cash, rounding) in listOf(Triple(1, 845L, -1L), Triple(2, 845L, 1L), Triple(3, 845L, 1L), Triple(4, 845L, 1L))) {
+        // the cash rounds once for the table: $33.78 → $33.80 in cash, four cash shares of $8.45
+        // (the running total 8.45, 16.90, 25.34 → 25.35, 33.78 → 33.80)
+        assertEquals(listOf(845L, 845L, 845L, 845L), created.groups().map { it["cashDueCents"]!!.jsonPrimitive.long })
+        for ((n, cash, rounding) in listOf(Triple(1, 845L, 0L), Triple(2, 845L, 0L), Triple(3, 845L, 1L), Triple(4, 845L, 1L))) {
             val res = c.postJson("/checks/$checkId/tenders",
                 """{"type":"CASH","amountTenderedCents":$cash,"groupId":${created.groupId(n)}}""")
             assertEquals(HttpStatusCode.Created, res.status, "group $n cash settles its share")

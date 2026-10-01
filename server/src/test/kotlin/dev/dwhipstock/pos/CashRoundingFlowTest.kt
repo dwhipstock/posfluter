@@ -269,7 +269,7 @@ class CashRoundingFlowTest {
         assertEquals(2L, lastPayload("refund.created").long("roundingAdjustmentCents"))
         // 10.01 back on the card: exact, no rounding
         val card = obj(c.postJson("/checks/$id/refund",
-            """{"amountCents":1001,"tenderType":"CARD","reason":"retour","managerPin":"1234"}""").bodyAsText())["refund"]!!.jsonObject
+            """{"amountCents":1001,"tenderType":"CARD","reason":"retour","managerPin":"1234","overrideTender":true}""").bodyAsText())["refund"]!!.jsonObject
         assertEquals(0L, card.long("roundingAdjustmentCents"))
         assertEquals(1001L, card.long("paidOutCents"))
         assertEquals(0L, lastPayload("refund.created").long("roundingAdjustmentCents"))

@@ -448,9 +448,35 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   Future<void> _voidCheck() async {
     final l = L.of(context);
+    // money already on the bill: it is handed back first (a refund), so the
+    // approval is for refunds and the server re-checks void too
+    final paid = _check?.paidCents ?? 0;
+    final reverse = paid > 0;
+    if (reverse) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l.voidPaidTitle),
+          content: Text(l.voidPaidBody(money(paid))),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l.cancel),
+            ),
+            FilledButton(
+              key: const Key('void-hand-back'),
+              style: FilledButton.styleFrom(backgroundColor: T.destructive),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l.handBackAndVoid),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     final approval = await requireGrant(
       context,
-      Perm.voidCheck,
+      reverse ? Perm.refund : Perm.voidCheck,
       title: l.voidApprovalTitle,
     );
     if (approval == null || !mounted) return;
@@ -496,7 +522,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     if (reason == null || reason.isEmpty || !mounted) return;
 
     try {
-      await Api.voidCheck(_checkId, reason, pin);
+      await Api.voidCheck(_checkId, reason, pin, reverseTenders: reverse);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -1212,6 +1238,23 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                   ),
                                 ),
                               ),
+                              // a flood of guest lines: turn them all away at once
+                              if (check.pendingLines.length > 1)
+                                TextButton.icon(
+                                  key: const Key('reject-all-pending'),
+                                  icon: const Icon(
+                                    LucideIcons.xCircle,
+                                    color: T.destructive,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    l.rejectAllOrders,
+                                    style: T.small(color: T.destructive),
+                                  ),
+                                  onPressed: () => _guarded(
+                                    () => Api.rejectAllPendingLines(_checkId),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
