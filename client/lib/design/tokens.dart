@@ -142,6 +142,12 @@ abstract final class T {
   /// table) actually line up on screen the way they do on the 48-column
   /// thermal printout. Falls back through a couple of common monospace
   /// families in case a platform doesn't recognise the generic name.
+  /// On-screen receipt / bill card width. The server lets a printed row run
+  /// to 48 columns (80 mm paper); at 14 px monospace (0.6 em per column) that
+  /// is 403 px of text, + 2 × 20 px padding = 443 px. 460 leaves headroom so
+  /// every printed row is one screen row (narrower screens still shrink it).
+  static const double receiptCardWidth = 460;
+
   static TextStyle receipt() => const TextStyle(
     fontFamily: 'monospace',
     fontFamilyFallback: ['RobotoMono', 'Courier New', 'Courier'],

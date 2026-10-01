@@ -33,6 +33,10 @@ type XlsxCell = { v: string | number | null; numFmt?: string };
 function toXlsx(c: Cell): XlsxCell {
   if (c.kind === "money") return { v: Number(c.value ?? 0) / 100, numFmt: MONEY_FMT };
   if (c.kind === "int") return { v: Number(c.value ?? 0), numFmt: INT_FMT };
+  if (c.kind === "num") {
+    const d = c.decimals ?? 2;
+    return { v: Number(c.value ?? 0), numFmt: d > 0 ? `#,##0.${"0".repeat(d)}` : INT_FMT };
+  }
   return { v: c.value == null ? "" : String(c.value) };
 }
 

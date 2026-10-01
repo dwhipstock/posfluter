@@ -11,14 +11,31 @@ import { saveBlob } from "./download";
 function value(c: Cell): string {
   if (c.kind === "money") return (Number(c.value ?? 0) / 100).toFixed(2);
   if (c.kind === "int") return String(Number(c.value ?? 0));
-  return String(c.value ?? "");
+  if (c.kind === "num") return Number(c.value ?? 0).toFixed(c.decimals ?? 2);
+  return text(String(c.value ?? ""));
+}
+
+/**
+ * CSV formula injection: a text cell that starts with = + - @ tab or CR is
+ * run as a formula by Excel / Sheets / Numbers (an item named
+ * `=HYPERLINK(...)`). Prefix such text with an apostrophe so it opens as
+ * text (OWASP's advice). A plain number ("-5.00", "+12") is left alone so it
+ * still sums.
+ */
+function text(v: string): string {
+  if (!/^[=+\-@\t\r]/.test(v)) return v;
+  if (/^[+-]?\d+(\.\d+)?$/.test(v)) return v;
+  return `'${v}`;
 }
 
 function esc(v: string): string {
   return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
-const line = (cells: string[]) => cells.map(esc).join(",");
+/** A row of already-safe values (numbers from [value], or text passed through [text]). */
+const row = (cells: string[]) => cells.map(esc).join(",");
+/** A row of free text (venue, labels, headers). */
+const line = (cells: string[]) => row(cells.map(text));
 
 export function buildCsv(doc: ExportDoc): string {
   const out: string[] = [
@@ -36,8 +53,8 @@ export function buildCsv(doc: ExportDoc): string {
     out.push("");
     if (s.title) out.push(line([s.title]));
     out.push(line(s.columns.map((c) => c.header)));
-    for (const row of s.rows) out.push(line(s.columns.map((c) => value(c.get(row)))));
-    if (s.total) out.push(line(s.total.map(value)));
+    for (const r of s.rows) out.push(row(s.columns.map((c) => value(c.get(r)))));
+    if (s.total) out.push(row(s.total.map(value)));
   }
   return out.join("\r\n") + "\r\n";
 }

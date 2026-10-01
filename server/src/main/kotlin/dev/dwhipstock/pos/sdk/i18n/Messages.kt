@@ -223,10 +223,15 @@ object Messages {
         val template = bundles[locale.tag]?.get(key.id)
             ?: bundles[defaultLocale.tag]?.get(key.id)
             ?: key.id
-        var out = template
-        args.forEachIndexed { i, arg -> out = out.replace("{$i}", arg.toString()) }
-        return out
+        // One pass over the template only: an argument's own text (a tax or
+        // item name containing "{1}") is inserted literally, never re-scanned.
+        return PLACEHOLDER.replace(template) { mr ->
+            val i = mr.groupValues[1].toInt()
+            if (i < args.size) args[i].toString() else mr.value
+        }
     }
+
+    private val PLACEHOLDER = Regex("""\{(\d+)\}""")
 
     /**
      * Classpath discovery, isolated per root and per file: one unreadable

@@ -258,7 +258,7 @@ function JournalRowView({
           {fmt.dateTime(row.closedAt)}
         </TableCell>
         <TableCell>
-          <span className="text-sm">{row.tableLabel}</span>
+          <span className="inline-block max-w-[16rem] align-top text-sm [overflow-wrap:anywhere]">{row.tableLabel}</span>
           <span className="ml-1.5 text-xs text-neutral-400">{row.zoneNameEn}</span>
         </TableCell>
         <TableCell className="hidden sm:table-cell">

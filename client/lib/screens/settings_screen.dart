@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
@@ -8,6 +9,7 @@ import '../design/widgets.dart';
 import '../i18n.dart';
 import '../kitchen/kitchen_i18n.dart';
 import '../kitchen/kitchen_setup_screen.dart';
+import '../money_input.dart';
 import '../payments/terminal_settings.dart';
 import '../server_discovery.dart';
 import '../widgets/url_qr.dart';
@@ -145,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _bankNumber.text = s.bankAccountNumber;
         _bankHolder.text = s.bankAccountName;
         _serviceCharge.text = '${s.serviceChargePercent}';
-        _corkage.text = '${s.corkagePerBottleCents ~/ 100}';
+        _corkage.text = centsToMoneyInput(s.corkagePerBottleCents);
         _footer.text = s.receiptFooter;
         _phone.text = s.venuePhone;
         _address.text = s.venueAddress;
@@ -167,13 +169,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// PATCH the current form to the server. Shared by Save and Test print
   /// (the printer must be persisted before the server can test it).
-  Future<void> _persist() => Api.updateSettings({
+  Future<void> _persist() async {
+    // corkage is dollars and cents ("12.50"); blank = off; junk is refused
+    // rather than saved as $0 or rounded to whole dollars
+    final corkageText = _corkage.text.trim();
+    final corkage = corkageText.isEmpty ? 0 : parseMoneyCents(corkageText);
+    if (corkage == null) throw _InvalidAmount(L.of(context).invalidMoneyAmount);
+    await _send(corkage);
+  }
+
+  Future<void> _send(int corkageCents) => Api.updateSettings({
     'cardProcessor': _card.text,
     'bankName': _bankName.text,
     'bankAccountNumber': _bankNumber.text,
     'bankAccountName': _bankHolder.text,
     'serviceChargePercent': int.tryParse(_serviceCharge.text) ?? 0,
-    'corkagePerBottleCents': (int.tryParse(_corkage.text) ?? 0) * 100,
+    'corkagePerBottleCents': corkageCents,
     'receiptFooter': _footer.text,
     'venuePhone': _phone.text,
     'venueAddress': _address.text,
@@ -441,12 +452,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String label, {
     TextInputType? keyboard,
     String? suffix,
+    List<TextInputFormatter>? formatters,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: c,
         keyboardType: keyboard,
+        inputFormatters: formatters,
         style: T.text(size: 16),
         decoration: InputDecoration(labelText: label, suffixText: suffix),
       ),
@@ -582,8 +595,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _field(
                       _corkage,
                       l.corkageRateLabel,
-                      keyboard: TextInputType.number,
+                      keyboard: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       suffix: '\$',
+                      formatters: moneyInputFormatters,
                     ),
                     SectionLabel(l.sectionReceipt),
                     _field(_footer, l.receiptFooterLabel),
@@ -732,4 +748,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
     );
   }
+}
+
+/// A form value the server would misread (corkage "12,50"): shown as-is by
+/// [showApiError], nothing is saved.
+class _InvalidAmount implements Exception {
+  final String message;
+  _InvalidAmount(this.message);
+  @override
+  String toString() => message;
 }

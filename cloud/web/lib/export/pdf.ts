@@ -9,6 +9,17 @@ import type {
 } from "pdfmake/interfaces";
 import type { Cell, ExportColors, ExportDoc, Kpi, Section } from "./doc";
 import { moneyCents } from "@/lib/format";
+import type { Locale } from "@/lib/i18n/messages";
+import { pdfText, sanitizeContent } from "./pdf-text";
+
+/** Shown at the top when a name had characters the PDF font can't draw (see pdf-text.ts). */
+const GLYPH_NOTE: Record<Locale, string> = {
+  en: "Some characters (emoji, Arabic, Hebrew, Chinese…) can't be shown in a PDF and appear as \uFFFD. The Excel and CSV exports keep every name in full.",
+  fr: "Certains caractères (émojis, arabe, hébreu, chinois…) ne peuvent pas s'afficher dans un PDF et apparaissent comme \uFFFD. Les exports Excel et CSV gardent les noms au complet.",
+  es: "Algunos caracteres (emojis, árabe, hebreo, chino…) no se pueden mostrar en un PDF y aparecen como \uFFFD. Las exportaciones a Excel y CSV conservan los nombres completos.",
+  de: "Einige Zeichen (Emojis, Arabisch, Hebräisch, Chinesisch …) lassen sich im PDF nicht darstellen und erscheinen als \uFFFD. Die Excel- und CSV-Exporte enthalten alle Namen vollständig.",
+  af: "Sommige karakters (emoji's, Arabies, Hebreeus, Chinees…) kan nie in 'n PDF gewys word nie en verskyn as \uFFFD. Die Excel- en CSV-uitvoere hou elke naam volledig.",
+};
 
 // the defaults; each export carries its client's brand colours (doc.colors)
 const DEFAULT_COLORS: ExportColors = {
@@ -39,6 +50,11 @@ let docLocale: "fr" | "en" | "de" = "en";
 function cellText(c: Cell): string {
   if (c.kind === "money") return moneyStr(Number(c.value ?? 0), c.currency, unambiguousDollars, c.approximate);
   if (c.kind === "int") return Number(c.value ?? 0).toLocaleString("en-US").replace(/,/g, docLocale === "fr" ? "\u00A0" : docLocale === "de" ? "." : ",");
+  // decimal quantities (gallons) are North American like money: "1,234.567"
+  if (c.kind === "num") {
+    const d = c.decimals ?? 2;
+    return Number(c.value ?? 0).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
   return String(c.value ?? "");
 }
 
@@ -155,6 +171,13 @@ export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
   if (doc.kpis?.length) content.push(...kpiContent(doc.kpis));
   for (const s of doc.sections) content.push(...sectionContent(s));
 
+  // the bundled font draws Latin/Greek/Cyrillic only: swap the rest for "�"
+  // and say so under the title rule, rather than printing blanks
+  let replaced = false;
+  const printable = sanitizeContent(content, () => (replaced = true));
+  if (replaced) printable.splice(3, 0, { text: GLYPH_NOTE[doc.locale] ?? GLYPH_NOTE.en, style: "note", margin: [0, 0, 0, 4] });
+  const generated = pdfText(doc.generatedLabel).text;
+
   return {
     pageSize: "A4",
     pageMargins: [40, 44, 40, 52],
@@ -166,11 +189,11 @@ export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
     footer: (currentPage, pageCount) => ({
       margin: [40, 8, 40, 0],
       columns: [
-        { text: doc.generatedLabel, style: "foot" },
+        { text: generated, style: "foot" },
         { text: `${currentPage} / ${pageCount}`, alignment: "right", style: "foot" },
       ],
     }),
-    content,
+    content: printable,
     styles: {
       venue: { fontSize: 15, bold: true, color: INK },
       reportTitle: { fontSize: 12, bold: true, color: INK },

@@ -5,12 +5,12 @@ import { useApi, useRange, reportKey } from "@/lib/hooks";
 import { useMoney } from "@/lib/money";
 import { FxNote } from "@/components/money-scope";
 import { useFuelKpis } from "@/components/fuel-kpis";
-import { useCategoryName, useFuelFmt } from "@/lib/fuel";
+import { gallons, useCategoryName, useFuelFmt } from "@/lib/fuel";
 import { useT, useFmt } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { ExportMenu } from "@/components/export-menu";
 import { useExportMeta, useStoreExport } from "@/lib/export/report";
-import { col, Int, T, type ExportDoc } from "@/lib/export/doc";
+import { col, Int, Num, T, type ExportDoc } from "@/lib/export/doc";
 import type { FuelGradeRow, FuelReport, InStoreCategoryRow } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -120,7 +120,7 @@ function FuelPage() {
           title: t("fuel_by_grade"),
           columns: [
             col.text<FuelGradeRow>(t("col_grade"), gradeName),
-            col.text<FuelGradeRow>(t("fuel_gallons"), (r) => f.gal(r.volumeMilli)),
+            col.num<FuelGradeRow>(t("fuel_gallons"), (r) => gallons(r.volumeMilli), 3),
             col.int<FuelGradeRow>(t("fuel_fills"), (r) => r.count),
             col.money<FuelGradeRow>(t("col_amount"), (r) => r.amountCents),
             col.money<FuelGradeRow>(t("col_cost"), (r) => r.costCents ?? 0),
@@ -132,7 +132,7 @@ function FuelPage() {
             ? {
                 total: [
                   T(t("fuel_total")),
-                  T(f.gal(pumps.volumeMilli)),
+                  Num(gallons(pumps.volumeMilli), 3),
                   Int(pumps.count),
                   m.totalCell(data.byGrade, gradeCur, (r) => r.amountCents),
                   m.totalCell(data.byGrade, gradeCur, (r) => r.costCents ?? 0),
@@ -146,7 +146,7 @@ function FuelPage() {
           [
             col.money(t("fuel_in_store"), (r) => r.inStoreSalesCents),
             col.money(t("instore_margin"), (r) => r.inStoreMarginCents ?? 0),
-            col.text(t("fuel_gallons"), (r) => f.gal(r.fuelVolumeMilli)),
+            col.num(t("fuel_gallons"), (r) => gallons(r.fuelVolumeMilli), 3),
             col.money(t("fuel_sales"), (r) => r.fuelAmountCents),
             col.money(t("fuel_margin"), (r) => r.fuelMarginCents ?? 0),
           ],
@@ -155,7 +155,7 @@ function FuelPage() {
             T(t("col_total")),
             m.totalCell(data.byVenue, cur, (r) => r.inStoreSalesCents),
             m.totalCell(data.byVenue, cur, (r) => r.inStoreMarginCents ?? 0),
-            T(f.gal(pumps.volumeMilli)),
+            Num(gallons(pumps.volumeMilli), 3),
             m.totalCell(data.byVenue, cur, (r) => r.fuelAmountCents),
             m.totalCell(data.byVenue, cur, (r) => r.fuelMarginCents ?? 0),
           ]

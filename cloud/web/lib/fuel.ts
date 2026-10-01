@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useI18n, useT } from "./i18n/context";
-import type { Locale, MsgKey } from "./i18n/messages";
+import type { MsgKey } from "./i18n/messages";
 import type { InStoreCategoryRow } from "./types";
 
 // Number formats for a gas station's figures (GET /v1/reports/fuel): gallons
@@ -11,7 +11,9 @@ import type { InStoreCategoryRow } from "./types";
 // sends basis points). A null ratio means no cost was known: shown as "—",
 // never as 0 or 100%.
 
-const NUMBER_LOCALE: Record<Locale, string> = { en: "en-US", fr: "fr-CA", es: "es-US", de: "de-DE", af: "en-US" };
+// North American in every UI language, like money (the owner's rule):
+// "1,234.567 gal", "30.5¢/gal", "27.5%" — never "1 234,567" or "30,5".
+const NUMBER_LOCALE = "en-US";
 
 /** A gas station's category ids (CONTRACT §2, Fuel) with portal names in every language. */
 const STORE_CATEGORIES = new Set([
@@ -37,11 +39,13 @@ export interface FuelFmt {
   pct: (bp: number | null | undefined) => string;
 }
 
+/** Gallons for an export cell: 10052 milli-gallons → 10.052 (a number, so a spreadsheet can sum it). */
+export const gallons = (milli: number): number => Math.round(milli) / 1000;
+
 export function useFuelFmt(): FuelFmt {
-  const { locale } = useI18n();
   const t = useT();
   return useMemo(() => {
-    const loc = NUMBER_LOCALE[locale];
+    const loc = NUMBER_LOCALE;
     const g = new Intl.NumberFormat(loc, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
     const one = new Intl.NumberFormat(loc, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     const pc = new Intl.NumberFormat(loc, { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -50,5 +54,5 @@ export function useFuelFmt(): FuelFmt {
       perGallon: (mills) => (mills == null ? "—" : t("fuel_cents_per_gal", { v: one.format(mills / 10) })),
       pct: (bp) => (bp == null ? "—" : pc.format(bp / 10000)),
     };
-  }, [locale, t]);
+  }, [t]);
 }
