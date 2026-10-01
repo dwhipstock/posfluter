@@ -78,9 +78,11 @@ Which model answers what (Gemini):
 | Request | Model |
 |---|---|
 | typed menu chat | `menu.ai.model`, else `gemini-3.5-flash-lite` |
-| spoken menu chat | `menu.ai.voiceModel`, else `menu.ai.model`, else `gemini-3.5-flash` |
+| spoken menu chat | `menu.ai.voiceModel`, else `menu.ai.model`, else `gemini-3.5-flash-lite` |
 | typed floor edit, room from picture | `menu.ai.layoutModel`, else `gemini-3.5-flash-lite` (medium thinking) |
-| spoken floor edit | `menu.ai.voiceModel`, else `menu.ai.layoutModel`, else `gemini-3.5-flash` (medium thinking) |
+| spoken floor edit | `menu.ai.voiceModel`, else `menu.ai.layoutModel`, else `gemini-3.5-flash-lite` (medium thinking) |
+
+Voice stays on the fast lite model: measured live (Oct 1), `gemini-3.5-flash` took 11–40 s for a spoken menu edit and over 120 s for a spoken floor edit, while lite (with the verbatim-transcript instructions) got 6 of 6 German clips right, mostly in 2–3 s.
 
 So an explicit `menu.ai.model` / `menu.ai.layoutModel` keeps applying to
 voice as it always did; set `menu.ai.voiceModel` to give voice its own. With

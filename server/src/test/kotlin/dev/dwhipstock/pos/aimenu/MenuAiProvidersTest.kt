@@ -196,11 +196,11 @@ class MenuAiProvidersTest {
             setProperty("menu.ai", "on"); setProperty("menu.ai.provider", "gemini"); setProperty("menu.ai.gemini.apiKey", key)
             kv.forEach { (k, v) -> setProperty(k, v) }
         })
-        // defaults: typed = lite, spoken = flash (menu and floor)
+        // defaults: typed and spoken both use the fast lite model (menu and floor)
         assertEquals(GeminiMenuProvider.DEFAULT_MODEL, MenuAiProviders.from(cfg())!!.model)
         assertEquals(GeminiMenuProvider.VOICE_MODEL, MenuAiProviders.voice(cfg())!!.model)
         assertEquals(GeminiMenuProvider.VOICE_MODEL, MenuAiProviders.floorVoice(cfg())!!.model)
-        assertTrue(GeminiMenuProvider.VOICE_MODEL != GeminiMenuProvider.DEFAULT_MODEL)
+        assertEquals(GeminiMenuProvider.DEFAULT_MODEL, GeminiMenuProvider.VOICE_MODEL) // flash was too slow live
         // an explicit menu.ai.model / layoutModel applies to voice too...
         assertEquals("gemini-m", MenuAiProviders.voice(cfg("menu.ai.model" to "gemini-m"))!!.model)
         assertEquals("gemini-l", MenuAiProviders.floorVoice(cfg("menu.ai.layoutModel" to "gemini-l"))!!.model)

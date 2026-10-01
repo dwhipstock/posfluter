@@ -91,7 +91,9 @@ class GeminiMenuProvider(
         const val DEFAULT_MODEL = "gemini-3.5-flash-lite" // 2–6 s a menu edit; 3.8-flash took 20–85 s
         const val FALLBACK_MODEL = "gemini-3.5-flash"
         /** Spoken requests: lite missed ~2 in 5 German voice floor edits (no_change); flash got 3/3 (6–13 s). */
-        const val VOICE_MODEL = "gemini-3.5-flash"
+        // voice uses the fast model too: measured 10/01, flash took 11-40 s a menu clip and timed out
+        // (>120 s) on floor clips; lite with the verbatim-transcript prompt got 6/6 German clips right in 2-27 s
+        const val VOICE_MODEL = "gemini-3.5-flash-lite"
         /** Room from picture: the lite model gets the spatial part wrong; this one thinks it through. */
         // flash-lite: reliable and fast; 3.8-flash was often "high demand" or took minutes (set menu.ai.layoutModel to try it)
         const val LAYOUT_MODEL = "gemini-3.5-flash-lite"
@@ -285,7 +287,7 @@ object MenuAiProviders {
 
     /**
      * Spoken menu requests: `menu.ai.voiceModel`, else an explicit `menu.ai.model`, else
-     * Gemini's [GeminiMenuProvider.VOICE_MODEL] (typed requests keep the fast lite model).
+     * Gemini's [GeminiMenuProvider.VOICE_MODEL] (the fast lite model, like typed requests).
      * Only Gemini takes audio; the others are built exactly as [from].
      */
     fun voice(config: MenuAiConfig.Resolved, http: ImageHttp = UrlImageHttp(readTimeoutMs = 180_000)): MenuAiProvider? {
