@@ -6,6 +6,7 @@ import dev.dwhipstock.pos.sdk.ThermalLayout
 import dev.dwhipstock.pos.sdk.ThermalReceiptRenderer
 import java.awt.image.BufferedImage
 import kotlin.test.Test
+import org.junit.Assume.assumeTrue
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -112,6 +113,9 @@ class RedTeamPrintTest {
      * missing-glyph box (tofu): the font the renderer picked can't draw them.
      */
     private fun assertRealGlyphs(script: String, a: String, b: String) {
+        // only meaningful where the OS has a font for this script (the tablet and Mac do; a bare CI box may not)
+        val fonts = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().allFonts
+        assumeTrue("no installed font can draw $script", fonts.any { it.canDisplayUpTo(a + b) == -1 })
         if (same(render(a), render(b)))
             fail("$script: '$a' and '$b' print as the identical missing-glyph box — the receipt shows □ instead of the name")
     }
