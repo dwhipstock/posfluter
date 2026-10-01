@@ -125,8 +125,8 @@ class JpmOnlineHttpTest {
         assertEquals("4112344112344113", JpmOnlineHttp.sandboxCard("visa", "approve").number)
         assertEquals(null, JpmOnlineHttp.sandboxCard("mastercard", "approve").triggerAmountCents)
         // the mock needs no credentials; a real host does
-        assertNotNull(JpmOnlineHttp.from(PaymentTerminalConfig.JpmCredentials(null, null, null, null, null, null)))
-        assertEquals(null, JpmOnlineHttp.from(PaymentTerminalConfig.JpmCredentials(null, null, null, null, null, JpmOnlineHttp.TEST_BASE)))
+        assertNotNull(JpmOnlineHttp.from(PaymentTerminalConfig.JpmCredentials(null, null, null, null, null, null), "Copper Lantern"))
+        assertEquals(null, JpmOnlineHttp.from(PaymentTerminalConfig.JpmCredentials(null, null, null, null, null, JpmOnlineHttp.TEST_BASE), "Copper Lantern"))
     }
 
     /**
@@ -144,7 +144,7 @@ class JpmOnlineHttpTest {
         val cfg = PaymentTerminalConfig.fromEnv { k ->
             dotenv?.getProperty(k)?.trim()?.removeSurrounding("\"")?.removeSurrounding("'") ?: System.getenv(k)
         }
-        val api = assertNotNull(JpmOnlineHttp.from(cfg.jpm))
+        val api = assertNotNull(JpmOnlineHttp.from(cfg.jpm, "Copper Lantern"))
         val auth = api.authorize("live-auth-${System.nanoTime()}", 1234, "USD", JpmOnlineHttp.sandboxCard("visa", "approve"), "livetest")
         println("JPM sandbox authorize: approved=${auth.approved} state=${auth.state} id=${auth.transactionId}")
         val cap = api.capture(auth.transactionId, 1234, "live-cap-${System.nanoTime()}")

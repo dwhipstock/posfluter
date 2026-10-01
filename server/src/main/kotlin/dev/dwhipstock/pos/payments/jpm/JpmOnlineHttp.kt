@@ -75,6 +75,8 @@ class JpmOnlineHttp(
     private val creds: PaymentTerminalConfig.JpmCredentials,
     val baseUrl: String = creds.baseUrl?.trimEnd('/') ?: MOCK_BASE,
     private val http: JpmHttp = UrlJpmHttp(),
+    /** merchantSoftware.companyName on every payment: [softwareCompany] of the store's brand. */
+    private val companyName: String = softwareCompany(""),
     private val clock: () -> Long = System::currentTimeMillis,
 ) : JpmOnlineApi {
     companion object {
@@ -84,11 +86,14 @@ class JpmOnlineHttp(
         const val MOCK_MERCHANT_ID = "998804938256"
 
         /** null when there's nothing to talk to (no credentials and not the mock). */
-        fun from(creds: PaymentTerminalConfig.JpmCredentials): JpmOnlineHttp? {
+        fun from(creds: PaymentTerminalConfig.JpmCredentials, brandName: String): JpmOnlineHttp? {
             val base = creds.baseUrl?.trimEnd('/') ?: MOCK_BASE
             if (base != MOCK_BASE && !creds.complete) return null
-            return JpmOnlineHttp(creds, base)
+            return JpmOnlineHttp(creds, base, companyName = softwareCompany(brandName))
         }
+
+        /** "Copper Lantern POS demo" for the brand name "Copper Lantern". */
+        fun softwareCompany(brandName: String): String = "$brandName POS demo".trim()
 
         /**
          * Documented US sandbox test cards. Declines are triggered by amount on
@@ -174,7 +179,7 @@ class JpmOnlineHttp(
 
     private fun merchantBlock() = buildJsonObject {
         putJsonObject("merchantSoftware") {
-            put("companyName", "Copper Lantern POS demo")
+            put("companyName", companyName)
             put("productName", "POS")
             put("version", "0.1")
         }

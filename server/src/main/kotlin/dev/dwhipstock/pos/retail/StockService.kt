@@ -5,11 +5,11 @@ import dev.dwhipstock.pos.base.Upc
 import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.db.SyncOutbox
 import dev.dwhipstock.pos.db.utcTimestamp
-import dev.dwhipstock.pos.restaurant.BadRequestException
+import dev.dwhipstock.pos.base.BadRequestException
 import dev.dwhipstock.pos.restaurant.CheckLines
 import dev.dwhipstock.pos.restaurant.Checks
-import dev.dwhipstock.pos.restaurant.ConflictException
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.StoreProfile

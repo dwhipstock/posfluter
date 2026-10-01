@@ -1,5 +1,6 @@
 package dev.dwhipstock.pos.restaurant
 
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.base.AgeChecks
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and

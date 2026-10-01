@@ -6,7 +6,7 @@ import dev.dwhipstock.pos.customers.copperlantern.CopperLanternExpressSeed
 import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.restaurant.CheckService
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.restaurant.CounterOrders
 import dev.dwhipstock.pos.restaurant.CounterSettingsUpdate
 import dev.dwhipstock.pos.restaurant.KioskOrderLine

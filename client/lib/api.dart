@@ -235,9 +235,18 @@ class Api {
   /// "Glenwood South" — the location half of [venueName]; null when unknown.
   static String? get venueLocation => splitVenueName(venueName).$2;
 
+  /// The brand this terminal wears: the store's own ([StoreProfile.brandName])
+  /// once it has said, else this build's ([AppMode.brandName], Copper Lantern
+  /// by default).
+  static String get houseBrand =>
+      StoreProfile.current.brandName ?? AppMode.brandName;
+
+  /// "Copper Lantern POS": the product name on the pairing screen.
+  static String get productName => '$houseBrand POS';
+
   /// "Brand — Location" → (brand, location). Falls back to the house brand.
   static (String, String?) splitVenueName(String? name) {
-    const brand = 'Copper Lantern';
+    final brand = houseBrand;
     final n = name?.trim() ?? '';
     if (n.isEmpty) return (brand, null);
     final parts = n.split(RegExp(r'\s+[—–-]\s+'));

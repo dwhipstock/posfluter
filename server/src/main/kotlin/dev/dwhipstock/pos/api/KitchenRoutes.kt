@@ -1,12 +1,12 @@
 package dev.dwhipstock.pos.api
 
 import dev.dwhipstock.pos.StoreAssets
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.restaurant.KitchenQueueStatus
 import dev.dwhipstock.pos.restaurant.KitchenService
 import dev.dwhipstock.pos.restaurant.KitchenSettingsDto
 import dev.dwhipstock.pos.restaurant.KitchenStationDto
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.server.request.receive

@@ -3,7 +3,8 @@ package dev.dwhipstock.pos.aiphotos
 import dev.dwhipstock.pos.aimenu.AiCaller
 import dev.dwhipstock.pos.aimenu.AiRequestLog
 import dev.dwhipstock.pos.aimenu.AiRequests
-import dev.dwhipstock.pos.aimenu.RateLimiter
+import dev.dwhipstock.pos.aimenu.admitAiCall
+import dev.dwhipstock.pos.aimenu.aiCallLimiter
 import dev.dwhipstock.pos.sdk.ImageGenConfig
 import dev.dwhipstock.pos.sdk.VenueClock
 import kotlinx.serialization.Serializable
@@ -85,7 +86,7 @@ class AiPhotoService(
     private val candidates = ConcurrentHashMap<String, Candidate>()
 
     @Volatile private var probe: Pair<Boolean, Long>? = null
-    private val limiter = RateLimiter(now = now)
+    private val limiter = aiCallLimiter(now)
 
     companion object {
         const val DEFAULT_COUNT = 3
@@ -188,7 +189,7 @@ class AiPhotoService(
         val kind = if (source == PhotoSource.AI_ENHANCED) "photo_enhance" else "photo_generate"
         // the same limits as the AI menu: per manager, user and device; then the store's daily image budget
         try {
-            if (who != null) limiter.admit(listOfNotNull("manager:${who.approverId}", "user:${who.userId}",
+            if (who != null) limiter.admitAiCall(listOfNotNull("manager:${who.approverId}", "user:${who.userId}",
                 who.deviceId?.let { "device:$it" }))
             reserve(n)
         } catch (e: ImageGenException) {

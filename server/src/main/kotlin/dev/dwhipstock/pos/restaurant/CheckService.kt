@@ -1,7 +1,11 @@
 package dev.dwhipstock.pos.restaurant
 
+import dev.dwhipstock.pos.base.NotFoundException
+import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.base.BadRequestException
 import dev.dwhipstock.pos.sdk.VenueClock
 
+import dev.dwhipstock.pos.base.CleanText
 import dev.dwhipstock.pos.base.GrantsRepo
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
@@ -74,18 +78,6 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
-
-/**
- * API errors carry a machine code; the client translates. The message is
- * developer-facing English for logs/debugging — never shown to staff verbatim.
- */
-class NotFoundException(message: String, val code: String = "not_found") : RuntimeException(message)
-class ConflictException(
-    message: String, val code: String = "conflict",
-    /** Extra machine-readable fields for the error body (e.g. which bills block a shift close). */
-    val details: JsonObject? = null,
-) : RuntimeException(message)
-class BadRequestException(message: String, val code: String = "bad_request") : RuntimeException(message)
 
 @kotlinx.serialization.Serializable
 data class PendingLineRequest(
@@ -189,21 +181,6 @@ interface CounterHook {
     fun cancelled(checkId: Int)
     /** The order number and dine in / take out for the receipt ("#101 · Take out"); null = not a counter order. */
     fun receiptOrder(checkId: Int): dev.dwhipstock.pos.sdk.ReceiptOrder?
-}
-
-/**
- * Free text a guest or staff member typed (notes, open-item names), made safe
- * to store, print and sync: control characters (NUL wedges the cloud's
- * Postgres JSONB; ESC sequences reach the printer) and bidi overrides are
- * dropped, line breaks and tabs become spaces, and it is cut to [max]
- * characters. Blank → null. Built on the shared [dev.dwhipstock.pos.base.CleanText.line]
- * (which also drops lone surrogate halves), plus the LRM/RLM marks.
- */
-internal fun cleanText(raw: String?, max: Int = 200): String? {
-    if (raw == null) return null
-    return dev.dwhipstock.pos.base.CleanText.line(raw)
-        .filter { it != '\u200E' && it != '\u200F' }
-        .trim().take(max).trim().takeIf { it.isNotEmpty() }
 }
 
 class CheckService(private val config: CustomerConfig) {
@@ -323,7 +300,7 @@ class CheckService(private val config: CustomerConfig) {
         checkId: Int, itemId: String, variantId: String, qty: Int, note: String?, expectedPriceCents: Long? = null,
     ): CheckView = transaction {
         requireQty(qty)
-        val note = cleanText(note)
+        val note = CleanText.field(note)
         val check = requireCheck(checkId)
         if (check[Checks.status] != "OPEN") throw ConflictException("check $checkId is ${check[Checks.status]}; basket is closed", "check_not_open")
         MenuGuard.require(itemId, variantId, expectedPriceCents)
@@ -414,8 +391,8 @@ class CheckService(private val config: CustomerConfig) {
      */
     fun addOpenLine(checkId: Int, rawName: String, unitPriceCents: Long, qty: Int, rawNote: String?): CheckView = transaction {
         requireQty(qty)
-        val name = cleanText(rawName, max = 100) ?: throw IllegalArgumentException("name is required")
-        val note = cleanText(rawNote)
+        val name = CleanText.field(rawName, max = 100) ?: throw IllegalArgumentException("name is required")
+        val note = CleanText.field(rawNote)
         // capped, so unit × qty can never wrap past Long into a negative line (a free "−$12 gift card")
         requireUnitPrice(unitPriceCents)
         val check = requireCheck(checkId)
@@ -522,7 +499,7 @@ class CheckService(private val config: CustomerConfig) {
                 it[variantId] = line.variantId
                 it[qty] = line.qty
                 it[unitPriceCents] = variant[ItemVariants.priceCents]
-                it[note] = cleanText(line.note)
+                it[note] = CleanText.field(line.note)
                 it[status] = "PENDING"
                 it[createdAt] = VenueClock.now()
                 captureShelfFacts(it, item)
@@ -534,7 +511,7 @@ class CheckService(private val config: CustomerConfig) {
                 put("itemId", line.itemId)
                 put("variantId", line.variantId)
                 put("qty", line.qty)
-                cleanText(line.note)?.let { n -> put("note", n) }
+                CleanText.field(line.note)?.let { n -> put("note", n) }
             })
         }
         loadCheck(check.id).copy(rejected = rejected)

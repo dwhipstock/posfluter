@@ -1,7 +1,7 @@
 package dev.dwhipstock.pos.api
 
 import dev.dwhipstock.pos.base.SettingsRepository
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.restaurant.DiningTables
 import dev.dwhipstock.pos.restaurant.TableTokens
 import dev.dwhipstock.pos.restaurant.Zones

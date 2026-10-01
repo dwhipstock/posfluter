@@ -58,9 +58,9 @@ import dev.dwhipstock.pos.api.kitchenRoutes
 import dev.dwhipstock.pos.api.quickServeRoutes
 import dev.dwhipstock.pos.api.demoSheetRoutes
 import dev.dwhipstock.pos.api.forecourtRoutes
-import dev.dwhipstock.pos.restaurant.BadRequestException
-import dev.dwhipstock.pos.restaurant.ConflictException
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.BadRequestException
+import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.sync.CloudSync
 import dev.dwhipstock.pos.sync.HttpCloudTransport
 import io.ktor.http.*
@@ -258,9 +258,12 @@ fun Application.module(
     receiptPrintMode.warning?.let { log.warn("Receipt printing config ignored: $it") }
     log.info("Receipt printing: ${receiptPrintMode.mode.wire} (${receiptPrintMode.source})" +
         if (receiptPrintMode.mode == ReceiptPrintMode.DIGITAL) " — receipts/bills saved digitally only; manual prints still use paper" else "")
+    // the test page's header names the brand; the config takes the printer, so it is set just below
+    var printerCustomerId = ""
     val thermalPrinter = NetworkThermalPrinter(
         audit = PrinterAdapter.VirtualPrinter(receiptsDir, billsDir),
         receiptMode = receiptPrintMode.mode,
+        customerId = { printerCustomerId },
         target = {
             if (physicalPrinterEnabled) settingsRepo.get().let { PrinterTarget(it.printerIp, it.printerPort) }
             else PrinterTarget("", 9100)
@@ -295,6 +298,7 @@ fun Application.module(
         legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
             dev.dwhipstock.pos.sdk.LegalAge.fromEnv(CopperLanternConfig.LEGAL_AGE), legalAgeOverride?.toString()),
     )
+    printerCustomerId = baseConfig.customerId
     // Which card terminal (payment.terminal). Stripe works in any store whose
     // Stripe account is in the store's currency (checked by StripeService).
     paymentTerminal.warnings.forEach { log.warn("Card terminal config ignored: $it") }

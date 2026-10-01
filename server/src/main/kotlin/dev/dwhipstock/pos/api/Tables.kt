@@ -4,9 +4,9 @@ import dev.dwhipstock.pos.sdk.VenueClock
 
 import dev.dwhipstock.pos.base.AuthService
 import dev.dwhipstock.pos.restaurant.Checks
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.restaurant.DiningTables
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.restaurant.Zones
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.restaurant.TableTokens

@@ -14,7 +14,7 @@ import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Translations
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.sdk.MenuAiConfig
 import dev.dwhipstock.pos.sdk.Money
 import dev.dwhipstock.pos.sdk.StoreProfile
@@ -141,7 +141,7 @@ class MenuAiService(
     // second Apply can say "already applied" instead of "expired".
     private val appliedProposals = ConcurrentHashMap<String, Long>()
     @Volatile private var probe: Pair<Boolean, Long>? = null
-    private val limiter = RateLimiter(now = now)
+    private val limiter = aiCallLimiter(now)
 
     companion object {
         const val MAX_PHOTOS = 6
@@ -245,7 +245,7 @@ class MenuAiService(
      */
     private fun <T> tracked(who: AiCaller?, kind: String, call: () -> T): T {
         if (who != null) try {
-            limiter.admit(listOfNotNull("manager:${who.approverId}", "user:${who.userId}", who.deviceId?.let { "device:$it" }))
+            limiter.admitAiCall(listOfNotNull("manager:${who.approverId}", "user:${who.userId}", who.deviceId?.let { "device:$it" }))
         } catch (e: ImageGenException) {
             AiRequestLog.record(who, kind, "rate_limited")
             log.info("AI $kind: rate limited (${who.approverId})")

@@ -1,8 +1,5 @@
 package dev.dwhipstock.pos.base
 
-import dev.dwhipstock.pos.restaurant.BadRequestException
-import dev.dwhipstock.pos.restaurant.ConflictException
-import dev.dwhipstock.pos.restaurant.NotFoundException
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.VenueClock
 import kotlinx.serialization.Serializable

@@ -5,7 +5,7 @@ import dev.dwhipstock.pos.base.Permissions
 import dev.dwhipstock.pos.forecourt.ForecourtService
 import dev.dwhipstock.pos.forecourt.FuelTrxRequest
 import dev.dwhipstock.pos.forecourt.PrepayRequest
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*

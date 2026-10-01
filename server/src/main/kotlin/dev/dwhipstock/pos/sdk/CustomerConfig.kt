@@ -14,6 +14,8 @@ package dev.dwhipstock.pos.sdk
 interface CustomerConfig {
     val customerId: String
     val displayName: String
+    /** The brand's own name, without the store ("Copper Lantern"): what the POS software says it is. */
+    val brandName: String get() = displayName
     val taxPolicy: TaxPolicy
     val roundingPolicy: RoundingPolicy
     val fees: List<Fee>

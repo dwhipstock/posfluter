@@ -57,4 +57,19 @@ object CleanText {
 
     /** [line], trimmed; null when nothing is left. */
     fun lineOrNull(raw: String?): String? = raw?.let(::line)?.trim()?.takeIf { it.isNotEmpty() }
+
+    /**
+     * Free text a guest or staff member typed (notes, open-item names), made safe
+     * to store, print and sync: control characters (NUL wedges the cloud's
+     * Postgres JSONB; ESC sequences reach the printer) and bidi overrides are
+     * dropped, line breaks and tabs become spaces, and it is cut to [max]
+     * characters. Blank → null. Built on [line] (which also drops lone
+     * surrogate halves), plus the LRM/RLM marks.
+     */
+    fun field(raw: String?, max: Int = 200): String? {
+        if (raw == null) return null
+        return line(raw)
+            .filter { it != '\u200E' && it != '\u200F' }
+            .trim().take(max).trim().takeIf { it.isNotEmpty() }
+    }
 }

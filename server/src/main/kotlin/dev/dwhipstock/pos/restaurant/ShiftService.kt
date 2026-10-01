@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.restaurant
 
+import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.base.BadRequestException
 import dev.dwhipstock.pos.sdk.VenueClock
 
 import dev.dwhipstock.pos.base.GrantsRepo

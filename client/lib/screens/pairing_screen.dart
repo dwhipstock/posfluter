@@ -157,7 +157,7 @@ class _PairingScreenState extends State<PairingScreen> {
                       const Icon(LucideIcons.link, size: 40, color: T.primary),
                       const SizedBox(height: 12),
                       Text(
-                        'Copper Lantern POS',
+                        Api.productName,
                         textAlign: TextAlign.center,
                         style: T.headline(),
                       ),

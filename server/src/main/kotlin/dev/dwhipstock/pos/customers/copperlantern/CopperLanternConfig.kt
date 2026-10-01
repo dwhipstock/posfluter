@@ -49,6 +49,7 @@ class CopperLanternConfig(
 
     override val customerId = "copperlantern"
     override val displayName = venue.displayName
+    override val brandName = BRAND_NAME
     override val venueId = venue.id
     override val brand = "copper-lantern"
     // Raleigh: US, USD, English (the default) with French, Spanish, German and
@@ -113,6 +114,8 @@ class CopperLanternConfig(
         }
 
     companion object {
+        /** The brand, without the store: what the POS software says it is (JPM merchant software). */
+        const val BRAND_NAME = "Copper Lantern"
         const val COUNTRY = "US"
         const val CURRENCY = "USD"
         const val TIME_ZONE = "America/New_York"
