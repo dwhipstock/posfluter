@@ -85,3 +85,32 @@ image without changing the store, API, or Caddy image tag.
 docker compose -f docker-compose.manager.yml pull
 docker compose -f docker-compose.manager.yml up -d
 ```
+
+## Off-site backups (S3 + Glacier Deep Archive)
+
+Every hosted client's portal database is backed up nightly to S3 by
+`backup/nightly-backup.sh` (cron, 03:15 UTC) and test-restored monthly by
+`backup/restore-test.sh` (1st of the month, 04:30 UTC). Install the schedule
+on the host with `crontab cloud/infra/backup/crontab.txt` (as `ubuntu`).
+
+| | |
+|---|---|
+| Bucket | `posflutter-backups-842588910054` (us-east-1), public access blocked, TLS only |
+| Layout | `daily/<client>/<YYYY>/<MM>/<DD>/pos_cloud-<client>-<ts>.dump` (+ `.manifest.json`: sha256, size, row counts) |
+| Encryption | SSE-KMS, key `alias/posflutter-backups` (yearly rotation) |
+| Retention | 30 days in S3 Standard, then Glacier Deep Archive; deleted after 7 years |
+| Tamper-proof | versioning + object lock, GOVERNANCE, 7 years: the host role can only put and read; no delete, no bypass |
+| Test restore | newest dump → sha256 check → `pg_restore` into a throwaway `postgres:17-alpine` with no network → row counts vs the manifest; result in `restore-tests/<client>/<date>.json` |
+| Local copy | `~/backups/nightly` on the host, 14 days; log in `~/backups/nightly.log`; `~/backups/last-ok-<client>` holds the last good time |
+
+Restore a client by hand (as an admin, from any machine with the AWS CLI):
+
+```bash
+aws s3 cp s3://posflutter-backups-842588910054/daily/<client>/<date>/<file>.dump .
+# older than 30 days: aws s3api restore-object … (Deep Archive, up to 12 h), then copy
+docker exec -i <db container> pg_restore -U pos -d pos_cloud --clean --if-exists --no-owner < <file>.dump
+```
+
+Uploads run through the pinned `amazon/aws-cli` image with the instance role
+(no AWS keys on the host). Only an admin can remove a locked backup early,
+with `--bypass-governance-retention`.

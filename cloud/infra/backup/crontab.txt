@@ -1,0 +1,3 @@
+# posflutter hosted backups (install: crontab cloud/infra/backup/crontab.txt as ubuntu)
+15 3 * * * /opt/posflutter-manager/app/cloud/infra/backup/nightly-backup.sh
+30 4 1 * * /opt/posflutter-manager/app/cloud/infra/backup/restore-test.sh
