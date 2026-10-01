@@ -30,6 +30,32 @@ class KeyedRateLimiter(
             q.addLast(now)
         }
     }
+
+    /**
+     * One call against every key at once (a manager, a user and a device), all
+     * or nothing: when any key is over, it throws for the first such key (in
+     * the given order) and counts nothing.
+     */
+    fun acquireAll(keys: List<String>) {
+        val distinct = keys.distinct()
+        val queues = distinct.map { k -> calls.computeIfAbsent(k) { ArrayDeque() } }
+        // lock in key order, so two callers sharing keys never deadlock
+        val lockOrder = distinct.indices.sortedBy { distinct[it] }.map { queues[it] }
+        withLocks(lockOrder, 0) {
+            val now = clock()
+            val cutoff = now.minus(window)
+            queues.forEach { q -> while (q.isNotEmpty() && !q.first().isAfter(cutoff)) q.removeFirst() }
+            queues.firstOrNull { it.size >= max }?.let { q ->
+                val retry = Duration.between(now, q.first().plus(window)).seconds.coerceAtLeast(1)
+                throw TooManyRequestsException(retry)
+            }
+            queues.forEach { it.addLast(now) }
+        }
+    }
+
+    private fun withLocks(locks: List<Any>, i: Int, block: () -> Unit) {
+        if (i == locks.size) block() else synchronized(locks[i]) { withLocks(locks, i + 1, block) }
+    }
 }
 
 /** → 429 `rate_limited` with Retry-After (a flood guard, not a PIN lockout). */

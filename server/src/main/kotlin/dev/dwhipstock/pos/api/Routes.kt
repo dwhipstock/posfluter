@@ -2,6 +2,7 @@ package dev.dwhipstock.pos.api
 
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.escapeHtml
 import dev.dwhipstock.pos.base.Permissions
 import dev.dwhipstock.pos.restaurant.DiningTables
 import dev.dwhipstock.pos.restaurant.FloorObjects
@@ -9,7 +10,7 @@ import dev.dwhipstock.pos.restaurant.Zones
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.restaurant.CheckView
 import dev.dwhipstock.pos.restaurant.LineView
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.restaurant.TableTokens
 import dev.dwhipstock.pos.restaurant.TenderView
 import dev.dwhipstock.pos.restaurant.guestTaxViews
@@ -992,11 +993,6 @@ private suspend fun serveCustomerMenu(
         .replace("{{VENUE_NAME}}", venueName.escapeHtml())
     call.respondText(html, ContentType.Text.Html)
 }
-
-/** Text or a double/single-quoted attribute value: & < > " ' all escaped (red-team: a quote broke out of alt="…"). */
-private fun String.escapeHtml(): String =
-    replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        .replace("\"", "&quot;").replace("'", "&#39;")
 
 /** A JS string literal (quotes included) safe to drop inside an inline <script>. */
 internal fun String.jsStringLiteral(): String =

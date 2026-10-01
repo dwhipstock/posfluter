@@ -6,9 +6,9 @@ import dev.dwhipstock.pos.sdk.Align
 import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.NetworkThermalPrinter
 import dev.dwhipstock.pos.sdk.PrintLine
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.restaurant.TableTokens
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.base.SettingsRepository
 import dev.dwhipstock.pos.sdk.GuestWifi
 import dev.dwhipstock.pos.sdk.WifiSecurity

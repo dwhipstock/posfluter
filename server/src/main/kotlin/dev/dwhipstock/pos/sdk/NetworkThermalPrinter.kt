@@ -68,7 +68,16 @@ class NetworkThermalPrinter(
     private val transport: EscPosTransport = TcpEscPosTransport(),
     /** [ReceiptPrintMode.DIGITAL]: receipts/bills are audit-spooled only; [printNow] is unaffected. */
     val receiptMode: ReceiptPrintMode = ReceiptPrintMode.PAPER,
+    /**
+     * The store's [CustomerConfig.customerId], read when the test page prints
+     * (the config is built after the printer, which it takes).
+     */
+    private val customerId: () -> String = { "" },
 ) : PrinterAdapter {
+    companion object {
+        /** The test page's header: "COPPERLANTERN POS" for customer id "copperlantern". */
+        fun testPageHeader(customerId: String): String = "${customerId.uppercase()} POS".trim()
+    }
 
     private val log = LoggerFactory.getLogger(NetworkThermalPrinter::class.java)
 
@@ -162,10 +171,10 @@ class NetworkThermalPrinter(
         )
     }
 
-    private fun testLines(): List<PrintLine> {
+    internal fun testLines(): List<PrintLine> {
         val t = target()
         return listOf(
-            PrintLine.Header("COPPERLANTERN POS"),
+            PrintLine.Header(testPageHeader(customerId())),
             PrintLine.Blank,
             PrintLine.Text("Test d’impression / Test print", Align.CENTER),
             PrintLine.Divider,

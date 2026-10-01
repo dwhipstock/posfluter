@@ -1,5 +1,6 @@
 package dev.dwhipstock.pos.restaurant
 
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Translations

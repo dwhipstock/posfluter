@@ -5,8 +5,8 @@ import dev.dwhipstock.pos.restaurant.CheckLines
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.restaurant.CheckView
 import dev.dwhipstock.pos.restaurant.Checks
-import dev.dwhipstock.pos.restaurant.ConflictException
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.Money
 import dev.dwhipstock.pos.sdk.Outbox

@@ -14,7 +14,7 @@ import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.db.SyncState
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.sdk.Outbox
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray

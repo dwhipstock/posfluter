@@ -19,8 +19,8 @@ import dev.dwhipstock.pos.payments.terminal.TerminalRefundRequest
 import dev.dwhipstock.pos.payments.terminal.TipMode
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.restaurant.CheckView
-import dev.dwhipstock.pos.restaurant.ConflictException
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.restaurant.RefundLineRequest
 import dev.dwhipstock.pos.restaurant.RefundResult
 import dev.dwhipstock.pos.restaurant.TenderView

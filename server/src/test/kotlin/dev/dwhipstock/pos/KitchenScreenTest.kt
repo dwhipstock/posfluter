@@ -1,7 +1,7 @@
 package dev.dwhipstock.pos
 
 import dev.dwhipstock.pos.restaurant.KitchenSettingsDto
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

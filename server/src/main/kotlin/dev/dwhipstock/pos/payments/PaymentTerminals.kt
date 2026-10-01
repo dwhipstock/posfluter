@@ -63,7 +63,7 @@ object PaymentTerminals {
                 }
                 PaymentTerminalConfig.JpmMode.ONLINE -> {
                     val hub = hub()
-                    val api = jpmOnline ?: JpmOnlineHttp.from(config.jpm)
+                    val api = jpmOnline ?: JpmOnlineHttp.from(config.jpm, customer.brandName)
                     log.info("Card terminal: J.P. Morgan Online Payments SANDBOX behind the simulated reader" +
                         (if (api == null) " — NOT CONFIGURED (JPM_CLIENT_ID / JPM_CLIENT_SECRET / JPM_TOKEN_URL / JPM_MERCHANT_ID)" else ""))
                     service(JpmOnlineAdapter(hub::link, api, config.timeoutSeconds, currency), hub)

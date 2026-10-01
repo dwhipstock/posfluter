@@ -52,6 +52,17 @@ class AppMode {
   /// This build's brand: `copperlantern` (default), `sagepoppy` or `pronghorn`.
   static const brand = _brandDefine == '' ? 'copperlantern' : _brandDefine;
 
+  /// A build brand's own name, for screens shown before the store has said
+  /// who it is: "Copper Lantern" (default), "Sage & Poppy", "Pronghorn".
+  static String brandNameFor(String brand) => switch (brand) {
+    'sagepoppy' => 'Sage & Poppy',
+    'pronghorn' => 'Pronghorn',
+    _ => 'Copper Lantern',
+  };
+
+  /// This build's brand name ([brandNameFor] of [brand]).
+  static final String brandName = brandNameFor(brand);
+
   /// The port a counter-tablet build's embedded store listens on. Must match
   /// the brand table in android/app/build.gradle.kts.
   static int storePortFor(String brand) => switch (brand) {

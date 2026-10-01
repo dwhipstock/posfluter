@@ -5,7 +5,7 @@ import dev.dwhipstock.pos.aiphotos.ItemFacts
 import dev.dwhipstock.pos.base.AuthService
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.Items
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.sdk.Images
 import dev.dwhipstock.pos.sdk.PhotoStore
 import io.ktor.http.*

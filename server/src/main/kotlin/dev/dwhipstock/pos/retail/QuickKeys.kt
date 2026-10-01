@@ -4,8 +4,8 @@ import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.QuickKeyPins
 import dev.dwhipstock.pos.restaurant.CheckLines
 import dev.dwhipstock.pos.restaurant.Checks
-import dev.dwhipstock.pos.restaurant.ConflictException
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.sdk.VenueClock
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq

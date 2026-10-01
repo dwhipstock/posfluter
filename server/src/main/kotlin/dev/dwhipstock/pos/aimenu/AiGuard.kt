@@ -2,6 +2,8 @@ package dev.dwhipstock.pos.aimenu
 
 import dev.dwhipstock.pos.aiphotos.ImageGenException
 import dev.dwhipstock.pos.aiphotos.Scrub
+import dev.dwhipstock.pos.base.KeyedRateLimiter
+import dev.dwhipstock.pos.base.TooManyRequestsException
 import dev.dwhipstock.pos.db.utcTimestamp
 import dev.dwhipstock.pos.sdk.VenueClock
 import kotlinx.serialization.Serializable
@@ -11,8 +13,8 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.text.Normalizer
-import java.util.ArrayDeque
-import java.util.concurrent.ConcurrentHashMap
+import java.time.Duration
+import java.time.Instant
 
 /**
  * The AI safety rails shared by every AI entry point (menu chat, menu from
@@ -368,32 +370,23 @@ object AiGuard {
 /** Who made an AI call: the tablet session's user and device, and the manager whose PIN approved it. */
 data class AiCaller(val userId: String, val approverId: String, val deviceId: String? = null, val lang: String? = null)
 
-/**
- * Sliding-window limit per key (device, manager): [max] AI calls per
- * [windowMs]. A call over the limit is a 429 menu_ai_too_many with Retry-After.
- */
-class RateLimiter(
-    private val max: Int = 20,
-    private val windowMs: Long = 10 * 60 * 1000L,
-    private val now: () -> Long = System::currentTimeMillis,
-) {
-    private val hits = ConcurrentHashMap<String, ArrayDeque<Long>>()
+/** The AI call limit, shared by the AI menu and AI photos: per key (manager, user, device). */
+const val AI_CALLS_MAX = 20
+val AI_CALLS_WINDOW: Duration = Duration.ofMinutes(10)
 
-    /** Counts one call for every key, or throws (counting nothing) when any key is over. */
-    fun admit(keys: List<String>) {
-        val t = now()
-        synchronized(this) {
-            val queues = keys.distinct().map { k -> hits.getOrPut(k) { ArrayDeque() }.also { q ->
-                while (q.isNotEmpty() && t - q.peekFirst() >= windowMs) q.pollFirst()
-            } }
-            queues.firstOrNull { it.size >= max }?.let { q ->
-                val retry = ((windowMs - (t - q.peekFirst())) / 1000).coerceAtLeast(1)
-                throw ImageGenException(429, "menu_ai_too_many",
-                    "too many AI requests: at most $max every ${windowMs / 60_000} minutes", retry)
-            }
-            queues.forEach { it.addLast(t) }
-        }
-    }
+/** A [KeyedRateLimiter] with the AI call limit, on a millisecond clock. */
+fun aiCallLimiter(now: () -> Long = System::currentTimeMillis) =
+    KeyedRateLimiter(AI_CALLS_MAX, AI_CALLS_WINDOW) { Instant.ofEpochMilli(now()) }
+
+/**
+ * Counts one AI call for every key, or (counting nothing) a 429
+ * menu_ai_too_many with Retry-After when any key is over the limit.
+ */
+fun KeyedRateLimiter.admitAiCall(keys: List<String>) = try {
+    acquireAll(keys)
+} catch (e: TooManyRequestsException) {
+    throw ImageGenException(429, "menu_ai_too_many",
+        "too many AI requests: at most $AI_CALLS_MAX every ${AI_CALLS_WINDOW.toMinutes()} minutes", e.retryAfterSeconds)
 }
 
 object AiRequests : Table("ai_requests") {

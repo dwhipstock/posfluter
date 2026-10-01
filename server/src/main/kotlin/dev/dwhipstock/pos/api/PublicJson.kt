@@ -1,6 +1,6 @@
 package dev.dwhipstock.pos.api
 
-import dev.dwhipstock.pos.restaurant.BadRequestException
+import dev.dwhipstock.pos.base.BadRequestException
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receiveText
 import kotlinx.serialization.SerializationException

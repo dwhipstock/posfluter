@@ -255,7 +255,7 @@ class AuthService(
         // wrong/absent code, or a code from a 30s step already consumed (single-use → no replay)
         if (row == null || step == null || (lastStep != null && step <= lastStep)) {
             rateLimiter.recordFailure(client)
-            throw dev.dwhipstock.pos.restaurant.BadRequestException("invalid authenticator code", "invalid_totp")
+            throw BadRequestException("invalid authenticator code", "invalid_totp")
         }
         rateLimiter.recordSuccess(client)
         StaffTotp.update({ StaffTotp.userId eq uid }) {

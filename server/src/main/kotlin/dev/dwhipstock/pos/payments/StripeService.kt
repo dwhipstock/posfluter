@@ -3,8 +3,8 @@ package dev.dwhipstock.pos.payments
 import dev.dwhipstock.pos.db.SyncState
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.restaurant.CheckView
-import dev.dwhipstock.pos.restaurant.ConflictException
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.restaurant.RefundLineRequest
 import dev.dwhipstock.pos.restaurant.RefundResult
 import dev.dwhipstock.pos.restaurant.StripePayments

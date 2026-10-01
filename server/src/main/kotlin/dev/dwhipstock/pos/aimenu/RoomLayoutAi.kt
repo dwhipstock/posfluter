@@ -10,7 +10,7 @@ import dev.dwhipstock.pos.api.tableManagementDto
 import dev.dwhipstock.pos.api.uniqueObjectId
 import dev.dwhipstock.pos.api.uniqueTableId
 import dev.dwhipstock.pos.restaurant.Checks
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.restaurant.DiningTables
 import dev.dwhipstock.pos.restaurant.FloorObjects
 import dev.dwhipstock.pos.restaurant.Zones
@@ -398,7 +398,7 @@ internal object RoomLayoutAi {
 
     fun room(zoneId: String): Room {
         val zone = Zones.selectAll().where { Zones.id eq zoneId }.firstOrNull()
-            ?: throw dev.dwhipstock.pos.restaurant.NotFoundException("zone $zoneId not found")
+            ?: throw dev.dwhipstock.pos.base.NotFoundException("zone $zoneId not found")
         val tables = DiningTables.selectAll()
             .where { (DiningTables.zoneId eq zoneId) and DiningTables.deletedAt.isNull() }.toList()
         val ids = tables.map { it[DiningTables.id] }

@@ -1,10 +1,10 @@
 package dev.dwhipstock.pos.api
 
 import dev.dwhipstock.pos.base.AuthService
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.restaurant.DiningTables
 import dev.dwhipstock.pos.restaurant.FloorObjects
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.restaurant.Zones
 import dev.dwhipstock.pos.sdk.Outbox
 import io.ktor.http.*

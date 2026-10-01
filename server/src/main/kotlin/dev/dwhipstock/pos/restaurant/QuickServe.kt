@@ -1,5 +1,7 @@
 package dev.dwhipstock.pos.restaurant
 
+import dev.dwhipstock.pos.base.NotFoundException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.base.CleanText
 import dev.dwhipstock.pos.base.DeviceRegistry
 import dev.dwhipstock.pos.base.Devices

@@ -3,7 +3,7 @@ package dev.dwhipstock.pos.api
 import dev.dwhipstock.pos.aiphotos.PhotoSource
 import dev.dwhipstock.pos.base.AuthService
 import dev.dwhipstock.pos.base.Items
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.PhotoStore
 import io.ktor.http.*

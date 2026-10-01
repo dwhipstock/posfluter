@@ -9,14 +9,14 @@ import dev.dwhipstock.pos.base.IdDates
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Upc
-import dev.dwhipstock.pos.restaurant.BadRequestException
+import dev.dwhipstock.pos.base.BadRequestException
 import dev.dwhipstock.pos.restaurant.CheckLines
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.restaurant.CheckView
 import dev.dwhipstock.pos.restaurant.Checks
-import dev.dwhipstock.pos.restaurant.ConflictException
+import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.restaurant.DiningTables
-import dev.dwhipstock.pos.restaurant.NotFoundException
+import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.restaurant.Zones
 import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.Crv
