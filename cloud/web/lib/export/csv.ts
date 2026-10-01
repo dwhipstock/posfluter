@@ -28,7 +28,19 @@ function text(v: string): string {
   return `'${v}`;
 }
 
-function esc(v: string): string {
+// CSV formula injection: a text cell starting with = + - @ (or a tab / CR that
+// some spreadsheets skip) runs as a formula when the file is opened in Excel or
+// Sheets — an item or store name like =HYPERLINK(...). Such a cell gets a
+// leading apostrophe (OWASP); a plain number (money, "-5.00") is left alone.
+const FORMULA_START = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+
+export function neutralize(v: string): string {
+  return FORMULA_START.test(v) && !PLAIN_NUMBER.test(v) ? `'${v}` : v;
+}
+
+function esc(raw: string): string {
+  const v = neutralize(raw);
   return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 

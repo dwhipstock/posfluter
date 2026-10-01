@@ -56,7 +56,42 @@ class GasStationTest {
             billsDir = Files.createTempDirectory("bl").toString(),
             venueId = Pronghorn.VENUE_ID, physicalPrinterEnabled = false,
             forecourtAdapter = fake, forecourtPoll = false, onForecourt = { fc = it },
+            staffAppMfa = dev.dwhipstock.pos.sdk.StaffAppMfa.Resolved(dev.dwhipstock.pos.sdk.StaffAppMfa.OFF, "test"),
         )
+    }
+
+    /** Red-team: a PIN-only staff-app phone can't drive the pumps; a prepay refund needs the grant or a manager PIN. */
+    @Test
+    fun pumpCommandsNeedThePosTerminalAndCancelNeedsTheRefundGrant() = testApplication {
+        val fake = FakeForecourt()
+        station(fake)
+        val c = loginClient()
+        fc.tick()
+        // a staff-app (phone) session, PIN only
+        val phoneToken = obj(client.post("/staff-app/login") {
+            contentType(ContentType.Application.Json); setBody("""{"pin":"9999"}""")
+        }.bodyAsText())["user"]!!.jsonObject["token"]!!.jsonPrimitive.content
+        val phone = createClient {
+            install(io.ktor.client.plugins.DefaultRequest) { header(HttpHeaders.Authorization, "Bearer $phoneToken") }
+        }
+        for (path in listOf("/forecourt/emergency-stop", "/forecourt/pumps/1/emergency-stop",
+            "/forecourt/pumps/1/authorise", "/forecourt/prepays/1/cancel")) {
+            val res = phone.post(path)
+            assertEquals(HttpStatusCode.Forbidden, res.status, path)
+            assertTrue("pos_terminal_required" in res.bodyAsText(), path)
+        }
+        // a server signed in on the POS: cancelling a paid prepay is a refund
+        c.openShift()
+        val sale = c.sale()
+        val id = obj(c.postJson("/retail/sales/$sale/prepay", """{"pump":4,"amountCents":2500}""").bodyAsText())["lines"]!!
+            .jsonArray.single().jsonObject["fuel"]!!.jsonObject["fuelSaleId"]!!.jsonPrimitive.int
+        c.payCash(sale)
+        fc.tick()
+        val server = loginClient("9999")
+        assertEquals(HttpStatusCode.OK, server.post("/forecourt/pumps/2/emergency-stop").status, "e-stop: no PIN")
+        assertEquals(HttpStatusCode.Forbidden, server.post("/forecourt/prepays/$id/cancel").status)
+        server.postJson("/forecourt/prepays/$id/cancel", """{"managerPin":"1234"}""")
+            .also { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
     }
 
     private suspend fun HttpClient.postJson(path: String, body: String = "{}") =

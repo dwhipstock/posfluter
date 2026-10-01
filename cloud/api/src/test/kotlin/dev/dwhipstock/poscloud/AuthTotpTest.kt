@@ -129,9 +129,11 @@ class AuthTotpTest {
         }
         assertEquals(HttpStatusCode.Unauthorized, badSecond.status)
 
+        // the enrollment code was single-use: the next 30 s step's code (within the ±1 step window)
+        val nextCode = Totp.code(secret, System.currentTimeMillis() / 1000 + 30)
         val goodSecond = client.post("/v1/auth/totp") {
             contentType(ContentType.Application.Json)
-            setBody("""{"pendingToken":"$secondPending","code":"${Totp.code(secret)}"}""")
+            setBody("""{"pendingToken":"$secondPending","code":"$nextCode"}""")
         }
         assertEquals(HttpStatusCode.OK, goodSecond.status)
         val session2 = goodSecond.setCookie().first { it.name == "pos_portal_session" }.value

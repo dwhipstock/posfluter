@@ -22,6 +22,7 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.exposed.sql.insert
 import org.slf4j.LoggerFactory
 import java.awt.image.BufferedImage
 import java.net.ServerSocket
@@ -104,6 +105,41 @@ class DemoModeTest {
         assertEquals("ok", login["status"]!!.jsonPrimitive.content)
         assertTrue(login["user"]!!.jsonObject["token"]!!.jsonPrimitive.content.isNotEmpty())
         assertNull(login["secret"]?.jsonPrimitive?.contentOrNull)
+    }
+
+    /** Red-team: with the PIN-only staff app, the manager PIN must not make a guest phone a manager. */
+    @Test
+    fun `demo mode on - a manager PIN is refused on the staff app and kitchen sign-in`() = testApplication {
+        application { module(dbPath = tempDb(), staffAppMfa = mfaOn, demoMode = demoOn()) }
+        val res = postJson("/staff-app/login", """{"pin":"1234"}""")
+        assertEquals(HttpStatusCode.Forbidden, res.status)
+        assertEquals("manager_pos_only", res.obj()["code"]!!.jsonPrimitive.content)
+        assertEquals(HttpStatusCode.Forbidden, postJson("/staff-app/totp", """{"pin":"1234","code":"000000"}""").status)
+        // the POS tablet itself (loopback here) still signs the manager in
+        assertEquals(HttpStatusCode.OK, postJson("/login", """{"pin":"1234"}""").status)
+    }
+
+    @Test
+    fun `demo mode on - a manager PIN from a phone on the Wi-Fi neither signs in nor approves`() {
+        dev.dwhipstock.pos.db.initDatabase(tempDb())
+        org.jetbrains.exposed.sql.transactions.transaction {
+            for ((id, role, pin) in listOf(Triple("m", "MANAGER", "1234"), Triple("s", "SERVER", "9999"))) {
+                dev.dwhipstock.pos.base.Users.insert {
+                    it[dev.dwhipstock.pos.base.Users.id] = id; it[name] = id; it[dev.dwhipstock.pos.base.Users.role] = role
+                    it[dev.dwhipstock.pos.base.Users.pin] = dev.dwhipstock.pos.base.AuthService.hashPin(pin)
+                }
+            }
+        }
+        val auth = dev.dwhipstock.pos.base.AuthService(demoMode = true)
+        val phone = dev.dwhipstock.pos.base.PinClient("ip:192.168.1.77", trusted = false)
+        kotlin.test.assertFailsWith<dev.dwhipstock.pos.base.ManagerOnPosOnlyException> { auth.login("1234", client = phone) }
+        kotlin.test.assertFailsWith<dev.dwhipstock.pos.base.ManagerOnPosOnlyException> { auth.verifyManagerPin("1234", phone) }
+        kotlin.test.assertFailsWith<dev.dwhipstock.pos.base.ManagerOnPosOnlyException> {
+            auth.verifyApproverPin("1234", dev.dwhipstock.pos.base.Permissions.VOID, phone)
+        }
+        assertNotNull(auth.login("9999", client = phone), "the server PIN still works from a phone")
+        assertNotNull(auth.login("1234"), "the tablet itself signs the manager in")
+        assertNotNull(auth.verifyManagerPin("1234"), "manager approval on the tablet")
     }
 
     @Test
@@ -215,7 +251,11 @@ class DemoModeTest {
             val i = lines.indexOf(PrintLine.QrCode(url))
             assertEquals(url, (lines[i + 1] as PrintLine.Text).text)
         }
-        assertTrue("Sign in: PIN 9999 (server) or 1234 (manager)" in t)
+        assertTrue("Sign in: PIN 9999 (server). Manager sign-in stays on the POS tablet." in t)
+        // red-team: the manager PIN is never on the slip, in any language
+        for (locale in listOf(LocaleCode.FR, LocaleCode.EN, LocaleCode.ES, LocaleCode.DE, LocaleCode.AF)) {
+            assertFalse(texts(demoSheetLines(sheet(), locale)).any { "1234" in it }, "manager PIN on the $locale slip")
+        }
         assertTrue("Username: owner@example.com" in t)
         assertTrue("Password: $password" in t)
         // no pairing blocks
