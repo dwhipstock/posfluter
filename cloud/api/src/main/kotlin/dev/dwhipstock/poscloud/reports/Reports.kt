@@ -59,11 +59,11 @@ import java.time.ZoneId
  * (`money`, a [MoneyScope]), and `byCurrency` carries the exact totals.
  */
 
-private val lenientJson = Json { ignoreUnknownKeys = true }
+internal val lenientJson = Json { ignoreUnknownKeys = true }
 private val log = LoggerFactory.getLogger("reports")
 
 /** One store over the requested dates, as instants of its own business days. */
-private class VenueRange(val venue: VenueScope, val from: LocalDate, val to: LocalDate) {
+internal class VenueRange(val venue: VenueScope, val from: LocalDate, val to: LocalDate) {
     val id: String get() = venue.venueId
     val zone: ZoneId get() = venue.zone
     val currency: String get() = venue.currency
@@ -71,7 +71,7 @@ private class VenueRange(val venue: VenueScope, val from: LocalDate, val to: Loc
     val end: OffsetDateTime = CloudTime.startOfDay(to.plusDays(1), zone)
 }
 
-private class ReportCtx(
+internal class ReportCtx(
     val tenantId: String,
     val venues: List<VenueRange>,
     val reporting: String,
@@ -137,7 +137,7 @@ private fun ReportCtx.cash(rows: List<ResultRow>, value: (ResultRow) -> Long) = 
 private fun ReportCtx.fuel(rows: List<ResultRow>, value: (ResultRow) -> Long) = total(rows, { it[FuelSales.venueId] }, value)
 
 /** Session → the in-scope stores + inclusive business-day range (default: each store's today). */
-private fun reportCtx(call: ApplicationCall, fx: Fx.Rates): ReportCtx {
+internal fun reportCtx(call: ApplicationCall, fx: Fx.Rates): ReportCtx {
     val (principal, venues) = portalScopes(call)
     val reporting = transaction { reportingCurrencyOf(principal.tenantId) }
     return ReportCtx(principal.tenantId, venues.map { v ->
@@ -147,7 +147,7 @@ private fun reportCtx(call: ApplicationCall, fx: Fx.Rates): ReportCtx {
 }
 
 /** ?from/?to (default today/today in [zone]), validated identically for every report. */
-private fun resolveRange(call: ApplicationCall, zone: ZoneId): Pair<LocalDate, LocalDate> {
+internal fun resolveRange(call: ApplicationCall, zone: ZoneId): Pair<LocalDate, LocalDate> {
     val today = LocalDate.now(zone)
     val from = call.request.queryParameters["from"]?.let(::parseDate) ?: today
     val to = call.request.queryParameters["to"]?.let(::parseDate) ?: today
@@ -191,7 +191,7 @@ private fun checkQst(row: ResultRow): Long = row[Checks.qstCents] ?: 0
  * when issued, not when the original bill sold). The store already decomposed
  * gross/net/tax; the cloud only sums. Netted out of sales + tax everywhere.
  */
-private fun refundsInRange(ctx: ReportCtx): List<ResultRow> =
+internal fun refundsInRange(ctx: ReportCtx): List<ResultRow> =
     Refunds.selectAll().where { inScope(ctx, Refunds.tenantId, Refunds.venueId, Refunds.createdAt) }.toList()
 
 private fun rGross(row: ResultRow): Long = row[Refunds.grossCents] ?: 0
@@ -241,16 +241,16 @@ private fun taxRates(closed: List<ResultRow>): List<TaxRateRow> =
         .sortedWith(compareBy({ it.code }, { it.ratePercent }))
 
 @Serializable
-private data class TaxAmount(val code: String, val labelFr: String = "", val labelEn: String = "",
+internal data class TaxAmount(val code: String, val labelFr: String = "", val labelEn: String = "",
                              val ratePercent: String = "", val amountCents: Long = 0,
                              /** Who the store pays it to ("NCDOR", "Wake County"); "" = not said. */
                              val remitTo: String = "")
 
-private fun taxesOf(json: String?): List<TaxAmount> =
+internal fun taxesOf(json: String?): List<TaxAmount> =
     json?.let { runCatching { lenientJson.decodeFromString<List<TaxAmount>>(it) }.getOrNull() }.orEmpty()
 
 /** A refund's reversed taxes: its breakdown, else (older rows) its GST / QST columns. */
-private fun refundTaxes(row: ResultRow): List<TaxAmount> =
+internal fun refundTaxes(row: ResultRow): List<TaxAmount> =
     row[Refunds.taxes]?.let(::taxesOf) ?: listOfNotNull(
         row[Refunds.gstCents]?.let { TaxAmount("GST", amountCents = it) },
         row[Refunds.qstCents]?.let { TaxAmount("QST", amountCents = it) },
@@ -271,7 +271,7 @@ private fun taxCodeTotals(ctx: ReportCtx, closed: List<ResultRow>, refunds: List
  * first rate seen. A refund's tax nets out of its own rate's row; an older
  * refund that carries no rate nets out of the code's first row.
  */
-private fun taxRows(ctx: ReportCtx, sales: List<Pair<String, TaxAmount>>, refunds: List<ResultRow>): List<TaxCodeRow> {
+internal fun taxRows(ctx: ReportCtx, sales: List<Pair<String, TaxAmount>>, refunds: List<ResultRow>): List<TaxCodeRow> {
     data class Key(val code: String, val rate: String, val currency: String)
     val labels = mutableMapOf<Key, TaxAmount>()
     val sums = linkedMapOf<Key, Long>()
@@ -794,8 +794,8 @@ data class CashMovementsResponse(
 // arithmetic on those sums — every figure is still the store's own cents,
 // added up, converted per currency exactly as before.
 
-private fun lit(s: String) = "'" + s.replace("'", "''") + "'"
-private fun lit(t: OffsetDateTime) = "'$t'::timestamptz"
+internal fun lit(s: String) = "'" + s.replace("'", "''") + "'"
+internal fun lit(t: OffsetDateTime) = "'$t'::timestamptz"
 
 /**
  * The in-scope predicate on table alias [a] over its time column [col] (as
@@ -803,7 +803,7 @@ private fun lit(t: OffsetDateTime) = "'$t'::timestamptz"
  * zone) share one `venue_id IN (…)` range: with one branch per store, 200
  * stores made Postgres combine 200 index scans and ran ~7× slower.
  */
-private fun scopeSql(ctx: ReportCtx, a: String, col: String): String =
+internal fun scopeSql(ctx: ReportCtx, a: String, col: String): String =
     "$a.tenant_id = ${lit(ctx.tenantId)} AND (" +
         ctx.venues.groupBy { it.start to it.end }.entries.joinToString(" OR ") { (range, vs) ->
             "($a.venue_id IN (${vs.joinToString(",") { lit(it.id) }}) AND $a.$col >= ${lit(range.first)} " +
@@ -811,10 +811,10 @@ private fun scopeSql(ctx: ReportCtx, a: String, col: String): String =
         } + ")"
 
 /** Each store's own zone, for its business day and hour. */
-private fun zoneSql(ctx: ReportCtx, a: String): String =
+internal fun zoneSql(ctx: ReportCtx, a: String): String =
     "CASE $a.venue_id " + ctx.venues.joinToString(" ") { "WHEN ${lit(it.id)} THEN ${lit(it.zone.id)}" } + " END"
 
-private fun <T> rowsOf(sql: String, read: (java.sql.ResultSet) -> T): List<T> {
+internal fun <T> rowsOf(sql: String, read: (java.sql.ResultSet) -> T): List<T> {
     val out = mutableListOf<T>()
     org.jetbrains.exposed.sql.transactions.TransactionManager.current().exec(sql) { rs ->
         while (rs.next()) out += read(rs)
@@ -866,9 +866,9 @@ private fun tenderSums(ctx: ReportCtx): List<TenderSums> = rowsOf("""
     GROUP BY 1, 2 ORDER BY min(t.tender_id)""") { rs -> TenderSums(rs.getString(1), rs.getString(2), rs.getInt(3), rs.getLong(4), rs.getLong(5)) }
 
 /** One store's charged amount of one tax code at one rate (from each sale's own breakdown). */
-private class TaxSums(val venueId: String, val tax: TaxAmount)
+internal class TaxSums(val venueId: String, val tax: TaxAmount)
 
-private fun taxSums(ctx: ReportCtx): List<TaxSums> = rowsOf("""
+internal fun taxSums(ctx: ReportCtx): List<TaxSums> = rowsOf("""
     SELECT c.venue_id, t->>'code', min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
            coalesce(t->>'ratePercent', ''), coalesce(sum((t->>'amountCents')::bigint), 0),
            max(coalesce(t->>'remitTo', ''))
@@ -914,10 +914,52 @@ private fun warnIfUndercountingSums(ctx: ReportCtx, sums: List<CheckSums>) {
 }
 
 /** [taxCodeTotals] over summed breakdowns. */
-private fun taxCodeTotalsOf(ctx: ReportCtx, taxes: List<TaxSums>, refunds: List<ResultRow>): List<TaxCodeRow> =
+internal fun taxCodeTotalsOf(ctx: ReportCtx, taxes: List<TaxSums>, refunds: List<ResultRow>): List<TaxCodeRow> =
     taxRows(ctx, taxes.map { ctx.currencyOf(it.venueId) to it.tax }, refunds)
 
 private fun ReportCtx.sums(rows: List<CheckSums>, value: (CheckSums) -> Long) = total(rows, { it.venueId }, value)
+
+/** One row of the tax-by-authority export: [date] null = the range total; [venueId] null = all stores. */
+internal class TaxSummaryRow(val date: LocalDate?, val venueId: String?, val tax: TaxCodeRow)
+
+/**
+ * The tax report's "by tax" figures (code, rate, currency, who it is paid to)
+ * per store per business day, then per store over the range, then — with
+ * several stores — over all of them. The totals are computed by exactly the
+ * functions the tax report uses: a store's total rows are its
+ * `byVenue[].taxes`, the all-stores rows are `byTax`.
+ */
+internal fun taxSummary(ctx: ReportCtx): List<TaxSummaryRow> {
+    val z = zoneSql(ctx, "c")
+    val daily = rowsOf("""
+        SELECT c.venue_id, (c.closed_at AT TIME ZONE $z)::date, t->>'code',
+               min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
+               coalesce(t->>'ratePercent', ''), coalesce(sum((t->>'amountCents')::bigint), 0),
+               max(coalesce(t->>'remitTo', ''))
+        FROM checks c CROSS JOIN LATERAL jsonb_array_elements(
+               CASE WHEN jsonb_typeof(c.taxes) = 'array' THEN c.taxes ELSE '[]'::jsonb END) t
+        WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED' AND t->>'code' IS NOT NULL
+        GROUP BY 1, 2, 3, 6""") { rs ->
+        (rs.getString(1) to rs.getDate(2).toLocalDate()) to
+            TaxSums(rs.getString(1), TaxAmount(rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getLong(7), rs.getString(8)))
+    }
+    val refunds = refundsInRange(ctx)
+    val salesBy = daily.groupBy({ it.first }, { it.second })
+    val refundsBy = refunds.groupBy { it[Refunds.venueId] to CloudTime.localDate(it[Refunds.createdAt]!!, ctx.zoneOf(it[Refunds.venueId])) }
+    val order = ctx.venues.map { it.id }
+    val out = mutableListOf<TaxSummaryRow>()
+    (salesBy.keys + refundsBy.keys).sortedWith(compareBy({ it.second }, { order.indexOf(it.first) })).forEach { key ->
+        taxCodeTotalsOf(ctx, salesBy[key].orEmpty(), refundsBy[key].orEmpty())
+            .forEach { out += TaxSummaryRow(key.second, key.first, it) }
+    }
+    val totals = taxSums(ctx)
+    ctx.venues.forEach { v ->
+        taxCodeTotalsOf(ctx, totals.filter { it.venueId == v.id }, refunds.filter { it[Refunds.venueId] == v.id })
+            .forEach { out += TaxSummaryRow(null, v.id, it) }
+    }
+    if (ctx.venues.size > 1) taxCodeTotalsOf(ctx, totals, refunds).forEach { out += TaxSummaryRow(null, null, it) }
+    return out
+}
 
 /** [byDay] over per-store, per-day sums. */
 private fun byDayOf(ctx: ReportCtx, days: List<CheckSums>, refunds: List<ResultRow>): List<DayRow> {

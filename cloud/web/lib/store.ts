@@ -13,7 +13,7 @@ import { useBrand } from "./brand/context";
 export const STORE_PARAM = "store";
 
 /** API routes whose data is store-scoped; they get `venue=<id>` when a store is picked. */
-const SCOPED_API = ["/v1/reports", "/v1/menu", "/v1/staff", "/v1/devices", "/v1/stock"];
+const SCOPED_API = ["/v1/reports", "/v1/menu", "/v1/staff", "/v1/devices", "/v1/stock", "/v1/exports"];
 
 export function useStoreId(): string | null {
   const sp = useSearchParams();
