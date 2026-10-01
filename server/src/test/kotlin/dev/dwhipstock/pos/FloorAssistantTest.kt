@@ -335,6 +335,106 @@ class FloorAssistantTest {
         assertEquals(8, live("lower").size)
     }
 
+    /**
+     * Live bug: "Make table U-12 round" (typed or spoken, any language) always came back
+     * no_change. U-12 anchors a sub-table (U-13), and every table in a sub-table link was
+     * locked like an open bill — 12 of the 17 Dining Room tables, shown to the model as
+     * "openBill": true, the sub-tables not shown at all. Now only an open bill locks a
+     * table, and the model may name a table by id, label or number.
+     */
+    @Test
+    fun aLinkedTableIsReshapedWhetherTheModelNamesItByIdLabelOrNumber() = testApplication {
+        val fake = FakeMenuProvider()
+        store(fake)
+        val manager = loginClient()
+        val before = live("upper")
+        assertEquals(T("U-12", 300, 635, "RECT", 8, false), before["u3"])
+
+        // what the model actually writes: the id, the label (as said), a bare number, "Tisch 12", lower case
+        for (ref in listOf("u3", "U-12", "u12", "12", "Tisch 12", "table U-12")) {
+            fake.reply = """{"refusal":false,"language":"de","summary":"Tisch U-12 wird rund.",
+                "ops":[{"op":"update_table","table":"$ref","shape":"round"}]}"""
+            val res = manager.ask("upper", "Mach Tisch U-12 rund")
+            assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+            val p = obj(res.bodyAsText())
+            assertNull(p["refusal"]?.jsonPrimitive?.content?.takeIf { it != "null" }, "$ref: $p")
+            val change = p["changes"]!!.jsonArray.single().jsonObject
+            assertEquals("update_table", change.s("kind"), ref)
+            assertEquals("U-12", change.s("title"), ref)
+            val ghost = p["tables"]!!.jsonArray.single().jsonObject
+            assertEquals("u3", ghost.s("id"))
+            assertEquals("ROUND", ghost.s("shape"))
+            // made round: an even footprint (not a 220 × 120 pill), same seats
+            assertEquals(ghost.s("width"), ghost.s("height"))
+            assertEquals("8", ghost.s("seats"))
+        }
+        // the model saw the linked tables as plain tables, sub-tables too, none as an open bill
+        val prompt = fake.prompts.last()
+        assertTrue(prompt.contains("\"id\":\"u3-3\"") && !prompt.contains("\"openBill\":true"), prompt)
+
+        fake.reply = """{"language":"en","summary":"U-12 round.","ops":[{"op":"update_table","table":"U-12","shape":"ROUND"}]}"""
+        val p = obj(manager.ask("upper", "Make table U-12 round").bodyAsText())
+        assertEquals(HttpStatusCode.OK, manager.applyEdit("upper", p.s("proposalId")).status)
+        val after = live("upper").getValue("u3")
+        assertEquals("ROUND", after.shape)
+        assertEquals("U-12", after.label)
+        assertEquals(8, after.seats)
+
+        // a same-shape echo is not a change; another room's label is not this room's table
+        fake.reply = """{"ops":[{"op":"update_table","table":"U-12","shape":"circle"},
+            {"op":"update_table","table":"L-5","shape":"round"}]}"""
+        val none = obj(manager.ask("upper", "make U-12 round").bodyAsText())
+        assertEquals("no_change", none.s("refusal"))
+        assertTrue(none["rejected"]!!.jsonArray.joinToString().contains("unknown table"), none.toString())
+
+        // a sub-table by label: reseated; an anchor is never removed while sub-tables hang off it
+        fake.reply = """{"ops":[{"op":"update_table","table":"U-13","seats":6},{"op":"remove_table","table":"U-12"}]}"""
+        val sub = obj(manager.ask("upper", "give U-13 six seats and remove U-12").bodyAsText())
+        assertEquals("U-13", sub["changes"]!!.jsonArray.single().jsonObject.s("title"))
+        assertTrue(sub["rejected"]!!.jsonArray.joinToString().contains("sub-tables"), sub.toString())
+    }
+
+    @Test
+    fun voiceUsesItsOwnModelAndTheAnswerIsInTheLanguageSpoken() = testApplication {
+        val typed = FakeMenuProvider()
+        val spoken = FakeMenuProvider()
+        application {
+            module(dbPath = tempDir("pos-floor-ai") + "/pos.db", photosDir = tempDir("photos"),
+                menuAiConfig = on(), menuAiProvider = typed, menuAiVoiceProvider = spoken, imageReachable = { true })
+        }
+        val manager = loginClient()
+
+        // spoken German, floor plan: the voice model; the prompt insists on a verbatim transcript
+        spoken.reply = """{"transcript":"Mach Tisch U-12 rund.","language":"de","summary":"Tisch U-12 wird rund.",
+            "ops":[{"op":"update_table","table":"U-12","shape":"round"}]}"""
+        val floor = obj(manager.say("/zones/upper/ai-edit/voice").bodyAsText())
+        assertEquals("Mach Tisch U-12 rund.", floor.s("transcript"))
+        assertEquals("Tisch U-12 wird rund.", floor.s("summary"))
+        assertEquals("ROUND", floor["tables"]!!.jsonArray.single().jsonObject.s("shape"))
+        assertEquals(0, typed.prompts.size)
+        val prompt = spoken.prompts.single()
+        assertTrue(prompt.contains("NEVER translate") && prompt.contains("de (German)"), prompt)
+        assertTrue(prompt.contains("\"language\""), prompt)
+
+        // nothing to change, said in German: the fixed reply in German, not the user's English
+        spoken.reply = """{"transcript":"Mach irgendwas.","language":"de","ops":[]}"""
+        val none = obj(manager.say("/zones/upper/ai-edit/voice").bodyAsText())
+        assertEquals("no_change", none.s("refusal"))
+        assertTrue(none.s("message").startsWith("Ich habe keine Änderung"), none.s("message"))
+        spoken.reply = """{"transcript":"Mach irgendwas.","language":"de","ops":[]}"""
+        val menu = obj(manager.say("/menu-ai/chat/voice").bodyAsText())
+        assertEquals("no_change", menu.s("refusal"))
+        assertFalse(menu.s("message").startsWith("I couldn't"), menu.s("message"))
+        assertTrue(spoken.prompts.last().contains("NEVER translate"))
+
+        // typed: the fast model, and no language reported falls back to the user's
+        typed.reply = """{"ops":[]}"""
+        val t = obj(manager.ask("upper", "make it nicer").bodyAsText())
+        assertTrue(t.s("message").startsWith("I couldn't find a change"), t.s("message"))
+        assertEquals(1, typed.prompts.size)
+        assertEquals(3, spoken.prompts.size)
+    }
+
     @Test
     fun revertRefusesWhenAnAffectedTableNowHasAnOpenCheck() = testApplication {
         val fake = FakeMenuProvider("""{"ops":[{"op":"update_table","table":"t7","x":500,"y":500}]}""")

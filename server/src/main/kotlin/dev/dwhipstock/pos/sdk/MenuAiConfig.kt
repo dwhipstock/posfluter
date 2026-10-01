@@ -15,6 +15,10 @@ import java.util.Properties
  * - optional `menu.ai.layoutModel`: the model for the room-from-picture and
  *   object-from-photo calls only (spatial work, a one-off setup: slower is
  *   fine). Default: Gemini's thinking flash model, else `menu.ai.model`.
+ * - optional `menu.ai.voiceModel`: the model for SPOKEN requests (menu and
+ *   floor plan). Unset: an explicit `menu.ai.model` (menu) / `menu.ai.layoutModel`
+ *   (floor) applies to voice too; with no override at all, Gemini voice uses
+ *   the stronger flash model while typed requests keep the fast lite one.
  *
  * Env vars (`POS_MENU_AI`, `POS_MENU_AI_PROVIDER`, `POS_MENU_AI_MODEL`, the
  * keys) win over the `POS_CONFIG_FILE` properties file. The key is never
@@ -30,6 +34,8 @@ object MenuAiConfig {
     const val ENV_MODEL = "POS_MENU_AI_MODEL"
     const val KEY_LAYOUT_MODEL = "menu.ai.layoutModel"
     const val ENV_LAYOUT_MODEL = "POS_MENU_AI_LAYOUT_MODEL"
+    const val KEY_VOICE_MODEL = "menu.ai.voiceModel"
+    const val ENV_VOICE_MODEL = "POS_MENU_AI_VOICE_MODEL"
 
     enum class Provider(val wire: String, val keyProperty: String?, val keyEnv: String?) {
         GEMINI("gemini", "menu.ai.gemini.apiKey", "GEMINI_API_KEY"),
@@ -56,6 +62,7 @@ object MenuAiConfig {
         val source: String,
         val warning: String? = null,
         val layoutModel: String? = null,
+        val voiceModel: String? = null,
     ) {
         val disabled: Disabled? = when {
             !enabledFlag -> Disabled.MENU_AI_OFF
@@ -112,6 +119,7 @@ object MenuAiConfig {
             source = key?.second ?: source,
             warning = warnings.takeIf { it.isNotEmpty() }?.joinToString("; "),
             layoutModel = pick(ENV_LAYOUT_MODEL, KEY_LAYOUT_MODEL),
+            voiceModel = pick(ENV_VOICE_MODEL, KEY_VOICE_MODEL),
         )
     }
 

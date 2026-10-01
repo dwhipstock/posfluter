@@ -191,6 +191,31 @@ class MenuAiProvidersTest {
     }
 
     @Test
+    fun voiceUsesTheStrongerModelUnlessAModelIsSetExplicitly() {
+        fun cfg(vararg kv: Pair<String, String>) = MenuAiConfig.fromProperties(Properties().apply {
+            setProperty("menu.ai", "on"); setProperty("menu.ai.provider", "gemini"); setProperty("menu.ai.gemini.apiKey", key)
+            kv.forEach { (k, v) -> setProperty(k, v) }
+        })
+        // defaults: typed = lite, spoken = flash (menu and floor)
+        assertEquals(GeminiMenuProvider.DEFAULT_MODEL, MenuAiProviders.from(cfg())!!.model)
+        assertEquals(GeminiMenuProvider.VOICE_MODEL, MenuAiProviders.voice(cfg())!!.model)
+        assertEquals(GeminiMenuProvider.VOICE_MODEL, MenuAiProviders.floorVoice(cfg())!!.model)
+        assertTrue(GeminiMenuProvider.VOICE_MODEL != GeminiMenuProvider.DEFAULT_MODEL)
+        // an explicit menu.ai.model / layoutModel applies to voice too...
+        assertEquals("gemini-m", MenuAiProviders.voice(cfg("menu.ai.model" to "gemini-m"))!!.model)
+        assertEquals("gemini-l", MenuAiProviders.floorVoice(cfg("menu.ai.layoutModel" to "gemini-l"))!!.model)
+        // ...unless menu.ai.voiceModel is set
+        val both = cfg("menu.ai.model" to "gemini-m", "menu.ai.layoutModel" to "gemini-l", "menu.ai.voiceModel" to "gemini-v")
+        assertEquals("gemini-m", MenuAiProviders.from(both)!!.model)
+        assertEquals("gemini-v", MenuAiProviders.voice(both)!!.model)
+        assertEquals("gemini-v", MenuAiProviders.floorVoice(both)!!.model)
+        // floor voice thinks like the typed floor edit
+        val http = Recorder(200, geminiOk)
+        MenuAiProviders.floorVoice(cfg(), http)!!.complete("sys", "user", photo)
+        assertTrue(http.requests.single().bodyText.contains("\"thinking_level\":\"medium\""))
+    }
+
+    @Test
     fun abbreviations() {
         assertEquals("CS", abbrev("Caesar Salad"))
         assertEquals("PO", abbrev("Poutine"))

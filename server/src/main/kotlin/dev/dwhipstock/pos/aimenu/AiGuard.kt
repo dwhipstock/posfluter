@@ -87,11 +87,11 @@ object AiGuard {
             "af" to "Ek kan net help om hierdie vertrek se vloerplan te wysig. Probeer iets soos “voeg vier tweepersoonstafels langs die venster by”.",
         ),
         Refusal.FLOOR_NO_CHANGE to mapOf(
-            "en" to "I couldn't find a change to make to this room from that. Name the table or object and what to change, for example \"make table 5 round\".",
-            "fr" to "Je n'ai trouvé aucun changement à faire dans cette salle. Nommez la table ou l'élément et ce qu'il faut changer, par exemple « rends la table 5 ronde ».",
-            "es" to "No encontré ningún cambio que hacer en esta sala. Indica la mesa o el elemento y qué cambiar, por ejemplo «haz redonda la mesa 5».",
-            "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 5 rund machen“.",
-            "af" to "Ek kon nie ’n verandering vir hierdie vertrek daarin vind nie. Noem die tafel of voorwerp en wat moet verander, byvoorbeeld “maak tafel 5 rond”.",
+            "en" to "I couldn't find a change to make to this room from that. Name the table or object and what to change, for example \"give table 3 six seats\" or \"add a round table for 4\".",
+            "fr" to "Je n'ai trouvé aucun changement à faire dans cette salle. Nommez la table ou l'élément et ce qu'il faut changer, par exemple « mets 6 places à la table 3 » ou « ajoute une table ronde pour 4 ».",
+            "es" to "No encontré ningún cambio que hacer en esta sala. Indica la mesa o el elemento y qué cambiar, por ejemplo «pon 6 lugares en la mesa 3» o «añade una mesa redonda para 4».",
+            "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 3 mit 6 Plätzen“ oder „einen runden Vierertisch hinzufügen“.",
+            "af" to "Ek kon nie ’n verandering vir hierdie vertrek daarin vind nie. Noem die tafel of voorwerp en wat moet verander, byvoorbeeld “gee tafel 3 ses sitplekke” of “voeg ’n ronde tafel vir 4 by”.",
         ),
         Refusal.INCOMPLETE to mapOf(
             "en" to "The AI's answer was cut off. Please try again.",

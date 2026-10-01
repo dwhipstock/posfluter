@@ -90,6 +90,8 @@ class GeminiMenuProvider(
     companion object {
         const val DEFAULT_MODEL = "gemini-3.5-flash-lite" // 2–6 s a menu edit; 3.8-flash took 20–85 s
         const val FALLBACK_MODEL = "gemini-3.5-flash"
+        /** Spoken requests: lite missed ~2 in 5 German voice floor edits (no_change); flash got 3/3 (6–13 s). */
+        const val VOICE_MODEL = "gemini-3.5-flash"
         /** Room from picture: the lite model gets the spatial part wrong; this one thinks it through. */
         // flash-lite: reliable and fast; 3.8-flash was often "high demand" or took minutes (set menu.ai.layoutModel to try it)
         const val LAYOUT_MODEL = "gemini-3.5-flash-lite"
@@ -133,7 +135,9 @@ class GeminiMenuProvider(
         var res = post(model)
         if (res.status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); res = post(model) }
         // busy, or this model's daily free quota used up: the fallback model has its own quota
-        if ((res.status == 503 || res.status == 429) && model != FALLBACK_MODEL && timeLeft()) res = post(FALLBACK_MODEL)
+        // (flash itself — the voice model — falls back to lite: a weaker answer beats none at the till)
+        val fallback = if (model == FALLBACK_MODEL) DEFAULT_MODEL else FALLBACK_MODEL
+        if ((res.status == 503 || res.status == 429) && timeLeft()) res = post(fallback)
         val json = parseJsonObject(res.text)
         if (res.status !in 200..299) throw failure("Gemini", res, json)
         val status = json?.get("status").str()
@@ -277,6 +281,31 @@ object MenuAiProviders {
             MenuAiConfig.Provider.ANTHROPIC -> AnthropicMenuProvider(key, http, config.model ?: AnthropicMenuProvider.DEFAULT_MODEL)
             MenuAiConfig.Provider.OFF -> null
         }
+    }
+
+    /**
+     * Spoken menu requests: `menu.ai.voiceModel`, else an explicit `menu.ai.model`, else
+     * Gemini's [GeminiMenuProvider.VOICE_MODEL] (typed requests keep the fast lite model).
+     * Only Gemini takes audio; the others are built exactly as [from].
+     */
+    fun voice(config: MenuAiConfig.Resolved, http: ImageHttp = UrlImageHttp(readTimeoutMs = 180_000)): MenuAiProvider? {
+        if (config.provider != MenuAiConfig.Provider.GEMINI) return from(config, http)
+        val key = config.apiKey ?: return null
+        Scrub.register(key)
+        return GeminiMenuProvider(key, http, config.voiceModel ?: config.model ?: GeminiMenuProvider.VOICE_MODEL,
+            budgetMs = 180_000L)
+    }
+
+    /**
+     * Spoken floor-plan requests: `menu.ai.voiceModel`, else an explicit `menu.ai.layoutModel`
+     * (what typed floor edits use), else [GeminiMenuProvider.VOICE_MODEL]; the layout's thinking.
+     */
+    fun floorVoice(config: MenuAiConfig.Resolved, http: ImageHttp = UrlImageHttp(readTimeoutMs = 300_000)): MenuAiProvider? {
+        if (config.provider != MenuAiConfig.Provider.GEMINI) return layout(config, http)
+        val key = config.apiKey ?: return null
+        Scrub.register(key)
+        return GeminiMenuProvider(key, http, config.voiceModel ?: config.layoutModel ?: GeminiMenuProvider.VOICE_MODEL,
+            thinkingLevel = GeminiMenuProvider.LAYOUT_THINKING, budgetMs = 280_000L)
     }
 
     /** Room from picture / object from photo: `menu.ai.layoutModel`, more thinking, a longer wait. */
