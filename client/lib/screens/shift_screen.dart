@@ -180,7 +180,46 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
       title: L.of(context).closeShiftApproval,
     );
     if (approval == null) return;
-    final z = await Api.closeShift(counted * 100, approval.managerPin);
+    final ShiftReport z;
+    try {
+      z = await Api.closeShift(counted * 100, approval.managerPin);
+    } on ApiException catch (e) {
+      // bills still open with money on them: say which, so they get finished first
+      final bills = (e.body?['bills'] as List?) ?? const [];
+      if (e.code != 'shift_has_paid_open_bills' || bills.isEmpty || !mounted) {
+        rethrow;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (context) {
+          final l = L.of(context);
+          return AlertDialog(
+            title: Text(l.closeShiftZ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$e'),
+                const SizedBox(height: 12),
+                for (final b in bills.cast<Map<String, dynamic>>())
+                  Text(
+                    '${l.billNo(b['checkId'] as int)} · ${l.table} '
+                    '${b['tableLabel']} · ${money((b['paidCents'] as num).toInt())}',
+                    style: T.small(color: T.textPrimary),
+                  ),
+              ],
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(l.ok),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
     if (!mounted) return;
     await showDialog(
       context: context,
@@ -656,6 +695,18 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
             ),
         ] else
           Text('—', style: T.small()),
+        // card tips on top of the bills: not revenue, owed to staff
+        if (r.tipsCents > 0) ...[
+          SectionLabel(l.cardTips),
+          for (final t in r.tenderBreakdown.where((t) => t.tipCents > 0))
+            kv(tenderLabels[t.type] ?? t.type, money(t.tipCents)),
+          kv(l.cardTips, money(r.tipsCents), bold: true),
+          if (r.tipsByServer.isNotEmpty) ...[
+            SectionLabel(l.tipsByServer),
+            for (final s in r.tipsByServer)
+              kv('${s.name} (${l.tipCount(s.count)})', money(s.tipCents)),
+          ],
+        ],
         SectionLabel(l.topItems),
         for (final i in r.itemMix)
           kv('${l.name(i.nameFr, i.nameEn)} ×${i.qty}', money(i.revenueCents)),
@@ -663,7 +714,10 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
           SectionLabel(l.voidedBills),
           for (final v in r.voids)
             kv(
-              '${l.billNo(v.checkId)} — ${v.reason}',
+              v.reversedCents > 0
+                  ? '${l.billNo(v.checkId)} — ${v.reason} · '
+                        '${l.voidReversed(money(v.reversedCents))}'
+                  : '${l.billNo(v.checkId)} — ${v.reason}',
               v.voidedBy,
               color: T.destructive,
             ),

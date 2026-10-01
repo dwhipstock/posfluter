@@ -95,9 +95,9 @@ class BillPrintTest {
         val c = loginClient()
 
         // customer scan-to-order leaves a pending line on the auto-opened check
-        val checkId = json.parseToJsonElement(client.postJson("${customerPath("t5-5")}/pending-lines",
-            """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}]}""").bodyAsText())
-            .jsonObject["id"]!!.jsonPrimitive.int
+        client.postJson("${customerPath("t5-5")}/pending-lines",
+            """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}]}""")
+        val checkId = c.staffCheckAt("t5-5")["id"]!!.jsonPrimitive.int
 
         val res = c.post("/checks/$checkId/bill")
         assertEquals(HttpStatusCode.Conflict, res.status)

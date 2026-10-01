@@ -457,9 +457,11 @@ class StripePaymentsTest {
         assertEquals(0L, c.get("/checks/$id/refunds").obj()["refundedCents"]!!.jsonPrimitive.long)
         assertNull(transaction { Refunds.selectAll().where { Refunds.checkId eq id }.firstOrNull() })
         assertTrue(outboxPayloads().none { "\"refundId\"" in it })
-        // a cash refund of the same check still works (existing rules)
+        // a card sale goes back to the card: cash needs a manager's override
+        assertEquals("refund_tender_mismatch", c.postJson("/checks/$id/refund",
+            """{"amountCents":2182,"tenderType":"CASH","reason":"returned","managerPin":"1234"}""").obj()["code"]!!.jsonPrimitive.content)
         assertEquals(HttpStatusCode.Created, c.postJson("/checks/$id/refund",
-            """{"amountCents":2182,"tenderType":"CASH","reason":"returned","managerPin":"1234"}""").status)
+            """{"amountCents":2182,"tenderType":"CASH","reason":"returned","managerPin":"1234","overrideTender":true}""").status)
     }
 
     @Test

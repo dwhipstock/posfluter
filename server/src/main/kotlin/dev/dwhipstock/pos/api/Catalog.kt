@@ -292,6 +292,7 @@ internal object CatalogOps {
 
     fun patchVariant(itemId: String, variantId: String, req: VariantPatchRequest): ItemDto {
         req.priceCents?.let { require(it >= 0) { "price must be >= 0" } }
+        req.priceCents?.let { dev.dwhipstock.pos.sdk.MoneyLimits.requireUnitPrice(it) }
         req.labelFr?.let { require(it.isNotBlank()) { "labelFr must not be blank" } }
         req.labelEn?.let { require(it.isNotBlank()) { "labelEn must not be blank" } }
         return transaction {
@@ -447,6 +448,8 @@ private fun validateVariantFields(labelFr: String, labelEn: String, priceCents: 
     require(labelFr.isNotBlank()) { "labelFr must not be blank" }
     require(labelEn.isNotBlank()) { "labelEn must not be blank" }
     require(priceCents >= 0) { "price must be >= 0" }
+    // no menu price so big that a line total could overflow (red team 2026-10-01)
+    dev.dwhipstock.pos.sdk.MoneyLimits.requireUnitPrice(priceCents)
 }
 
 private fun requireCategory(categoryId: String) {

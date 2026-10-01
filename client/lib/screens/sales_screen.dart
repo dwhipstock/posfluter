@@ -150,6 +150,21 @@ class _RefundScreenState extends State<RefundScreen> {
         _check = check;
         _info = info;
         _error = null;
+        // back the way the guest paid: the payment type that took the most
+        if (check.tenders.isNotEmpty) {
+          final byType = <String, int>{};
+          for (final t in check.tenders) {
+            byType[t.type] = (byType[t.type] ?? 0) + t.amountAppliedCents;
+          }
+          final top = byType.entries
+              .reduce((a, b) => b.value > a.value ? b : a)
+              .key;
+          if (top != 'STRIPE' || info.stripeRefundableCents > 0) {
+            if (top != 'TERMINAL' || info.terminalRefundableCents > 0) {
+              _tender = top;
+            }
+          }
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -255,14 +270,53 @@ class _RefundScreenState extends State<RefundScreen> {
                 .map((e) => {'lineId': e.key, 'qty': e.value})
                 .toList()
           : null;
-      final result = await Api.refundCheck(
+      Future<RefundResult> send({
+        bool overrideTender = false,
+        String? managerPin,
+      }) => Api.refundCheck(
         widget.checkId,
         amountCents: _mode == _RefundMode.byLine ? null : _selectedGross,
         lines: lines,
         tenderType: _tender,
         reason: reason,
-        managerPin: pin,
+        managerPin: managerPin ?? pin,
+        overrideTender: overrideTender,
       );
+      RefundResult result;
+      try {
+        result = await send();
+      } on ApiException catch (e) {
+        // back another way than the guest paid: only with a manager's override
+        if (e.code != 'refund_tender_mismatch' || !mounted) rethrow;
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(l.refundOverrideTitle),
+            content: Text('$e\n\n${l.refundOverrideBody}'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(l.cancel),
+              ),
+              FilledButton(
+                key: const Key('refund-override'),
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(l.managerOverride),
+              ),
+            ],
+          ),
+        );
+        if (go != true || !mounted) return;
+        final managerPin = await managerOrPin(
+          context,
+          title: l.managerOverride,
+        );
+        if (managerPin == null || !mounted) return;
+        result = await send(
+          overrideTender: true,
+          managerPin: managerPin.isEmpty ? pin : managerPin,
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

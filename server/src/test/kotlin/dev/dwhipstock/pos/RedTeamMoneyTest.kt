@@ -65,15 +65,21 @@ class RedTeamMoneyTest {
         val t = server.freeTables()
         server.paidLager(t.next()) // an ordinary $8.10 cash sale earlier in the shift
         val id = server.open(t.next()); server.lager(id)
-        // a plain server (no manager) can tender any amount; change = $92 quadrillion
+        // main: a plain server (no manager) could tender any amount; change = $92 quadrillion.
+        // Fixed: refused (more than $1,000 over the cash due), nothing recorded
         val tender = server.cash(id, Long.MAX_VALUE)
-        assertEquals(HttpStatusCode.Created, tender.status, tender.bodyAsText())
+        assertEquals(HttpStatusCode.BadRequest, tender.status, tender.bodyAsText())
+        assertEquals("cash_amount_too_high", tender.obj()["code"]!!.jsonPrimitive.content)
+        // $1,000 over is still fine (a $1,000 bill for an $8.10 pint), one cent more is not
+        assertEquals(HttpStatusCode.BadRequest, server.cash(id, 810 + 100_001).status)
+        assertEquals(HttpStatusCode.Created, server.cash(id, 810 + 100_000).status)
         assertEquals(HttpStatusCode.OK, server.post("/checks/$id/finalize").status)
-        // expected: the tender is refused (sane upper bound) or at least the reports still work
+        // and the reports still work
         val x = c.get("/shifts/current/report")
         assertEquals(HttpStatusCode.OK, x.status, "X report: ${x.bodyAsText()}")
         val z = c.postJson("/shifts/current/close", """{"closingCountCents":11620}""")
         assertEquals(HttpStatusCode.OK, z.status, "Z close: ${z.bodyAsText()}")
+        assertEquals(11620L, z.obj().l("expectedCashCents"))
     }
 
     // CRITICAL: refund cap is bypassed by Long overflow (already + gross wraps negative)
@@ -130,17 +136,32 @@ class RedTeamMoneyTest {
         assertTrue(again.status.value >= 400, "the one amber was refunded twice: ${again.bodyAsText().take(200)}")
     }
 
-    // HIGH: Z report misstates the drawer when a shift closes over a partly paid check
+    // HIGH: Z report misstates the drawer when a shift closes over a partly paid check.
+    // Fixed the owner's way (simple and safe): the shift can't close while a bill that
+    // is still open has money on it; the refusal names those bills.
     @Test
     fun `cash taken on a still-open check counts in the shift that took it`() = testApplication {
         application { module(dbPath = tempDb()) }
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":10000}""")
-        val id = c.open(c.freeTables().next()); c.lager(id, 2) // $16.16
+        val table = c.freeTables().next()
+        val id = c.open(table); c.lager(id, 2) // $16.16
         assertEquals(HttpStatusCode.Created, c.cash(id, 500).status) // $5 in the drawer
-        val z = c.postJson("/shifts/current/close", """{"closingCountCents":10500}""").obj()
-        // main: expected 10000, over/short +500 — the $5 really is in the drawer
-        assertEquals(10500L, z.l("expectedCashCents"), z.toString())
+        // main: closed with expected 10000, over/short +500 — the $5 really is in the drawer
+        val refused = c.postJson("/shifts/current/close", """{"closingCountCents":10500}""")
+        assertEquals(HttpStatusCode.Conflict, refused.status, refused.bodyAsText())
+        val body = refused.obj()
+        assertEquals("shift_has_paid_open_bills", body["code"]!!.jsonPrimitive.content)
+        val bill = body["bills"]!!.jsonArray.single().jsonObject
+        assertEquals(id, bill["checkId"]!!.jsonPrimitive.int)
+        assertEquals(500L, bill.l("paidCents"))
+        assertTrue(bill["tableLabel"]!!.jsonPrimitive.content.isNotBlank())
+        // the shift is still open; finish the bill, then the Z counts all of its cash
+        assertEquals(HttpStatusCode.OK, c.get("/shifts/current/report").status)
+        assertEquals(HttpStatusCode.Created, c.cash(id, 1115).status) // $11.16 → $11.15 in cash
+        assertEquals(HttpStatusCode.OK, c.post("/checks/$id/finalize").status)
+        val z = c.postJson("/shifts/current/close", """{"closingCountCents":11615}""").obj()
+        assertEquals(11615L, z.l("expectedCashCents"), z.toString())
         assertEquals(0L, z.l("overShortCents"))
     }
 
@@ -189,7 +210,9 @@ class RedTeamMoneyTest {
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":10000}""")
         val id = c.open("t5-5"); c.lager(id, 4) // $32.33
-        val pid = c.postJson("/checks/$id/terminal/payments", """{"tipMode":"on_reader"}""").obj()["paymentId"]!!.jsonPrimitive.content
+        val started = c.postJson("/checks/$id/terminal/payments", """{"tipMode":"on_reader"}""")
+        assertEquals(HttpStatusCode.Created, started.status, started.bodyAsText())
+        val pid = started.obj()["paymentId"]!!.jsonPrimitive.content
         c.postJson("/terminal/ui/tip", """{"tipCents":600}""")
         c.postJson("/terminal/ui/present", """{"entry":"tap","card":"visa","outcome":"approve"}""")
         assertEquals("RECORDED", c.get("/terminal/payments/$pid").obj()["status"]!!.jsonPrimitive.content)

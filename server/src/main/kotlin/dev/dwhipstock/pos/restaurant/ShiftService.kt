@@ -12,6 +12,9 @@ import dev.dwhipstock.pos.sdk.CustomerConfig
 import dev.dwhipstock.pos.sdk.Fee
 import dev.dwhipstock.pos.sdk.FeeContext
 import dev.dwhipstock.pos.sdk.Money
+import dev.dwhipstock.pos.sdk.MoneyLimits
+import dev.dwhipstock.pos.sdk.sumExact
+import dev.dwhipstock.pos.sdk.sumOfExact
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.PrintLine
 import dev.dwhipstock.pos.sdk.PrinterAdapter
@@ -69,6 +72,8 @@ class ShiftService(private val config: CustomerConfig) {
 
     fun openShift(userId: String, openingFloatCents: Long): ShiftView = transaction {
         require(openingFloatCents >= 0) { "float must be >= 0" }
+        if (openingFloatCents > MoneyLimits.MAX_DRAWER_AMOUNT_CENTS)
+            throw BadRequestException("float is more than ${MoneyLimits.MAX_DRAWER_AMOUNT_CENTS} cents", "cash_amount_too_high")
         if (currentOpenShiftId() != null) throw ConflictException("a shift is already open", "shift_already_open")
         val now = VenueClock.now()
         val id = Shifts.insertAndGetId {
@@ -99,6 +104,8 @@ class ShiftService(private val config: CustomerConfig) {
             throw BadRequestException("direction must be IN or OUT", "cash_bad_direction")
         if (amountCents <= 0)
             throw BadRequestException("amount must be positive", "cash_non_positive")
+        if (amountCents > MoneyLimits.MAX_DRAWER_AMOUNT_CENTS)
+            throw BadRequestException("amount is more than ${MoneyLimits.MAX_DRAWER_AMOUNT_CENTS} cents", "cash_amount_too_high")
         // defense-in-depth: the route already authorized this; re-check the grant on the authorizer
         if (!GrantsRepo.has(managerId, Permissions.CASH_MOVEMENT))
             throw ConflictException("cash movement requires the cash_movement grant or a manager's approval", "manager_approval_required")
@@ -184,10 +191,38 @@ class ShiftService(private val config: CustomerConfig) {
         buildReport(shift, closingCountCents = null)
     }
 
-    /** Z-report: computes the X content + cash reconciliation, then closes the shift. */
+    /**
+     * Z-report: computes the X content + cash reconciliation, then closes the shift.
+     *
+     * Refused (409 shift_has_paid_open_bills, with `bills`: id + table label +
+     * what is paid) while any bill that is still open has money on it: the Z
+     * counts a bill's cash when the bill closes, so cash taken on a bill that
+     * stays open would be in the drawer but in no Z report (red team
+     * 2026-10-01). The simple safe rule, the owner's choice: finish those bills
+     * (or cancel them, handing the money back) before closing the day.
+     */
     fun closeShift(userId: String, closingCountCents: Long): ShiftReport = transaction {
+        if (closingCountCents !in 0..MoneyLimits.MAX_DRAWER_AMOUNT_CENTS)
+            throw BadRequestException("closing count must be 0-${MoneyLimits.MAX_DRAWER_AMOUNT_CENTS} cents", "cash_amount_too_high")
         val shift = Shifts.selectAll().where { Shifts.status eq "OPEN" }.firstOrNull()
             ?: throw ConflictException("no open shift", "no_open_shift")
+        val paidOpen = paidOpenBills()
+        if (paidOpen.isNotEmpty())
+            throw ConflictException(
+                "bills still open with money on them: ${paidOpen.joinToString { "#${it.checkId} (${it.tableLabel})" }}",
+                "shift_has_paid_open_bills",
+                buildJsonObject {
+                    putJsonArray("bills") {
+                        paidOpen.forEach { b ->
+                            addJsonObject {
+                                put("checkId", b.checkId)
+                                put("tableLabel", b.tableLabel)
+                                put("paidCents", b.paidCents)
+                            }
+                        }
+                    }
+                },
+            )
         val report = buildReport(shift, closingCountCents)
         val now = VenueClock.now()
         Shifts.update({ Shifts.id eq shift[Shifts.id].value }) {
@@ -219,17 +254,49 @@ class ShiftService(private val config: CustomerConfig) {
             put("cashRefundCents", report.cashRefundCents)
             put("refundTotalCents", report.refundTotalCents)
             put("cashRoundingCents", report.cashRoundingCents)
+            put("tipsCents", report.tipsCents)
+            putJsonArray("tipsByServer") {
+                report.tipsByServer.forEach { s ->
+                    addJsonObject {
+                        put("userId", s.userId)
+                        put("name", s.name)
+                        put("tipCents", s.tipCents)
+                        put("count", s.count)
+                    }
+                }
+            }
             putJsonArray("tenderBreakdown") {
                 report.tenderBreakdown.forEach { t ->
                     addJsonObject {
                         put("type", t.type)
                         put("amountCents", t.amountCents)
                         put("count", t.count)
+                        put("tipCents", t.tipCents)
                     }
                 }
             }
         })
         report.copy(shiftStatus = "CLOSED")
+    }
+
+    private data class PaidOpenBill(val checkId: Int, val tableLabel: String, val paidCents: Long)
+
+    /** Live (OPEN / TOTAL_LOCKED) bills with money applied, oldest first. Inside a transaction. */
+    private fun paidOpenBills(): List<PaidOpenBill> {
+        val live = Checks.selectAll().where { Checks.status inList listOf("OPEN", "TOTAL_LOCKED") }
+            .orderBy(Checks.id).toList()
+        if (live.isEmpty()) return emptyList()
+        val paid = Tenders.selectAll()
+            .where { (Tenders.transactionId inList live.map { it[Checks.id].value }) and Tenders.reversedAt.isNull() }
+            .groupBy({ it[Tenders.transactionId] }, { it[Tenders.amountAppliedCents] })
+            .mapValues { it.value.sumExact() }
+        return live.mapNotNull { c ->
+            val id = c[Checks.id].value
+            val cents = paid[id] ?: 0L
+            if (cents == 0L) return@mapNotNull null
+            val table = DiningTables.selectAll().where { DiningTables.id eq c[Checks.tableId] }.firstOrNull()
+            PaidOpenBill(id, table?.let { it[DiningTables.nameOverride] ?: it[DiningTables.label] } ?: c[Checks.tableId], cents)
+        }
     }
 
     /**
@@ -245,7 +312,7 @@ class ShiftService(private val config: CustomerConfig) {
         val voids = Checks.selectAll().where {
             (Checks.status eq "VOID") and
                 (Checks.closedAt greaterEq start) and (Checks.closedAt less end)
-        }.map { VoidEntry(it[Checks.id].value, it[Checks.voidReason] ?: "-", it[Checks.voidedBy] ?: "-") }
+        }.map { voidEntry(it) }
         val agg = aggregate { (Checks.closedAt greaterEq start) and (Checks.closedAt less end) }
         ShiftReport(
             shiftId = 0,
@@ -263,6 +330,8 @@ class ShiftService(private val config: CustomerConfig) {
             cashRoundingCents = agg.cashRounding,
             dineInCount = agg.modes["DINE_IN"] ?: 0,
             takeOutCount = agg.modes["TAKE_OUT"] ?: 0,
+            tipsCents = agg.tips,
+            tipsByServer = agg.tipsByServer,
         )
     }
 
@@ -274,6 +343,9 @@ class ShiftService(private val config: CustomerConfig) {
         val cashRounding: Long,
         /** Quick-serve orders by service mode (DINE_IN / TAKE_OUT). */
         val modes: Map<String, Int> = emptyMap(),
+        /** Card tips on top of the bills (reader / Stripe), all tenders. */
+        val tips: Long = 0,
+        val tipsByServer: List<ServerTips> = emptyList(),
     )
 
     /**
@@ -297,16 +369,30 @@ class ShiftService(private val config: CustomerConfig) {
         val tendered = Tenders.amountTenderedCents.sum()
         val change = Tenders.changeCents.sum()
         val rounding = Tenders.roundingAdjustmentCents.sum()
+        val tips = Tenders.tipCents.sum()
         val tenderCount = Tenders.id.count()
         val firstTender = Tenders.id.min()
-        val tenderRows = Tenders.select(Tenders.type, applied, tendered, change, rounding, tenderCount, firstTender)
+        val tenderRows = Tenders.select(Tenders.type, applied, tendered, change, rounding, tips, tenderCount, firstTender)
             .where { Tenders.transactionId inSubQuery ids }
             .groupBy(Tenders.type)
             .toList()
             .sortedBy { it[firstTender]?.value ?: 0 } // first seen first, as the tenders were listed
         val tenderBreakdown = tenderRows.map {
-            TenderSummary(it[Tenders.type], it[applied] ?: 0L, it[tenderCount].toInt())
+            TenderSummary(it[Tenders.type], it[applied] ?: 0L, it[tenderCount].toInt(), tipCents = it[tips] ?: 0L)
         }.sortedByDescending { it.amountCents }
+
+        // card tips (reader / Stripe) per server: whoever opened the bill
+        val serverTips = Tenders.tipCents.sum()
+        val tippedCount = Tenders.id.count()
+        val tipsByServer = Tenders.join(Checks, org.jetbrains.exposed.sql.JoinType.INNER, Tenders.transactionId, Checks.id)
+            .select(Checks.openedBy, serverTips, tippedCount)
+            .where { (Tenders.transactionId inSubQuery ids) and (Tenders.tipCents greater 0L) }
+            .groupBy(Checks.openedBy)
+            .map { Triple(it[Checks.openedBy], it[serverTips] ?: 0L, it[tippedCount].toInt()) }
+        val names = if (tipsByServer.isEmpty()) emptyMap() else
+            Users.selectAll().where { Users.id inList tipsByServer.map { it.first } }.associate { it[Users.id] to it[Users.name] }
+        val serverTipList = tipsByServer.map { (user, cents, n) -> ServerTips(user, names[user] ?: user, cents, n) }
+            .sortedByDescending { it.tipCents }
 
         // item mix over ACTIVE lines of closed checks. TODO: separate top-by-qty view
         // inner join to Items: open lines (null item_id) drop out of the mix on
@@ -370,9 +456,11 @@ class ShiftService(private val config: CustomerConfig) {
             itemMix = itemMix,
             corkage = corkage,
             // tendered − change = the ROUNDED cash each settling payment took
-            cashIn = cashRows.sumOf { it[tendered] ?: 0L },
-            changeOut = cashRows.sumOf { it[change] ?: 0L },
-            cashRounding = cashRows.sumOf { it[rounding] ?: 0L },
+            cashIn = cashRows.sumOfExact { it[tendered] ?: 0L },
+            changeOut = cashRows.sumOfExact { it[change] ?: 0L },
+            cashRounding = cashRows.sumOfExact { it[rounding] ?: 0L },
+            tips = tenderBreakdown.sumOfExact { it.tipCents },
+            tipsByServer = serverTipList,
         )
     }
 
@@ -382,19 +470,19 @@ class ShiftService(private val config: CustomerConfig) {
 
         val voids = Checks.selectAll()
             .where { (Checks.shiftId eq shiftId) and (Checks.status eq "VOID") }
-            .map { VoidEntry(it[Checks.id].value, it[Checks.voidReason] ?: "-", it[Checks.voidedBy] ?: "-") }
+            .map { voidEntry(it) }
 
         // non-sale cash movements and refunds posted to this shift
         val movements = CashMovements.selectAll().where { CashMovements.shiftId eq shiftId }.toList()
-        val cashPaidIn = movements.filter { it[CashMovements.direction] == "IN" }.sumOf { it[CashMovements.amountCents] }
-        val cashPaidOut = movements.filter { it[CashMovements.direction] == "OUT" }.sumOf { it[CashMovements.amountCents] }
+        val cashPaidIn = movements.filter { it[CashMovements.direction] == "IN" }.sumOfExact { it[CashMovements.amountCents] }
+        val cashPaidOut = movements.filter { it[CashMovements.direction] == "OUT" }.sumOfExact { it[CashMovements.amountCents] }
         val refunds = Refunds.selectAll().where { Refunds.shiftId eq shiftId }.toList()
-        val refundTotal = refunds.sumOf { it[Refunds.grossCents] }
+        val refundTotal = refunds.sumOfExact { it[Refunds.grossCents] }
         // only CASH refunds leave the drawer; Card/transfer refunds don't. The
         // cash that left is the rounded amount: gross + its nickel rounding.
         val cashRefundRows = refunds.filter { it[Refunds.tenderType] == "CASH" }
-        val cashRefund = cashRefundRows.sumOf { it[Refunds.grossCents] + it[Refunds.roundingAdjustmentCents] }
-        val refundRounding = cashRefundRows.sumOf { it[Refunds.roundingAdjustmentCents] }
+        val cashRefund = cashRefundRows.sumOfExact { it[Refunds.grossCents] + it[Refunds.roundingAdjustmentCents] }
+        val refundRounding = cashRefundRows.sumOfExact { it[Refunds.roundingAdjustmentCents] }
 
         // cash drawer math (all of it the rounded cash that changed hands):
         //   opening float + cash taken - change given
@@ -426,7 +514,17 @@ class ShiftService(private val config: CustomerConfig) {
             overShortCents = closingCountCents?.let { it - expected },
             dineInCount = agg.modes["DINE_IN"] ?: 0,
             takeOutCount = agg.modes["TAKE_OUT"] ?: 0,
+            tipsCents = agg.tips,
+            tipsByServer = agg.tipsByServer,
         )
+    }
+
+    /** A voided bill on the report, with any payments handed back when it was cancelled. */
+    private fun voidEntry(row: ResultRow): VoidEntry {
+        val id = row[Checks.id].value
+        val back = Tenders.selectAll().where { (Tenders.transactionId eq id) and Tenders.reversedAt.isNotNull() }
+            .sumOfExact { it[Tenders.amountAppliedCents] }
+        return VoidEntry(id, row[Checks.voidReason] ?: "-", row[Checks.voidedBy] ?: "-", back)
     }
 
     private fun toView(row: ResultRow) = ShiftView(
@@ -456,13 +554,25 @@ data class ShiftView(
 )
 
 @Serializable
-data class TenderSummary(val type: String, val amountCents: Long, val count: Int)
+data class TenderSummary(
+    val type: String, val amountCents: Long, val count: Int,
+    /** Card tips taken with these tenders, on top of [amountCents] (reader / Stripe). */
+    val tipCents: Long = 0,
+)
+
+/** Card tips one server took (the bills they opened). */
+@Serializable
+data class ServerTips(val userId: String, val name: String, val tipCents: Long, val count: Int)
 
 @Serializable
 data class ItemMixEntry(val itemId: String, val nameFr: String, val nameEn: String = "", val qty: Int, val revenueCents: Long)
 
 @Serializable
-data class VoidEntry(val checkId: Int, val reason: String, val voidedBy: String)
+data class VoidEntry(
+    val checkId: Int, val reason: String, val voidedBy: String,
+    /** Payments handed back when the bill was cancelled (void with reverseTenders); 0 = none. */
+    val reversedCents: Long = 0,
+)
 
 @Serializable
 data class ShiftReport(
@@ -493,6 +603,9 @@ data class ShiftReport(
     /** Quick-serve: paid counter orders eaten in / taken out (both 0 elsewhere). */
     val dineInCount: Int = 0,
     val takeOutCount: Int = 0,
+    /** Card tips on top of the bills (reader / Stripe): not revenue, owed to staff. */
+    val tipsCents: Long = 0,
+    val tipsByServer: List<ServerTips> = emptyList(),
 )
 
 @Serializable

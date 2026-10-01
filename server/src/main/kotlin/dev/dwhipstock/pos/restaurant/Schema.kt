@@ -190,6 +190,8 @@ object Refunds : IntIdTable("refunds") {
     val taxesJson = text("taxes_json").nullable()
     // CASH refunds (039): cash handed back − gross, to the nickel; 0 otherwise
     val roundingAdjustmentCents = long("rounding_adjustment_cents").default(0)
+    // a refund to another payment type than the guest paid with (060): the approving manager
+    val overrideBy = varchar("override_by", 64).nullable()
 }
 
 /**

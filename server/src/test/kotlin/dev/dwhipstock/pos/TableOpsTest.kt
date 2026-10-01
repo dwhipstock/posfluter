@@ -147,9 +147,9 @@ class TableOpsTest {
         assertEquals("clear_split_first", errorCode(c.postJson("/checks/$src/merge", """{"intoCheckId":$split}""")))
 
         // pending QR lines must be resolved first
-        val qr = json.parseToJsonElement(client.postJson("${customerPath("t5-5")}/pending-lines",
-            """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}]}""").bodyAsText())
-            .jsonObject["id"]!!.jsonPrimitive.int
+        client.postJson("${customerPath("t5-5")}/pending-lines",
+            """{"lines":[{"itemId":"lantern-lager","variantId":"lantern-lager:pint","qty":1}]}""")
+        val qr = c.staffCheckAt("t5-5")["id"]!!.jsonPrimitive.int
         assertEquals("pending_lines_unresolved", errorCode(c.postJson("/checks/$qr/move", """{"tableId":"t1"}""")))
 
         // closed destination zone refuses a move (t1 = U-1, free, in "upper")

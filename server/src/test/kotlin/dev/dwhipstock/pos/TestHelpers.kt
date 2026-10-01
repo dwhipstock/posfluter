@@ -46,6 +46,14 @@ private fun rawTableToken(tableId: String): String = org.jetbrains.exposed.sql.t
 /** The guest-facing path for a table: /m/t/{token}. */
 suspend fun ApplicationTestBuilder.customerPath(tableId: String): String = "/m/t/${tableToken(tableId)}"
 
+/**
+ * The staff view of a table's live check (opened if none): the guest order
+ * reply is the guest's own minimal bill, without ids.
+ */
+suspend fun HttpClient.staffCheckAt(tableId: String): kotlinx.serialization.json.JsonObject =
+    Json.parseToJsonElement(post("/tables/$tableId/checks") { contentType(ContentType.Application.Json); setBody("{}") }
+        .bodyAsText()).jsonObject
+
 /** A slip-page ticket from an authenticated client. */
 suspend fun HttpClient.slipTicket(): String =
     Json.parseToJsonElement(post("/slips/ticket").bodyAsText()).jsonObject["ticket"]!!.jsonPrimitive.content

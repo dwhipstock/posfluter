@@ -1173,14 +1173,18 @@ class Api {
     }),
   );
 
+  /// [reverseTenders]: the bill already has payments; hand them back first
+  /// (needs the refund grant), then void.
   static Future<Check> voidCheck(
     int checkId,
     String reason,
-    String? managerPin,
-  ) async => Check.fromJson(
+    String? managerPin, {
+    bool reverseTenders = false,
+  }) async => Check.fromJson(
     await _post('/checks/$checkId/void', {
       'reason': reason,
       'managerPin': ?managerPin,
+      if (reverseTenders) 'reverseTenders': true,
     }),
   );
 
@@ -1961,6 +1965,10 @@ class Api {
         await _post('/checks/$checkId/pending-lines/$lineId/reject'),
       );
 
+  /// Turn away every guest line waiting on the bill at once.
+  static Future<Check> rejectAllPendingLines(int checkId) async =>
+      Check.fromJson(await _post('/checks/$checkId/pending-lines/reject-all'));
+
   /// null when no shift is open.
   static Future<ShiftInfo?> currentShift() async {
     final res = await _send(
@@ -2026,6 +2034,7 @@ class Api {
     required String tenderType,
     required String reason,
     String? managerPin,
+    bool overrideTender = false,
   }) async {
     final json = await _post('/checks/$checkId/refund', {
       'amountCents': ?amountCents,
@@ -2033,6 +2042,7 @@ class Api {
       'tenderType': tenderType,
       'reason': reason,
       'managerPin': ?managerPin,
+      if (overrideTender) 'overrideTender': true,
     });
     return RefundResult.fromJson(json);
   }
@@ -3286,9 +3296,25 @@ class ShiftInfo {
 class TenderSummary {
   final String type;
   final int amountCents, count;
-  TenderSummary(this.type, this.amountCents, this.count);
-  factory TenderSummary.fromJson(Map<String, dynamic> j) =>
-      TenderSummary(j['type'], j['amountCents'], j['count']);
+
+  /// Card tips taken with these tenders, on top of [amountCents] (0 on older servers).
+  final int tipCents;
+  TenderSummary(this.type, this.amountCents, this.count, {this.tipCents = 0});
+  factory TenderSummary.fromJson(Map<String, dynamic> j) => TenderSummary(
+    j['type'],
+    j['amountCents'],
+    j['count'],
+    tipCents: j['tipCents'] ?? 0,
+  );
+}
+
+/// Card tips one server took (the bills they opened).
+class ServerTips {
+  final String userId, name;
+  final int tipCents, count;
+  ServerTips(this.userId, this.name, this.tipCents, this.count);
+  factory ServerTips.fromJson(Map<String, dynamic> j) =>
+      ServerTips(j['userId'], j['name'], j['tipCents'], j['count']);
 }
 
 class ItemMixEntry {
@@ -3313,9 +3339,16 @@ class ItemMixEntry {
 class VoidEntry {
   final int checkId;
   final String reason, voidedBy;
-  VoidEntry(this.checkId, this.reason, this.voidedBy);
-  factory VoidEntry.fromJson(Map<String, dynamic> j) =>
-      VoidEntry(j['checkId'], j['reason'], j['voidedBy']);
+
+  /// Payments handed back when the bill was cancelled (0 = none).
+  final int reversedCents;
+  VoidEntry(this.checkId, this.reason, this.voidedBy, {this.reversedCents = 0});
+  factory VoidEntry.fromJson(Map<String, dynamic> j) => VoidEntry(
+    j['checkId'],
+    j['reason'],
+    j['voidedBy'],
+    reversedCents: j['reversedCents'] ?? 0,
+  );
 }
 
 class ShiftReport {
@@ -3342,6 +3375,10 @@ class ShiftReport {
 
   /// Quick-serve: paid counter orders eaten in / taken out (0 elsewhere).
   final int dineInCount, takeOutCount;
+
+  /// Card tips on top of the bills (reader / Stripe), and per server.
+  final int tipsCents;
+  final List<ServerTips> tipsByServer;
   ShiftReport(
     this.shiftId,
     this.shiftStatus,
@@ -3365,6 +3402,8 @@ class ShiftReport {
     this.cashRoundingCents = 0,
     this.dineInCount = 0,
     this.takeOutCount = 0,
+    this.tipsCents = 0,
+    this.tipsByServer = const [],
   });
   factory ShiftReport.fromJson(Map<String, dynamic> j) => ShiftReport(
     j['shiftId'],
@@ -3391,6 +3430,10 @@ class ShiftReport {
     cashRoundingCents: j['cashRoundingCents'] ?? 0,
     dineInCount: j['dineInCount'] ?? 0,
     takeOutCount: j['takeOutCount'] ?? 0,
+    tipsCents: j['tipsCents'] ?? 0,
+    tipsByServer: ((j['tipsByServer'] as List?) ?? const [])
+        .map((t) => ServerTips.fromJson(t))
+        .toList(),
   );
 }
 

@@ -202,7 +202,9 @@ class MenuChangesUnderOrdersTest {
             {"itemId":"amber-ale","variantId":"amber-ale:pint","qty":1,"expectedPriceCents":$pint}]}""")
         assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
         val body = obj(res.bodyAsText())
-        assertEquals(listOf("lantern-lager"), body["pendingLines"]!!.jsonArray.map { it.jsonObject["itemId"]!!.jsonPrimitive.content })
+        assertEquals(1, body["pendingLines"]!!.jsonArray.size)
+        assertEquals(listOf("lantern-lager"), loginClient().staffCheckAt("t5-5")["pendingLines"]!!.jsonArray
+            .map { it.jsonObject["itemId"]!!.jsonPrimitive.content })
         val rejected = body["rejected"]!!.jsonArray.map { it.jsonObject }
         assertEquals(listOf(1 to "item_unavailable", 2 to "price_changed"),
             rejected.map { it["index"]!!.jsonPrimitive.int to it["code"]!!.jsonPrimitive.content })
