@@ -3,7 +3,7 @@
 # store: install the Card Reader app on the phone, point the store at it, and
 # print the pairing steps.
 #
-#   scripts/phone-reader.sh --phone <serial> --tablet <serial> [--app sagepoppy|pronghorn]
+#   scripts/phone-reader.sh --phone <serial> --tablet <serial> [--app sagepoppy|pronghorn|copperlantern]
 #   scripts/phone-reader.sh --phone <serial>              # desktop store: prints its env instead
 #   options: --real (real cards instead of Stripe's simulated reader)
 #            --no-install (store setup only)   --apk <path>
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown option $1 (see --help)" >&2; exit 2;;
   esac
 done
-[[ "$APP" == sagepoppy || "$APP" == pronghorn ]] || { echo "ERROR: --app must be sagepoppy or pronghorn (the US stores)." >&2; exit 2; }
+[[ "$APP" == sagepoppy || "$APP" == pronghorn || "$APP" == copperlantern ]] || { echo "ERROR: --app must be sagepoppy, pronghorn or copperlantern (the US stores)." >&2; exit 2; }
 tablet_app_set "$APP"
 command -v adb >/dev/null || { echo "ERROR: adb not found." >&2; exit 1; }
 
