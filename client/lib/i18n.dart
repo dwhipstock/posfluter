@@ -1051,16 +1051,12 @@ class L {
     final word = own.trim().isNotEmpty
         ? own
         : _t('Taxes', 'Tax', 'Impuesto', 'Steuer', 'Belasting');
-    final r = tax.ratePercent;
-    return switch (lang) {
-      'fr' || 'de' => '$word (${r.replaceAll('.', ',')} %)',
-      _ => '$word ($r%)',
-    };
+    // the rate always reads "8.25%", like money, in every language
+    return '$word (${tax.ratePercent}%)';
   }
 
   String _taxItem(TaxLine tax) => switch (lang) {
-    'fr' => '${tax.labelFr} ${tax.ratePercent.replaceAll('.', ',')} %',
-    'de' => '${tax.labelEn} ${tax.ratePercent.replaceAll('.', ',')} %',
+    'fr' => '${tax.labelFr} ${tax.ratePercent}%',
     _ => '${tax.labelEn} ${tax.ratePercent}%',
   };
   String get pay => _t('Payer', 'Pay', 'Cobrar', 'Bezahlen', 'Betaal');

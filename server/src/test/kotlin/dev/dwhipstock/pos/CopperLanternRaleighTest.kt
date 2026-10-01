@@ -165,11 +165,11 @@ class CopperLanternRaleighTest {
         // press-and-hold reprints: each in its own language, one language at a time
         val fr = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.FR), ReceiptKind.PROVISIONAL))
         assertTrue("#101 · Sur place" in fr && "Dine in" !in fr, fr)
-        assertTrue("Taxes (8,25\u00A0%)" in fr && "Lager de la Lanterne" in fr, fr)
+        assertTrue("Taxes (8.25%)" in fr && "Lager de la Lanterne" in fr, fr)
         val es = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.ES), ReceiptKind.PROVISIONAL))
         assertTrue("#101 · Para comer aquí" in es && "Lager de la casa Lantern" in es && "Impuesto (8.25%)" in es, es)
         val de = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.DE), ReceiptKind.PROVISIONAL))
-        assertTrue("#101 · Hier essen" in de && "Steuer (8.25 %)" in de, de)
+        assertTrue("#101 · Hier essen" in de && "Steuer (8.25%)" in de, de)
         val af = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.AF), ReceiptKind.PROVISIONAL))
         assertTrue("#101 · Eet hier" in af && "Belasting (8.25%)" in af, af)
         // the same bill itemised (a store whose display is Itemized): the two NC taxes, each with its rate

@@ -94,9 +94,9 @@ class CombinedTaxTest {
     fun theCombinedLineReadsTaxAtTheSummedRateInEveryLanguage() {
         val one = guestTaxLines(combined.assess(Money(1000)).lines, TaxDisplay.Combined()).single().component
         assertEquals("Tax (8.25%)", ReceiptRenderer.taxLineLabel(one, LocaleCode.EN))
-        assertEquals("Taxes (8,25 %)", ReceiptRenderer.taxLineLabel(one, LocaleCode.FR))
+        assertEquals("Taxes (8.25%)", ReceiptRenderer.taxLineLabel(one, LocaleCode.FR))
         assertEquals("Impuesto (8.25%)", ReceiptRenderer.taxLineLabel(one, LocaleCode.ES))
-        assertEquals("Steuer (8.25 %)", ReceiptRenderer.taxLineLabel(one, LocaleCode.DE))
+        assertEquals("Steuer (8.25%)", ReceiptRenderer.taxLineLabel(one, LocaleCode.DE))
         assertEquals("Belasting (8.25%)", ReceiptRenderer.taxLineLabel(one, LocaleCode.AF))
         // a store's own word for it
         val named = guestTaxLines(combined.assess(Money(1000)).lines, TaxDisplay.Combined("Sales tax")).single().component

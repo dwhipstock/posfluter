@@ -56,7 +56,7 @@ void main() {
       const L(true).taxLine(_check().taxes[1]),
       'Wake prepared food tax 1%',
     );
-    expect(const L(false).taxLine(nc), 'NC sales tax 7,25\u00A0%');
+    expect(const L(false).taxLine(nc), 'NC sales tax 7.25%');
   });
 
   testWidgets('an itemising store shows subtotal and the two NC taxes', (
@@ -130,9 +130,9 @@ void main() {
     test('labelled "Tax (8.25%)" in every language', () {
       final t = TaxLine.forGuests(_check().taxes, profile: combined).single;
       expect(const L(true).taxLine(t), 'Tax (8.25%)');
-      expect(const L(false).taxLine(t), 'Taxes (8,25 %)');
+      expect(const L(false).taxLine(t), 'Taxes (8.25%)');
       expect(const L.forLang('es').taxLine(t), 'Impuesto (8.25%)');
-      expect(const L.forLang('de').taxLine(t), 'Steuer (8,25 %)');
+      expect(const L.forLang('de').taxLine(t), 'Steuer (8.25%)');
       expect(const L.forLang('af').taxLine(t), 'Belasting (8.25%)');
     });
 

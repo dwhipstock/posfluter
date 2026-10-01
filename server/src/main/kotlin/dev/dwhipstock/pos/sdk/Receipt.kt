@@ -394,8 +394,8 @@ object ReceiptRenderer {
     }
 
     /**
-     * "GST/TPS 5%", "TVQ/QST 9,975 %"; the one combined line of
-     * [dev.dwhipstock.pos.sdk.guestTaxLines]: "Tax (8.25%)", "Taxes (8,25 %)".
+     * "GST/TPS 5%", "TVQ/QST 9.975%"; the one combined line of
+     * [dev.dwhipstock.pos.sdk.guestTaxLines]: "Tax (8.25%)", "Taxes (8.25%)".
      */
     fun taxLineLabel(tax: TaxComponent, locale: LocaleCode): String {
         if (tax.code == dev.dwhipstock.pos.sdk.COMBINED_TAX_CODE) {
@@ -410,7 +410,7 @@ object ReceiptRenderer {
     fun taxRegistrationLine(tax: TaxComponent, locale: LocaleCode): String =
         Messages.get(RECEIPT_TAX_REGISTRATION, locale, taxName(tax, locale), tax.registrationNumber)
 
-    /** The rate with the locale's decimal mark ("9.975" / "9,975"). */
-    private fun rateText(tax: TaxComponent, locale: LocaleCode): String =
-        locale.dataText(tax.rateText.replace('.', ','), tax.rateText)
+    /** The rate as "8.25" in every language, like money (North American format). */
+    @Suppress("UNUSED_PARAMETER")
+    private fun rateText(tax: TaxComponent, locale: LocaleCode): String = tax.rateText
 }

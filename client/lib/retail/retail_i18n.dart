@@ -161,9 +161,7 @@ class R {
     final name = label == 'Sales Tax'
         ? _t('Sales Tax', 'Impuesto sobre la venta', 'Taxe de vente')
         : label;
-    return lang == 'fr'
-        ? '$name ${rate.replaceAll('.', ',')}\u00A0%'
-        : '$name $rate%';
+    return '$name $rate%';
   }
 
   // age check

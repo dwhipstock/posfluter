@@ -87,7 +87,7 @@ class RefundAndCashMovementTest {
         val slipKv = slip.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
         assertTrue("Sous-total | 20.25" in slipKv, slip)
         // the guest's slip: the taxes handed back as one combined line
-        assertTrue("Taxes (8,25\u00A0%) | 1.67" in slipKv, slip)
+        assertTrue("Taxes (8.25%) | 1.67" in slipKv, slip)
         assertTrue("Wake" !in slip, slip)
         assertTrue("*** REMBOURSEMENT / REFUND ***" in slip, "fr refund header expected:\n$slip")
         assertTrue("Addition d’origine n°\u00A0$checkId" in slip)

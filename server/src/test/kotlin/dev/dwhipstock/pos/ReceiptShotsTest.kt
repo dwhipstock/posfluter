@@ -133,12 +133,12 @@ class ReceiptShotsTest {
         val bill = ReceiptRenderer.render(pubReceipt, fr, ReceiptKind.PROVISIONAL)
         val kv = receipt.filterIsInstance<PrintLine.KeyValue>().associate { it.left to it.right }
         assertEquals("73.00", kv["Sous-total"])
-        assertEquals("6.02", kv["Taxes (8,25\u00A0%)"])
+        assertEquals("6.02", kv["Taxes (8.25%)"])
         assertEquals("21.00", kv["Monnaie rendue"])
         assertTrue(bill.any { it is PrintLine.Header && it.text.startsWith("*** ADDITION") })
         assertEquals(PrintLine.Text("Tél. (919) 555-0142", Align.CENTER), receipt[2])
         // and Spanish, German, Afrikaans name the combined tax too
-        for ((lang, label) in listOf("es" to "Impuesto (8.25%)", "de" to "Steuer (8.25 %)", "af" to "Belasting (8.25%)")) {
+        for ((lang, label) in listOf("es" to "Impuesto (8.25%)", "de" to "Steuer (8.25%)", "af" to "Belasting (8.25%)")) {
             val lines = ReceiptRenderer.render(pubReceipt, pubPolicy.withLocale(LocaleCode.of(lang)), ReceiptKind.FINAL)
             assertTrue(lines.filterIsInstance<PrintLine.KeyValue>().any { it.left == label && it.right == "6.02" },
                 "$lang: ${texts(lines)}")
