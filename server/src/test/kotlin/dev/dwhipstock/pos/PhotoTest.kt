@@ -52,6 +52,10 @@ class PhotoTest {
         assertEquals(HttpStatusCode.BadRequest, manager.post("/items/lantern-lager/photo") {
             setBody(multipart("1234", ByteArray(2 * 1024 * 1024 + 1), "image/png"))
         }.status)
+        // far past it: refused on the declared length, before the body is read
+        assertEquals(HttpStatusCode.BadRequest, manager.post("/items/lantern-lager/photo") {
+            setBody(multipart("1234", ByteArray(8 * 1024 * 1024), "image/png"))
+        }.status)
 
         // happy path: manager-approved PNG upload
         assertEquals(HttpStatusCode.Created, manager.post("/items/lantern-lager/photo") {

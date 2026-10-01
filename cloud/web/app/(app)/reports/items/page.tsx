@@ -201,7 +201,7 @@ function ItemsPage() {
                 <TableRow key={`${r.itemId ?? `open-${i}`}-${r.currency ?? ""}`}>
                   <TableCell className="text-xs font-semibold text-neutral-500">{i + 1}</TableCell>
                   <TableCell>
-                    <div className="min-w-[10rem]">
+                    <div className="min-w-[10rem] max-w-[20rem] [overflow-wrap:anywhere]">
                       <div className="text-sm font-medium">{name(r.nameFr, r.nameEn, r.names)}</div>
                       {nameAlt(r.nameFr, r.nameEn) && (
                         <div className="text-xs text-neutral-500">{nameAlt(r.nameFr, r.nameEn)}</div>
@@ -221,7 +221,7 @@ function ItemsPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="hidden text-xs text-neutral-500 lg:table-cell">
+                  <TableCell className="hidden max-w-[12rem] text-xs text-neutral-500 [overflow-wrap:anywhere] lg:table-cell">
                     {name(r.categoryNameFr, r.categoryNameEn, r.categoryNames) || "—"}
                   </TableCell>
                   {combined &&

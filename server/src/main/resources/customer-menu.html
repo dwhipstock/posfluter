@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{VENUE_NAME}} — Order Online</title>
 <style>
+  /* a long unbroken name (no spaces) wraps instead of stretching or clipping the card (red-team) */
+  body { overflow-wrap: anywhere; }
   /* Customer scan-to-order menu (M3). Vanilla on purpose — loads instantly on any phone. */
   :root {
     --ink: #17263a;
@@ -353,7 +355,7 @@ function render() {
 
   const cats = categories.filter(c => items.some(i => i.category === c.id)).map(c => c.id);
   document.getElementById("chips").innerHTML = cats.map(c =>
-    `<button class="chip ${c === cat ? "on" : ""}" onclick="cat='${c}';render()">${catName(c)}</button>`).join("");
+    `<button class="chip ${c === cat ? "on" : ""}" onclick="pickCat(${jsArg(c)})">${esc(catName(c))}</button>`).join("");
   const visibleItems = items.filter(i => i.category === cat);
   document.getElementById("grid").innerHTML = menuError
     ? `<div class="menu-status">${T().menuUnavailable}</div>`
@@ -361,16 +363,16 @@ function render() {
     ? `<div class="menu-status">${T().menuLoading}</div>`
     : visibleItems.map(i => `
     <div class="card">
-      ${i.photoVersion ? `<img class="photo" loading="lazy" src="/photos/${i.id}?v=${i.photoVersion}"
-           onerror="this.outerHTML='<div class=ph>${i.abbrev}</div>'">` : `<div class="ph">${i.abbrev}</div>`}
-      <div class="fr">${iname(i)}</div>
-      <div class="en">${inameAlt(i)}</div>
+      ${i.photoVersion ? `<img class="photo" loading="lazy" src="/photos/${encodeURIComponent(i.id)}?v=${esc(i.photoVersion)}"
+           data-fallback="${esc(i.abbrev)}" onerror="photoFallback(this)">` : `<div class="ph">${esc(i.abbrev)}</div>`}
+      <div class="fr">${esc(iname(i))}</div>
+      <div class="en">${esc(inameAlt(i))}</div>
       <div class="desc">${esc(idesc(i))}</div>
       <div class="price">${i.variants.length === 1 ? cad(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
-      ${i.variants.length > 1 ? `<select id="v-${i.id}">` + i.variants.map(v =>
-        `<option value="${v.id}">${vlabel(v)} ${cad(v.priceCents)}</option>`).join("") + `</select>` : ""}
-      <input type="text" id="n-${i.id}" placeholder="${T().note}">
-      <button class="add" onclick="add('${i.id}')">${T().addToBasket}</button>
+      ${i.variants.length > 1 ? `<select id="v-${esc(i.id)}">` + i.variants.map(v =>
+        `<option value="${esc(v.id)}">${esc(vlabel(v))} ${cad(v.priceCents)}</option>`).join("") + `</select>` : ""}
+      <input type="text" id="n-${esc(i.id)}" placeholder="${T().note}">
+      <button class="add" onclick="add(${jsArg(i.id)})">${T().addToBasket}</button>
     </div>`).join("");
   document.getElementById("cart-title").textContent = T().basket;
   document.getElementById("cart-open-btn").textContent = T().viewCart;
@@ -631,8 +633,23 @@ async function fetchBill() {
   renderBill();
 }
 
-// notes are guest-typed text seen by everyone at the table — always escape
-const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// notes are guest-typed text seen by everyone at the table, and every catalog
+// name is typed by staff or the owner's portal — always escape (red-team)
+const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+// Embed an untrusted string as a JS string literal inside an inline-handler
+// attribute (onclick="fn(...)"): HTML entities are decoded BEFORE the handler
+// compiles, so only JS \uXXXX escapes survive (same as the staff app).
+const jsArg = s => "'" + String(s ?? "").replace(/[^\w .:@/-]/g,
+  c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "'";
+// Photo-load fallback: the abbrev badge via textContent, never innerHTML
+function photoFallback(img) {
+  const d = document.createElement("div");
+  d.className = "ph";
+  d.textContent = img.dataset.fallback || "";
+  img.replaceWith(d);
+}
+function pickCat(c) { cat = c; render(); }
 const lineName = l => {
   const name = nm(l, l.nameFr, l.nameEn);
   const variant = l.variantLabelFr || l.variantLabelEn

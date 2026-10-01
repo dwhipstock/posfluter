@@ -196,20 +196,14 @@ interface CounterHook {
  * to store, print and sync: control characters (NUL wedges the cloud's
  * Postgres JSONB; ESC sequences reach the printer) and bidi overrides are
  * dropped, line breaks and tabs become spaces, and it is cut to [max]
- * characters. Blank → null.
+ * characters. Blank → null. Built on the shared [dev.dwhipstock.pos.base.CleanText.line]
+ * (which also drops lone surrogate halves), plus the LRM/RLM marks.
  */
 internal fun cleanText(raw: String?, max: Int = 200): String? {
     if (raw == null) return null
-    val sb = StringBuilder(raw.length)
-    for (ch in raw) {
-        when {
-            ch == '\n' || ch == '\r' || ch == '\t' -> sb.append(' ')
-            Character.isISOControl(ch) -> {}
-            ch in '‪'..'‮' || ch in '⁦'..'⁩' || ch == '‎' || ch == '‏' -> {}
-            else -> sb.append(ch)
-        }
-    }
-    return sb.toString().trim().take(max).trim().takeIf { it.isNotEmpty() }
+    return dev.dwhipstock.pos.base.CleanText.line(raw)
+        .filter { it != '\u200E' && it != '\u200F' }
+        .trim().take(max).trim().takeIf { it.isNotEmpty() }
 }
 
 class CheckService(private val config: CustomerConfig) {

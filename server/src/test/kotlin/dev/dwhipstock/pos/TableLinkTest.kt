@@ -184,7 +184,8 @@ class TableLinkTest {
             setBody("""{"nameOverride":"<script>alert(1)</script>","managerPin":"1234"}""")
         }
         val body = client.get(customerPath("t8")).bodyAsText()
-        assertTrue("&lt;script&gt;alert(1)&lt;/script&gt;" in body)
+        // the label sits inside the page's <script> as a JS string literal: < and > as \u escapes
+        assertTrue("\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in body)
         assertFalse("<script>alert(1)</script>" in body)
     }
 

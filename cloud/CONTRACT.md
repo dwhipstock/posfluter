@@ -102,7 +102,7 @@ tenant+venue on the cloud; the store never sends tenant ids).
 
 Response `200`:
 ```json
-{ "accepted": 37, "duplicates": 3, "highWaterMark": 1234 }
+{ "accepted": 37, "duplicates": 3, "highWaterMark": 1234, "quarantined": 0 }
 ```
 
 Semantics:
@@ -119,6 +119,19 @@ Semantics:
 - Every event is stored raw in the cloud `events` table (replayable), then
   projected. Unknown event types are stored and otherwise ignored — never an
   error.
+- **One bad event never fails its batch.** The cloud drops what Postgres
+  cannot store (U+0000, lone surrogates, other control characters except tab
+  and line breaks) from every string first. An event that still cannot be
+  stored or projected is rolled back alone (a savepoint), kept as it came in
+  `ingest_quarantine` with the error (to look at and replay), logged, and
+  counted in `quarantined`; the rest of the batch is stored and the batch is
+  acknowledged. Only if setting it aside fails too does the batch fail.
+- The store also sends only storable text (no U+0000), and if the cloud keeps
+  refusing a batch (an HTTP answer, 3 ticks running) it sends that batch one
+  event at a time: an event refused alone while the event after it goes
+  through is set aside (`sync_state` key `push_quarantine`, its seq; it stays
+  in the outbox) and the drain goes on. A cloud that refuses everything gets
+  nothing set aside: the store waits.
 - Any non-200 → the store leaves the HWM alone and retries next tick.
   Offline = nothing to do; the outbox is the queue. A 409 `install_mismatch`
   halts sync loudly until an operator resolves it (infra README

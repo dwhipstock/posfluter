@@ -672,14 +672,21 @@ Demo mode on:
 - **Staff app MFA is off**: the staff phone app signs in with the PIN only,
   whatever `staff.app.mfa` says. With demo mode off, `staff.app.mfa` works as
   described above.
+- **Managers sign in only on the POS itself.** Because the demo PINs are well
+  known and the staff app is PIN-only, a manager PIN is refused (403
+  `manager_pos_only`, "managers sign in only on the POS tablet") on the staff
+  phone app and kitchen screen, and from any phone or laptop on the Wi-Fi for
+  `/login` and for manager approvals. It works as usual on the POS tablet (the
+  app's own store on 127.0.0.1) and on a paired terminal. Manager actions in
+  the demo are done on the tablet, or a server asks for approval there.
 - **Print demo QR sheet** appears in Venue settings. It prints one slip on the
   store's receipt printer (80 mm), in the language the POS is set to (English
   by default): the header "DEMO MODE — demo QR codes", a line saying it is
   printed only for the demo, then one block per app with what it is, its link,
   its QR code and how to sign in:
   - Guest ordering at a table (the first table; left off for a quick-serve store)
-  - Staff phone app (PIN 9999 server, 1234 manager)
-  - Kitchen screen (when `kitchen.printing=on`; staff PIN)
+  - Staff phone app (PIN 9999 server only; the manager PIN is never printed)
+  - Kitchen screen (when `kitchen.printing=on`; PIN 9999)
   - Pickup board, for a separate screen like a TV (quick-serve stores)
   - Manager portal: address, username and password from `demo.portal.*`
   - Guest Wi-Fi join code, when guest Wi-Fi is set up in Venue settings
@@ -706,6 +713,17 @@ password only (no authenticator) and the portal shows a **Demo mode** badge; it
 is a manager (no terminal pairing or revoking). The owner keeps the
 authenticator. Turn `PORTAL_DEMO_MODE` off after the demo: the demo login then
 cannot sign in at all.
+
+The sheet prints only for a manager signed in on the POS tablet itself (a
+staff-app session or a phone on the Wi-Fi gets 403 `pos_terminal_required`),
+so the portal password can't be reprinted remotely.
+
+Also in every mode (red-team fixes): the login screen's staff list (`GET
+/staff`) answers only the tablet / a paired terminal, or a signed-in session;
+wrong PINs lock out only the device that typed them (5 tries from a phone, 10
+from the tablet itself), never the whole store; the pump commands (forecourt)
+need the POS terminal's own session, and cancelling a paid prepay needs the
+`refund` grant or a manager PIN.
 
 **Tablet**:
 

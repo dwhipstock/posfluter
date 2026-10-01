@@ -556,6 +556,7 @@ fun Route.stockRoutes() {
     /** A delivery (RECEIVED, qty > 0) or an adjustment (ADJUSTMENT, qty ≠ 0: breakage, a return). */
     post("/stock/movements") {
         val (principal, venues) = portalScopes(call)
+        principal.requireStockWriter()
         val store = singleRetailStore(venues)
         val req = call.receive<MovementRequest>()
         val kind = req.kind.trim().uppercase()
@@ -585,6 +586,7 @@ fun Route.stockRoutes() {
     /** Set (or clear, null) a product's reorder level. */
     put("/stock/reorder") {
         val (principal, venues) = portalScopes(call)
+        principal.requireStockWriter()
         val store = singleRetailStore(venues)
         val req = call.receive<ReorderRequest>()
         if (req.reorderLevel != null && req.reorderLevel !in 0..100_000)
@@ -630,4 +632,10 @@ fun Route.stockRoutes() {
         }
         call.respond(response)
     }
+}
+
+/** Recording stock and setting reorder levels are writes: owners and managers only (027: a viewer only looks). */
+private fun dev.dwhipstock.poscloud.auth.Principal.requireStockWriter() {
+    if (!canEditMenu) throw dev.dwhipstock.poscloud.ForbiddenException(
+        "only owners and managers can change stock", "stock_write_forbidden")
 }

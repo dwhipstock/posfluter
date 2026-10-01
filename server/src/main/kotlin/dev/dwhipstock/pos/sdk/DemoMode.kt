@@ -8,7 +8,10 @@ import java.util.Properties
  * the pitch demo's conveniences, so none of them leak into a real store:
  *
  * - the staff phone app signs in by PIN only (forces `staff.app.mfa` off;
- *   with demo mode off the explicit `staff.app.mfa` setting applies as before);
+ *   with demo mode off the explicit `staff.app.mfa` setting applies as before).
+ *   Because of that, a MANAGER PIN signs in and approves only on the POS itself
+ *   (loopback / a paired terminal): the staff app, the kitchen screen and any
+ *   phone on the Wi-Fi get 403 `manager_pos_only` (red-team; see AuthService);
  * - managers get "Print demo QR sheet" in Venue settings: one slip with a QR
  *   for every app guests can try, and how to sign in to each.
  *

@@ -29,11 +29,18 @@ import java.util.UUID
  * staff app, …), each with its own token and independent sliding/absolute
  * expiry; logging into one surface no longer kicks the others. The live count
  * is capped at [MAX_SESSIONS_PER_USER], evicting only the oldest beyond the cap.
- * Failed attempts are rate-limited terminal-wide (see [LoginRateLimiter]).
+ * Failed attempts are rate-limited per client (see [PinAttemptLimiter]).
  */
 class AuthService(
     private val settings: SettingsRepository? = null,
     private val staffAppMfaRequired: Boolean = true,
+    /**
+     * demo.mode=on: the demo seed's PINs are printed / well known, so a manager
+     * PIN signs in (and approves) only on the POS itself — loopback or a paired
+     * terminal ([PinClient.trusted]) — never from a phone on the guest Wi-Fi or
+     * the staff app. See [ManagerOnPosOnlyException].
+     */
+    private val demoMode: Boolean = false,
 ) {
 
     companion object {
@@ -78,17 +85,28 @@ class AuthService(
         }
     }
 
-    private val rateLimiter = LoginRateLimiter()
+    private val rateLimiter = PinAttemptLimiter()
+
+    /** Demo mode: a manager's PIN from anywhere but the POS itself is refused (counted as a failure). */
+    private fun refuseManagerOffPos(uid: String?, client: PinClient, staffApp: Boolean = false) {
+        if (!demoMode || uid == null || (!staffApp && client.trusted)) return
+        if (roleOf(uid) != "MANAGER") return
+        rateLimiter.recordFailure(client)
+        throw ManagerOnPosOnlyException()
+    }
+
+    private fun roleOf(id: String): String? = transaction { activeUser(id)?.get(Users.role) }
 
     /** Live sliding-idle window in minutes: owner-tunable via venue settings. */
     private fun idleMinutes(): Long =
         settings?.get()?.sessionIdleMinutes?.toLong() ?: DEFAULT_IDLE_MINUTES
 
-    fun login(pin: String, deviceId: String? = null): AuthUser? {
-        rateLimiter.checkNotLocked()
+    fun login(pin: String, deviceId: String? = null, client: PinClient = PinClient.LOCAL): AuthUser? {
+        rateLimiter.checkNotLocked(client)
         val uid = userIdByPin(pin)
+        refuseManagerOffPos(uid, client)
         val user = uid?.let { id -> transaction { activeUser(id)?.let { issueSession(it, deviceId) } } }
-        if (user == null) rateLimiter.recordFailure() else rateLimiter.recordSuccess()
+        if (user == null) rateLimiter.recordFailure(client) else rateLimiter.recordSuccess(client)
         return user
     }
 
@@ -166,29 +184,30 @@ class AuthService(
      *   - "enroll" : no activated authenticator yet → returns the otpauth URI + secret
      *                for the QR; the app collects the first code to activate.
      */
-    fun staffAppBegin(pin: String, deviceTokens: List<String>): StaffAppBegin? {
-        rateLimiter.checkNotLocked()
+    fun staffAppBegin(pin: String, deviceTokens: List<String>, client: PinClient = PinClient.LOCAL): StaffAppBegin? {
+        rateLimiter.checkNotLocked(client)
         val uid = userIdByPin(pin)
-        return transaction { staffAppBeginTx(uid, deviceTokens) }
+        refuseManagerOffPos(uid, client, staffApp = true)
+        return transaction { staffAppBeginTx(uid, deviceTokens, client) }
     }
 
-    private fun staffAppBeginTx(verifiedId: String?, deviceTokens: List<String>): StaffAppBegin? {
+    private fun staffAppBeginTx(verifiedId: String?, deviceTokens: List<String>, client: PinClient): StaffAppBegin? {
         val user = verifiedId?.let(::activeUser)
-        if (user == null) { rateLimiter.recordFailure(); return null }
+        if (user == null) { rateLimiter.recordFailure(client); return null }
         val uid = user[Users.id]
 
         // staff.app.mfa=off (store config; default on). Keep the
         // PIN check, rate limit, and normal session expiry; leave enrolled TOTP
         // data intact so turning it back on requires it at the next login.
         if (!staffAppMfaRequired) {
-            rateLimiter.recordSuccess()
+            rateLimiter.recordSuccess(client)
             return StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))
         }
 
         // A still-trusted device completes the login now (PIN only). Clearing the
         // failure counter is correct HERE because authentication is complete.
         if (deviceTokens.any { consumeTrustedDevice(uid, it) }) {
-            rateLimiter.recordSuccess()
+            rateLimiter.recordSuccess(client)
             return StaffAppBegin("ok", user = issueSession(user, surface = SessionSurface.STAFF_APP))
         }
 
@@ -219,25 +238,26 @@ class AuthService(
      * THIS device. Returns null on a bad PIN (→ 401); throws (invalid_totp) on a bad
      * code so the app keeps the code field for a retry.
      */
-    fun staffAppTotp(pin: String, code: String): StaffAppSession? {
-        rateLimiter.checkNotLocked()
+    fun staffAppTotp(pin: String, code: String, client: PinClient = PinClient.LOCAL): StaffAppSession? {
+        rateLimiter.checkNotLocked(client)
         val verifiedId = userIdByPin(pin)
-        return transaction { staffAppTotpTx(verifiedId, code) }
+        refuseManagerOffPos(verifiedId, client, staffApp = true)
+        return transaction { staffAppTotpTx(verifiedId, code, client) }
     }
 
-    private fun staffAppTotpTx(verifiedId: String?, code: String): StaffAppSession? {
+    private fun staffAppTotpTx(verifiedId: String?, code: String, client: PinClient): StaffAppSession? {
         val user = verifiedId?.let(::activeUser)
-        if (user == null) { rateLimiter.recordFailure(); return null }
+        if (user == null) { rateLimiter.recordFailure(client); return null }
         val uid = user[Users.id]
         val row = StaffTotp.selectAll().where { StaffTotp.userId eq uid }.firstOrNull()
         val step = row?.let { Totp.matchingCounter(it[StaffTotp.secret], code) }
         val lastStep = row?.get(StaffTotp.lastStep)
         // wrong/absent code, or a code from a 30s step already consumed (single-use → no replay)
         if (row == null || step == null || (lastStep != null && step <= lastStep)) {
-            rateLimiter.recordFailure()
+            rateLimiter.recordFailure(client)
             throw dev.dwhipstock.pos.restaurant.BadRequestException("invalid authenticator code", "invalid_totp")
         }
-        rateLimiter.recordSuccess()
+        rateLimiter.recordSuccess(client)
         StaffTotp.update({ StaffTotp.userId eq uid }) {
             it[StaffTotp.lastStep] = step // replay guard: this 30s window can't be reused
             if (row[StaffTotp.activatedAt] == null) it[activatedAt] = VenueClock.now()
@@ -346,16 +366,16 @@ class AuthService(
     }
 
     /** Staff change their own PIN; current PIN re-verified, attempts rate-limited. */
-    fun changePin(userId: String, currentPin: String, newPin: String) {
+    fun changePin(userId: String, currentPin: String, newPin: String, client: PinClient = PinClient.LOCAL) {
         require(newPin.length == 4 && newPin.all { it.isDigit() }) { "PIN must be 4 digits" }
-        rateLimiter.checkNotLocked()
+        rateLimiter.checkNotLocked(client)
         // bcrypt outside the transaction (see userIdByPin)
         val current = transaction { Users.selectAll().where { Users.id eq userId }.first()[Users.pin] }
         if (!verifyPin(currentPin, current)) {
-            rateLimiter.recordFailure()
+            rateLimiter.recordFailure(client)
             throw IllegalArgumentException("current PIN is incorrect")
         }
-        rateLimiter.recordSuccess()
+        rateLimiter.recordSuccess(client)
         val hashed = hashPin(newPin)
         transaction {
             Users.update({ Users.id eq userId }) { it[pin] = hashed }
@@ -368,12 +388,13 @@ class AuthService(
     /**
      * Inline manager approval: a manager taps their PIN into the modal on the
      * staff member's screen. Returns the approver's user id, or null.
-     * Shares the terminal-wide rate limit with login.
+     * Shares the per-client rate limit with login.
      */
-    fun verifyManagerPin(pin: String): String? {
-        rateLimiter.checkNotLocked()
+    fun verifyManagerPin(pin: String, client: PinClient = PinClient.LOCAL): String? {
+        rateLimiter.checkNotLocked(client)
         val manager = userIdByPin(pin) { it[Users.role] == "MANAGER" }
-        if (manager == null) rateLimiter.recordFailure() else rateLimiter.recordSuccess()
+        refuseManagerOffPos(manager, client)
+        if (manager == null) rateLimiter.recordFailure(client) else rateLimiter.recordSuccess(client)
         return manager
     }
 
@@ -381,15 +402,16 @@ class AuthService(
      * Grant-aware inline approval (CONTRACT §7): the entered PIN must belong to an
      * active staff member who has [permission] effectively granted (a manager by
      * default, but the owner can revoke or grant it). Returns the approver's id or
-     * null. Shares the terminal-wide rate limit with login.
+     * null. Shares the per-client rate limit with login.
      */
-    fun verifyApproverPin(pin: String?, permission: String): String? {
+    fun verifyApproverPin(pin: String?, permission: String, client: PinClient = PinClient.LOCAL): String? {
         if (pin == null) return null
-        rateLimiter.checkNotLocked()
+        rateLimiter.checkNotLocked(client)
         // only the staff who hold the grant are candidates: one or two bcrypt
         // checks, where this used to check the PIN against every staff member
         val approver = userIdByPin(pin) { GrantsRepo.has(it[Users.id], permission) }
-        if (approver == null) rateLimiter.recordFailure() else rateLimiter.recordSuccess()
+        refuseManagerOffPos(approver, client)
+        if (approver == null) rateLimiter.recordFailure(client) else rateLimiter.recordSuccess(client)
         return approver
     }
 
@@ -408,6 +430,13 @@ class AuthService(
         surface = surface,
     )
 }
+
+/**
+ * Demo mode: a manager PIN entered anywhere but the POS itself (a phone on the
+ * Wi-Fi, the staff app, the kitchen screen). → 403 `manager_pos_only`.
+ */
+class ManagerOnPosOnlyException :
+    RuntimeException("managers sign in and approve on the POS itself in demo mode")
 
 @Serializable
 data class AuthUser(

@@ -25,10 +25,18 @@ object Totp {
         return hotp(base32Decode(secret), counter)
     }
 
-    fun verify(secret: String, code: String, epochSeconds: Long = System.currentTimeMillis() / 1000): Boolean {
+    fun verify(secret: String, code: String, epochSeconds: Long = System.currentTimeMillis() / 1000): Boolean =
+        matchingStep(secret, code, epochSeconds) != null
+
+    /**
+     * The 30 s step [code] belongs to (within ±1 step of now), or null. Sign-in
+     * stores it per user and refuses any code whose step is not later than the
+     * last accepted one, so each code is single-use (no replay).
+     */
+    fun matchingStep(secret: String, code: String, epochSeconds: Long = System.currentTimeMillis() / 1000): Long? {
         val key = base32Decode(secret)
         val counter = epochSeconds / STEP_SECONDS
-        return (-1L..1L).any { drift -> hotp(key, counter + drift) == code }
+        return (-1L..1L).map { counter + it }.firstOrNull { hotp(key, it) == code }
     }
 
     fun otpauthUri(issuer: String, account: String, secret: String): String {

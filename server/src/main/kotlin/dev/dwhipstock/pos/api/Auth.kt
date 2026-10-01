@@ -3,6 +3,8 @@ package dev.dwhipstock.pos.api
 import dev.dwhipstock.pos.base.AuthService
 import dev.dwhipstock.pos.base.AuthUser
 import dev.dwhipstock.pos.base.DeviceRegistry
+import dev.dwhipstock.pos.base.PinClient
+import dev.dwhipstock.pos.base.SessionSurface
 import dev.dwhipstock.pos.base.Users
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
@@ -95,13 +97,17 @@ fun Application.installAuthGate(auth: AuthService, requireDeviceToken: Boolean =
         if (presented != null && !presented.revoked) call.attributes.put(PairedDeviceKey, presented)
 
         if (requireDeviceToken && isTerminalPreAuthRoute(path, method)) {
-            val device = call.attributes.getOrNull(PairedDeviceKey)
+            val device = staffTerminal(call)
             if (device == null) {
                 call.respond(HttpStatusCode.Unauthorized, deviceError(presented))
                 return@intercept finish()
             }
         }
-        if (isOpenRoute(path, method)) {
+        // the login-screen staff tiles name every staff member and role: open to the
+        // store's own counter only (the tablet on loopback, or a paired terminal) —
+        // a phone on the guest Wi-Fi needs a signed-in session to read them
+        val staffTilesForCounter = method == HttpMethod.Get && path == "/staff" && call.pinClient().trusted
+        if (staffTilesForCounter || isOpenRoute(path, method)) {
             call.attributes.getOrNull(PairedDeviceKey)?.let { DeviceRegistry.touch(it.id) }
             return@intercept
         }
@@ -141,6 +147,19 @@ fun Application.installAuthGate(auth: AuthService, requireDeviceToken: Boolean =
     }
 }
 
+/**
+ * The paired device on this call when it is a staff terminal. A self-order
+ * kiosk's token (quick-serve) only opens the /kiosk routes: it never counts
+ * as a terminal for the PIN login, the staff tiles or the staff-app login.
+ */
+private fun staffTerminal(call: ApplicationCall): DeviceRegistry.PairedDevice? =
+    call.attributes.getOrNull(PairedDeviceKey)?.takeUnless { d ->
+        transaction {
+            !dev.dwhipstock.pos.restaurant.KioskDevices.selectAll()
+                .where { dev.dwhipstock.pos.restaurant.KioskDevices.deviceId eq d.id }.empty()
+        }
+    }
+
 /** device_revoked tells the terminal to wipe its pairing and re-pair; device_required just to pair. */
 private fun deviceError(presented: DeviceRegistry.PairedDevice?): Map<String, String> =
     if (presented?.revoked == true)
@@ -179,7 +198,6 @@ private fun isOpenRoute(path: String, method: HttpMethod): Boolean =
         // the menu's change counter: guest, kiosk and staff menus poll it to refresh
         (method == HttpMethod.Get && path == "/menu/version") ||
         (method == HttpMethod.Get && path == "/categories") ||
-        (method == HttpMethod.Get && path == "/staff") ||
         (method == HttpMethod.Get && path.matches(Regex("/photos/[^/]+"))) ||
         // printable slip pages: opened in a browser with a short-lived ?ticket= (checked in the route)
         (method == HttpMethod.Get && path.matches(Regex("/tables/[^/]+/slip"))) ||
@@ -198,7 +216,8 @@ private fun isOpenRoute(path: String, method: HttpMethod): Boolean =
         path.startsWith("/kiosk/")
 
 fun Route.authRoutes(auth: AuthService) {
-    /** Open: the login screen shows staff tiles ("who's clocking in?"). Names only, no PINs. */
+    /** The login screen's staff tiles ("who's clocking in?"). Names only, no PINs. Open to the
+     *  store's own counter (loopback / paired terminal); anyone else needs a session (see the gate). */
     get("/staff") {
         val staff = transaction {
             Users.selectAll()
@@ -213,7 +232,7 @@ fun Route.authRoutes(auth: AuthService) {
         val req = call.receive<LoginRequest>()
         // bind the session to the paired device presenting the login (M8); on
         // non-enforcing (on-prem) stores this stays null and nothing changes
-        val user = auth.login(req.pin, call.attributes.getOrNull(PairedDeviceKey)?.id)
+        val user = auth.login(req.pin, call.attributes.getOrNull(PairedDeviceKey)?.id, call.pinClient())
         if (user == null) {
             call.respond(HttpStatusCode.Unauthorized,
                 mapOf("error" to "invalid PIN", "code" to "invalid_pin"))
@@ -228,7 +247,7 @@ fun Route.authRoutes(auth: AuthService) {
     post("/staff-app/login") {
         val req = call.receive<StaffAppLoginRequest>()
         val tokens = (req.deviceTokens ?: emptyList()) + listOfNotNull(req.deviceToken)
-        val r = auth.staffAppBegin(req.pin, tokens)
+        val r = auth.staffAppBegin(req.pin, tokens, call.pinClient())
             ?: return@post call.respond(HttpStatusCode.Unauthorized,
                 mapOf("error" to "invalid PIN", "code" to "invalid_pin"))
         call.respond(StaffAppLoginResponse(
@@ -240,7 +259,7 @@ fun Route.authRoutes(auth: AuthService) {
     post("/staff-app/totp") {
         val req = call.receive<StaffAppTotpRequest>()
         // bad PIN → null → 401; bad code → BadRequestException(invalid_totp)
-        val session = auth.staffAppTotp(req.pin, req.code)
+        val session = auth.staffAppTotp(req.pin, req.code, call.pinClient())
             ?: return@post call.respond(HttpStatusCode.Unauthorized,
                 mapOf("error" to "invalid PIN", "code" to "invalid_pin"))
         call.respond(session)
@@ -267,7 +286,7 @@ fun Route.authRoutes(auth: AuthService) {
 
     patch("/me/pin") {
         val req = call.receive<ChangePinRequest>()
-        auth.changePin(call.sessionUser().userId, req.currentPin, req.newPin)
+        auth.changePin(call.sessionUser().userId, req.currentPin, req.newPin, call.pinClient())
         call.respond(mapOf("ok" to "true"))
     }
 
@@ -281,8 +300,8 @@ fun Route.authRoutes(auth: AuthService) {
         // grant-aware when the action's permission is supplied (the approver must be
         // able to do the very thing being approved); else the legacy manager check.
         val approverId = if (req.permission != null)
-            auth.verifyApproverPin(req.pin, req.permission) ?: throw ManagerApprovalException()
-        else requireManagerApproval(auth, req.pin)
+            auth.verifyApproverPin(req.pin, req.permission, call.pinClient()) ?: throw ManagerApprovalException()
+        else requireManagerApproval(auth, req.pin, call)
         call.respond(mapOf("approverId" to approverId))
     }
 
@@ -295,9 +314,17 @@ fun Route.authRoutes(auth: AuthService) {
 /** The logged-in user for this request (present on all gated routes). */
 fun ApplicationCall.sessionUser(): AuthUser = attributes[SessionUserKey]
 
+/**
+ * Who is typing a PIN on this call, for the per-client PIN rate limit: the
+ * paired device presenting it, else the direct peer (never X-Forwarded-For —
+ * the store is reached directly on the LAN and a guest could forge the header).
+ */
+fun ApplicationCall.pinClient(): PinClient =
+    PinClient.of(attributes.getOrNull(PairedDeviceKey)?.id, request.local.remoteAddress)
+
 /** Verify an inline manager PIN; returns the approving manager's user id. */
-fun requireManagerApproval(auth: AuthService, managerPin: String?): String =
-    managerPin?.let { auth.verifyManagerPin(it) } ?: throw ManagerApprovalException()
+fun requireManagerApproval(auth: AuthService, managerPin: String?, call: ApplicationCall): String =
+    managerPin?.let { auth.verifyManagerPin(it, call.pinClient()) } ?: throw ManagerApprovalException()
 
 /**
  * The AI actions (menu setup, translate, AI photos): a manager's own session
@@ -307,7 +334,7 @@ fun requireManagerApproval(auth: AuthService, managerPin: String?): String =
 fun requireManagerOrPin(auth: AuthService, call: ApplicationCall, managerPin: String?): String {
     val actor = call.attributes.getOrNull(SessionUserKey)
     if (actor?.role == "MANAGER") return actor.userId
-    return requireManagerApproval(auth, managerPin?.takeIf { it.isNotBlank() })
+    return requireManagerApproval(auth, managerPin?.takeIf { it.isNotBlank() }, call)
 }
 
 /**
@@ -320,12 +347,36 @@ fun requireManagerOrPin(auth: AuthService, call: ApplicationCall, managerPin: St
 fun requireGrant(auth: AuthService, call: ApplicationCall, permission: String, managerPin: String?): String {
     val actor = call.sessionUser()
     if (auth.hasGrant(actor.userId, permission)) return actor.userId
-    return auth.verifyApproverPin(managerPin, permission) ?: throw ManagerApprovalException()
+    return auth.verifyApproverPin(managerPin, permission, call.pinClient()) ?: throw ManagerApprovalException()
 }
 
 /** Manager-session gate (settings, catalog editing): the whole screen is manager-only. */
 fun requireManagerSession(call: ApplicationCall) {
     if (call.sessionUser().role != "MANAGER") throw ManagerApprovalException("manager session required")
+}
+
+/** A route that is not for the staff phone app / kitchen screen. → 403 `pos_terminal_required` */
+class PosTerminalRequiredException(message: String = "this action is only available on the POS terminal") :
+    RuntimeException(message)
+
+/**
+ * The POS terminal's own session (signed in through /login), not a staff-app or
+ * kitchen-screen bearer: those are PIN-only phones on the venue Wi-Fi.
+ */
+fun requireTerminalSession(call: ApplicationCall) {
+    if (call.sessionUser().surface != SessionSurface.POS) throw PosTerminalRequiredException()
+}
+
+/**
+ * A manager signed in on the POS itself: a POS-surface manager session, called
+ * from the store's own counter (the tablet on loopback, or a paired terminal).
+ * For what must never be reachable from a phone on the Wi-Fi, e.g. reprinting
+ * the demo sheet (it prints the portal password).
+ */
+fun requireManagerOnPos(call: ApplicationCall) {
+    requireManagerSession(call)
+    requireTerminalSession(call)
+    if (!call.pinClient().trusted) throw PosTerminalRequiredException("only on the store's own POS tablet")
 }
 
 /**

@@ -1,7 +1,16 @@
 package dev.dwhipstock.pos.aiphotos
 
+import dev.dwhipstock.pos.aimenu.AiCaller
+import dev.dwhipstock.pos.aimenu.AiRequestLog
+import dev.dwhipstock.pos.aimenu.AiRequests
+import dev.dwhipstock.pos.aimenu.RateLimiter
 import dev.dwhipstock.pos.sdk.ImageGenConfig
+import dev.dwhipstock.pos.sdk.VenueClock
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -76,6 +85,7 @@ class AiPhotoService(
     private val candidates = ConcurrentHashMap<String, Candidate>()
 
     @Volatile private var probe: Pair<Boolean, Long>? = null
+    private val limiter = RateLimiter(now = now)
 
     companion object {
         const val DEFAULT_COUNT = 3
@@ -85,6 +95,9 @@ class AiPhotoService(
         private const val MAX_CANDIDATES = 24
         private const val PROBE_TTL_MS = 20_000L
         const val OFFLINE = "image_offline"
+        /** Today's AI image budget ([ImageGenConfig.Resolved.dailyImageLimit]) is used up. */
+        const val DAILY_LIMIT = "image_daily_limit"
+        private val PHOTO_KINDS = listOf("photo_generate", "photo_enhance")
 
         fun tcpReachable(host: String): Boolean = runCatching {
             Socket().use { it.connect(InetSocketAddress(host, 443), 1_500) }
@@ -129,32 +142,78 @@ class AiPhotoService(
 
     private fun clampCount(count: Int?) = (count ?: DEFAULT_COUNT).coerceIn(MIN_COUNT, MAX_COUNT)
 
-    fun generate(itemId: String, item: ItemFacts, count: Int? = null): AiPhotoCandidates {
+    fun generate(itemId: String, item: ItemFacts, count: Int? = null, who: AiCaller? = null): AiPhotoCandidates {
         val p = requireProvider()
         val n = clampCount(count)
-        return run(itemId, p, PhotoSource.AI_GENERATED, n) { p.generate(PhotoPrompts.generate(item, style), n) }
+        return run(itemId, p, PhotoSource.AI_GENERATED, n, who) { p.generate(PhotoPrompts.generate(item, style), n) }
     }
 
-    fun enhance(itemId: String, item: ItemFacts, photo: ByteArray, contentType: String, count: Int? = null): AiPhotoCandidates {
+    fun enhance(
+        itemId: String, item: ItemFacts, photo: ByteArray, contentType: String, count: Int? = null, who: AiCaller? = null,
+    ): AiPhotoCandidates {
         val p = requireProvider()
         val n = clampCount(count)
-        return run(itemId, p, PhotoSource.AI_ENHANCED, n) {
+        return run(itemId, p, PhotoSource.AI_ENHANCED, n, who) {
             p.enhance(photo, contentType, PhotoPrompts.enhance(item, style), n)
         }
     }
 
+    /** Images being made right now (counted against today's limit before they are logged). */
+    private var inFlight = 0
+
+    /** AI images made today (the AI log's photo lines), from the store's own log so a restart keeps the count. */
+    private fun usedToday(): Int = runCatching {
+        transaction {
+            val since = VenueClock.startOfDay(VenueClock.today())
+            AiRequests.selectAll().where {
+                (AiRequests.kind inList PHOTO_KINDS) and (AiRequests.outcome eq "proposed") and
+                    (AiRequests.createdAt greaterEq since)
+            }.sumOf { it[AiRequests.changes] }
+        }
+    }.getOrDefault(0)
+
+    /** Reserves [n] images of today's budget, or throws 429 image_daily_limit. */
+    private fun reserve(n: Int) = synchronized(this) {
+        val limit = config.dailyImageLimit
+        if (usedToday() + inFlight + n > limit) throw ImageGenException(429, DAILY_LIMIT,
+            "today's AI photo limit is reached ($limit images a day)")
+        inFlight += n
+    }
+
+    private fun release(n: Int) = synchronized(this) { inFlight = (inFlight - n).coerceAtLeast(0) }
+
     private fun run(
-        itemId: String, p: ImageProvider, source: PhotoSource, n: Int, call: () -> List<GeneratedImage>,
+        itemId: String, p: ImageProvider, source: PhotoSource, n: Int, who: AiCaller?, call: () -> List<GeneratedImage>,
     ): AiPhotoCandidates {
+        val kind = if (source == PhotoSource.AI_ENHANCED) "photo_enhance" else "photo_generate"
+        // the same limits as the AI menu: per manager, user and device; then the store's daily image budget
+        try {
+            if (who != null) limiter.admit(listOfNotNull("manager:${who.approverId}", "user:${who.userId}",
+                who.deviceId?.let { "device:$it" }))
+            reserve(n)
+        } catch (e: ImageGenException) {
+            AiRequestLog.record(who, kind, if (e.code == DAILY_LIMIT) DAILY_LIMIT else "rate_limited")
+            log.info("AI photo ${source.wire} for $itemId: ${e.code}")
+            throw e
+        }
         val started = now()
         val images = try {
             call()
         } catch (e: ImageGenException) {
+            release(n)
             if (e.code == ImageGenException.UNAVAILABLE) markOffline()
             log.info("AI photo ${source.wire} for $itemId via ${p.id} failed: ${e.code} ${e.message}")
+            AiRequestLog.record(who, kind, e.code, elapsedMs = now() - started)
+            throw e
+        } catch (e: RuntimeException) {
+            release(n)
             throw e
         }
         val elapsed = now() - started
+        // logged as made (and counted against today's limit) whether or not a caller is known
+        AiRequestLog.record(who ?: AiCaller("system", "system"), kind, "proposed", images.size.coerceAtMost(n),
+            elapsedMs = elapsed)
+        release(n)
         sweep()
         val batch = UUID.randomUUID().toString()
         val dtos = images.take(n).map { img ->

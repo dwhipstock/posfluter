@@ -10,6 +10,7 @@ import '../forecourt/forecourt_i18n.dart';
 import '../forecourt/food_panel.dart';
 import '../forecourt/pump_grid.dart';
 import '../i18n.dart';
+import '../text_utils.dart';
 import '../menu_changes.dart';
 import '../payments/terminal_settings.dart';
 import '../screens/login_screen.dart';
@@ -907,12 +908,7 @@ class _RetailScreenState extends State<RetailScreen> {
                   radius: 20,
                   backgroundColor: c.sage,
                   child: Text(
-                    (user?.name ?? '?')
-                        .split(RegExp(r'\s+'))
-                        .where((w) => w.isNotEmpty)
-                        .take(2)
-                        .map((w) => w[0].toUpperCase())
-                        .join(),
+                    initialsOf(user?.name),
                     style: s.text(
                       size: 15,
                       weight: FontWeight.w800,
@@ -1074,12 +1070,7 @@ class _RetailScreenState extends State<RetailScreen> {
     final s = BrandSkin.of(context);
     final g = s.glyphs;
     final user = Api.currentUser;
-    final initials = (user?.name ?? '?')
-        .split(RegExp(r'\s+'))
-        .where((w) => w.isNotEmpty)
-        .take(2)
-        .map((w) => w[0].toUpperCase())
-        .join();
+    final initials = initialsOf(user?.name);
     return Container(
       width: 92,
       color: c.surface,

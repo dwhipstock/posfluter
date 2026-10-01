@@ -7,11 +7,13 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../text_utils.dart';
 import '../kitchen/kitchen_banner.dart';
 import '../kitchen/kitchen_i18n.dart';
 import '../menu_changes.dart';
 import '../widgets/menu_change_dialogs.dart';
 import '../quickserve/quick_serve_i18n.dart';
+import '../retail/age_check_dialog.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/print_language_picker.dart';
@@ -283,6 +285,35 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
+  }
+
+  /// Alcohol (any age-restricted line, e.g. a kiosk order's beer at the
+  /// counter) is paid only after an ID check: the same check as the shop's
+  /// register (scan, or date of birth with "I have seen the ID"); the store
+  /// records only the outcome and refuses the payment without it. A failed
+  /// check takes the restricted items off; the rest of the order is paid.
+  /// True when payment can go ahead.
+  Future<bool> _idChecked(Check check) async {
+    if (!check.ageCheckRequired || check.ageCleared) return true;
+    final result = await AgeCheckDialog.show(
+      context,
+      saleId: check.id,
+      legalAge: StoreProfile.current.legalAge,
+      looksOver: StoreProfile.current.looksOverAge,
+    );
+    if (result == null || !mounted) return false;
+    if (result.passed) {
+      setState(() => _check = result.check);
+      return result.check.ageCleared;
+    }
+    await _guarded(() async {
+      var c = result.check;
+      for (final l in c.lines.where((l) => l.ageRestricted).toList()) {
+        c = await Api.removeLine(_checkId, l.id);
+      }
+      return c;
+    });
+    return false;
   }
 
   Future<void> _guarded(Future<Check> Function() op) async {
@@ -1073,11 +1104,18 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          item.variants.length == 1
-                              ? money(item.variants.first.priceCents)
-                              : '${money(item.variants.first.priceCents)}+',
-                          style: T.price(size: 18, weight: FontWeight.w700),
+                        // a huge price shrinks to fit the tile, never clips
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              item.variants.length == 1
+                                  ? money(item.variants.first.priceCents)
+                                  : '${money(item.variants.first.priceCents)}+',
+                              style: T.price(size: 18, weight: FontWeight.w700),
+                            ),
+                          ),
                         ),
                         if (inactive) const Pill('86', color: T.destructive),
                       ],
@@ -1107,10 +1145,16 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // a VIP name can be 100 chars (and older ones may
+                      // hold line breaks): one line of text, 2 rows max
                       Text(
-                        widget.counterOrder
-                            ? widget.tableLabel
-                            : '${l.table} ${widget.tableLabel}',
+                        oneLine(
+                          widget.counterOrder
+                              ? widget.tableLabel
+                              : '${l.table} ${widget.tableLabel}',
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: T.text(
                           size: 22,
                           weight: FontWeight.w700,
@@ -1266,12 +1310,20 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       l.total,
                       style: T.text(size: 20, weight: FontWeight.w600),
                     ),
-                    Text(
-                      money(check.grandTotalCents),
-                      style: T.price(
-                        size: T.priceBigSize,
-                        weight: FontWeight.w700,
-                        color: T.navy,
+                    const SizedBox(width: 12),
+                    // a seven-figure total shrinks rather than overflowing
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          money(check.grandTotalCents),
+                          style: T.price(
+                            size: T.priceBigSize,
+                            weight: FontWeight.w700,
+                            color: T.navy,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -1387,11 +1439,14 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                       !widget.counterOrder) {
                                     unawaited(KitchenApi.sendQuietly(_checkId));
                                   }
+                                  if (!await _idChecked(check) || !mounted) {
+                                    return;
+                                  }
                                   final closed = await Navigator.of(context)
                                       .push<bool>(
                                         MaterialPageRoute(
                                           builder: (_) => TenderScreen(
-                                            check: check,
+                                            check: _check ?? check,
                                             counterOrder: widget.counterOrder,
                                           ),
                                         ),

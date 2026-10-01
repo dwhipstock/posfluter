@@ -7,6 +7,7 @@ import '../design/skin.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../text_utils.dart';
 import '../widgets/brand.dart';
 import '../widgets/open_shift_prompt.dart';
 import '../widgets/pin_pad.dart';
@@ -373,12 +374,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final c = SpColors.of(context);
     final s = BrandSkin.of(context);
     final on = _selected == x.id;
-    final initials = x.name
-        .split(RegExp(r'\s+'))
-        .where((w) => w.isNotEmpty)
-        .take(2)
-        .map((w) => w[0].toUpperCase())
-        .join();
+    final initials = initialsOf(x.name);
     return Material(
       color: on ? c.selectedFill : c.surface,
       shape: const StadiumBorder(),

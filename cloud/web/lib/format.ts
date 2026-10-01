@@ -6,8 +6,20 @@ export function hourLabel(h: number): string {
   return `${String(h).padStart(2, "0")}:00`;
 }
 
+/**
+ * The API sends integer cents, but a computed figure (an average, a share)
+ * can reach the formatters fractional: round it first, or "1234.5" cents
+ * prints as "$12.34.5". Non-finite → 0.
+ */
+function wholeCents(cents: number): number {
+  if (!Number.isFinite(cents)) return 0;
+  const r = Math.round(cents);
+  return r === 0 ? 0 : r; // no "-$0.00" from -0
+}
+
 // "$1,234" — cents shown only when nonzero.
 export function cad(cents: number): string {
+  cents = wholeCents(cents);
   const neg = cents < 0;
   const abs = Math.abs(cents);
   const whole = Math.floor(abs / 100).toLocaleString("en-US");
@@ -88,6 +100,7 @@ export function money(
             : [String(Math.round(abs)), ""];
     return `${sign}${currencySymbol(cur, unambiguous)}${num}${unit}`;
   }
+  cents = wholeCents(cents);
   const neg = cents < 0;
   const abs = Math.abs(cents);
   const whole = Math.floor(abs / 100);
@@ -106,6 +119,7 @@ export function moneyCents(
   opts?: { unambiguous?: boolean; locale?: MoneyLocale }
 ): string {
   const cur = currency || "CAD";
+  cents = wholeCents(cents);
   const neg = cents < 0;
   const abs = Math.abs(cents);
   const whole = Math.floor(abs / 100);

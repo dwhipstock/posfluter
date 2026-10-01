@@ -460,9 +460,13 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
           ),
           if (isManager) ...[
             IconButton(
-              tooltip: q.pairKiosk,
+              key: const Key('kiosks'),
+              tooltip: q.kiosks,
               icon: const Icon(LucideIcons.tabletSmartphone),
-              onPressed: _pairKiosk,
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => KiosksDialog(onPair: _pairKiosk),
+              ),
             ),
             IconButton(
               tooltip: l.settings,
@@ -508,6 +512,130 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The manager's kiosks: the ones paired with this store, each with Unpair
+/// (a lost, stolen or replaced kiosk stops taking orders at once, no portal
+/// or internet needed), and Pair a kiosk for a new one.
+class KiosksDialog extends StatefulWidget {
+  final Future<void> Function() onPair;
+  const KiosksDialog({super.key, required this.onPair});
+
+  @override
+  State<KiosksDialog> createState() => _KiosksDialogState();
+}
+
+class _KiosksDialogState extends State<KiosksDialog> {
+  List<PairedKiosk>? _kiosks;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    try {
+      final k = await QuickServeApi.kiosks();
+      if (mounted) {
+        setState(() {
+          _kiosks = k;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = e);
+    }
+  }
+
+  Future<void> _unpair(PairedKiosk k) async {
+    final q = Q.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(q.unpairTitle(k.name)),
+        content: Text(q.unpairBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(L.of(context).cancel),
+          ),
+          FilledButton(
+            key: const Key('unpair-confirm'),
+            style: FilledButton.styleFrom(backgroundColor: T.destructive),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(q.unpair),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final left = await QuickServeApi.unpairKiosk(k.deviceId);
+      if (!mounted) return;
+      setState(() => _kiosks = left);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(q.unpaired(k.name))));
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+      _reload();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = Q.of(context);
+    final kiosks = _kiosks;
+    return AlertDialog(
+      title: Text(q.kiosks),
+      content: SizedBox(
+        width: 480,
+        child: _error != null
+            ? Text('$_error')
+            : kiosks == null
+            ? const Center(child: CircularProgressIndicator())
+            : kiosks.isEmpty
+            ? Text(q.noKiosks, key: const Key('no-kiosks'))
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final k in kiosks)
+                    ListTile(
+                      key: Key('paired-kiosk-${k.deviceId}'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(LucideIcons.tabletSmartphone),
+                      title: Text(k.name),
+                      trailing: OutlinedButton(
+                        key: Key('unpair-${k.deviceId}'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: T.destructive,
+                        ),
+                        onPressed: () => _unpair(k),
+                        child: Text(q.unpair),
+                      ),
+                    ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(MaterialLocalizations.of(context).closeButtonLabel),
+        ),
+        FilledButton.icon(
+          key: const Key('pair-kiosk'),
+          onPressed: () async {
+            await widget.onPair();
+            _reload();
+          },
+          icon: const Icon(LucideIcons.plus),
+          label: Text(q.pairKiosk),
+        ),
+      ],
     );
   }
 }

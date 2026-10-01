@@ -1458,13 +1458,18 @@ class Api {
   static Future<RoomLayoutApplyResult> floorEditApply(
     String zoneId,
     String proposalId,
-    String managerPin,
-  ) async {
+    String managerPin, {
+    bool confirmed = false,
+  }) async {
     final res = await _send(
       () => http.post(
         Uri.parse('$baseUrl/zones/$zoneId/ai-edit/apply'),
         headers: _headers,
-        body: jsonEncode({'managerPin': managerPin, 'proposalId': proposalId}),
+        body: jsonEncode({
+          'managerPin': managerPin,
+          'proposalId': proposalId,
+          'confirmed': confirmed,
+        }),
       ),
       operation: 'POST ai-edit/apply',
     );
@@ -1488,8 +1493,9 @@ class Api {
   }
 
   /// Apply the ticked changes (through the store's usual menu code).
-  /// [confirmed]: the manager confirmed a bulk change (more than 10 removals
-  /// or price changes); the store refuses a bulk Apply without it.
+  /// [confirmed]: the manager confirmed a big change ([MenuProposal.bulk]: many
+  /// removals, price changes or items taken off the till, or a steep price
+  /// cut); the store refuses such an Apply without it.
   static Future<MenuApplyResult> menuAiApply(
     String proposalId,
     List<String> changeIds,
@@ -2577,6 +2583,9 @@ class RoomLayoutProposal {
   final String? transcript;
   final List<FloorChange> changes;
   final List<String> removedTables, removedObjects;
+
+  /// Many removals: the store wants one more explicit yes before Apply.
+  final bool bulk;
   const RoomLayoutProposal({
     required this.proposalId,
     required this.zoneId,
@@ -2594,6 +2603,7 @@ class RoomLayoutProposal {
     this.changes = const [],
     this.removedTables = const [],
     this.removedObjects = const [],
+    this.bulk = false,
   });
   factory RoomLayoutProposal.fromJson(
     Map<String, dynamic> j,
@@ -2621,6 +2631,7 @@ class RoomLayoutProposal {
         .toList(),
     removedTables: ((j['removedTables'] as List?) ?? const []).cast<String>(),
     removedObjects: ((j['removedObjects'] as List?) ?? const []).cast<String>(),
+    bulk: j['bulk'] == true,
   );
 }
 

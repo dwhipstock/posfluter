@@ -403,7 +403,7 @@ fun Application.module(
     staffAppMfa.warning?.let { log.warn("Staff app MFA config ignored: $it") }
     val effectiveMfa = demoMode.staffAppMfa(staffAppMfa)
     log.info(effectiveMfa.describe())
-    val authService = AuthService(settingsRepo, effectiveMfa.required)
+    val authService = AuthService(settingsRepo, effectiveMfa.required, demoMode = demoMode.on)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
     val aiPhotos = dev.dwhipstock.pos.aiphotos.AiPhotoService(
         imageGenConfig, config.brand,
@@ -500,6 +500,14 @@ fun Application.module(
             call.respond(HttpStatusCode.Unauthorized,
                 mapOf("error" to "open the slips from the tablet", "code" to "slip_ticket_required"))
         }
+        exception<dev.dwhipstock.pos.base.ManagerOnPosOnlyException> { call, cause ->
+            call.respond(HttpStatusCode.Forbidden,
+                mapOf("error" to (cause.message ?: "managers sign in on the POS"), "code" to "manager_pos_only"))
+        }
+        exception<dev.dwhipstock.pos.api.PosTerminalRequiredException> { call, cause ->
+            call.respond(HttpStatusCode.Forbidden,
+                mapOf("error" to (cause.message ?: "POS terminal required"), "code" to "pos_terminal_required"))
+        }
         exception<ManagerApprovalException> { call, cause ->
             call.respond(HttpStatusCode.Forbidden,
                 mapOf("error" to (cause.message ?: "manager approval required"),
@@ -533,6 +541,23 @@ fun Application.module(
             call.response.header(HttpHeaders.RetryAfter, cause.retryAfterSeconds.toString())
             call.respond(HttpStatusCode.TooManyRequests,
                 mapOf("error" to (cause.message ?: "rate limited"), "code" to "rate_limited"))
+        }
+        // a kiosk (or any keyed flood guard) sending faster than a person could
+        exception<dev.dwhipstock.pos.base.TooManyRequestsException> { call, cause ->
+            call.response.header(HttpHeaders.RetryAfter, cause.retryAfterSeconds.toString())
+            call.respond(HttpStatusCode.TooManyRequests,
+                mapOf("error" to (cause.message ?: "rate limited"), "code" to "rate_limited"))
+        }
+        // a body Ktor could not read as the route's type (not JSON, a missing
+        // or mistyped field, a bad parameter): the caller's mistake, a calm 400
+        // with no stack trace in the log
+        exception<io.ktor.server.plugins.BadRequestException> { call, _ ->
+            call.respond(HttpStatusCode.BadRequest,
+                mapOf("error" to "malformed request", "code" to "bad_body"))
+        }
+        exception<io.ktor.server.plugins.ContentTransformationException> { call, _ ->
+            call.respond(HttpStatusCode.BadRequest,
+                mapOf("error" to "malformed request body", "code" to "bad_body"))
         }
         exception<IllegalArgumentException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest,

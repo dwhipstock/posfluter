@@ -2411,6 +2411,16 @@ class L {
     'Bitte alle Felder ausfüllen',
     'Vul alle velde in',
   );
+
+  /// A money box holds something that isn't dollars and cents. The example
+  /// stays North American ($12.99) in every language — that's how it's typed.
+  String get invalidMoneyAmount => _t(
+    'Montant invalide : entrez par ex. 12.99 (point pour les cents)',
+    'Invalid amount: enter e.g. 12.99',
+    'Importe no válido: escribe p. ej. 12.99 (punto para los centavos)',
+    'Ungültiger Betrag: z. B. 12.99 eingeben (Punkt vor den Cents)',
+    'Ongeldige bedrag: tik bv. 12.99 (punt voor die sente)',
+  );
   String get editCategories => _t(
     'Gérer les catégories',
     'Edit categories',
@@ -2871,6 +2881,27 @@ class L {
     'Es un cambio grande: $removes producto(s) eliminado(s) y $prices precio(s) cambiado(s). ¿Aplicar de todos modos?',
     'Das ist eine große Änderung: $removes Artikel entfernt und $prices Preis(e) geändert. Trotzdem übernehmen?',
     'Dit is ’n groot verandering: $removes item(s) verwyder en $prices prys(e) verander. Pas in elk geval toe?',
+  );
+  String get aiMenuBigChangeConfirm => _t(
+    'C’est un gros changement : des produits retirés de la caisse ou des prix réduits de moitié ou plus. Appliquer quand même ?',
+    'This is a big change: items taken off the till, or prices cut by half or more. Apply anyway?',
+    'Es un cambio grande: productos retirados de la caja o precios rebajados a la mitad o más. ¿Aplicar de todos modos?',
+    'Das ist eine große Änderung: Artikel von der Kasse genommen oder Preise um die Hälfte oder mehr gesenkt. Trotzdem übernehmen?',
+    'Dit is ’n groot verandering: items van die kasregister afgehaal, of pryse met die helfte of meer verlaag. Pas in elk geval toe?',
+  );
+  String floorEditBulkConfirm(int n) => _t(
+    'L’IA retirerait $n table(s) ou élément(s) de cette salle. Appliquer quand même ?',
+    'The AI would remove $n table(s) or object(s) from this room. Apply anyway?',
+    'La IA quitaría $n mesa(s) o elemento(s) de esta sala. ¿Aplicar de todos modos?',
+    'Die KI würde $n Tisch(e) oder Element(e) aus diesem Raum entfernen. Trotzdem übernehmen?',
+    'Die KI sou $n tafel(s) of voorwerp(e) uit hierdie vertrek verwyder. Pas in elk geval toe?',
+  );
+  String get floorEditApplyAnyway => _t(
+    'Appliquer quand même',
+    'Apply anyway',
+    'Aplicar de todos modos',
+    'Trotzdem übernehmen',
+    'Pas in elk geval toe',
   );
   String get aiMenuTranslateDone => _t(
     'Tous les noms sont déjà traduits.',
@@ -3876,6 +3907,13 @@ class L {
       'Das Guthaben des KI-Fotokontos ist aufgebraucht.',
       'Die KI-foto-rekening se krediete is op.',
     ),
+    'image_daily_limit' => _t(
+      'La limite quotidienne de photos IA de ce magasin est atteinte. Réessayez demain.',
+      'This store’s daily AI photo limit is reached. Try again tomorrow.',
+      'Se alcanzó el límite diario de fotos con IA de esta tienda. Inténtalo mañana.',
+      'Das tägliche KI-Fotolimit dieses Geschäfts ist erreicht. Morgen erneut versuchen.',
+      'Hierdie winkel se daaglikse KI-fotolimiet is bereik. Probeer môre weer.',
+    ),
     'image_refused' => _t(
       'Le service de photos IA a refusé cette demande. Modifiez la description et réessayez.',
       'The AI photo service declined this request. Adjust the description and try again.',
@@ -3967,6 +4005,20 @@ class L {
       'Se requiere la aprobación del gerente',
       'Freigabe durch Manager erforderlich',
       'Bestuurder se goedkeuring nodig',
+    ),
+    'manager_pos_only' => _t(
+      'En mode démo, le gérant se connecte seulement sur la tablette du PDV',
+      'In demo mode, managers sign in only on the POS tablet',
+      'En modo demo, el gerente inicia sesión solo en la tableta del TPV',
+      'Im Demo-Modus meldet sich die Leitung nur am Kassen-Tablet an',
+      'In demo-modus meld die bestuurder net op die kassa-tablet aan',
+    ),
+    'pos_terminal_required' => _t(
+      'Seulement sur la caisse (PDV)',
+      'Only on the POS terminal',
+      'Solo en el terminal TPV',
+      'Nur an der Kasse',
+      'Net op die kassa-terminaal',
     ),
     'check_not_open' => _t(
       'Cette addition n’est plus ouverte',
@@ -4227,12 +4279,19 @@ class L {
       'Nicht gefunden',
       'Nie gevind nie',
     ),
-    'bad_request' => _t(
+    'bad_request' || 'bad_body' => _t(
       'Demande invalide',
       'Invalid request',
       'Solicitud no válida',
       'Ungültige Anfrage',
       'Ongeldige versoek',
+    ),
+    'kiosk_not_found' => _t(
+      'Cette borne n’est plus jumelée',
+      'This kiosk is no longer paired',
+      'Este quiosco ya no está vinculado',
+      'Dieses Bestellterminal ist nicht mehr gekoppelt',
+      'Hierdie kiosk is nie meer gekoppel nie',
     ),
     'rate_limited' => _t(
       'Trop de tentatives échouées — réessayez plus tard',

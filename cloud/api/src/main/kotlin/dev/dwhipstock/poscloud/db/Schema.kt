@@ -106,6 +106,8 @@ object PortalUsers : Table("portal_users") {
     val role = text("role").default("owner")
     /** 028: the demo login (DEMO_USER_NAME) — password-only while PORTAL_DEMO_MODE=on, refused otherwise. */
     val isDemo = bool("is_demo").default(false)
+    /** 029: the TOTP step of the last accepted code — a code is single-use (no replay). */
+    val totpLastStep = long("totp_last_step").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -151,6 +153,21 @@ object Events : Table("events") {
     val storeSeq = long("store_seq")
     val storeCreatedAt = timestampWithTimeZone("store_created_at")
     val receivedAt = timestampWithTimeZone("received_at")
+    override val primaryKey = PrimaryKey(tenantId, eventId)
+}
+
+/** An ingested event set aside instead of failing its batch (029); [payload] is the event's JSON as it came. */
+object IngestQuarantine : Table("ingest_quarantine") {
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val eventId = text("event_id")
+    val eventType = text("event_type")
+    val aggregateType = text("aggregate_type")
+    val aggregateId = text("aggregate_id")
+    val storeSeq = long("store_seq")
+    val storeCreatedAt = text("store_created_at")
+    val payload = text("payload")
+    val error = text("error")
     override val primaryKey = PrimaryKey(tenantId, eventId)
 }
 

@@ -82,6 +82,43 @@ class Q {
     'Bestellterminal koppeln',
     'Koppel ’n kiosk',
   );
+  String get kiosks =>
+      _t('Bornes', 'Kiosks', 'Quioscos', 'Bestellterminals', 'Kioske');
+  String get noKiosks => _t(
+    'Aucune borne jumelée',
+    'No kiosk is paired',
+    'No hay ningún quiosco vinculado',
+    'Kein Bestellterminal gekoppelt',
+    'Geen kiosk is gekoppel nie',
+  );
+  String get unpair =>
+      _t('Dissocier', 'Unpair', 'Desvincular', 'Entkoppeln', 'Ontkoppel');
+  String unpairTitle(String name) => _t(
+    'Dissocier «\u00A0$name\u00A0»\u00A0?',
+    'Unpair “$name”?',
+    '¿Desvincular «$name»?',
+    '„$name“ entkoppeln?',
+    'Ontkoppel “$name”?',
+  );
+  String get unpairBody => _t(
+    'Elle cesse aussitôt de prendre des commandes et revient à l’écran de jumelage. '
+        'Pour la réutiliser, jumelez-la avec un nouveau code.',
+    'It stops taking orders at once and goes back to its pairing screen. '
+        'To use it again, pair it with a new code.',
+    'Deja de tomar pedidos al instante y vuelve a su pantalla de vinculación. '
+        'Para usarlo de nuevo, vincúlelo con un código nuevo.',
+    'Es nimmt sofort keine Bestellungen mehr an und zeigt wieder den Kopplungsbildschirm. '
+        'Zum erneuten Einsatz mit einem neuen Code koppeln.',
+    'Dit neem dadelik geen bestellings meer nie en gaan terug na sy koppelskerm. '
+        'Koppel dit met ’n nuwe kode om dit weer te gebruik.',
+  );
+  String unpaired(String name) => _t(
+    '«\u00A0$name\u00A0» dissociée',
+    '“$name” unpaired',
+    '«$name» desvinculado',
+    '„$name“ entkoppelt',
+    '“$name” ontkoppel',
+  );
   String pairKioskBody(int minutes) => _t(
     'Entrez ce code sur la borne. Valide $minutes minutes, une seule fois.',
     'Type this code on the kiosk. Valid for $minutes minutes, once.',

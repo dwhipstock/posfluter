@@ -1,8 +1,11 @@
 package dev.dwhipstock.pos.restaurant
 
+import dev.dwhipstock.pos.base.CleanText
 import dev.dwhipstock.pos.base.DeviceRegistry
+import dev.dwhipstock.pos.base.Devices
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.KeyedRateLimiter
 import dev.dwhipstock.pos.base.LoginRateLimiter
 import dev.dwhipstock.pos.db.utcTimestamp
 import dev.dwhipstock.pos.sdk.CustomerConfig
@@ -107,6 +110,12 @@ data class KioskOrderRequest(
     val lines: List<KioskOrderLine>,
     /** The language the guest chose at the kiosk: their ticket prints in it. */
     val lang: String? = null,
+    /**
+     * The kiosk's own id for this order (one per guest's Pay tap): sent again
+     * (a double tap, a retry after a dropped connection), the store answers
+     * with the order it already placed instead of placing a second one.
+     */
+    val clientOrderId: String? = null,
 )
 
 @Serializable
@@ -152,6 +161,10 @@ data class KioskPairingCode(val code: String, val expiresInSeconds: Int)
 
 @Serializable
 data class KioskPairResponse(val deviceId: String, val deviceToken: String, val storeName: String)
+
+/** A paired kiosk, for the manager's list (and its Unpair button). */
+@Serializable
+data class KioskDeviceView(val deviceId: String, val name: String, val pairedAt: String, val lastSeenAt: String? = null)
 
 /**
  * The quick-serve counter (Copper Lantern Express), one flow for every order,
@@ -201,6 +214,10 @@ class QuickServeService(
         private val LEGACY = listOf("NEW", "PREPARING", "READY", "PICKED_UP")
         private const val CODE_TTL_SECONDS = 600
         private const val MAX_LINES = 40
+        /** Per kiosk; a flood (a stuck button, a script with a stolen token) gets 429 rate_limited. */
+        const val KIOSK_ORDERS_PER_MINUTE = 10
+        /** How long a kiosk's order id is remembered (a retry comes within seconds). */
+        private val ORDER_ID_TTL: Duration = Duration.ofMinutes(15)
         private val LIVE = listOf("OPEN", "TOTAL_LOCKED")
         const val LEGACY_VOID_REASON = "Test order (old counter flow)"
     }
@@ -250,7 +267,7 @@ class QuickServeService(
     /** Checks one line against the menu (live item, its own size). Inside a transaction. */
     private fun validate(l: KioskOrderLine) {
         require(l.qty in 1..20) { "qty must be 1-20" }
-        require((l.note?.length ?: 0) <= 200) { "note too long" }
+        require((cleanNote(l.note)?.length ?: 0) <= 200) { "note too long" }
         val item = Items.selectAll().where { (Items.id eq l.itemId) and Items.deletedAt.isNull() }.firstOrNull()
             ?: throw NotFoundException("item ${l.itemId} not found", "item_not_found")
         if (!item[Items.active]) throw ConflictException("${item[Items.nameEn]} is not available", "item_inactive")
@@ -258,6 +275,9 @@ class QuickServeService(
             (ItemVariants.id eq l.variantId) and (ItemVariants.itemId eq l.itemId) and ItemVariants.deletedAt.isNull()
         }.firstOrNull() ?: throw NotFoundException("variant ${l.variantId} not found", "item_not_found")
     }
+
+    /** A note as it is kept: printable, one line ([CleanText]); null when empty. */
+    private fun cleanNote(note: String?): String? = CleanText.lineOrNull(note)
 
     /** A new unpaid order with its [lines] (never empty), no number yet. Returns the check id. */
     private fun create(mode: String, source: String, userId: String, lines: List<KioskOrderLine>): Int = transaction {
@@ -267,7 +287,7 @@ class QuickServeService(
         lines.forEach(::validate)
         ensureCounter()
         val checkId = checks.openCounterCheck(COUNTER_TABLE, userId)
-        for (l in lines) checks.addLine(checkId, l.itemId, l.variantId, l.qty, l.note?.trim()?.takeIf { it.isNotEmpty() })
+        for (l in lines) checks.addLine(checkId, l.itemId, l.variantId, l.qty, cleanNote(l.note))
         val date = today().toString()
         val kiosk = source == "KIOSK"
         CounterOrders.insert {
@@ -295,7 +315,47 @@ class QuickServeService(
      * PENDING), WAITING to be paid at the counter under its order number. It
      * goes to the kitchen only once it is paid, like any order.
      */
-    fun placeKioskOrder(req: KioskOrderRequest, deviceName: String): KioskOrderResult {
+    fun placeKioskOrder(req: KioskOrderRequest, deviceName: String, deviceId: String = deviceName): KioskOrderResult {
+        val clientId = req.clientOrderId?.trim()?.takeIf { it.isNotEmpty() }
+        if (clientId == null) {
+            kioskOrderLimiter.acquire(deviceId)
+            return place(req, deviceName)
+        }
+        require(clientId.length <= 64 && clientId.all { it.isLetterOrDigit() || it == '-' || it == '_' }) {
+            "clientOrderId must be 1-64 letters, digits, - or _"
+        }
+        val key = "$deviceId|$clientId"
+        val lock = placing.computeIfAbsent(key) { Any() }
+        synchronized(lock) {
+            forgetOldOrderIds()
+            // the same Pay tap again: the order it already placed, nothing new
+            placed[key]?.let {
+                log.info("Kiosk order #${it.result.orderNumber} sent again by '$deviceName' (same order id): not placed twice")
+                return it.result
+            }
+            kioskOrderLimiter.acquire(deviceId)
+            val result = place(req, deviceName)
+            placed[key] = Placed(clock(), result)
+            return result
+        }
+    }
+
+    /** A kiosk places at most this many orders a minute (a guest takes longer than that to order). */
+    private val kioskOrderLimiter = KeyedRateLimiter(KIOSK_ORDERS_PER_MINUTE, Duration.ofMinutes(1), clock)
+
+    private class Placed(val at: Instant, val result: KioskOrderResult)
+
+    /** "device id|the kiosk's order id" → the order it placed, kept for [ORDER_ID_TTL]. */
+    private val placed = ConcurrentHashMap<String, Placed>()
+    private val placing = ConcurrentHashMap<String, Any>()
+
+    private fun forgetOldOrderIds() {
+        val cutoff = clock().minus(ORDER_ID_TTL)
+        val old = placed.filterValues { it.at.isBefore(cutoff) }.keys
+        old.forEach { placed.remove(it); placing.remove(it) }
+    }
+
+    private fun place(req: KioskOrderRequest, deviceName: String): KioskOrderResult {
         // the menu may have changed since the kiosk loaded it: refuse only the
         // lines it hit, take the rest (all refused → 409 lines_rejected)
         require(req.lines.isNotEmpty()) { "empty order" }
@@ -630,7 +690,7 @@ class QuickServeService(
             throw NotFoundException("unknown or expired kiosk code", "bad_pairing_code")
         }
         pairLimiter.recordSuccess()
-        val name = "Kiosk" + deviceName.trim().take(60).let { if (it.isEmpty()) "" else " — $it" }
+        val name = "Kiosk" + CleanText.line(deviceName).trim().take(60).let { if (it.isEmpty()) "" else " — $it" }
         val (deviceId, token) = DeviceRegistry.pair(name)
         transaction {
             KioskDevices.insert { it[KioskDevices.deviceId] = deviceId; it[KioskDevices.name] = name; it[pairedAt] = clock() }
@@ -641,5 +701,31 @@ class QuickServeService(
 
     fun isKiosk(deviceId: String): Boolean = transaction {
         !KioskDevices.selectAll().where { KioskDevices.deviceId eq deviceId }.empty()
+    }
+
+    /** The paired kiosks (unpaired ones are gone from the list), oldest first. */
+    fun kiosks(): List<KioskDeviceView> = transaction {
+        KioskDevices.join(Devices, JoinType.INNER, KioskDevices.deviceId, Devices.id)
+            .selectAll().where { Devices.revokedAt.isNull() }
+            .orderBy(KioskDevices.pairedAt to SortOrder.ASC)
+            .map {
+                KioskDeviceView(
+                    it[KioskDevices.deviceId], it[KioskDevices.name], VenueClock.iso(it[KioskDevices.pairedAt]),
+                    it[Devices.lastSeenAt]?.let(VenueClock::iso),
+                )
+            }
+    }
+
+    /**
+     * A manager unpairs a kiosk (lost, stolen, replaced) right here, with no
+     * portal or internet: its token stops working at once (the kiosk goes
+     * back to its pairing screen) and the portal's device list shows it
+     * revoked on the next heartbeat. Pairing it again takes a new code.
+     */
+    fun unpairKiosk(deviceId: String, byUserId: String): List<KioskDeviceView> {
+        if (!isKiosk(deviceId)) throw NotFoundException("no kiosk $deviceId", "kiosk_not_found")
+        DeviceRegistry.applyRevocation(deviceId)
+        log.info("kiosk unpaired: $deviceId (by $byUserId)")
+        return kiosks()
     }
 }

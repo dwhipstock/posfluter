@@ -9,12 +9,14 @@
 
 import type { Locale } from "@/lib/i18n/messages";
 
-export type CellKind = "text" | "money" | "int";
+export type CellKind = "text" | "money" | "int" | "num";
 
 export interface Cell {
   kind: CellKind;
-  /** money → cents (int); int → the number; text → the string. */
+  /** money → cents (int); int / num → the number; text → the string. */
   value: string | number | null;
+  /** num only: decimal places shown (gallons: 3). */
+  decimals?: number;
   /** money only: the ISO currency the cents are in (default CAD). */
   currency?: string;
   /** money only: a converted, approximate figure ("≈" in the PDF). */
@@ -32,6 +34,8 @@ export const Money = (cents: number, currency?: string, approximate?: boolean): 
   ...(approximate ? { approximate } : {}),
 });
 export const Int = (n: number): Cell => ({ kind: "int", value: n });
+/** A decimal quantity (gallons): a real number in XLSX/CSV, "1,234.567" in the PDF. */
+export const Num = (n: number, decimals: number): Cell => ({ kind: "num", value: n, decimals });
 
 // A column bound to a row type R: header + how to pull the cell out of a row.
 // col.money / col.int default to right-aligned; col.text to left.
@@ -74,6 +78,12 @@ export const col = {
     make("money", header, get, 14, "right", opts),
   int: <R>(header: string, get: (r: R) => number, opts?: ColOpts): Col<R> =>
     make("int", header, get, 10, "right", opts),
+  num: <R>(header: string, get: (r: R) => number, decimals: number, opts?: ColOpts): Col<R> => ({
+    header,
+    align: opts?.align ?? "right",
+    width: opts?.width ?? 12,
+    get: (r: R) => Num(Number(get(r) ?? 0), decimals),
+  }),
 };
 
 // R defaults to `any` (not `unknown`) on purpose: a doc holds Sections over

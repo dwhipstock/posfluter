@@ -16,6 +16,17 @@ class R {
   String _t(String en, String es, String fr) =>
       lang == 'es' ? es : (lang == 'fr' ? fr : en);
 
+  /// The strings the quick-serve counter shares (the ID check before alcohol
+  /// is paid): German and Afrikaans too, the Express store's other languages.
+  String _t5(String en, String es, String fr, String de, String af) =>
+      switch (lang) {
+        'de' => de,
+        'af' => af,
+        'es' => es,
+        'fr' => fr,
+        _ => en,
+      };
+
   // header
   String get bottleShop =>
       _t('Bottle Shop', 'Tienda de licores', 'Boutique d’alcools');
@@ -40,7 +51,8 @@ class R {
   String get managerPin =>
       _t('Manager PIN', 'PIN del gerente', 'NIP du gérant');
   String get open => _t('Open', 'Abrir', 'Ouvrir');
-  String get cancel => _t('Cancel', 'Cancelar', 'Annuler');
+  String get cancel =>
+      _t5('Cancel', 'Cancelar', 'Annuler', 'Abbrechen', 'Kanselleer');
   String get more => _t('More', 'Más', 'Plus');
   String get countStock =>
       _t('Count stock', 'Contar inventario', 'Faire l’inventaire');
@@ -169,85 +181,148 @@ class R {
       _t('ID checked', 'Identificación verificada', 'Pièce vérifiée');
   String get checkId =>
       _t('Check ID', 'Verificar identificación', 'Vérifier la pièce');
-  String ageCheckTitle(int legalAge) => _t(
+  String ageCheckTitle(int legalAge) => _t5(
     'Check ID ($legalAge+)',
     'Verificar identificación ($legalAge+)',
     'Vérifier la pièce d’identité ($legalAge+)',
+    'Ausweis prüfen (ab $legalAge)',
+    'Kontroleer ID ($legalAge+)',
   );
-  String get scanIdTitle => _t(
+  String get scanIdTitle => _t5(
     'Scan the ID',
     'Escanea la identificación',
     'Balayez la pièce d’identité',
+    'Ausweis scannen',
+    'Skandeer die ID',
   );
-  String get scanIdHint => _t(
+  String get scanIdHint => _t5(
     'Scan the barcode on the back of the driver’s license or ID card.',
     'Escanea el código de barras al reverso de la licencia de manejo o de la identificación.',
     'Balayez le code-barres au dos du permis de conduire ou de la carte d’identité.',
+    'Den Barcode auf der Rückseite des Führerscheins oder Ausweises scannen.',
+    'Skandeer die strepieskode agter op die rybewys of ID-kaart.',
   );
-  String get listening => _t(
+  String get listening => _t5(
     'Waiting for the scan…',
     'Esperando el escaneo…',
     'En attente de la lecture…',
+    'Warte auf den Scan …',
+    'Wag vir die skandering…',
   );
-  String get orEnterDob => _t(
+  String get orEnterDob => _t5(
     'Or enter the date of birth',
     'O ingresa la fecha de nacimiento',
     'Ou entrez la date de naissance',
+    'Oder das Geburtsdatum eingeben',
+    'Of voer die geboortedatum in',
   );
-  String get month => _t('Month', 'Mes', 'Mois');
-  String get day => _t('Day', 'Día', 'Jour');
-  String get year => _t('Year', 'Año', 'Année');
-  String get sawId => _t(
+  String get month => _t5('Month', 'Mes', 'Mois', 'Monat', 'Maand');
+  String get day => _t5('Day', 'Día', 'Jour', 'Tag', 'Dag');
+  String get year => _t5('Year', 'Año', 'Année', 'Jahr', 'Jaar');
+  String get sawId => _t5(
     'I have seen the customer’s ID',
     'Vi la identificación del cliente',
     'J’ai vu la pièce d’identité du client',
+    'Ich habe den Ausweis des Kunden gesehen',
+    'Ek het die klant se ID gesien',
   );
-  String get verify => _t('Verify', 'Verificar', 'Vérifier');
-  String passed(int age) => _t(
+  String get verify =>
+      _t5('Verify', 'Verificar', 'Vérifier', 'Prüfen', 'Verifieer');
+  String passed(int age) => _t5(
     'OK to sell · $age years old',
     'Se puede vender · $age años',
     'Vente autorisée · $age ans',
+    'Verkauf erlaubt · $age Jahre alt',
+    'Mag verkoop · $age jaar oud',
   );
   String failed(String? reason, int? age, int legalAge) => switch (reason) {
-    'under_age' => _t(
+    'under_age' => _t5(
       'Under $legalAge${age == null ? '' : ' ($age)'} — do not sell alcohol',
       'Menor de $legalAge${age == null ? '' : ' ($age)'}: no vendas alcohol',
       'Moins de $legalAge ans${age == null ? '' : ' ($age)'}\u00A0: pas d’alcool',
+      'Unter $legalAge${age == null ? '' : ' ($age)'} – keinen Alkohol verkaufen',
+      'Onder $legalAge${age == null ? '' : ' ($age)'} — moenie alkohol verkoop nie',
     ),
-    'expired' => _t(
+    'expired' => _t5(
       'This ID has expired — ask for a valid one',
       'Esta identificación está vencida: pide una vigente',
       'Cette pièce est expirée\u00A0: demandez-en une valide',
+      'Dieser Ausweis ist abgelaufen – nach einem gültigen fragen',
+      'Hierdie ID het verval — vra vir ’n geldige een',
     ),
-    'not_confirmed' => _t(
+    'not_confirmed' => _t5(
       'Confirm you have seen the ID',
       'Confirma que viste la identificación',
       'Confirmez que vous avez vu la pièce',
+      'Bestätigen, dass Sie den Ausweis gesehen haben',
+      'Bevestig dat jy die ID gesien het',
     ),
-    _ => _t(
+    _ => _t5(
       'Couldn’t read that ID — scan again or enter the date of birth',
       'No se pudo leer la identificación: escanéala de nuevo o ingresa la fecha de nacimiento',
       'Pièce illisible\u00A0: balayez-la de nouveau ou entrez la date de naissance',
+      'Ausweis nicht lesbar – erneut scannen oder das Geburtsdatum eingeben',
+      'Kon nie die ID lees nie — skandeer weer of voer die geboortedatum in',
     ),
   };
-  String get removeRestricted => _t(
+  String get removeRestricted => _t5(
     'Remove age-restricted items',
     'Quitar los artículos con restricción de edad',
     'Retirer les articles réservés aux adultes',
+    'Altersbeschränkte Artikel entfernen',
+    'Verwyder ouderdomsbeperkte items',
   );
   String get idFailedBanner => _t(
     'ID check failed — remove the age-restricted items to sell the rest',
     'No pasó la verificación: quita los artículos con restricción de edad para vender el resto',
     'Vérification échouée\u00A0: retirez les articles réservés aux adultes pour vendre le reste',
   );
-  String get tryAgain => _t('Try again', 'Intentar de nuevo', 'Réessayer');
-  String get done => _t('Done', 'Listo', 'Terminé');
-  String get privacyNote => _t(
+  String get tryAgain => _t5(
+    'Try again',
+    'Intentar de nuevo',
+    'Réessayer',
+    'Erneut versuchen',
+    'Probeer weer',
+  );
+  String get done => _t5('Done', 'Listo', 'Terminé', 'Fertig', 'Klaar');
+  String get privacyNote => _t5(
     'Only the result is kept — never the name, date of birth or license number.',
     'Solo se guarda el resultado; nunca el nombre, la fecha de nacimiento ni el número de licencia.',
     'Seul le résultat est conservé, jamais le nom, la date de naissance ni le numéro de permis.',
+    'Nur das Ergebnis wird gespeichert – nie der Name, das Geburtsdatum oder die Führerscheinnummer.',
+    'Net die uitslag word gehou — nooit die naam, geboortedatum of rybewysnommer nie.',
   );
-  List<String> get months => lang == 'es'
+  List<String> get months => lang == 'de'
+      ? const [
+          'Jan.',
+          'Feb.',
+          'März',
+          'Apr.',
+          'Mai',
+          'Juni',
+          'Juli',
+          'Aug.',
+          'Sep.',
+          'Okt.',
+          'Nov.',
+          'Dez.',
+        ]
+      : lang == 'af'
+      ? const [
+          'Jan.',
+          'Feb.',
+          'Mrt.',
+          'Apr.',
+          'Mei',
+          'Jun.',
+          'Jul.',
+          'Aug.',
+          'Sep.',
+          'Okt.',
+          'Nov.',
+          'Des.',
+        ]
+      : lang == 'es'
       ? const [
           'ene',
           'feb',
@@ -513,10 +588,12 @@ class R {
           'Tienda de licores · Los Ángeles',
           'Boutique d’alcools · Los Angeles',
         );
-  String looksOver(int n) => _t(
+  String looksOver(int n) => _t5(
     'Clearly over $n: no ID needed',
     'Claramente mayor de $n: sin identificación',
     'Nettement plus de $n\u00A0ans\u00A0: sans pièce d’identité',
+    'Deutlich über $n: kein Ausweis nötig',
+    'Duidelik ouer as $n: geen ID nodig nie',
   );
   String get stockApp =>
       _t('Stock app', 'App de inventario', 'Application d’inventaire');

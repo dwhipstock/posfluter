@@ -11,6 +11,21 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   // stray lockfiles above the repo otherwise hijack the tracing root
   outputFileTracingRoot: __dirname,
+  // security headers on every portal page (red-team): no framing
+  // (clickjacking), no MIME sniffing. Caddy sets the same in production.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return [
       { source: "/v1/:path*", destination: `${API_ORIGIN}/v1/:path*` },

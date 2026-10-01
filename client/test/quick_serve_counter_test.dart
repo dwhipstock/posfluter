@@ -12,6 +12,8 @@ import 'package:pos_client/api.dart';
 import 'package:pos_client/design/tokens.dart';
 import 'package:pos_client/i18n.dart';
 import 'package:pos_client/quickserve/counter_screen.dart';
+import 'package:pos_client/retail/age_check_dialog.dart';
+import 'package:pos_client/screens/tender_screen.dart';
 import 'package:pos_client/widgets/url_qr.dart';
 
 /// The quick-serve counter, one flow for every order: it opens on a new
@@ -49,6 +51,14 @@ class _Store {
   final statusCalls = <String>[];
   final closed = <int>{};
   String defaultMode = 'TAKE_OUT';
+
+  /// Checks with a passing ID check (POST /retail/sales/{id}/age-check).
+  final idChecked = <int>{};
+  final ageChecks = <Map<String, dynamic>>[];
+
+  /// Paired kiosks (GET /counter/kiosks) and the ones unpaired.
+  final kiosks = <Map<String, dynamic>>[];
+  final unpaired = <String>[];
   int _nextCheck = 1;
   int _nextNumber = 101;
 
@@ -129,6 +139,9 @@ class _Store {
       // the store rounds cash to the nickel: one cent up here
       'cashDueCents': open && total > 0 ? total + 1 : 0,
       'cashRoundingCents': open && total > 0 ? 1 : 0,
+      // alcohol is paid after an ID check (the store refuses the tender without one)
+      'ageCheckRequired': _alcohol(id),
+      'ageCleared': !_alcohol(id) || idChecked.contains(id),
     };
   }
 
@@ -171,6 +184,7 @@ class _Store {
         'unitPriceCents': v['priceCents'],
         'lineTotalCents': qty * (v['priceCents'] as int),
         'note': null,
+        'ageRestricted': item['isAlcohol'] == true,
       });
     }
   }
@@ -258,6 +272,20 @@ class _Store {
         case '/receipt/print':
           return _json({'checkId': id, 'text': 'RECEIPT #${numbers[id]}'});
       }
+    }
+    final age = RegExp(r'^/retail/sales/(\d+)/age-check$').firstMatch(p);
+    if (age != null) {
+      final id = int.parse(age[1]!);
+      ageChecks.add(body as Map<String, dynamic>);
+      idChecked.add(id);
+      return _json({'passed': true, 'legalAge': 21, 'check': check(id)});
+    }
+    if (p == '/counter/kiosks') return _json(kiosks);
+    final unpair = RegExp(r'^/counter/kiosks/([^/]+)/unpair$').firstMatch(p);
+    if (unpair != null) {
+      unpaired.add(unpair[1]!);
+      kiosks.removeWhere((k) => k['deviceId'] == unpair[1]);
+      return _json(kiosks);
     }
     if (p == '/printer/status') return _json({'configured': false});
     if (p == '/cloud/info') {
@@ -602,6 +630,80 @@ void main() {
       expect(find.byKey(const Key('kiosk-id-2')), findsOneWidget);
       expect(find.text('21+'), findsOneWidget);
       expect(find.byTooltip('Alcohol — check ID (21+)'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    }, () => store.client);
+  });
+
+  testWidgets('a kiosk beer order is paid only after an ID check', (
+    tester,
+  ) async {
+    StoreProfile.current = const StoreProfile(
+      kind: 'quick-serve',
+      country: 'US',
+      currency: 'USD',
+      locales: ['en', 'fr', 'es', 'de', 'af'],
+      legalAge: 21,
+      looksOverAge: 30,
+    );
+    final store = _Store()..kioskOrder(number: 113, beer: true);
+    await http.runWithClient(() async {
+      await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+      await tester.tap(find.byKey(const Key('kiosk-1')));
+      await settle(tester);
+      // Pay: the ID check first, no tender screen
+      await tester.tap(find.text('Pay'));
+      await settle(tester);
+      expect(find.byType(AgeCheckDialog), findsOneWidget);
+      expect(find.text('Check ID (21+)'), findsOneWidget);
+      expect(find.byType(TenderScreen), findsNothing);
+      // dismissed: still no payment
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TenderScreen), findsNothing);
+      expect(store.ageChecks, isEmpty);
+      // checked (here: clearly over 30), then the money
+      await tester.tap(find.text('Pay'));
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('age-visual')));
+      await settle(tester);
+      expect(store.ageChecks.single['method'], 'VISUAL');
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TenderScreen), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    }, () => store.client);
+  });
+
+  testWidgets('a manager unpairs a lost kiosk from the counter', (
+    tester,
+  ) async {
+    Api.currentUser = AuthUser.fromJson({
+      'userId': 'manager',
+      'name': 'Demo Manager',
+      'role': 'MANAGER',
+      'grants': <String>[],
+    }, 'token');
+    addTearDown(() => Api.currentUser = null);
+    final store = _Store()
+      ..kiosks.addAll([
+        {'deviceId': 'k1', 'name': 'Kiosk — Door 1', 'pairedAt': ''},
+        {'deviceId': 'k2', 'name': 'Kiosk — Door 2', 'pairedAt': ''},
+      ]);
+    await http.runWithClient(() async {
+      await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+      await tester.tap(find.byKey(const Key('kiosks')));
+      await tester.pumpAndSettle();
+      expect(find.text('Kiosk — Door 1'), findsOneWidget);
+      expect(find.text('Kiosk — Door 2'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('unpair-k1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Unpair “Kiosk — Door 1”?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('unpair-confirm')));
+      await tester.pumpAndSettle();
+      expect(store.unpaired, ['k1']);
+      expect(find.text('Kiosk — Door 1'), findsNothing);
+      expect(find.text('Kiosk — Door 2'), findsOneWidget);
+      expect(find.byKey(const Key('pair-kiosk')), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     }, () => store.client);
   });

@@ -20,6 +20,24 @@ import org.jetbrains.exposed.sql.update
 
 internal const val MAX_PHOTO_BYTES = 2 * 1024 * 1024
 internal val ALLOWED_TYPES = setOf("image/jpeg", "image/png")
+/** The photo plus its form fields and multipart framing. */
+private const val MAX_PHOTO_BODY_BYTES = MAX_PHOTO_BYTES + 64L * 1024
+
+/**
+ * Read the whole channel but refuse to hold more than [max] bytes: the moment
+ * the running total passes the cap, stop reading and reject the upload.
+ */
+private suspend fun ByteReadChannel.readCapped(max: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val chunk = ByteArray(16 * 1024)
+    while (!exhausted()) { // same loop as the cloud's photo ingest (StoreRoutes.receivePhoto)
+        val read = readAvailable(chunk, 0, chunk.size)
+        if (read <= 0) continue
+        if (out.size().toLong() + read > max) throw IllegalArgumentException("photo too large (max 2MB)")
+        out.write(chunk, 0, read)
+    }
+    return out.toByteArray()
+}
 
 /**
  * Item photos (M5): upload is staff-side and manager-gated; serving is open
@@ -38,11 +56,16 @@ fun Route.photoRoutes(photos: PhotoStore, auth: AuthService) {
             Items.selectAll().where { Items.id eq itemId }.firstOrNull()
         } ?: throw NotFoundException("item $itemId not found")
 
+        // a body far past the cap is refused before a byte of it is read
+        call.request.contentLength()?.let { if (it > MAX_PHOTO_BODY_BYTES) throw IllegalArgumentException("photo too large (max 2MB)") }
         var managerPin: String? = null
         var source: String? = null
         var bytes: ByteArray? = null
         var contentType: String? = null
-        call.receiveMultipart().forEachPart { part ->
+        // Ktor's per-part limit (default 50MB; it covers file parts too). Set just past the
+        // photo cap as a backstop for a chunked body with no declared length: readCapped
+        // below normally refuses first, with a clean 400
+        call.receiveMultipart(formFieldLimit = MAX_PHOTO_BODY_BYTES).forEachPart { part ->
             when (part) {
                 is PartData.FormItem -> when (part.name) {
                     "managerPin" -> managerPin = part.value
@@ -50,13 +73,15 @@ fun Route.photoRoutes(photos: PhotoStore, auth: AuthService) {
                 }
                 is PartData.FileItem -> {
                     contentType = part.contentType?.toString()?.lowercase()
-                    bytes = part.provider().toByteArray()
+                    // the cap is enforced WHILE streaming (red-team): an oversized upload
+                    // is refused as soon as it passes MAX_PHOTO_BYTES, never buffered whole
+                    bytes = part.provider().readCapped(MAX_PHOTO_BYTES)
                 }
                 else -> {}
             }
             part.dispose()
         }
-        requireManagerApproval(auth, managerPin)
+        requireManagerApproval(auth, managerPin, call)
         val photoSource = source?.let { raw ->
             PhotoSource.entries.firstOrNull { it.wire == raw } ?: throw IllegalArgumentException("unknown photo source")
         } ?: PhotoSource.ORIGINAL

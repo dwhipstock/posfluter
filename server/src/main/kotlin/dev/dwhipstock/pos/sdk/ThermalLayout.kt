@@ -134,15 +134,37 @@ object ThermalLayout {
         var size = style.size
         while (!fits(text, style, size, m, content) && size * STEP >= MIN_SIZE) size *= STEP
         if (fits(text, style, size, m, content)) return listOf(Row.Text(text, style, size, align))
+        // Break only between user-perceived characters (grapheme clusters): an
+        // emoji's surrogate pair, a flag, or a letter and its accents are never
+        // split across rows.
+        val bounds = graphemeBounds(text)
         val rows = mutableListOf<Row>()
-        var start = 0
-        while (start < text.length) {
-            var end = start + 1
-            while (end < text.length && fits(text.substring(start, end + 1), style, size, m, content)) end++
-            rows += Row.Text(text.substring(start, end), style, size, align)
-            start = end
+        var b = 0 // index into bounds of the row's first cluster
+        while (b < bounds.size - 1) {
+            val start = bounds[b]
+            var e = b + 1 // always take at least one cluster
+            while (e < bounds.size - 1 && fits(text.substring(start, bounds[e + 1]), style, size, m, content)) e++
+            rows += Row.Text(text.substring(start, bounds[e]), style, size, align)
+            b = e
         }
         return rows
+    }
+
+    /** Every grapheme-cluster boundary offset in [text], 0 and text.length included. */
+    private fun graphemeBounds(text: String): List<Int> {
+        val it = java.text.BreakIterator.getCharacterInstance()
+        it.setText(text)
+        val out = mutableListOf<Int>()
+        var at = it.first()
+        while (at != java.text.BreakIterator.DONE) {
+            // belt and braces for older runtimes: never a boundary inside a surrogate pair
+            val insidePair = at in 1 until text.length &&
+                Character.isHighSurrogate(text[at - 1]) && Character.isLowSurrogate(text[at])
+            if (!insidePair) out += at
+            at = it.next()
+        }
+        if (out.lastOrNull() != text.length) out += text.length
+        return out
     }
 
     /**

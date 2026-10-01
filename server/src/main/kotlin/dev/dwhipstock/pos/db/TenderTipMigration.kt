@@ -7,14 +7,15 @@ import kotlinx.serialization.json.longOrNull
 import org.jetbrains.exposed.sql.Transaction
 
 /**
- * Migration 061 (code): card tenders recorded before 060 kept their tip only
- * inside card_json ({"tipCents": 600, ...}). Copy it to tenders.tip_cents so
- * the reports count tips taken before the upgrade too. Raw SQL on the columns
- * as they are at 060; an unreadable card_json leaves the tip at 0.
+ * Migration 062 (code): card tenders recorded before 061 kept their tip only
+ * inside card_json ({"tipCents": 600, ...}). Copy it to tenders.tip_cents
+ * (added by 061_tender_tips_reversals.sql) so the reports count tips taken
+ * before the upgrade too. Raw SQL on the columns as they are at 061; an
+ * unreadable card_json leaves the tip at 0.
  */
 object TenderTipMigration {
-    const val VERSION = 61
-    const val NAME = "061_tender_tip_backfill (code)"
+    const val VERSION = 62
+    const val NAME = "062_tender_tip_backfill (code)"
 
     fun run(tx: Transaction) {
         val tips = mutableListOf<Pair<Int, Long>>()

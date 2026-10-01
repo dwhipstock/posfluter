@@ -15,6 +15,8 @@ import java.util.Properties
  *   `GEMINI_API_KEY` / `OPENAI_API_KEY` on the desktop / docker store.
  * - optional `image.model` (the provider's model id) and `image.style` (a
  *   house-style line that replaces the brand's built-in one).
+ * - optional `image.dailyLimit`: AI images per store per day (default 60; 0 turns
+ *   generation off); each call is also rate limited per manager and device like the AI menu.
  *
  * Desktop: each `POS_IMAGE_*` / key env var wins over the same setting in the
  * `POS_CONFIG_FILE` properties file (the [StripeConfig] pattern). The tablet
@@ -31,10 +33,14 @@ object ImageGenConfig {
     const val KEY_PROVIDER = "image.provider"
     const val KEY_MODEL = "image.model"
     const val KEY_STYLE = "image.style"
+    const val KEY_DAILY_LIMIT = "image.dailyLimit"
     const val ENV_GENERATION = "POS_IMAGE_GENERATION"
     const val ENV_PROVIDER = "POS_IMAGE_PROVIDER"
     const val ENV_MODEL = "POS_IMAGE_MODEL"
     const val ENV_STYLE = "POS_IMAGE_STYLE"
+    const val ENV_DAILY_LIMIT = "POS_IMAGE_DAILY_LIMIT"
+    /** AI photos per store per day (each candidate counts): a few dollars a day at today's prices. */
+    const val DEFAULT_DAILY_LIMIT = 60
 
     enum class Provider(val wire: String, val keyProperty: String?, val keyEnv: String?) {
         FLUX("flux", "image.bfl.apiKey", "BFL_API_KEY"),
@@ -62,6 +68,8 @@ object ImageGenConfig {
         val style: String?,
         val source: String,
         val warning: String? = null,
+        /** At most this many AI images per store per (venue) day; 0 = no AI photos. */
+        val dailyImageLimit: Int = DEFAULT_DAILY_LIMIT,
     ) {
         val disabled: Disabled? = when {
             !generation -> Disabled.GENERATION_OFF
@@ -113,6 +121,10 @@ object ImageGenConfig {
             else clean(env(provider.keyEnv))?.let { it to provider.keyEnv }
                 ?: clean(prop(provider.keyProperty!!))?.let { it to source }
         val keyValue = key?.first?.takeUnless { it.any(Char::isWhitespace) }
+        val rawLimit = pick(ENV_DAILY_LIMIT, KEY_DAILY_LIMIT)
+        val dailyLimit = if (rawLimit == null) DEFAULT_DAILY_LIMIT else rawLimit.toIntOrNull()?.takeIf { it >= 0 } ?: run {
+            warnings += "invalid $KEY_DAILY_LIMIT='$rawLimit' (expected a whole number)"; DEFAULT_DAILY_LIMIT
+        }
         if (key != null && keyValue == null) warnings += "the ${provider.wire} key contains spaces and was ignored"
         return Resolved(
             generation = generation,
@@ -122,6 +134,7 @@ object ImageGenConfig {
             style = pick(ENV_STYLE, KEY_STYLE),
             source = key?.second ?: source,
             warning = warnings.takeIf { it.isNotEmpty() }?.joinToString("; "),
+            dailyImageLimit = dailyLimit,
         )
     }
 

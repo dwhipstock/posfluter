@@ -60,7 +60,8 @@ object DeviceRegistry {
         val token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
         Devices.insert {
             it[Devices.id] = id
-            it[Devices.name] = name.trim().ifBlank { "Terminal" }.take(100)
+            // printable, one line: the name rides the heartbeat to the cloud (Postgres refuses U+0000)
+            it[Devices.name] = CleanText.line(name).trim().ifBlank { "Terminal" }.take(100)
             it[tokenSha256] = sha256Hex(token)
             it[pairedAt] = VenueClock.now()
         }

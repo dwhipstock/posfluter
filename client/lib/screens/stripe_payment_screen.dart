@@ -235,7 +235,7 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
                   const SizedBox(height: 24),
                   if (intent != null) ...[
                     Text(
-                      '${intent.currency} ${(intent.amountCents / 100).toStringAsFixed(2)}',
+                      formatMoney(intent.amountCents, intent.currency),
                       textAlign: TextAlign.center,
                       style: T.price(size: 44, weight: FontWeight.w700),
                     ),
