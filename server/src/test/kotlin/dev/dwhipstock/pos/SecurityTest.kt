@@ -1,6 +1,8 @@
 package dev.dwhipstock.pos
 
 import dev.dwhipstock.pos.base.LoginRateLimiter
+import dev.dwhipstock.pos.base.PinAttemptLimiter
+import dev.dwhipstock.pos.base.PinClient
 import dev.dwhipstock.pos.base.RateLimitException
 import dev.dwhipstock.pos.base.Sessions
 import dev.dwhipstock.pos.sdk.VenueClock
@@ -45,12 +47,74 @@ class SecurityTest {
             contentType(ContentType.Application.Json)
             setBody("""{"pin":"$pin"}""")
         }
-        repeat(5) { assertEquals(HttpStatusCode.Unauthorized, tryPin("0000").status) }
+        // the test client is the tablet itself (loopback): its own, roomier bucket (10)
+        repeat(10) { assertEquals(HttpStatusCode.Unauthorized, tryPin("0000").status) }
         // locked now — even the correct PIN gets 429 + Retry-After
         val locked = tryPin("1234")
         assertEquals(HttpStatusCode.TooManyRequests, locked.status)
         assertTrue((locked.headers[HttpHeaders.RetryAfter]?.toLong() ?: 0) > 0)
         assertTrue("rate_limited" in locked.bodyAsText())
+    }
+
+    /** Red-team: PIN lockouts are per client — one phone's guesses never freeze another client. */
+    @Test
+    fun pinLimiterIsPerClient() {
+        var now = Instant.parse("2026-07-08T00:00:00Z")
+        val limiter = PinAttemptLimiter(clock = { now })
+        val attacker = PinClient("ip:192.168.1.66", trusted = false)
+        val phone = PinClient("ip:192.168.1.20", trusted = false)
+        val tablet = PinClient.LOCAL
+        repeat(5) { limiter.recordFailure(attacker) }
+        assertFailsWith<RateLimitException> { limiter.checkNotLocked(attacker) }
+        limiter.checkNotLocked(phone)
+        limiter.checkNotLocked(tablet)
+        // a LAN client's correct PIN doesn't wipe its failures (they age out),
+        // so a known PIN can't reset the counter between guesses at another
+        repeat(4) { limiter.recordFailure(phone) }
+        limiter.recordSuccess(phone)
+        limiter.recordFailure(phone)
+        assertFailsWith<RateLimitException> { limiter.checkNotLocked(phone) }
+        // the tablet: 10 failures to lock, 5 minutes, a success clears it
+        repeat(9) { limiter.recordFailure(tablet) }
+        limiter.recordSuccess(tablet)
+        repeat(9) { limiter.recordFailure(tablet) }
+        limiter.checkNotLocked(tablet)
+        limiter.recordFailure(tablet)
+        assertFailsWith<RateLimitException> { limiter.checkNotLocked(tablet) }
+        now = now.plus(Duration.ofMinutes(6))
+        limiter.checkNotLocked(tablet)
+    }
+
+    /** Rotating addresses: unknown LAN clients share a store-wide ceiling; the tablet and known phones don't. */
+    @Test
+    fun pinLimiterCeilingForRotatingAddresses() {
+        val now = Instant.parse("2026-07-08T00:00:00Z")
+        val limiter = PinAttemptLimiter(clock = { now })
+        val known = PinClient("ip:192.168.1.20", trusted = false)
+        limiter.recordSuccess(known) // signed in earlier with a correct PIN
+        repeat(30) { i -> limiter.recordFailure(PinClient("ip:10.0.${i / 250}.${i % 250}", trusted = false)) }
+        assertFailsWith<RateLimitException> { limiter.checkNotLocked(PinClient("ip:10.9.9.9", trusted = false)) }
+        limiter.checkNotLocked(known)
+        limiter.checkNotLocked(PinClient.LOCAL)
+        limiter.checkNotLocked(PinClient("dev:terminal-1", trusted = true))
+    }
+
+    @Test
+    fun pinClientClassification() {
+        assertEquals(PinClient.LOCAL, PinClient.of(null, "127.0.0.1"))
+        assertEquals(PinClient.LOCAL, PinClient.of(null, "0:0:0:0:0:0:0:1"))
+        assertEquals(PinClient("dev:d1", true), PinClient.of("d1", "192.168.1.5"))
+        assertEquals(PinClient("ip:192.168.1.5", false), PinClient.of(null, "192.168.1.5"))
+    }
+
+    @Test
+    fun pinLimiterMemoryIsBounded() {
+        val limiter = PinAttemptLimiter(maxKeys = 100)
+        val victim = PinClient("ip:192.168.1.66", trusted = false)
+        repeat(5) { limiter.recordFailure(victim) }
+        repeat(50) { i -> limiter.checkNotLocked(PinClient("ip:10.1.0.$i", trusted = false)) }
+        // the victim is still locked: recently used entries survive, only the eldest are dropped
+        assertFailsWith<RateLimitException> { limiter.checkNotLocked(victim) }
     }
 
     @Test

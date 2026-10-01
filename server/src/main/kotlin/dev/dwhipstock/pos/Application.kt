@@ -403,7 +403,7 @@ fun Application.module(
     staffAppMfa.warning?.let { log.warn("Staff app MFA config ignored: $it") }
     val effectiveMfa = demoMode.staffAppMfa(staffAppMfa)
     log.info(effectiveMfa.describe())
-    val authService = AuthService(settingsRepo, effectiveMfa.required)
+    val authService = AuthService(settingsRepo, effectiveMfa.required, demoMode = demoMode.on)
     val photoStore: PhotoStore = FilesystemPhotoStore(java.io.File(photosDir))
     val aiPhotos = dev.dwhipstock.pos.aiphotos.AiPhotoService(
         imageGenConfig, config.brand,
@@ -494,6 +494,14 @@ fun Application.module(
         exception<SlipTicketException> { call, _ ->
             call.respond(HttpStatusCode.Unauthorized,
                 mapOf("error" to "open the slips from the tablet", "code" to "slip_ticket_required"))
+        }
+        exception<dev.dwhipstock.pos.base.ManagerOnPosOnlyException> { call, cause ->
+            call.respond(HttpStatusCode.Forbidden,
+                mapOf("error" to (cause.message ?: "managers sign in on the POS"), "code" to "manager_pos_only"))
+        }
+        exception<dev.dwhipstock.pos.api.PosTerminalRequiredException> { call, cause ->
+            call.respond(HttpStatusCode.Forbidden,
+                mapOf("error" to (cause.message ?: "POS terminal required"), "code" to "pos_terminal_required"))
         }
         exception<ManagerApprovalException> { call, cause ->
             call.respond(HttpStatusCode.Forbidden,

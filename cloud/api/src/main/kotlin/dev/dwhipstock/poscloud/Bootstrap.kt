@@ -120,6 +120,7 @@ object Bootstrap {
                 PortalUsers.update({ PortalUsers.id eq userId }) {
                     it[totpEnabled] = false
                     it[totpSecret] = null
+                    it[totpLastStep] = null // a new secret: its first code may share the old one's 30 s step
                 }
                 PortalBackupCodes.deleteWhere {
                     (PortalBackupCodes.tenantId eq tenant) and (PortalBackupCodes.userId eq userId)

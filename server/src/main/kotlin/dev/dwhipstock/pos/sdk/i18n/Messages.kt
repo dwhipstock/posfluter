@@ -128,7 +128,7 @@ enum class MessageKey(val id: String) {
     DEMO_HEADER("demo.header"),
     DEMO_NOTE("demo.note"),
     DEMO_NO_SIGN_IN("demo.no_sign_in"),
-    /** {0} = server PIN, {1} = manager PIN. */
+    /** {0} = server PIN (the manager PIN is never printed). */
     DEMO_SIGN_IN_PINS("demo.sign_in_pins"),
     DEMO_GUEST_TITLE("demo.guest.title"),
     /** {0} = the table's label. */

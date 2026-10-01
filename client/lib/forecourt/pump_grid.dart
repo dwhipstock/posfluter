@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../api.dart';
 import '../design/skin.dart';
 import '../retail/sp_theme.dart';
+import '../widgets/pin_pad.dart';
 import 'forecourt_i18n.dart';
 
 /// Pump state colours: one hue per state, bright on the dark counter, each
@@ -577,6 +578,8 @@ class PumpSheet extends StatelessWidget {
     final look = PumpLook.of(p, f);
     final n = p.pump;
     void close() => Navigator.of(context).pop();
+    // still mounted once this sheet has closed: for a manager-PIN prompt
+    final host = Navigator.of(context).context;
 
     Widget action(
       String key,
@@ -766,7 +769,21 @@ class PumpSheet extends StatelessWidget {
             'cancel-prepay',
             f.cancelPrepay(money(pre.prepaidCents)),
             Icons.undo_rounded,
-            () => onCommand(() => ForecourtApi.cancelPrepay(pre.fuelSaleId)),
+            () async {
+              // a refund: the cashier's own grant, else a manager's PIN
+              final ok = await requireGrant(
+                host,
+                Perm.refund,
+                title: f.cancelPrepay(money(pre.prepaidCents)),
+              );
+              if (ok == null) return;
+              await onCommand(
+                () => ForecourtApi.cancelPrepay(
+                  pre.fuelSaleId,
+                  managerPin: ok.managerPin,
+                ),
+              );
+            },
           ),
         );
       }

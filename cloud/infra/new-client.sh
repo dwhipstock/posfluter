@@ -363,6 +363,7 @@ render_site() {
 # the shared edge network, nowhere else.
 $hosts {
 	encode gzip
+	import security_headers # defined in Caddyfile.proxy
 
 	handle /health {
 		reverse_proxy $CLIENT_ID-api:8081

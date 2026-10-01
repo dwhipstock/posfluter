@@ -44,8 +44,15 @@ class ForecourtApi {
         : '/forecourt/pumps/$pump/emergency-stop',
   );
 
-  static Future<Forecourt> cancelPrepay(int fuelSaleId) =>
-      _cmd('/forecourt/prepays/$fuelSaleId/cancel');
+  /// A refund: the store needs the `refund` grant or a manager's [managerPin].
+  static Future<Forecourt> cancelPrepay(
+    int fuelSaleId, {
+    String? managerPin,
+  }) async => Forecourt.fromJson(
+    await Api._post('/forecourt/prepays/$fuelSaleId/cancel', {
+      'managerPin': ?managerPin,
+    }),
+  );
   static Future<Forecourt> changeGiven(int fuelSaleId) =>
       _cmd('/forecourt/prepays/$fuelSaleId/change-given');
 

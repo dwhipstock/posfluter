@@ -943,15 +943,25 @@ private suspend fun serveCustomerMenu(
     }
     val html = dev.dwhipstock.pos.StoreAssets.readText("customer-menu.html")
         .replace("{{TABLE_TOKEN}}", token) // [A-Za-z0-9_-] only: safe in the page's JS string
-        // label is a user-authored nameOverride; escape it (like zoneClosedMenuPage does for
-        // the same value) so it can't inject markup/script into the customer menu page.
-        .replace("{{TABLE_LABEL}}", label.escapeHtml())
+        // label is a user-authored nameOverride that lands INSIDE the page's <script>:
+        // a JSON string literal with <, >, &, quotes and line separators as \u escapes,
+        // so a quote can't end the string, a backslash can't eat the closing quote and
+        // </script> can't end the script (red-team).
+        .replace("\"{{TABLE_LABEL}}\"", label.jsStringLiteral())
         .replace("{{VENUE_NAME}}", venueName.escapeHtml())
     call.respondText(html, ContentType.Text.Html)
 }
 
+/** Text or a double/single-quoted attribute value: & < > " ' all escaped (red-team: a quote broke out of alt="…"). */
 private fun String.escapeHtml(): String =
     replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&#39;")
+
+/** A JS string literal (quotes included) safe to drop inside an inline <script>. */
+internal fun String.jsStringLiteral(): String =
+    kotlinx.serialization.json.JsonPrimitive(this).toString()
+        .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        .replace("'", "\\u0027").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
 /** One printable table slip: label + zone + the QR of its tokenised menu URL. */
 private class SlipData(row: org.jetbrains.exposed.sql.ResultRow, publicBaseUrl: String) {

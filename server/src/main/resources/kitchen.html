@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#111418">
 <title>Kitchen screen</title>
 <style>
+  /* a long unbroken name (no spaces) wraps instead of stretching or clipping the card (red-team) */
+  body { overflow-wrap: anywhere; }
   :root {
     --bg: #111418; --panel: #1b2027; --panel2: #232a33; --line: #2e3742;
     --text: #f2f4f7; --muted: #9aa5b1; --accent: #d9822b;
@@ -128,7 +130,7 @@
 
 const STR = {
   fr: {
-    title: "Cuisine", pin: "Entrez votre NIP", pinWrong: "NIP incorrect", codeTitle: "Code de vérification",
+    title: "Cuisine", pin: "Entrez votre NIP", pinWrong: "NIP incorrect", managerPos: "En mode démo, le gérant se connecte seulement sur la tablette de caisse", codeTitle: "Code de vérification",
     codePrompt: "Entrez le code à 6 chiffres de votre application d’authentification.",
     enrollPrompt: "Balayez ce code avec votre application d’authentification, puis entrez le code à 6 chiffres.",
     codeWrong: "Code incorrect", all: "Toutes", recall: "Rappeler", done: "Touchez pour terminer",
@@ -137,7 +139,7 @@ const STR = {
     updated: "À jour", recent: "Terminées récemment :", nothing: "Rien à rappeler", voided: "annulé",
   },
   en: {
-    title: "Kitchen", pin: "Enter your PIN", pinWrong: "Wrong PIN", codeTitle: "Verification code",
+    title: "Kitchen", pin: "Enter your PIN", pinWrong: "Wrong PIN", managerPos: "In demo mode, managers sign in only on the POS tablet", codeTitle: "Verification code",
     codePrompt: "Enter the 6-digit code from your authenticator app.",
     enrollPrompt: "Scan this code with your authenticator app, then enter the 6-digit code.",
     codeWrong: "Wrong code", all: "All", recall: "Recall", done: "Tap to finish",
@@ -207,7 +209,8 @@ async function submitPin() {
     showCode(r);
   } catch (e) {
     pinBuf = ""; renderDots();
-    $("login-err").textContent = (e.code === "rate_limited") ? "⏳" : (e.status === 0 ? T().offline : T().pinWrong);
+    $("login-err").textContent = (e.code === "rate_limited") ? "⏳"
+      : e.code === "manager_pos_only" ? T().managerPos : (e.status === 0 ? T().offline : T().pinWrong);
   }
 }
 function showCode(r) {
@@ -232,7 +235,7 @@ async function submitCode() {
   } catch (e) {
     if (e.code === "invalid_totp") $("code-err").textContent = T().codeWrong;
     else if (e.code === "rate_limited") $("code-err").textContent = "⏳";
-    else { backToPin(); $("login-err").textContent = T().pinWrong; return; }
+    else { backToPin(); $("login-err").textContent = e.code === "manager_pos_only" ? T().managerPos : T().pinWrong; return; }
     $("code-input").value = "";
   } finally { codeBusy = false; }
 }

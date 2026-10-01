@@ -165,8 +165,8 @@ class StaffAppTotpTest {
         val secret = post("/staff-app/login", """{"pin":"9999"}""").obj()["secret"]!!.jsonPrimitive.content
         post("/staff-app/totp", """{"pin":"9999","code":"${Totp.code(secret)}"}""")
 
-        // 5 wrong codes, each preceded by a correct-PIN begin() that must not clear the counter
-        repeat(5) {
+        // 10 wrong codes (the tablet-side bucket; the test client is loopback), each preceded by a correct-PIN begin() that must not clear the counter
+        repeat(10) {
             assertEquals("totp",
                 post("/staff-app/login", """{"pin":"9999"}""").obj()["status"]!!.jsonPrimitive.content)
             post("/staff-app/totp", """{"pin":"9999","code":"000000"}""")

@@ -213,14 +213,29 @@ private fun resolveSession(hash: String, policy: SessionPolicy, background: Bool
     )
 }
 
-/** In-memory login throttle: 10 attempts per rolling minute per email+IP. */
+/**
+ * In-memory login throttle: 10 attempts per rolling minute per email+IP, plus
+ * a per-account ceiling across all IPs ([ACCOUNT_LIMIT]).
+ */
 internal object LoginRateLimiter {
     private const val LIMIT = 10
+    /** Per account, whatever the IP: slows a spread-out guess at one password. */
+    internal const val ACCOUNT_LIMIT = 30
     private const val WINDOW_MS = 60_000L
     // Hard ceiling on tracked keys so the unauthenticated /auth/login path can't be
     // grown without bound by an attacker cycling distinct email+IP keys.
     private const val MAX_KEYS = 10_000
-    private val attempts = mutableMapOf<String, MutableList<Long>>()
+
+    private class Bucket(val limit: Int) { val times = ArrayDeque<Long>() }
+    // insertion-ordered: the eldest entries are the first evicted past MAX_KEYS
+    private val attempts = LinkedHashMap<String, Bucket>()
+
+    /**
+     * The login form's email / username as the limiter keys it: trimmed and
+     * lowercased, exactly as the lookup matches it — padding or case must not
+     * buy a fresh bucket (red-team).
+     */
+    fun normalize(login: String): String = login.trim().lowercase()
 
     /** Live key count — exposed for the boundedness regression test. */
     internal val keyCount: Int @Synchronized get() = attempts.size
@@ -233,18 +248,32 @@ internal object LoginRateLimiter {
     fun record(key: String, limit: Int = LIMIT, nowMs: Long = System.currentTimeMillis()) {
         val cutoff = nowMs - WINDOW_MS
         // Prune every bucket and drop keys that have gone empty (all attempts aged out),
-        // so distinct-key traffic is reclaimed rather than accumulating forever. Cheap
-        // in the common case (few active keys); the hard cap backstops a fresh-key burst
-        // that hasn't had time to age out yet — the window is a minute, so dropping the
-        // map just hands honest callers a fresh one.
-        attempts.entries.removeAll { (_, times) ->
-            times.removeAll { it < cutoff }
-            times.isEmpty()
+        // so distinct-key traffic is reclaimed rather than accumulating forever.
+        attempts.entries.removeAll { (_, b) ->
+            while (b.times.isNotEmpty() && b.times.first() < cutoff) b.times.removeFirst()
+            b.times.isEmpty()
         }
-        if (attempts.size > MAX_KEYS) attempts.clear()
-        val window = attempts.getOrPut(key) { mutableListOf() }
-        if (window.size >= limit) throw RateLimitException()
-        window += nowMs
+        val bucket = attempts.getOrPut(key) { Bucket(limit) }
+        if (bucket.times.size >= limit) throw RateLimitException()
+        bucket.times.addLast(nowMs)
+        evictPastCap()
+    }
+
+    /**
+     * Past [MAX_KEYS], drop the eldest keys that are NOT at their limit. It used
+     * to clear the whole map, so 10,001 junk logins wiped a victim's lockout
+     * (red-team); a key that is currently locked out is kept until it ages out.
+     */
+    private fun evictPastCap() {
+        if (attempts.size <= MAX_KEYS) return
+        val open = attempts.entries.iterator()
+        while (attempts.size > MAX_KEYS && open.hasNext()) {
+            val b = open.next().value
+            if (b.times.size < b.limit) open.remove()
+        }
+        // everything left is locked out: still bounded — drop the eldest
+        val all = attempts.entries.iterator()
+        while (attempts.size > MAX_KEYS && all.hasNext()) { all.next(); all.remove() }
     }
 }
 
@@ -306,7 +335,10 @@ fun Route.authRoutes(config: CloudConfig) {
 
     post("/auth/login") {
         val req = call.receive<LoginRequest>()
-        LoginRateLimiter.record("${req.email.lowercase()}|${call.request.origin.remoteHost}")
+        // keyed on the login as the lookup matches it (trimmed, lowercased), per IP and per account
+        val loginKey = LoginRateLimiter.normalize(req.email)
+        LoginRateLimiter.record("$loginKey|${call.request.origin.remoteHost}")
+        LoginRateLimiter.record("account|$loginKey", limit = LoginRateLimiter.ACCOUNT_LIMIT)
         val (response, sessionToken) = transaction {
             // email is unique per tenant, not globally: pick the row the password verifies against.
             // The field also takes the demo login's username, stored lowercased.
@@ -353,7 +385,9 @@ fun Route.authRoutes(config: CloudConfig) {
             val pending = consumablePending(req.pendingToken, "totp")
             // A 6-digit authenticator code, OR — if the phone is gone — a one-time
             // backup code. isDigit() filter tolerates a pasted "123 456".
-            val ok = Totp.verify(pending[LoginPending.secret], req.code.filter { it.isDigit() }) ||
+            // single-use: the code's step must be later than the last one that signed this user in
+            val step = Totp.matchingStep(pending[LoginPending.secret], req.code.filter { it.isDigit() })
+            val ok = (step != null && claimTotpStep(pending[LoginPending.userId], step)) ||
                 consumeBackupCode(pending[LoginPending.tenantId], pending[LoginPending.userId], req.code)
             if (!ok) {
                 failTotpAttempt(pending)
@@ -373,7 +407,8 @@ fun Route.authRoutes(config: CloudConfig) {
         val (token, backupCodes) = transaction {
             val pending = consumablePending(req.pendingToken, "totp_setup")
             val secret = pending[LoginPending.secret]
-            if (!Totp.verify(secret, req.code.filter { it.isDigit() })) {
+            val step = Totp.matchingStep(secret, req.code.filter { it.isDigit() })
+            if (step == null || !claimTotpStep(pending[LoginPending.userId], step)) {
                 failTotpAttempt(pending)
                 throw UnauthorizedException("wrong code", "bad_totp")
             }
@@ -407,6 +442,16 @@ fun Route.authRoutes(config: CloudConfig) {
             principal.role, principal.canEditMenu, demo = principal.isDemo, demoMode = config.demoMode))
     }
 }
+
+/**
+ * TOTP replay guard: record [step] as this user's last accepted code, only if
+ * it is later than the one stored. One conditional UPDATE, so two requests
+ * racing with the same code can't both win. False = a replayed / older code.
+ */
+private fun claimTotpStep(userId: Long, step: Long): Boolean =
+    PortalUsers.update({
+        (PortalUsers.id eq userId) and (PortalUsers.totpLastStep.isNull() or (PortalUsers.totpLastStep less step))
+    }) { it[totpLastStep] = step } == 1
 
 /** Max-Age = the session's absolute cap: the cookie never outlives the server session. */
 private fun ApplicationCall.setSessionCookie(token: String, policy: SessionPolicy) {

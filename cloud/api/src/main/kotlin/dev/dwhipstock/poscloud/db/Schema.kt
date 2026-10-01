@@ -106,6 +106,8 @@ object PortalUsers : Table("portal_users") {
     val role = text("role").default("owner")
     /** 028: the demo login (DEMO_USER_NAME) — password-only while PORTAL_DEMO_MODE=on, refused otherwise. */
     val isDemo = bool("is_demo").default(false)
+    /** 029: the TOTP step of the last accepted code — a code is single-use (no replay). */
+    val totpLastStep = long("totp_last_step").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

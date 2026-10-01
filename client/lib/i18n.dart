@@ -3889,6 +3889,20 @@ class L {
       'Freigabe durch Manager erforderlich',
       'Bestuurder se goedkeuring nodig',
     ),
+    'manager_pos_only' => _t(
+      'En mode démo, le gérant se connecte seulement sur la tablette du PDV',
+      'In demo mode, managers sign in only on the POS tablet',
+      'En modo demo, el gerente inicia sesión solo en la tableta del TPV',
+      'Im Demo-Modus meldet sich die Leitung nur am Kassen-Tablet an',
+      'In demo-modus meld die bestuurder net op die kassa-tablet aan',
+    ),
+    'pos_terminal_required' => _t(
+      'Seulement sur la caisse (PDV)',
+      'Only on the POS terminal',
+      'Solo en el terminal TPV',
+      'Nur an der Kasse',
+      'Net op die kassa-terminaal',
+    ),
     'check_not_open' => _t(
       'Cette addition n’est plus ouverte',
       'This bill is no longer open',

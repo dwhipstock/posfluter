@@ -48,7 +48,7 @@ fun Route.stockRoutes(stock: StockService, auth: AuthService) {
         val req = call.receive<SubmitCountRequest>()
         val user = call.sessionUser()
         val approver = if (stock.needsApproval(id) && user.role != "MANAGER")
-            requireManagerApproval(auth, req.managerPin) else null
+            requireManagerApproval(auth, req.managerPin, call) else null
         call.respond(stock.submit(id, user.userId, approver))
     }
 

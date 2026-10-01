@@ -23,9 +23,12 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 
-/** The demo seed's sign-in PINs (every demo store seeds these two). */
+/**
+ * The demo seed's server PIN — the only PIN the demo sheet prints. The
+ * manager PIN is never on the slip: in demo mode a manager signs in and
+ * approves only on the POS tablet itself ([dev.dwhipstock.pos.base.ManagerOnPosOnlyException]).
+ */
 internal const val DEMO_SERVER_PIN = "9999"
-internal const val DEMO_MANAGER_PIN = "1234"
 
 /** What the demo QR sheet lists; each null / false block is left off the slip. */
 internal data class DemoSheet(
@@ -42,8 +45,9 @@ internal data class DemoSheet(
 
 /**
  * Demo mode only (demo.mode=on): one slip with a QR for every app a guest can
- * try at the demo, and how to sign in to each. Manager-only (it prints the
- * portal sign-in and the Wi-Fi password). 409 `demo_mode_off` otherwise.
+ * try at the demo, and how to sign in to each (the server PIN only — never the
+ * manager's). A manager on the POS itself only ([requireManagerOnPos]: it prints
+ * the portal sign-in and the Wi-Fi password). 409 `demo_mode_off` otherwise.
  * `?lang=` prints in the POS's current language (English when absent or unknown).
  *
  * Printed straight to the thermal printer with [NetworkThermalPrinter.printNow],
@@ -55,7 +59,9 @@ fun Route.demoSheetRoutes(
     demo: DemoMode, kitchenOn: Boolean,
 ) {
     post("/printer/demo-sheet/print") {
-        requireManagerSession(call)
+        // a manager on the POS itself — never a staff-app bearer or a phone on the
+        // Wi-Fi: the slip carries the portal password, so it must not be reprintable remotely
+        requireManagerOnPos(call)
         if (!demo.on) throw ConflictException("demo mode is off", "demo_mode_off")
         val quickServe = config.profile.kind == StoreProfile.Kind.QUICK_SERVE
         val firstTable = if (quickServe) null else transaction {
@@ -100,7 +106,7 @@ internal fun demoSheetLines(sheet: DemoSheet, locale: LocaleCode = LocaleCode.EN
         add(PrintLine.Blank)
     }
     val base = sheet.baseUrl.trimEnd('/')
-    val pins = m(MessageKey.DEMO_SIGN_IN_PINS, DEMO_SERVER_PIN, DEMO_MANAGER_PIN)
+    val pins = m(MessageKey.DEMO_SIGN_IN_PINS, DEMO_SERVER_PIN)
     val noSignIn = m(MessageKey.DEMO_NO_SIGN_IN)
 
     add(PrintLine.LogoPlaceholder(sheet.venueName))

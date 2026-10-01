@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Copper Lantern POS — Staff</title>
 <style>
+  /* a long unbroken name (no spaces) wraps instead of stretching or clipping the card (red-team) */
+  body { overflow-wrap: anywhere; }
   /* Staff mobile ordering app (M7). Served from the store at /staff-app. Vanilla
      on purpose — loads instantly on any phone, no build step, offline-first.
      Shares the customer menu's light blue Copper Lantern brand tokens. */
@@ -339,7 +341,7 @@ let store = { locales: ["fr", "en"], currency: "CAD", country: "CA", kitchen: fa
 const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans" };
 const STR = {
   fr: {
-    whoClockingIn: "Qui commence son quart ?", enterPin: "Entrez votre NIP", pinWrong: "NIP incorrect",
+    whoClockingIn: "Qui commence son quart ?", enterPin: "Entrez votre NIP", pinWrong: "NIP incorrect", managerPos: "En mode démo, le gérant se connecte seulement sur la tablette de caisse",
     logout: "Déconnexion", tabTables: "Tables", tabPending: "À confirmer",
     free: "Libre", open: "Ouverte", noZones: "Aucune zone pour le moment", closed: "Fermée",
     addItems: "＋ Ajouter des articles", onCheck: "Sur l’addition", pendingHd: "⏳ Commandes des clients à confirmer",
@@ -362,7 +364,7 @@ const STR = {
     gone: n => `${n} n’est plus offert`, priceNow: (n, p) => `${n}\u00a0: le prix est maintenant ${p}`, addAt: p => `Ajouter à ${p}`, menuChanged: "Le menu a changé — vérifiez le panier",
   },
   en: {
-    whoClockingIn: "Who's clocking in?", enterPin: "Enter your PIN", pinWrong: "Incorrect PIN",
+    whoClockingIn: "Who's clocking in?", enterPin: "Enter your PIN", pinWrong: "Incorrect PIN", managerPos: "In demo mode, managers sign in only on the POS tablet",
     logout: "Log out", tabTables: "Tables", tabPending: "Pending",
     free: "Free", open: "Open", noZones: "No zones yet", closed: "Closed",
     addItems: "＋ Add items", onCheck: "On the bill", pendingHd: "⏳ Customer orders (to confirm)",
@@ -385,7 +387,7 @@ const STR = {
     gone: n => `${n} is no longer available`, priceNow: (n, p) => `${n}: price changed to ${p}`, addAt: p => `Add at ${p}`, menuChanged: "The menu changed — check the basket",
   },
   es: {
-    whoClockingIn: "¿Quién empieza su turno?", enterPin: "Ingresa tu PIN", pinWrong: "PIN incorrecto",
+    whoClockingIn: "¿Quién empieza su turno?", enterPin: "Ingresa tu PIN", pinWrong: "PIN incorrecto", managerPos: "En modo demo, el gerente inicia sesión solo en la tableta de caja",
     logout: "Cerrar sesión", tabTables: "Mesas", tabPending: "Pendientes",
     free: "Libre", open: "Abierta", noZones: "Todavía no hay zonas", closed: "Cerrada",
     addItems: "＋ Agregar productos", onCheck: "En la cuenta", pendingHd: "⏳ Pedidos de clientes por confirmar",
@@ -408,7 +410,7 @@ const STR = {
     gone: n => `${n} ya no está disponible`, priceNow: (n, p) => `${n}: el precio cambió a ${p}`, addAt: p => `Agregar a ${p}`, menuChanged: "El menú cambió: revisa el carrito",
   },
   de: {
-    whoClockingIn: "Wer beginnt die Schicht?", enterPin: "PIN eingeben", pinWrong: "Falsche PIN",
+    whoClockingIn: "Wer beginnt die Schicht?", enterPin: "PIN eingeben", pinWrong: "Falsche PIN", managerPos: "Im Demo-Modus meldet sich die Leitung nur am Kassen-Tablet an",
     logout: "Abmelden", tabTables: "Tische", tabPending: "Zu bestätigen",
     free: "Frei", open: "Besetzt", noZones: "Noch keine Bereiche", closed: "Geschlossen",
     addItems: "＋ Artikel hinzufügen", onCheck: "Auf der Rechnung", pendingHd: "⏳ Gästebestellungen (zu bestätigen)",
@@ -431,7 +433,7 @@ const STR = {
     gone: n => `${n} ist nicht mehr erhältlich`, priceNow: (n, p) => `${n}: Preis geändert auf ${p}`, addAt: p => `Für ${p} hinzufügen`, menuChanged: "Die Karte hat sich geändert – Warenkorb prüfen",
   },
   af: {
-    whoClockingIn: "Wie begin die skof?", enterPin: "Tik jou PIN in", pinWrong: "Verkeerde PIN",
+    whoClockingIn: "Wie begin die skof?", enterPin: "Tik jou PIN in", pinWrong: "Verkeerde PIN", managerPos: "In demo-modus meld die bestuurder net op die kassa-tablet aan",
     logout: "Teken uit", tabTables: "Tafels", tabPending: "Om te bevestig",
     free: "Vry", open: "Beset", noZones: "Nog geen areas nie", closed: "Gesluit",
     addItems: "＋ Voeg items by", onCheck: "Op die rekening", pendingHd: "⏳ Gastebestellings (om te bevestig)",
@@ -742,7 +744,7 @@ async function openResetSheet() {
   const list = document.getElementById("reset-list");
   list.innerHTML = `<div class="spinner">${T().loading}</div>`;
   let staff = [];
-  try { staff = await api("/staff", { auth: false }); } catch (_) {}
+  try { staff = await api("/staff"); } catch (_) {}
   list.innerHTML = staff.map(s => `
     <div class="rrow">
       <span class="who2">${esc(s.name)} <small>${esc(roleName(s.role))}</small></span>
@@ -813,7 +815,8 @@ async function submitPin() {
   } catch (e) {
     pinBuf = ""; renderPinDots();
     document.getElementById("login-err").textContent =
-      (e instanceof ApiError && e.code === "rate_limited") ? "⏳" : T().pinWrong;
+      (e instanceof ApiError && e.code === "rate_limited") ? "⏳"
+      : (e instanceof ApiError && e.code === "manager_pos_only") ? T().managerPos : T().pinWrong;
   }
 }
 
@@ -862,7 +865,12 @@ async function submitCode() {
     const el = document.getElementById("code-err");
     if (e instanceof ApiError && e.code === "invalid_totp") el.textContent = T().codeWrong;
     else if (e instanceof ApiError && e.code === "rate_limited") el.textContent = "⏳";
-    else { backToPin(); document.getElementById("login-err").textContent = T().pinWrong; return; }
+    else {
+      backToPin();
+      document.getElementById("login-err").textContent =
+        (e instanceof ApiError && e.code === "manager_pos_only") ? T().managerPos : T().pinWrong;
+      return;
+    }
     document.getElementById("code-input").value = "";
   } finally {
     codeSubmitting = false;
