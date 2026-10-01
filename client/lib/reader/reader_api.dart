@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../store_profile.dart';
+
 /// A payment the store queued for this phone. [clientSecret] is only ever
 /// handed to the Stripe Terminal SDK, never shown or logged.
 class ReaderJob {
@@ -30,12 +32,8 @@ class ReaderJob {
   bool get active =>
       state == 'queued' || state == 'collecting' || state == 'processing';
 
-  String get amountLabel {
-    final c = amountCents.abs();
-    final symbol = currency == 'USD' || currency == 'CAD' ? r'$' : '';
-    return '$symbol${c ~/ 100}.${(c % 100).toString().padLeft(2, '0')}'
-        '${symbol.isEmpty ? ' $currency' : ''}';
-  }
+  /// "$1,234.56": the shared North American money format, like the POS.
+  String get amountLabel => formatMoney(amountCents.abs(), currency);
 }
 
 class ReaderConfig {

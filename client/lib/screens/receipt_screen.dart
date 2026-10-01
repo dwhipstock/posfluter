@@ -115,7 +115,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       ),
       body: Center(
         child: Container(
-          width: 420,
+          width: T.receiptCardWidth,
           margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(

@@ -147,14 +147,14 @@ function ExceptionsPage() {
                   <TableCell className="whitespace-nowrap text-xs text-neutral-500">
                     {fmt.dateTime(v.voidedAt)}
                   </TableCell>
-                  <TableCell>{v.tableLabel}</TableCell>
+                  <TableCell className="max-w-[16rem] [overflow-wrap:anywhere]">{v.tableLabel}</TableCell>
                   <TableCell className="text-right font-medium tabular-nums text-red-600">
                     {m.fmtIn(v.currency ?? m.currencyOf(v.venueId), v.amountCents)}
                   </TableCell>
                   <TableCell className="max-w-[14rem] truncate text-xs text-neutral-600">
                     {v.reason}
                   </TableCell>
-                  <TableCell className="text-xs text-neutral-500">{v.voidedBy}</TableCell>
+                  <TableCell className="max-w-[12rem] text-xs text-neutral-500 [overflow-wrap:anywhere]">{v.voidedBy}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

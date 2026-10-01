@@ -2332,6 +2332,16 @@ class L {
     'Bitte alle Felder ausfüllen',
     'Vul alle velde in',
   );
+
+  /// A money box holds something that isn't dollars and cents. The example
+  /// stays North American ($12.99) in every language — that's how it's typed.
+  String get invalidMoneyAmount => _t(
+    'Montant invalide : entrez par ex. 12.99 (point pour les cents)',
+    'Invalid amount: enter e.g. 12.99',
+    'Importe no válido: escribe p. ej. 12.99 (punto para los centavos)',
+    'Ungültiger Betrag: z. B. 12.99 eingeben (Punkt vor den Cents)',
+    'Ongeldige bedrag: tik bv. 12.99 (punt voor die sente)',
+  );
   String get editCategories => _t(
     'Gérer les catégories',
     'Edit categories',

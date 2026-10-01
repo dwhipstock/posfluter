@@ -14,18 +14,17 @@
     /* the brand's page colour and face (both from the brand pack; fonts are bundled in app/fonts, never fetched) */
     @apply bg-paper font-sans text-ink antialiased;
     font-feature-settings: "cv11", "ss01";
-  }
-  ::selection {
-    background: var(--c-selection);
-  }
-  /* French labels run longer than English. overflow-wrap is a last-resort
-     fallback so a long unbroken word wraps instead of overflowing its card at
-     phone widths. break-word (not anywhere) avoids shrinking table columns'
-     min-content width. */
-  :lang(fr) {
+    /* Every language: a last-resort fallback so a long unbroken word (French
+       labels, or a 200-character name with no spaces typed into the POS)
+       wraps instead of overflowing its card at phone widths. break-word (not
+       anywhere) keeps table columns' min-content width, so table cells that
+       hold user-typed names also carry break-words / truncate. */
     word-break: normal;
     overflow-wrap: break-word;
     line-break: auto;
+  }
+  ::selection {
+    background: var(--c-selection);
   }
 }
 

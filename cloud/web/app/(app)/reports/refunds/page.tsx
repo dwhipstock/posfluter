@@ -182,7 +182,7 @@ function RefundsPage() {
               <TableBody>
                 {data.byReason.map((r) => (
                   <TableRow key={r.reason}>
-                    <TableCell className="font-medium">{r.reason}</TableCell>
+                    <TableCell className="max-w-[20rem] font-medium [overflow-wrap:anywhere]">{r.reason}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.count}</TableCell>
                     <TableCell className="text-right tabular-nums text-red-600">
                       {fmtC(r.grossCents)}

@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -6,6 +7,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../money_input.dart';
 import '../widgets/ai_menu.dart';
 import '../widgets/ai_photos.dart';
 import '../widgets/item_photo.dart';
@@ -466,13 +468,14 @@ class _VariantEdit {
     : labelFr = TextEditingController(text: fr),
       labelEn = TextEditingController(text: en),
       priceCAD = TextEditingController(
-        text: cents == null ? '' : '${cents ~/ 100}',
+        text: cents == null ? '' : centsToMoneyInput(cents),
       );
 
-  bool get filled =>
-      labelFr.text.trim().isNotEmpty &&
-      labelEn.text.trim().isNotEmpty &&
-      int.tryParse(priceCAD.text) != null;
+  /// The price box as cents; null when it isn't a dollars-and-cents amount.
+  int? get cents => parseMoneyCents(priceCAD.text);
+
+  bool get labelled =>
+      labelFr.text.trim().isNotEmpty && labelEn.text.trim().isNotEmpty;
 }
 
 class _ItemEditorDialog extends StatefulWidget {
@@ -561,10 +564,16 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
         _nameEn.text.trim().isEmpty ||
         _abbrev.text.trim().isEmpty ||
         _variants.isEmpty ||
-        _variants.any((v) => !v.filled)) {
+        _variants.any((v) => !v.labelled || v.priceCAD.text.trim().isEmpty)) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(l.fillAllFields)));
+      return;
+    }
+    if (_variants.any((v) => v.cents == null)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.invalidMoneyAmount)));
       return;
     }
     await _guard(() async {
@@ -580,7 +589,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
               {
                 'labelFr': v.labelFr.text.trim(),
                 'labelEn': v.labelEn.text.trim(),
-                'priceCents': int.parse(v.priceCAD.text) * 100,
+                'priceCents': v.cents!,
               },
           ],
         });
@@ -599,11 +608,11 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
             await Api.addVariant(item.id, {
               'labelFr': v.labelFr.text.trim(),
               'labelEn': v.labelEn.text.trim(),
-              'priceCents': int.parse(v.priceCAD.text) * 100,
+              'priceCents': v.cents!,
             });
           } else {
             final orig = item.variants.where((x) => x.id == v.id).firstOrNull;
-            final cents = int.parse(v.priceCAD.text) * 100;
+            final cents = v.cents!;
             if (orig == null ||
                 orig.labelFr != v.labelFr.text.trim() ||
                 orig.labelEn != v.labelEn.text.trim() ||
@@ -665,10 +674,12 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
     String label, {
     TextInputType? keyboard,
     int? maxLength,
+    List<TextInputFormatter>? formatters,
   }) {
     return TextField(
       controller: c,
       keyboardType: keyboard,
+      inputFormatters: formatters,
       maxLength: maxLength,
       style: T.text(size: 16),
       decoration: InputDecoration(labelText: label, counterText: ''),
@@ -708,12 +719,19 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _categoryId,
+                        // a long category name ellipsizes instead of
+                        // overflowing the field
+                        isExpanded: true,
                         decoration: InputDecoration(labelText: l.categoryLabel),
                         items: [
                           for (final c in widget.categories)
                             DropdownMenuItem(
                               value: c.id,
-                              child: Text(l.name(c.nameFr, c.nameEn, c.names)),
+                              child: Text(
+                                l.name(c.nameFr, c.nameEn, c.names),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                         ],
                         onChanged: (v) =>
@@ -770,7 +788,10 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                           child: _field(
                             v.priceCAD,
                             l.priceCAD,
-                            keyboard: TextInputType.number,
+                            keyboard: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            formatters: moneyInputFormatters,
                           ),
                         ),
                         IconButton(
@@ -830,18 +851,23 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                 const SizedBox(height: 16),
                 Row(
                   children: [
+                    // Delete gives way (ellipsizes) before Cancel/Save do
                     if (!isNew)
-                      TextButton.icon(
-                        icon: const Icon(
-                          LucideIcons.trash2,
-                          size: 18,
-                          color: T.destructive,
+                      Flexible(
+                        child: TextButton.icon(
+                          icon: const Icon(
+                            LucideIcons.trash2,
+                            size: 18,
+                            color: T.destructive,
+                          ),
+                          label: Text(
+                            l.deleteItem,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: T.destructive),
+                          ),
+                          onPressed: _busy ? null : _deleteItem,
                         ),
-                        label: Text(
-                          l.deleteItem,
-                          style: const TextStyle(color: T.destructive),
-                        ),
-                        onPressed: _busy ? null : _deleteItem,
                       ),
                     const Spacer(),
                     TextButton(

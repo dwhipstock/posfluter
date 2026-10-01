@@ -140,7 +140,7 @@ fun Route.tableRoutes(auth: AuthService) {
                 it[DiningTables.zoneId] = zoneId
                 it[DiningTables.label] = label
                 it[parentTableId] = req.parentTableId
-                it[nameOverride] = req.nameOverride?.trim()?.ifBlank { null }
+                it[nameOverride] = normalizeTableName(req.nameOverride)
                 it[sortOrder] = maxSort + 1
                 it[x] = req.x
                 it[y] = req.y
@@ -209,7 +209,7 @@ fun Route.tableRoutes(auth: AuthService) {
                 zoneLabel(zoneId, requireZone(zoneId)[Zones.labelPrefix], it, excludeId = tableId)
             }
             val changedLabel = newLabel != null && newLabel != row[DiningTables.label]
-            val newOverride = req.nameOverride?.trim()?.ifBlank { null }
+            val newOverride = normalizeTableName(req.nameOverride)
             val changedOverride =
                 req.nameOverride != null && newOverride != row[DiningTables.nameOverride]
             if (changedLabel || changedOverride) {
@@ -290,6 +290,14 @@ fun requireLiveTable(tableId: String): ResultRow =
     DiningTables.selectAll().where {
         (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull()
     }.firstOrNull() ?: throw NotFoundException("table $tableId not found")
+
+/**
+ * A VIP table name is one line everywhere it shows (floor tile, check header,
+ * kitchen ticket, receipt): line breaks, tabs and other control characters
+ * become single spaces, runs of spaces collapse, blank → null.
+ */
+internal fun normalizeTableName(raw: String?): String? =
+    raw?.replace(Regex("[\\p{Cc}\\u2028\\u2029\\s]+"), " ")?.trim()?.ifBlank { null }
 
 /** Trailing digits of a label ("L-12" → 12, "B1" → 1, "Patio" → null). */
 private fun trailingInt(label: String): Int? =

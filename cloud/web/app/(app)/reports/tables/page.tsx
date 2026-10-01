@@ -165,11 +165,11 @@ function TablesPage() {
                 <TableRow key={`${t.venueId}/${t.tableId}`}>
                   <TableCell className="font-medium">
                     <span className="flex items-center gap-1.5">
-                      {t.tableLabel}
+                      <span className="max-w-[16rem] [overflow-wrap:anywhere]">{t.tableLabel}</span>
                       <StoreTag venueId={t.venueId} />
                     </span>
                   </TableCell>
-                  <TableCell className="text-xs text-neutral-500">{name(null, t.zoneNameEn, t.zoneNames)}</TableCell>
+                  <TableCell className="max-w-[12rem] text-xs text-neutral-500 [overflow-wrap:anywhere]">{name(null, t.zoneNameEn, t.zoneNames)}</TableCell>
                   <TableCell className="text-right tabular-nums">{t.checkCount}</TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
                     {m.fmtVenue(t.venueId, t.grossCents)}

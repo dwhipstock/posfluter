@@ -7,6 +7,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../text_utils.dart';
 import 'floor_object_icons.dart';
 
 /// Geometry is stored server-side in LOGICAL units on a square canvas —
@@ -306,15 +307,24 @@ class TableShape extends StatelessWidget {
     final border = filled
         ? Color.lerp(statusColor, T.textPrimary, .25)!
         : statusColor ?? T.border;
+    // The FittedBox below lays the content out unconstrained, so a long VIP
+    // name (up to 100 chars) would set the width and shrink everything to a
+    // few px. Cap the name at the tile's inner width (the upright one, for a
+    // rotated table) so it ellipsizes at the readable labelSize instead.
+    final sideways = (table.rotation % 180).abs() == 90;
+    final labelMaxWidth = math.max((sideways ? h : w) - 8, 24.0);
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          table.displayLabel,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: T.text(size: labelSize, weight: FontWeight.w700, color: ink),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: labelMaxWidth),
+          child: Text(
+            oneLine(table.displayLabel),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: T.text(size: labelSize, weight: FontWeight.w700, color: ink),
+          ),
         ),
         if (subtitle != null &&
             h > 36 &&

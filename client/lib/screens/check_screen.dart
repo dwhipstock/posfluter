@@ -7,6 +7,7 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../text_utils.dart';
 import '../kitchen/kitchen_banner.dart';
 import '../kitchen/kitchen_i18n.dart';
 import '../menu_changes.dart';
@@ -1047,11 +1048,18 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          item.variants.length == 1
-                              ? money(item.variants.first.priceCents)
-                              : '${money(item.variants.first.priceCents)}+',
-                          style: T.price(size: 18, weight: FontWeight.w700),
+                        // a huge price shrinks to fit the tile, never clips
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              item.variants.length == 1
+                                  ? money(item.variants.first.priceCents)
+                                  : '${money(item.variants.first.priceCents)}+',
+                              style: T.price(size: 18, weight: FontWeight.w700),
+                            ),
+                          ),
                         ),
                         if (inactive) const Pill('86', color: T.destructive),
                       ],
@@ -1081,10 +1089,16 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // a VIP name can be 100 chars (and older ones may
+                      // hold line breaks): one line of text, 2 rows max
                       Text(
-                        widget.counterOrder
-                            ? widget.tableLabel
-                            : '${l.table} ${widget.tableLabel}',
+                        oneLine(
+                          widget.counterOrder
+                              ? widget.tableLabel
+                              : '${l.table} ${widget.tableLabel}',
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: T.text(
                           size: 22,
                           weight: FontWeight.w700,
@@ -1223,12 +1237,20 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       l.total,
                       style: T.text(size: 20, weight: FontWeight.w600),
                     ),
-                    Text(
-                      money(check.grandTotalCents),
-                      style: T.price(
-                        size: T.priceBigSize,
-                        weight: FontWeight.w700,
-                        color: T.navy,
+                    const SizedBox(width: 12),
+                    // a seven-figure total shrinks rather than overflowing
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          money(check.grandTotalCents),
+                          style: T.price(
+                            size: T.priceBigSize,
+                            weight: FontWeight.w700,
+                            color: T.navy,
+                          ),
+                        ),
                       ),
                     ),
                   ],
