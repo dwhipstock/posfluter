@@ -65,7 +65,22 @@ class ParsedChangeSet(
     val summary: String, val ops: List<MenuOp>, val rejected: List<String>,
     /** The model said this is not a menu request (its `refusal` field). */
     val refused: Boolean = false,
+    /** Ops dropped because a name or description was offensive ([AiGuard.BLOCKED_WORD]). */
+    val offensive: Int = 0,
 )
+
+/**
+ * What one AI task may propose. Whatever the model (or text in a photo, or a
+ * name stored in the menu) says, an op outside the scope is rejected.
+ */
+enum class MenuScope(val ops: Set<String>, val pricesOnlyUpdates: Boolean = false) {
+    /** Menu chat (typed or spoken): everything. */
+    CHAT(MenuChangeSetParser.KNOWN_OPS),
+    /** "Translate menu": names in the store's extra languages, nothing else. */
+    TRANSLATE(setOf("set_name")),
+    /** "Menu from photos": new categories and items, and new prices of existing items; never a removal or rename. */
+    PHOTOS(setOf("add_category", "add_item", "update_item"), pricesOnlyUpdates = true),
+}
 
 /**
  * Strict reader of the model's reply. The reply must be one JSON object
@@ -86,9 +101,12 @@ object MenuChangeSetParser {
     private const val MAX_LABEL = 30
     private const val MAX_VARIANTS = 8
 
+    val KNOWN_OPS = setOf("add_category", "add_item", "update_item", "remove_item", "rename_category",
+        "reorder_categories", "set_name")
+
     private val json = Json { isLenient = false }
 
-    fun parse(reply: String, facts: MenuFacts): ParsedChangeSet {
+    fun parse(reply: String, facts: MenuFacts, scope: MenuScope = MenuScope.CHAT): ParsedChangeSet {
         val text = reply.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
         val root = runCatching { json.parseToJsonElement(text) }.getOrNull() as? JsonObject
             ?: throw MenuAiReplyException("the AI reply was not a JSON object")
@@ -105,25 +123,35 @@ object MenuChangeSetParser {
         val newRefs = mutableSetOf<String>()
         val ops = mutableListOf<MenuOp>()
         val rejected = mutableListOf<String>()
+        var offensive = 0
         rawOps.forEachIndexed { i, el ->
             val o = el as? JsonObject
             if (o == null) { rejected += "#${i + 1}: not an object"; return@forEachIndexed }
             try {
                 val kind = o["op"].s()
+                // only the server's own op names reach the screen, never the model's text
+                require(kind in KNOWN_OPS) { "unknown op" }
+                require(kind in scope.ops) { "not allowed for this task" }
                 if (kind == "remove_item") require(removes <= MAX_REMOVES) {
                     "too many removals at once ($removes); at most $MAX_REMOVES per request"
                 }
                 if (kind == "add_item" || kind == "add_category") require(++adds <= MAX_ADDS) {
                     "too many new items at once; at most $MAX_ADDS per request"
                 }
-                val op = one(o, facts, newRefs)
+                var op = one(o, facts, newRefs)
+                if (scope.pricesOnlyUpdates && op is MenuOp.UpdateItem) {
+                    require(op.prices.isNotEmpty()) { "only new prices are allowed for this task" }
+                    op = MenuOp.UpdateItem(op.itemId, prices = op.prices)
+                }
                 if (op is MenuOp.AddCategory) newRefs += op.ref
                 ops += op
             } catch (e: IllegalArgumentException) {
-                rejected += AiGuard.quote("#${i + 1} (${o["op"].s()?.take(20) ?: "?"}): ${e.message}", 160)
+                if (e.message?.endsWith(AiGuard.BLOCKED_WORD) == true) offensive++
+                val kind = o["op"].s()?.takeIf { it in KNOWN_OPS } ?: "?"
+                rejected += AiGuard.quote("#${i + 1} ($kind): ${e.message}", 160)
             }
         }
-        return ParsedChangeSet(summary, guardExtraLanguageBleed(ops, facts, rejected), rejected)
+        return ParsedChangeSet(summary, guardExtraLanguageBleed(ops, facts, rejected), rejected, offensive = offensive)
     }
 
     /**
@@ -184,13 +212,13 @@ object MenuChangeSetParser {
     private fun one(o: JsonObject, facts: MenuFacts, newRefs: Set<String>): MenuOp {
         fun category(raw: String?): String {
             require(!raw.isNullOrBlank()) { "category missing" }
-            require(raw in facts.categoryIds || raw in newRefs) { "unknown category '${raw.take(40)}'" }
+            require(raw in facts.categoryIds || raw in newRefs) { "unknown category" }
             return raw
         }
         fun item(): String {
             val id = o["item"].s()
             require(!id.isNullOrBlank()) { "item missing" }
-            require(id in facts.itemVariants) { "unknown item '${id.take(40)}'" }
+            require(id in facts.itemVariants) { "unknown item" }
             return id
         }
         fun name(key: String, max: Int): String? = o[key].s()?.trim()?.also {
@@ -204,7 +232,7 @@ object MenuChangeSetParser {
             "add_category" -> {
                 val ref = o["ref"].s()?.trim()
                 require(!ref.isNullOrBlank() && ref.startsWith("new:")) { "ref must look like \"new:...\"" }
-                require(ref !in newRefs) { "duplicate ref '$ref'" }
+                require(ref !in newRefs) { "duplicate ref" }
                 val en = name("nameEn", MAX_CATEGORY_NAME).orEmpty()
                 val fr = name("nameFr", MAX_CATEGORY_NAME).orEmpty()
                 require(en.isNotEmpty() || fr.isNotEmpty()) { "a name is required" }
@@ -240,7 +268,7 @@ object MenuChangeSetParser {
                 (o["prices"] as? JsonArray)?.forEach { p ->
                     val po = p as? JsonObject ?: throw IllegalArgumentException("a price is not an object")
                     val variant = po["variant"].s()
-                    require(variant != null && variant in live) { "unknown size '${variant?.take(40)}' of $id" }
+                    require(variant != null && variant in live) { "unknown size of $id" }
                     prices[variant] = price(po["priceMinor"], facts, facts.variantPrices[variant] == 0L)
                 }
                 o["priceMinor"]?.takeUnless { it is JsonNull }?.let {
@@ -268,7 +296,7 @@ object MenuChangeSetParser {
             "remove_item" -> MenuOp.RemoveItem(item())
             "rename_category" -> {
                 val id = o["category"].s()
-                require(id != null && id in facts.categoryIds) { "unknown category '${id?.take(40)}'" }
+                require(id != null && id in facts.categoryIds) { "unknown category" }
                 val (en, fr) = guardNameBleed(
                     name("nameEn", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() },
                     name("nameFr", MAX_CATEGORY_NAME)?.takeIf { it.isNotEmpty() },
@@ -281,12 +309,12 @@ object MenuChangeSetParser {
                 val entity = o["entity"].s()
                 val id = o["id"].s()
                 when (entity) {
-                    "item" -> require(id != null && id in facts.itemVariants) { "unknown item '${id?.take(40)}'" }
-                    "category" -> require(id != null && id in facts.categoryIds) { "unknown category '${id?.take(40)}'" }
+                    "item" -> require(id != null && id in facts.itemVariants) { "unknown item" }
+                    "category" -> require(id != null && id in facts.categoryIds) { "unknown category" }
                     else -> throw IllegalArgumentException("entity must be item or category")
                 }
                 val lang = o["lang"].s()?.trim()?.lowercase()
-                require(lang != null && lang in facts.extraLangs) { "language '${lang?.take(8)}' is not one of ${facts.extraLangs}" }
+                require(lang != null && lang in facts.extraLangs) { "that language is not one of ${facts.extraLangs}" }
                 val text = name("name", MAX_ITEM_NAME)
                 require(!text.isNullOrEmpty()) { "a name is required" }
                 MenuOp.SetName(entity, id!!, lang, text)
@@ -298,7 +326,7 @@ object MenuChangeSetParser {
                 order.forEach { category(it) }
                 MenuOp.ReorderCategories(order)
             }
-            else -> throw IllegalArgumentException("unknown op '${kind?.take(20)}'")
+            else -> throw IllegalArgumentException("unknown op")
         }
     }
 

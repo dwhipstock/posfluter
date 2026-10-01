@@ -85,6 +85,28 @@ class MenuAiProvidersTest {
     }
 
     @Test
+    fun geminiNeverRunsPastItsOverallBudgetAcrossRetries() {
+        // a slow "busy" answer, then a fallback that hangs: the whole call still ends on the budget
+        val http = object : ImageHttp {
+            var calls = 0
+            override fun send(request: ImageHttpRequest): ImageHttpResponse {
+                calls++
+                if (calls == 1) { Thread.sleep(200); return ImageHttpResponse(503, """{"error":{"message":"busy"}}""".toByteArray()) }
+                Thread.sleep(5_000)
+                return ImageHttpResponse(200, geminiOk.toByteArray())
+            }
+        }
+        val started = System.currentTimeMillis()
+        val e = assertFailsWith<ImageGenException> {
+            GeminiMenuProvider(key, http, pause = {}, budgetMs = 600).complete("s", "u", emptyList())
+        }
+        val took = System.currentTimeMillis() - started
+        assertEquals(ImageGenException.TIMEOUT, e.code)
+        assertTrue(took < 2_000, "took ${took}ms on a 600ms budget")
+        assertEquals(2, http.calls) // no same-model retry: too little budget left for the pause
+    }
+
+    @Test
     fun geminiQuotaUsedUpFallsBackWithoutPausing() {
         val quota = 429 to """{"error":{"message":"Quota exceeded for metric generate_content_free_tier_requests"}}"""
         val pauses = mutableListOf<Long>()

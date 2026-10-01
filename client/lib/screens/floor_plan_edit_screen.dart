@@ -802,12 +802,38 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     final p = _proposal;
     if (p == null) return;
     final l = L.of(context);
+    // many removals ("remove every table"): one more explicit yes
+    if (p.isEdit && p.bulk) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          content: Text(
+            l.floorEditBulkConfirm(
+              p.removedTables.length + p.removedObjects.length,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l.cancel),
+            ),
+            FilledButton(
+              key: const Key('floor-edit-bulk-confirm'),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l.floorEditApplyAnyway),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     try {
       final r = p.isEdit
           ? await Api.floorEditApply(
               widget.zone.id,
               p.proposalId,
               widget.managerPin,
+              confirmed: p.bulk,
             )
           : await Api.roomLayoutApply(
               widget.zone.id,

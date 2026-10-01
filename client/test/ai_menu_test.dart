@@ -219,6 +219,40 @@ void main() {
     expect(fake.confirmed.single, isTrue);
   });
 
+  testWidgets('a steep price cut asks once more, even for one change', (
+    tester,
+  ) async {
+    final fake = _Fake()
+      ..next = () => MenuProposal.fromJson({
+        'proposalId': 'p4',
+        'provider': 'fake',
+        'summary': '',
+        'bulk': true,
+        'bulkReasons': ['price_cuts'],
+        'changes': [
+          {
+            'id': 'c1',
+            'kind': 'update_item',
+            'title': 'Poutine',
+            'details': [
+              {'field': 'price', 'before': r'$14.00', 'after': r'$0.01'},
+            ],
+          },
+        ],
+      });
+    await tester.pumpWidget(_app(fake.dialog()));
+    await tester.enterText(find.byKey(const Key('ai-menu-text')), 'poutine 0');
+    await tester.tap(find.byKey(const Key('ai-menu-ask')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ai-menu-apply')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('prices cut by half'), findsOneWidget);
+    expect(fake.applied, isEmpty);
+    await tester.tap(find.byKey(const Key('ai-menu-bulk-confirm')));
+    await tester.pumpAndSettle();
+    expect(fake.confirmed.single, isTrue);
+  });
+
   group('translate menu', () {
     MenuProposal names() => MenuProposal.fromJson({
       'proposalId': 'p2',
