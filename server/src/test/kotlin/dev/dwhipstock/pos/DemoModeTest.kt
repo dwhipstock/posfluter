@@ -205,7 +205,7 @@ class DemoModeTest {
         val lines = demoSheetLines(sheet())
         val t = texts(lines)
         assertEquals("DEMO MODE — demo QR codes", lines.filterIsInstance<PrintLine.Header>().first().text)
-        assertTrue("Printed for the demo so guests can try every app. Not printed in normal use." in t)
+        assertTrue("Printed for the demo so guests can try every app. Not printed in normal use. MFA (two-step sign-in) is turned off in demo mode." in t)
         for (title in listOf("Guest ordering at a table", "Staff phone app", "Kitchen screen", "Pickup board",
             "Manager portal", "Guest Wi-Fi")) assertTrue(title in t, title)
         val urls = listOf(tableUrl, "$base/staff-app", "$base/kitchen", "$base/pickup", portal)
