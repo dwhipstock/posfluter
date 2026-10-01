@@ -154,6 +154,15 @@ internal object RoomLayoutRules {
 
     class Result(val tables: List<RoomTableDto>, val objects: List<RoomObjectDto>, val rejected: List<String>)
 
+    /** "round", "Circle", "ROUND" → "ROUND"; null for a shape we don't draw. */
+    fun tableShape(raw: String?): String? = raw?.trim()?.uppercase()?.let(TABLE_SHAPE::get)
+
+    /** "bar", "Pool table", "BAR_FRONT" → the stored type; null when unknown. */
+    fun objectType(raw: String?): String? {
+        val key = raw?.trim()?.uppercase()?.replace(' ', '_')?.replace('-', '_') ?: return null
+        return (OBJECT_TYPE[key] ?: key).takeIf { it in FLOOR_OBJECT_TYPES }
+    }
+
     /**
      * Known types only, everything clamped into the room, seats 1–20, at most
      * [MAX_TABLES] tables and [MAX_OBJECTS] objects, no table on top of

@@ -70,6 +70,24 @@ category it touched. **AI history** in the dialog lists the last 20 with a
 | `menu.ai.provider` / `POS_MENU_AI_PROVIDER` | `gemini` / `openai` / `anthropic` / `off` |
 | key | `menu.ai.gemini.apiKey` / `menu.ai.openai.apiKey` / `menu.ai.anthropic.apiKey`, or `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` |
 | `menu.ai.model` / `POS_MENU_AI_MODEL` | optional model id |
+| `menu.ai.layoutModel` / `POS_MENU_AI_LAYOUT_MODEL` | optional: room from picture, object from photo, typed floor edits |
+| `menu.ai.voiceModel` / `POS_MENU_AI_VOICE_MODEL` | optional: spoken requests (menu and floor plan) |
+
+Which model answers what (Gemini):
+
+| Request | Model |
+|---|---|
+| typed menu chat | `menu.ai.model`, else `gemini-3.5-flash-lite` |
+| spoken menu chat | `menu.ai.voiceModel`, else `menu.ai.model`, else `gemini-3.5-flash` |
+| typed floor edit, room from picture | `menu.ai.layoutModel`, else `gemini-3.5-flash-lite` (medium thinking) |
+| spoken floor edit | `menu.ai.voiceModel`, else `menu.ai.layoutModel`, else `gemini-3.5-flash` (medium thinking) |
+
+So an explicit `menu.ai.model` / `menu.ai.layoutModel` keeps applying to
+voice as it always did; set `menu.ai.voiceModel` to give voice its own. With
+no override, voice gets the stronger flash model: in live tests the lite model
+missed about 2 in 5 German spoken floor edits (`no_change`), flash got them
+all (it is slower: roughly 6–30 s). A busy (503) or out-of-quota (429) flash
+call falls back to lite.
 
 Default models: Gemini `gemini-3.5-flash-lite` (fast: 2–6 s a request; Interactions API, JSON output; a busy
 503 is retried once, then tried on `gemini-3.5-flash`),
@@ -229,7 +247,13 @@ package streams PCM on both) and send it once to `/menu-ai/chat/voice` or
 audio part with the usual instruction, so one call transcribes and interprets;
 the model writes what it heard in `transcript` and the tablet shows
 "Heard: …" above the answer. The transcript gets the typed text's checks, so
-an injection by voice gets the fixed reply. The audio is never stored or
+an injection by voice gets the fixed reply. The prompt names the store's
+languages and insists the transcript is verbatim in the language spoken,
+never translated (German audio once came back as a French transcript,
+"Mettez table 12 ronde"). Typed or spoken, the model reports the request's
+`language` and writes its summary in it; the fixed replies (no change, off
+topic) and the "skipped" lines follow it too, falling back to the signed-in
+user's language. The audio is never stored or
 logged. OpenAI and Anthropic answer `409 menu_ai_voice_unsupported` (type
 instead). Android asks for the microphone at first use (`RECORD_AUDIO`);
 Windows uses its microphone privacy setting.
@@ -244,6 +268,12 @@ seats and geometry; objects; the walls are the plan's edges) and answers ops
 (add / update / remove tables and objects). The store checks them with the
 room-from-picture rules (known shapes and types, inside the room, no table on
 another, numbers free in the store) and never moves, reshapes, renumbers or
-removes a table with an open bill or in a join. The result is the usual ghost
+removes a table with an open bill (on it or one of its sub-tables). A
+sub-table link alone does not lock a table: linked tables can be reshaped,
+reseated, moved and renumbered, and a table with sub-tables is only kept from
+removal. The model may name a table by id, label or number ("u3", "U-12",
+"Tisch 12", "12" all resolve to U-12; "L-5" in the Dining Room does not).
+Made round or square with no size given, a table gets an even footprint of
+about the same area, on the same centre. The result is the usual ghost
 preview with a list of changes; Apply re-checks against the room as it is
 then and saves a "room" change set that reverts like the others.

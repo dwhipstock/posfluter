@@ -110,6 +110,10 @@ class MenuAiService(
     private val provider: MenuAiProvider? = MenuAiProviders.from(config),
     /** Room from picture and object from photo only (a slower, thinking model); null = [provider]. */
     private val layoutProvider: MenuAiProvider? = null,
+    /** Spoken menu requests ([MenuAiProviders.voice]): the stronger model; null = [provider]. */
+    private val voiceProvider: MenuAiProvider? = null,
+    /** Spoken floor-plan requests ([MenuAiProviders.floorVoice]); null = [layoutProvider]. */
+    private val floorVoiceProvider: MenuAiProvider? = null,
     private val reachable: (String) -> Boolean = AiPhotoService::tcpReachable,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
@@ -179,7 +183,19 @@ class MenuAiService(
     private val extraLangs = profile.locales.map { it.tag }.filter { it !in Translations.SLOTS }.toSet()
     /** "es (Spanish), de (German), af (Afrikaans …)": the codes, named, for the model. */
     private val extraLangsNamed = extraLangs.joinToString(", ") { tag -> LANGUAGE_NAMES[tag]?.let { "$tag ($it)" } ?: tag }
-    private val fractionDigits = runCatching { java.util.Currency.getInstance(profile.currency).defaultFractionDigits }
+    private val langCodes = profile.locales.map { it.tag.lowercase() }.distinct().ifEmpty { listOf("en") }
+
+    /** The store's languages for the prompts; the fallback reply language is the signed-in user's. */
+    private fun langs(who: AiCaller?): AiLangs {
+        val own = who?.lang?.take(2)?.lowercase()?.takeIf { it in langCodes } ?: langCodes.first()
+        return AiLangs(langCodes, langCodes.joinToString(", ") { tag -> LANGUAGE_NAMES[tag]?.let { "$tag ($it)" } ?: tag },
+            "${LANGUAGE_NAMES[own] ?: own} ($own)")
+    }
+
+    /** The language to answer in: the one the request was in (the model says), else the user's. */
+    private fun replyLang(reply: String, who: AiCaller?) = AiVoice.language(reply, langCodes) ?: who?.lang
+
+    private val fractionDigits =runCatching { java.util.Currency.getInstance(profile.currency).defaultFractionDigits }
         .getOrDefault(2).coerceAtLeast(0)
 
     fun start() {
@@ -203,8 +219,13 @@ class MenuAiService(
             reason = if (online) null else "menu_ai_offline")
     }
 
-    private fun requireProvider(layout: Boolean = false): MenuAiProvider =
-        (if (layout) layoutProvider ?: provider else provider)?.takeIf { config.enabled }
+    private fun requireProvider(layout: Boolean = false, voice: Boolean = false): MenuAiProvider =
+        when {
+            layout && voice -> floorVoiceProvider ?: layoutProvider ?: provider
+            layout -> layoutProvider ?: provider
+            voice -> voiceProvider ?: provider
+            else -> provider
+        }?.takeIf { config.enabled }
         ?: throw ImageGenException(409, "menu_ai_disabled",
             "AI menu setup is off on this store (${config.disabled?.code ?: "menu_ai_provider_off"})")
 
@@ -273,8 +294,9 @@ class MenuAiService(
 
     private fun refusal(
         r: AiGuard.Refusal, who: AiCaller?, rejected: List<String> = emptyList(), elapsed: Long = 0, heard: String? = null,
+        lang: String? = who?.lang,
     ) = MenuProposalDto("", provider?.id ?: "", provider?.model ?: "", "", emptyList(), rejected, elapsed,
-            refusal = r.code, message = AiGuard.reply(r, who?.lang), transcript = heard)
+            refusal = r.code, message = AiGuard.reply(r, lang), transcript = heard)
 
     /** The manager's log of AI calls, newest first. */
     fun requests(): List<AiRequestDto> = AiRequestLog.recent()
@@ -400,17 +422,20 @@ class MenuAiService(
         require(t.length <= 1000) { "that request is too long" }
         val existing = transaction { RoomLayoutAi.room(zoneId) }.tables.size
         return tracked(who, if (audio != null) "floor_voice" else "floor_edit") {
-            val p = requireProvider(layout = true)
+            // spoken: the stronger model (lite missed ~2 in 5 German voice requests); typed: the fast one
+            val p = requireProvider(layout = true, voice = audio != null)
             val started = now()
+            // the language of the answer: the request's own once the model has said, else the user's
+            var lang = who?.lang
             fun refuse(r: AiGuard.Refusal, heard: String? = null, rejected: List<String> = emptyList()) =
-                FloorEditProposalDto("", zoneId, p.id, p.model, transcript = heard, rejected = AiText.skips(rejected, who?.lang),
-                    existingTables = existing, elapsedMs = now() - started, refusal = r.code, message = AiGuard.reply(r, who?.lang))
+                FloorEditProposalDto("", zoneId, p.id, p.model, transcript = heard, rejected = AiText.skips(rejected, lang),
+                    existingTables = existing, elapsedMs = now() - started, refusal = r.code, message = AiGuard.reply(r, lang))
             // plainly not a floor-plan request: the fixed reply, and the model is never asked
             if (audio == null && (AiGuard.offTopic(t) || AiGuard.hatefulRequest(t))) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC)
             val room = transaction { FloorEditAi.context(zoneId) }
             val request = if (audio != null) AiVoice.REQUEST else AiGuard.quote(t, 1000)
             val reply = try {
-                p.complete(FloorEditAi.systemPrompt(bilingual, voice = audio != null),
+                p.complete(FloorEditAi.systemPrompt(bilingual, voice = audio != null, langs(who)),
                     "<current_room>\n$room\n</current_room>\n\n<manager_request>\n$request\n</manager_request>", listOfNotNull(audio))
             } catch (e: ImageGenException) {
                 if (e.code == ImageGenException.REFUSED) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC)
@@ -420,6 +445,7 @@ class MenuAiService(
                     e.retryAfterSeconds, e)
             }
             val heard = if (audio != null) AiVoice.heard(reply) else null
+            lang = replyLang(reply, who)
             if (audio != null && heard.isNullOrBlank()) return@tracked refuse(AiGuard.Refusal.FLOOR_NO_CHANGE)
             if (heard != null && !AiVoice.safe(heard)) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC)
             val parsed = try { FloorEditAi.parse(reply) } catch (e: MenuAiReplyException) {
@@ -436,7 +462,7 @@ class MenuAiService(
             floorProposals[id] = FloorProposal(zoneId, parsed.ops, parsed.summary, now(), removals > FloorEditAi.CONFIRM_REMOVES)
             log.info("AI floor edit via ${p.id}/${p.model}: ${plan.changes.size} change(s), ${plan.rejected.size} rejected")
             FloorEditProposalDto(id, zoneId, p.id, p.model, parsed.summary, heard, plan.changes, plan.tables, plan.objects,
-                plan.removedTables, plan.removedObjects, AiText.skips(parsed.rejected + plan.rejected, who?.lang), plan.existingTables,
+                plan.removedTables, plan.removedObjects, AiText.skips(parsed.rejected + plan.rejected, lang), plan.existingTables,
                 plan.protectedTables, now() - started, bulk = removals > FloorEditAi.CONFIRM_REMOVES)
         }
     }
@@ -517,11 +543,13 @@ class MenuAiService(
         task: String, images: List<MenuImage>, source: String, includeMenu: Boolean = true, who: AiCaller? = null,
         voice: Boolean = false, scope: MenuScope = MenuScope.CHAT,
     ): MenuProposalDto {
-        val p = requireProvider()
+        val p = requireProvider(voice = voice)
         val (menuJson, facts) = transaction { menuContext(who) }
         val started = now()
+        val langs = langs(who)
         val reply = try {
-            p.complete(systemPrompt(who) + if (voice) "\n" + AiVoice.PROMPT.trimIndent() else "",
+            p.complete(systemPrompt(who) + "\n" + AiVoice.replyLanguage(langs.codes, langs.fallback) +
+                (if (voice) "\n" + AiVoice.prompt(langs.named) else ""),
                 if (includeMenu) "<current_menu>\n$menuJson\n</current_menu>\n\n$task" else task, images)
         } catch (e: ImageGenException) {
             // the provider's own safety refusal is the same fixed reply, not an error
@@ -535,9 +563,11 @@ class MenuAiService(
         val elapsed = now() - started
         // voice: what was heard gets the typed text's check (an injection by voice = the fixed reply)
         val heard = if (voice) AiVoice.heard(reply) else null
-        if (voice && heard.isNullOrBlank()) return refusal(AiGuard.Refusal.NO_CHANGE, who, elapsed = elapsed)
+        // the fixed replies below: in the language the manager spoke or typed (the model says which)
+        val lang = replyLang(reply, who)
+        if (voice && heard.isNullOrBlank()) return refusal(AiGuard.Refusal.NO_CHANGE, who, elapsed = elapsed, lang = lang)
         // never echoed: an unsafe transcript (code, the prompt, a swear) is not shown as "Heard: …"
-        if (heard != null && !AiVoice.safe(heard)) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed)
+        if (heard != null && !AiVoice.safe(heard)) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, lang = lang)
         val parsed = try {
             MenuChangeSetParser.parse(reply, facts, scope)
         } catch (e: MenuAiReplyException) {
@@ -545,12 +575,12 @@ class MenuAiService(
             // the model's own text, but a technical retry message rather than "that's off topic"
             log.info("AI menu via ${p.id}: unusable reply (${e.message})")
             return refusal(if (e.tooMany) AiGuard.Refusal.TOO_MANY_CHANGES else AiGuard.Refusal.INCOMPLETE,
-                who, elapsed = elapsed, heard = heard)
+                who, elapsed = elapsed, heard = heard, lang = lang)
         }
-        if (parsed.refused) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard)
+        if (parsed.refused) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard, lang = lang)
         // everything the model proposed was dropped for an offensive name: an offensive request, not "no change"
-        if (parsed.ops.isEmpty() && parsed.offensive > 0 && parsed.offensive == parsed.rejected.size) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard)
-        if (parsed.ops.isEmpty()) return refusal(AiGuard.Refusal.NO_CHANGE, who, parsed.rejected, elapsed, heard)
+        if (parsed.ops.isEmpty() && parsed.offensive > 0 && parsed.offensive == parsed.rejected.size) return refusal(AiGuard.Refusal.OFF_TOPIC, who, elapsed = elapsed, heard = heard, lang = lang)
+        if (parsed.ops.isEmpty()) return refusal(AiGuard.Refusal.NO_CHANGE, who, parsed.rejected, elapsed, heard, lang)
         sweep()
         val ids = parsed.ops.indices.map { "c${it + 1}" }
         val ops = ids.zip(parsed.ops).toMap()

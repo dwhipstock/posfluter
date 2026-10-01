@@ -162,6 +162,8 @@ fun Application.module(
     menuAiConfig: dev.dwhipstock.pos.sdk.MenuAiConfig.Resolved = dev.dwhipstock.pos.sdk.MenuAiConfig.fromEnv(),
     // test seams: a fake menu model (the online probe is imageReachable)
     menuAiProvider: dev.dwhipstock.pos.aimenu.MenuAiProvider? = null,
+    // and a separate one for spoken requests (null = menuAiProvider)
+    menuAiVoiceProvider: dev.dwhipstock.pos.aimenu.MenuAiProvider? = null,
     // kitchen.printing=on|off (POS_KITCHEN_PRINTING / POS_CONFIG_FILE; the
     // tablet passes its store.properties). Default off; restaurants only.
     kitchenPrinting: dev.dwhipstock.pos.sdk.KitchenPrinting.Resolved = dev.dwhipstock.pos.sdk.KitchenPrinting.fromEnv(),
@@ -418,6 +420,9 @@ fun Application.module(
         menuAiConfig, config.profile,
         provider = menuAiProvider ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.from(menuAiConfig),
         layoutProvider = menuAiProvider ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.layout(menuAiConfig),
+        voiceProvider = menuAiVoiceProvider ?: menuAiProvider ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.voice(menuAiConfig),
+        floorVoiceProvider = menuAiVoiceProvider ?: menuAiProvider
+            ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.floorVoice(menuAiConfig),
         reachable = imageReachable ?: dev.dwhipstock.pos.aiphotos.AiPhotoService::tcpReachable,
     ).also { it.start() }
 
