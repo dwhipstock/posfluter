@@ -43,12 +43,17 @@ dependencies {
     // Password hashing
     implementation("at.favre.lib:bcrypt:0.10.2")
 
+    // Spreadsheet exports: streaming XLSX writer, Apache-2.0, ~130 KB (+ opczip, Apache-2.0)
+    implementation("org.dhatim:fastexcel:0.20.2")
+
     // Logging
     implementation("ch.qos.logback:logback-classic:1.5.13")
 
     // Tests
     testImplementation("io.ktor:ktor-server-test-host-jvm")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.0.21")
+    // reads the exported XLSX back in tests (test only, not in the image)
+    testImplementation("org.dhatim:fastexcel-reader:0.20.2")
 }
 
 kotlin {

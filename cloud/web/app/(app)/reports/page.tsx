@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   ChevronRight,
   Clock3,
+  Download,
   Fuel,
   Landmark,
   ListOrdered,
@@ -21,11 +22,15 @@ import { useBrand } from "@/lib/brand/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
+import { useMe } from "@/lib/hooks";
+import { canExport } from "@/lib/export/server";
 
 type ReportCard = { href: string; titleKey: MsgKey; descKey: MsgKey; icon: typeof Landmark };
 
 // a gas station (brand pack `features.fuel`): fuel by grade beside in-store sales, first
 const FUEL: ReportCard = { href: "/reports/fuel", titleKey: "report_fuel_title", descKey: "report_fuel_desc", icon: Fuel };
+
+const EXPORTS: ReportCard = { href: "/exports", titleKey: "nav_exports", descKey: "exports_sub", icon: Download };
 
 const REPORTS: ReportCard[] = [
   { href: "/reports/tax", titleKey: "report_tax_title", descKey: "report_tax_desc", icon: Landmark },
@@ -43,7 +48,10 @@ const REPORTS: ReportCard[] = [
 export default function ReportsPage() {
   const t = useT();
   const storeHref = useStoreHref();
-  const reports = useBrand().features.fuel ? [FUEL, ...REPORTS] : REPORTS;
+  const fuelFirst = useBrand().features.fuel ? [FUEL, ...REPORTS] : REPORTS;
+  // the data exports, for owners and managers (on phones this is the way in)
+  const me = useMe();
+  const reports = me.data && canExport(me.data.role) ? [...fuelFirst, EXPORTS] : fuelFirst;
   return (
     <div>
       <PageHeader title={t("reports_title")} sub={t("reports_sub")} />

@@ -4,6 +4,7 @@ import dev.dwhipstock.poscloud.auth.authRoutes
 import dev.dwhipstock.poscloud.auth.installPortalSessions
 import dev.dwhipstock.poscloud.db.Db
 import dev.dwhipstock.poscloud.db.Migrations
+import dev.dwhipstock.poscloud.exports.exportRoutes
 import dev.dwhipstock.poscloud.menu.menuEditRoutes
 import dev.dwhipstock.poscloud.menu.menuRoutes
 import dev.dwhipstock.poscloud.reports.reportRoutes
@@ -99,6 +100,7 @@ fun Application.module(config: CloudConfig = CloudConfig()) {
             storeRoutes(config)
             staffEndpointRoute() // public: portal /staff-app redirect reads this
             reportRoutes(config.fxRates)
+            exportRoutes(config.fxRates)
             stockRoutes()
             menuRoutes()
             menuEditRoutes()

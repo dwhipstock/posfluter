@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.ColumnType
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.javatime.date
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 import org.postgresql.util.PGobject
 import java.util.concurrent.ConcurrentHashMap
@@ -156,6 +157,20 @@ object Events : Table("events") {
     val storeCreatedAt = timestampWithTimeZone("store_created_at")
     val receivedAt = timestampWithTimeZone("received_at")
     override val primaryKey = PrimaryKey(tenantId, eventId)
+}
+
+/** One portal export: who took which dataset, in which format, for which stores and dates (032). */
+object ExportLog : Table("export_log") {
+    val id = long("id").autoIncrement()
+    val tenantId = text("tenant_id")
+    val userId = long("user_id")
+    val dataset = text("dataset")
+    val format = text("format")
+    val venueIds = text("venue_ids")
+    val fromDate = date("from_date").nullable()
+    val toDate = date("to_date").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+    override val primaryKey = PrimaryKey(id)
 }
 
 /** An ingested event set aside instead of failing its batch (029); [payload] is the event's JSON as it came. */

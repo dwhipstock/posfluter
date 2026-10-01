@@ -242,6 +242,33 @@ counts 0.
                              "lineTotalCents" } ] } ] }
   ```
 
+## Exports (session-authed; owners and managers)
+
+Whole datasets as files, written by the cloud from the full data (the report
+pages' PDF / Excel buttons export what the page shows; these export
+everything in scope). Scoped like the reports: the caller's tenant, `venue=`
+one store or none for all, `from` / `to` business days (default today) read
+in each store's own zone. Viewers get 403 `export_forbidden`.
+
+- `GET /v1/exports/{dataset}.csv` or `.xlsx` — one dataset: `sales` (one row
+  per CLOSED / VOID check, a `tax_<CODE>_<RATE>_amount` + `_remit_to` column
+  pair per tax charged in range), `sale-lines`, `refunds`, `tenders`,
+  `shifts`, `cash-movements`, `menu-items` and `staff` (current state; dates
+  ignored; staff = names and roles only), `tax-summary` (by tax and authority,
+  per store per day, per store total = the tax report's `byVenue[].taxes`,
+  all-stores total = its `byTax`). Money is a plain decimal with a `currency`
+  column; times are store wall-clock time with a `timezone` column. Text
+  starting with = + - @ tab or CR gets a leading apostrophe; XLSX cells are
+  typed strings / numbers / dates, never formulas. Unknown dataset 404
+  `unknown_export`; another format 400 `bad_format`.
+- `GET /v1/exports/all.zip` — owner only (403 `owner_only`): every dataset as
+  CSV plus `README.txt` (each file and column). Without `from` / `to` it covers
+  every date. 3 per user per rolling hour (429 + `Retry-After`).
+- Rows are counted before anything is sent: over 1,000,000 in one file (the
+  zip: 5,000,000) is 413 `export_too_large` — narrow the dates or pick one
+  store. Rows stream from a database cursor. Each export is recorded in
+  `export_log` (user, dataset, format, stores, dates) and logged by user id.
+
 ## Menu (session-authed; two-way with each store, CONTRACT.md §10)
 
 The menu syncs both ways: the stores push their menus up, and owners and
