@@ -3,6 +3,7 @@ package dev.dwhipstock.poscloud.venues
 import dev.dwhipstock.poscloud.BadRequestException
 import dev.dwhipstock.poscloud.CloudConfig
 import dev.dwhipstock.poscloud.NotFoundException
+import dev.dwhipstock.poscloud.auth.requireOwner
 import dev.dwhipstock.poscloud.auth.requirePortal
 import dev.dwhipstock.poscloud.auth.sha256Hex
 import dev.dwhipstock.poscloud.catalog.Catalog
@@ -170,6 +171,7 @@ fun Route.venueRoutes(config: CloudConfig) {
         // one auth pass: scope + principal together (404s unless {venueId} belongs
         // to the session's tenant). principal.email is the code's createdBy.
         val (principal, scope) = portalScopeAndPrincipal(call)
+        principal.requireOwner() // a new device gets store credentials: owner only
         val req = runCatching { call.receive<PairingCodeRequest>() }.getOrDefault(PairingCodeRequest())
         val code = StringBuilder().apply {
             repeat(PAIRING_CODE_LENGTH) { append(CODE_ALPHABET[random.nextInt(CODE_ALPHABET.length)]) }
@@ -244,7 +246,8 @@ fun Route.venueRoutes(config: CloudConfig) {
      * heartbeat flips `revoked` here — until then the portal shows "revoking…".
      */
     post("/venues/{venueId}/devices/{deviceId}/revoke") {
-        val scope = portalVenueScope(call)
+        val (principal, scope) = portalScopeAndPrincipal(call)
+        principal.requireOwner()
         val deviceId = call.parameters["deviceId"]!!
         transaction {
             val updated = Devices.update({
@@ -270,7 +273,8 @@ fun Route.venueRoutes(config: CloudConfig) {
      * safe to use freely.
      */
     delete("/venues/{venueId}/devices/{deviceId}") {
-        val scope = portalVenueScope(call)
+        val (principal, scope) = portalScopeAndPrincipal(call)
+        principal.requireOwner()
         val deviceId = call.parameters["deviceId"]!!
         val removed = transaction {
             Devices.deleteWhere {

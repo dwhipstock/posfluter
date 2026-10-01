@@ -317,3 +317,37 @@ docker exec -i copper-lantern-manager-db-1 psql -U pos -d pos_cloud < /tmp/resto
 # (its old key comes back only from the backup env: STORE_API_KEYS in manager.env-pre-split-<TS>)
 clients/copperlantern/compose.sh up -d api
 ```
+
+## 8. A demo login for live demos (any client portal)
+
+For a live demo, sign in with a separate **demo login** instead of the owner,
+so the owner's password is never shown or printed. It is a plain username (not
+an email), a **manager** of every store of the client: reports, menu, stock
+and staff, but not pairing, revoking or removing terminals, nor users, store
+keys or settings (those answer 403 `owner_only`).
+
+Three settings in `clients/<id>/.env`, kept by every re-run of `new-client.sh`
+like the others:
+
+| Setting | Meaning |
+|---|---|
+| `DEMO_USER_NAME` | the demo username: letters, digits, `-` `_` `.`, 3-40 characters (case does not matter at sign-in) |
+| `DEMO_USER_PASSWORD` | its password: generated once (24 characters) or set by hand, at least 10 characters, no `$`, quotes, `#` or backticks |
+| `PORTAL_DEMO_MODE` | `on`: the demo login signs in with its password only (no authenticator) and every page shows a **Demo mode** badge. `off` (default): the demo login cannot sign in, and its open sessions stop working. |
+
+The owner (`ADMIN_EMAIL`) always keeps the authenticator, demo mode or not.
+Sign-in rate limiting (10 tries a minute) and the session timeouts apply to the
+demo login too.
+
+```sh
+./new-client.sh copperlantern copperlantern-manager.lostmindllc.com --demo-user lantern-demo --demo-mode on --dry-run
+./new-client.sh copperlantern copperlantern-manager.lostmindllc.com --demo-user lantern-demo --demo-mode on --up
+grep '^DEMO_USER_PASSWORD=' clients/copperlantern/.env   # read it here; put it on the demo QR sheet, nowhere else
+```
+
+To choose a memorable password: edit `DEMO_USER_PASSWORD=` in the `.env` by
+hand, then re-run with `--up` (the API re-hashes it at boot and ends the demo
+login's open sessions). After the demo: `--demo-mode off --up`. To remove the
+login entirely: `--no-demo-user --up`. Changing `--demo-user` to a new name
+retires the old one at the next boot.
+

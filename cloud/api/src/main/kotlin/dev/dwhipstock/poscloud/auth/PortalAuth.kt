@@ -61,11 +61,16 @@ const val IDLE_MINUTES_HEADER = "X-Session-Idle-Minutes"
  * The cookie's Max-Age is the absolute cap, so it never outlives the server session,
  * and any rejected session gets its cookie cleared on the 401.
  */
-data class SessionPolicy(val idleMinutes: Long = 60, val maxHours: Long = 12, val cookieSecure: Boolean = false) {
+data class SessionPolicy(
+    val idleMinutes: Long = 60, val maxHours: Long = 12, val cookieSecure: Boolean = false,
+    /** PORTAL_DEMO_MODE: off → a demo user's live sessions are refused too, not just new sign-ins. */
+    val demoMode: Boolean = false,
+) {
     val maxAgeSeconds: Long get() = maxHours * 3600
 
     companion object {
-        fun from(config: CloudConfig) = SessionPolicy(config.sessionIdleMinutes, config.sessionMaxHours, config.cookieSecure)
+        fun from(config: CloudConfig) =
+            SessionPolicy(config.sessionIdleMinutes, config.sessionMaxHours, config.cookieSecure, config.demoMode)
     }
 }
 
@@ -100,9 +105,30 @@ fun sweepExpiredSessions(policy: SessionPolicy, now: OffsetDateTime = dev.dwhips
 data class Principal(
     val tenantId: String, val userId: Long, val email: String, val displayName: String,
     /** owner | manager | viewer (027): owners and managers may edit the menu. */
-    val role: String = "owner",
+    val role: String = ROLE_OWNER,
+    /** The demo login (028). */
+    val isDemo: Boolean = false,
 ) {
-    val canEditMenu: Boolean get() = role == "owner" || role == "manager"
+    val canEditMenu: Boolean get() = role == ROLE_OWNER || role == ROLE_MANAGER
+    /** Devices, store keys, users, tenant settings: the owner's alone. */
+    val isOwner: Boolean get() = role == ROLE_OWNER
+}
+
+const val ROLE_OWNER = "owner"
+const val ROLE_MANAGER = "manager"
+
+/** Demo login while PORTAL_DEMO_MODE is off: refused at sign-in and on every request. */
+private fun demoModeOff() = UnauthorizedException("demo sign-in is turned off", "demo_mode_off")
+
+/**
+ * Owner-only actions (device pairing / revocation / removal, and any future
+ * store-key, user or tenant-settings route): a manager or viewer — the demo
+ * login among them — gets 403 `owner_only`. Call OUTSIDE a transaction, like [requirePortal].
+ */
+fun requireOwner(call: ApplicationCall): Principal = requirePortal(call).also { it.requireOwner() }
+
+fun Principal.requireOwner() {
+    if (!isOwner) throw dev.dwhipstock.poscloud.ForbiddenException("only the owner can do this", "owner_only")
 }
 
 fun hashPassword(password: String): String =
@@ -179,9 +205,11 @@ private fun resolveSession(hash: String, policy: SessionPolicy, background: Bool
     if (!background) PortalSessions.update({ PortalSessions.tokenSha256 eq hash }) { it[lastUsedAt] = now }
     val user = PortalUsers.selectAll().where { PortalUsers.id eq row[PortalSessions.userId] }.firstOrNull()
         ?: throw UnauthorizedException()
+    if (user[PortalUsers.isDemo] && !policy.demoMode) throw demoModeOff()
     return Principal(
         row[PortalSessions.tenantId], user[PortalUsers.id],
-        user[PortalUsers.email], user[PortalUsers.displayName], user[PortalUsers.role],
+        user[PortalUsers.email], user[PortalUsers.displayName],
+        user[PortalUsers.role], user[PortalUsers.isDemo],
     )
 }
 
@@ -266,9 +294,11 @@ private data class ConfirmResponse(val ok: Boolean = true, val backupCodes: List
 
 @Serializable
 /** venueName = the tenant's first store (kept for older portals); tenantName = the group. */
+/** demo: this is the demo login; demoMode: PORTAL_DEMO_MODE is on (the header badge). */
 private data class MeResponse(
     val email: String, val displayName: String, val venueName: String, val tenantName: String,
     val role: String = "owner", val canEditMenu: Boolean = true,
+    val demo: Boolean = false, val demoMode: Boolean = false,
 )
 
 fun Route.authRoutes(config: CloudConfig) {
@@ -278,15 +308,24 @@ fun Route.authRoutes(config: CloudConfig) {
         val req = call.receive<LoginRequest>()
         LoginRateLimiter.record("${req.email.lowercase()}|${call.request.origin.remoteHost}")
         val (response, sessionToken) = transaction {
-            // email is unique per tenant, not globally: pick the row the password verifies against
-            val candidates = PortalUsers.selectAll().where { PortalUsers.email eq req.email }
-                .orderBy(PortalUsers.id).toList()
+            // email is unique per tenant, not globally: pick the row the password verifies against.
+            // The field also takes the demo login's username, stored lowercased.
+            val login = req.email.trim()
+            val candidates = PortalUsers.selectAll().where {
+                (PortalUsers.email eq login) or (PortalUsers.email eq login.lowercase())
+            }.orderBy(PortalUsers.id).toList()
             if (candidates.isEmpty()) verifyPassword(req.password, dummyHash)
             val user = candidates.firstOrNull { verifyPassword(req.password, it[PortalUsers.passwordHash]) }
                 ?: throw UnauthorizedException("wrong email or password", "bad_credentials")
             val now = dev.dwhipstock.poscloud.CloudTime.now()
             val token = newToken()
-            if (!config.totpRequired) {
+            if (user[PortalUsers.isDemo]) {
+                // The demo login: password only, and only while demo mode is on. The
+                // owner and every other real user still go through TOTP below.
+                if (!config.demoMode) throw demoModeOff()
+                LoginResponse(stage = "authenticated") to
+                    createSession(user[PortalUsers.tenantId], user[PortalUsers.id], policy)
+            } else if (!config.totpRequired) {
                 LoginResponse(stage = "authenticated") to
                     createSession(user[PortalUsers.tenantId], user[PortalUsers.id], policy)
             } else if (user[PortalUsers.totpEnabled]) {
@@ -365,7 +404,7 @@ fun Route.authRoutes(config: CloudConfig) {
         val venueName = transaction { venueNameOf(principal.tenantId) } ?: config.venueName
         val tenantName = transaction { tenantNameOf(principal.tenantId) } ?: venueName
         call.respond(MeResponse(principal.email, principal.displayName, venueName, tenantName,
-            principal.role, principal.canEditMenu))
+            principal.role, principal.canEditMenu, demo = principal.isDemo, demoMode = config.demoMode))
     }
 }
 

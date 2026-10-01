@@ -18,8 +18,8 @@
 #   clients/proxy-sites/<id>.caddy    the client's hostname(s) on the edge proxy
 #   clients/<id>/compose.override.yml only with --brand-dir (mounts a custom brand pack)
 #
-# Idempotent: re-running keeps every secret (DB password, admin password, store
-# keys) and every setting not named on the command line; a new store gets a new
+# Idempotent: re-running keeps every secret (DB password, admin password, demo
+# password, store keys) and every setting not named on the command line; a new store gets a new
 # key, existing stores keep theirs. Secrets are never printed — not in full,
 # not in part. --dry-run prints the plan and writes nothing.
 #
@@ -41,7 +41,14 @@
 #   --pg-volume NAME       use this EXISTING Postgres volume (adopting a running portal)
 #   --from-env FILE        adopt: take settings and secrets from an existing .env
 #   --local                plain-HTTP site, non-secure cookies (a laptop, never a server)
-#   --no-totp              skip authenticator sign-in (isolated demos only)
+#   --no-totp              skip authenticator sign-in for EVERY user (isolated demos only)
+#   --demo-user NAME       a demo login: plain username (letters, digits, - _ ., 3-40), a
+#                          manager of every store (no devices, users, keys, settings); its
+#                          password DEMO_USER_PASSWORD is generated once (or set by hand), kept
+#   --no-demo-user         remove the demo login (it can no longer sign in)
+#   --demo-mode on|off     PORTAL_DEMO_MODE: on = the demo login signs in with its password
+#                          alone and the portal shows a "Demo mode" badge; the owner still
+#                          uses the authenticator. off (default) = the demo login is refused
 #   --no-fx                drop the fixed conversion rates (a single-currency client)
 #   --clients-dir DIR      default: cloud/infra/clients
 #   --up                   start/refresh the containers and reload the edge proxy
@@ -53,7 +60,7 @@ REPO_ROOT="$(cd "$INFRA_DIR/../.." && pwd)"
 BRANDS_DIR="$REPO_ROOT/cloud/web/brands"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
-usage() { sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+usage() { sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 
 [[ $# -ge 1 && ( "$1" == -h || "$1" == --help ) ]] && usage 0
 [[ $# -ge 2 ]] || usage
@@ -62,6 +69,7 @@ CLIENT_ID="$1"; DOMAIN_ARG="$2"; shift 2
 F_NAME=""; F_BRAND=""; F_BRAND_DIR=""; F_STORES=(); F_ZONE=""; F_CURRENCY=""; F_COUNTRY=""; F_RETAIL=0
 F_ADMIN=""; F_ALIASES=(); F_REGISTRY=""; F_TAG=""; F_API_IMAGE=""; F_WEB_IMAGE=""; F_PROJECT=""
 F_TENANT=""; F_PG_VOLUME=""; F_FROM_ENV=""; LOCAL=0; NO_TOTP=0; NO_FX=0; UP=0; DRY=0
+F_DEMO_USER=""; NO_DEMO_USER=0; F_DEMO_MODE=""
 CLIENTS_DIR="${CLIENTS_DIR:-$INFRA_DIR/clients}"
 while [[ $# -gt 0 ]]; do
   need() { [[ $# -ge 2 && -n "$2" ]] || die "$1 needs a value"; }
@@ -88,6 +96,9 @@ while [[ $# -gt 0 ]]; do
     --local) LOCAL=1; shift;;
     --no-totp) NO_TOTP=1; shift;;
     --no-fx) NO_FX=1; shift;;
+    --demo-user) need "$@"; F_DEMO_USER="$2"; shift 2;;
+    --no-demo-user) NO_DEMO_USER=1; shift;;
+    --demo-mode) need "$@"; F_DEMO_MODE="$(echo "$2" | tr '[:upper:]' '[:lower:]')"; shift 2;;
     --up) UP=1; shift;;
     --dry-run) DRY=1; shift;;
     -h|--help) usage 0;;
@@ -106,6 +117,10 @@ for a in ${F_ALIASES[@]+"${F_ALIASES[@]}"}; do [[ "$a" =~ $HOST_RE ]] || die "al
 [[ -z "$F_COUNTRY" || "$F_COUNTRY" =~ ^[A-Z]{2}$ ]] || die "--country: a 2-letter code (CA, US, …)"
 [[ -z "$F_ADMIN" || "$F_ADMIN" =~ ^[^@[:space:]]+@[^@[:space:]]+$ ]] || die "--admin-email: not an email address"
 [[ -z "$F_FROM_ENV" || -f "$F_FROM_ENV" ]] || die "--from-env: $F_FROM_ENV not found"
+DEMO_USER_RE='^[A-Za-z0-9._-]{3,40}$'
+[[ -z "$F_DEMO_USER" || "$F_DEMO_USER" =~ $DEMO_USER_RE ]] || die "--demo-user: a plain username — letters, digits, - _ . (3-40), not an email"
+[[ -z "$F_DEMO_USER" || "$NO_DEMO_USER" == 0 ]] || die "--demo-user and --no-demo-user together"
+[[ -z "$F_DEMO_MODE" || "$F_DEMO_MODE" == on || "$F_DEMO_MODE" == off ]] || die "--demo-mode: on or off"
 if [[ -n "$F_BRAND_DIR" ]]; then
   [[ -f "$F_BRAND_DIR/brand.json" ]] || die "--brand-dir: $F_BRAND_DIR/brand.json not found"
   F_BRAND_DIR="$(cd "$F_BRAND_DIR" && pwd)"
@@ -232,6 +247,10 @@ PG_VOLUME="$(pick "$F_PG_VOLUME" PG_VOLUME "${PROJECT}_pgdata")"
 EDGE_NETWORK="$(pick "" EDGE_NETWORK pos-edge)"
 SESSION_IDLE="$(pick "" PORTAL_SESSION_IDLE_MINUTES 60)"
 SESSION_MAX="$(pick "" PORTAL_SESSION_MAX_HOURS 12)"
+# demo login (cloud migration 028): kept across re-runs like every other setting
+PORTAL_DEMO_MODE="$(pick "$F_DEMO_MODE" PORTAL_DEMO_MODE off)"
+if [[ "$NO_DEMO_USER" == 1 ]]; then DEMO_USER_NAME=""; else DEMO_USER_NAME="$(pick "$F_DEMO_USER" DEMO_USER_NAME "")"; fi
+[[ -z "$DEMO_USER_NAME" || "$DEMO_USER_NAME" =~ $DEMO_USER_RE ]] || die "DEMO_USER_NAME '$DEMO_USER_NAME' in the env file: letters, digits, - _ . (3-40)"
 if [[ -n "$F_BRAND_DIR" ]]; then BRAND_DIR_IN_CONTAINER=/brand; BRAND_HOST_DIR="$F_BRAND_DIR"
 elif [[ -f "$OVERRIDE_FILE" ]]; then BRAND_DIR_IN_CONTAINER="$(old PORTAL_BRAND_DIR_IN_CONTAINER)"; BRAND_HOST_DIR=""
 else BRAND_DIR_IN_CONTAINER=""; BRAND_HOST_DIR=""; fi
@@ -239,6 +258,14 @@ else BRAND_DIR_IN_CONTAINER=""; BRAND_HOST_DIR=""; fi
 # secrets: kept on re-runs, minted once
 secret DB_PASSWORD gen_pw
 secret ADMIN_PASSWORD gen_pw
+# the demo password only exists with a demo login; a hand-set one is kept as-is
+if [[ -n "$DEMO_USER_NAME" ]]; then
+  secret DEMO_USER_PASSWORD gen_pw
+  safe_value DEMO_USER_PASSWORD "$DEMO_USER_PASSWORD"
+  [[ ${#DEMO_USER_PASSWORD} -ge 10 ]] || die "DEMO_USER_PASSWORD: at least 10 characters (the portal is on the internet)"
+else
+  DEMO_USER_PASSWORD=""
+fi
 # store keys: venue → key from STORE_API_KEY (the old primary) + STORE_API_KEYS
 OLD_PRIMARY="$(old STORES | cut -d, -f1 | cut -d= -f1 | sed 's/^ *//;s/ *$//')"
 old_key_of() { # old_key_of <venue>
@@ -260,7 +287,7 @@ while IFS= read -r ov; do
 done < <(old STORES | tr ',' '\n' | cut -d= -f1 | sed 's/^ *//;s/ *$//')
 
 # extra keys a hand edit added (FX_EUR_CAD, RESET_TOTP_EMAIL, …): carried over as-is
-KNOWN_KEYS="CLIENT_ID COMPOSE_PROJECT_NAME DOMAIN DOMAIN_ALIASES TENANT_ID VENUE_NAME VENUE_TZ PORTAL_BRAND PORTAL_BRAND_DIR_IN_CONTAINER STORES STORE_ZONES STORE_CURRENCIES STORE_COUNTRIES RETAIL_STORES REPORTING_CURRENCY FX_USD_CAD FX_CAD_USD PUBLIC_BASE_DOMAIN COOKIE_SECURE TOTP_REQUIRED ADMIN_EMAIL ADMIN_PASSWORD DB_PASSWORD STORE_API_KEY STORE_API_KEYS REGISTRY IMAGE_TAG WEB_IMAGE_TAG API_IMAGE WEB_IMAGE PG_VOLUME EDGE_NETWORK PORTAL_SESSION_IDLE_MINUTES PORTAL_SESSION_MAX_HOURS"
+KNOWN_KEYS="CLIENT_ID COMPOSE_PROJECT_NAME DOMAIN DOMAIN_ALIASES TENANT_ID VENUE_NAME VENUE_TZ PORTAL_BRAND PORTAL_BRAND_DIR_IN_CONTAINER STORES STORE_ZONES STORE_CURRENCIES STORE_COUNTRIES RETAIL_STORES REPORTING_CURRENCY FX_USD_CAD FX_CAD_USD PUBLIC_BASE_DOMAIN COOKIE_SECURE TOTP_REQUIRED ADMIN_EMAIL ADMIN_PASSWORD DB_PASSWORD STORE_API_KEY STORE_API_KEYS REGISTRY IMAGE_TAG WEB_IMAGE_TAG API_IMAGE WEB_IMAGE PG_VOLUME EDGE_NETWORK PORTAL_SESSION_IDLE_MINUTES PORTAL_SESSION_MAX_HOURS PORTAL_DEMO_MODE DEMO_USER_NAME DEMO_USER_PASSWORD"
 # an adopted manager stack's keys that mean nothing to a client instance
 ADOPT_SKIP="LEGACY_DOMAIN STORE_DOMAIN ACME_EMAIL BASE_DOMAIN AWS_REGION"
 EXTRA_LINES=""
@@ -304,6 +331,10 @@ PORTAL_SESSION_IDLE_MINUTES=$SESSION_IDLE
 PORTAL_SESSION_MAX_HOURS=$SESSION_MAX
 ADMIN_EMAIL=$ADMIN_EMAIL
 ADMIN_PASSWORD=$ADMIN_PASSWORD
+# live demos: on = DEMO_USER_NAME signs in with its password only (owner keeps TOTP)
+PORTAL_DEMO_MODE=$PORTAL_DEMO_MODE
+DEMO_USER_NAME=$DEMO_USER_NAME
+DEMO_USER_PASSWORD=$DEMO_USER_PASSWORD
 DB_PASSWORD=$DB_PASSWORD
 STORE_API_KEY=$STORE_API_KEY
 STORE_API_KEYS=$STORE_API_KEYS
@@ -410,6 +441,11 @@ echo "  secrets     : ${SECRET_NOTES[*]}; store keys — ${KEY_NOTES[*]} (values
 [[ ${#DROPPED[@]} -gt 0 ]] && echo "  NOTE        : no longer listed: ${DROPPED[*]} — their keys leave this file; the database keeps its history and key rows (see docs/hosted-client-split.md for removing a store's data)"
 [[ "$COOKIE_SECURE" == false && "$LOCAL" == 0 ]] && echo "  WARNING     : COOKIE_SECURE=false outside --local"
 [[ "$TOTP_REQUIRED" == false ]] && echo "  NOTE        : TOTP_REQUIRED=false — authenticator sign-in is off (isolated demos only)"
+if [[ -n "$DEMO_USER_NAME" ]]; then
+  echo "  demo login  : $DEMO_USER_NAME (manager, every store)   demo mode: $PORTAL_DEMO_MODE$( [[ "$PORTAL_DEMO_MODE" == off ]] && echo " — it cannot sign in until --demo-mode on")"
+elif [[ "$PORTAL_DEMO_MODE" == on ]]; then
+  echo "  NOTE        : PORTAL_DEMO_MODE=on but no --demo-user — only the badge shows"
+fi
 
 if [[ "$DRY" == 1 ]]; then
   echo "  would write : $(rel "$ENV_FILE") (600), $(rel "$COMPOSE_SH"), $(rel "$SITE_FILE")"
@@ -466,5 +502,6 @@ for v in "${VENUES[@]}"; do
   printf '    %-14s CLOUD_SYNC_URL=%s  → %s\n' "$v" "$BASE_URL" "$(rel "$CLIENT_DIR/stores/$v.env")"
 done
 echo "  Portal sign-in: $ADMIN_EMAIL, password = ADMIN_PASSWORD in $(rel "$ENV_FILE")$( [[ "$TOTP_REQUIRED" == true ]] && echo " (authenticator enrolled at first sign-in)")"
+[[ -n "$DEMO_USER_NAME" ]] && echo "  Demo sign-in : $DEMO_USER_NAME, password = DEMO_USER_PASSWORD in $(rel "$ENV_FILE") (demo mode $PORTAL_DEMO_MODE)"
 CD_ARG=""; [[ "$CLIENTS_DIR" != "$INFRA_DIR/clients" ]] && CD_ARG=" --clients-dir $CLIENTS_DIR"
 [[ "$UP" == 1 ]] || echo "  Start it     : $(rel "$0") $CLIENT_ID $DOMAIN$CD_ARG --up"

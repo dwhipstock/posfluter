@@ -148,6 +148,14 @@ export const messages = {
     "Trop de tentatives. Attendez un moment, puis réessayez.",
     "Too many attempts. Wait a moment and try again."
   ),
+  err_demo_mode_off: m("La connexion démo est désactivée.", "Demo sign-in is turned off."),
+  // header badge while the portal runs with PORTAL_DEMO_MODE=on
+  demo_badge: m("Mode démo", "Demo mode"),
+  // devices page, for a manager (e.g. the demo login)
+  devices_owner_only: m(
+    "Seul le propriétaire peut jumeler, révoquer ou retirer des terminaux.",
+    "Only the owner can pair, revoke or remove terminals."
+  ),
   // shown on /login after the session ends on its own
   login_signed_out_idle: m(
     "Déconnecté après {n} minutes d’inactivité",

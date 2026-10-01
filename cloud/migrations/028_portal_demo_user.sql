@@ -1,0 +1,11 @@
+-- 028: the demo login for live demos (DEMO_USER_NAME / DEMO_USER_PASSWORD).
+--
+-- is_demo  the demo login: always role 'manager' (027's role model: reports,
+--          menu edits, stock; never device pairing / revocation, store keys,
+--          portal users or tenant settings, which are the owner's). It signs
+--          in with its password only while PORTAL_DEMO_MODE=on and cannot sign
+--          in at all otherwise. Boot never turns an existing user into it.
+--          The owner and every other user keep TOTP.
+--
+-- NOTE for merges: renumber this file if another 028 lands on main first.
+ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE;

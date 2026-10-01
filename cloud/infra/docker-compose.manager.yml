@@ -31,6 +31,10 @@ services:
       ADMIN_EMAIL: "${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}"
       TOTP_REQUIRED: "${TOTP_REQUIRED:-true}"
+      # live demos: on = the demo login (DEMO_USER_NAME) signs in without TOTP; the owner keeps it
+      PORTAL_DEMO_MODE: "${PORTAL_DEMO_MODE:-off}"
+      DEMO_USER_NAME: "${DEMO_USER_NAME:-}"
+      DEMO_USER_PASSWORD: "${DEMO_USER_PASSWORD:-}"
       STORE_API_KEY: "${STORE_API_KEY:?set STORE_API_KEY in .env}"
       # extra stores: "<venueId>=<key>,…"; the tenant's stores: "<venueId>=<name>,…" (first = primary)
       STORE_API_KEYS: "${STORE_API_KEYS:-}"

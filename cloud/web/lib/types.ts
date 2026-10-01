@@ -11,6 +11,10 @@ export interface Me {
   role?: "owner" | "manager" | "viewer";
   /** Owners and managers may edit the menu; absent from older servers. */
   canEditMenu?: boolean;
+  /** This is the demo login (DEMO_USER_NAME): a manager. */
+  demo?: boolean;
+  /** The portal runs with PORTAL_DEMO_MODE=on: the header shows a badge. */
+  demoMode?: boolean;
 }
 
 /** ISO 4217 code: "CAD", "USD". An older API omits it on rows → CAD. */

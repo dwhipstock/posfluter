@@ -104,6 +104,8 @@ object PortalUsers : Table("portal_users") {
     val createdAt = timestampWithTimeZone("created_at")
     // owner | manager (may edit the menu) | viewer (027)
     val role = text("role").default("owner")
+    /** 028: the demo login (DEMO_USER_NAME) — password-only while PORTAL_DEMO_MODE=on, refused otherwise. */
+    val isDemo = bool("is_demo").default(false)
     override val primaryKey = PrimaryKey(id)
 }
 

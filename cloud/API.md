@@ -26,8 +26,13 @@ sign-in and every 15 min. Passwords BCrypt. TOTP: RFC 6238, SHA-1, 6 digits, 30 
 period, ±1 step tolerance. TOTP is REQUIRED: a user without it enrolled is
 forced through setup at login.
 
-- `POST /v1/auth/login` `{ "email", "password" }`
+- `POST /v1/auth/login` `{ "email", "password" }` — `email` also takes the demo
+  login's plain username (`DEMO_USER_NAME`, case-insensitive)
   - wrong creds → 401 `bad_credentials` (rate-limited: 10/min per IP+email → 429)
+  - the demo login (028) with `PORTAL_DEMO_MODE=on` → `{ "stage": "authenticated" }`
+    and the session cookie, no TOTP; with it off → 401 `demo_mode_off` (its
+    existing sessions get the same 401). The owner and every non-demo user
+    always go through TOTP (unless `TOTP_REQUIRED=false`).
   - TOTP enrolled → `{ "stage": "totp", "pendingToken": "…" }` (token valid 5 min)
   - TOTP not yet enrolled → `{ "stage": "totp_setup", "pendingToken": "…",
       "secret": "BASE32…", "otpauthUri": "otpauth://totp/CopperLantern%20Pub:owner@…?secret=…&issuer=CopperLantern%20Pub" }`
@@ -46,7 +51,13 @@ too, the operator sets `RESET_TOTP_EMAIL=<owner-email>` and restarts — that us
 TOTP is wiped (re-enroll at next login) and old backup codes deleted. Clear the
 env var afterwards, or every restart re-triggers the reset.
 - `POST /v1/auth/logout` → clears cookie, revokes session.
-- `GET /v1/auth/me` → `{ "email", "displayName", "venueName" }`.
+- `GET /v1/auth/me` → `{ "email", "displayName", "venueName", "tenantName", "role",
+  "demo", "demoMode" }` — `demo`: this is the demo login; `demoMode`:
+  `PORTAL_DEMO_MODE` is on (the portal's header badge).
+
+Owner-only (403 `owner_only` for any other role, the demo login included):
+`POST /v1/venues/{id}/pairing-codes`, `POST /v1/venues/{id}/devices/{deviceId}/revoke`,
+`DELETE /v1/venues/{id}/devices/{deviceId}`.
 
 ## Reports (session-authed, tenant-scoped)
 
