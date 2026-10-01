@@ -345,6 +345,8 @@ export const af: Record<MsgKey, string> = {
   devices_pos_seen_sec: "{n} s gelede",
   devices_pos_lan: "LAN-adres",
   devices_pos_public: "Openbare adres",
+  devices_staff_app: "Personeel-app op die foon",
+  devices_staff_app_hint: "Personeel skandeer dit (op die winkel se Wi-Fi) om die bestelapp op hul foon oop te maak.",
   devices_pos_install: "Installasie",
   devices_pos_version: "Weergawe",
   devices_pos_contract: "kontrak v{n}",

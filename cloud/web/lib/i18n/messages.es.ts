@@ -342,6 +342,8 @@ export const es: Record<MsgKey, string> = {
   devices_pos_seen_sec: "hace {n} s",
   devices_pos_lan: "Dirección local",
   devices_pos_public: "Dirección pública",
+  devices_staff_app: "App del personal en el teléfono",
+  devices_staff_app_hint: "El personal escanea esto (en el Wi-Fi de la tienda) para abrir la app de pedidos en su teléfono.",
   devices_pos_install: "Instalación",
   devices_pos_version: "Versión",
   devices_pos_contract: "contrato v{n}",

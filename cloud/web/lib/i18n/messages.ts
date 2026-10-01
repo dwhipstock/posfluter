@@ -512,6 +512,11 @@ export const messages = {
   devices_pos_seen_sec: m("il y a {n} s", "{n}s ago"),
   devices_pos_lan: m("Adresse sur le réseau local", "LAN address"),
   devices_pos_public: m("Adresse publique", "Public address"),
+  devices_staff_app: m("Application du personnel sur téléphone", "Staff phone app"),
+  devices_staff_app_hint: m(
+    "Le personnel balaie ce code (sur le Wi-Fi de l’établissement) pour ouvrir l’application de commande.",
+    "Staff scan this (on the store’s Wi-Fi) to open the ordering app on their phone."
+  ),
   devices_pos_install: m("Installation", "Install"),
   devices_pos_version: m("Version", "Version"),
   devices_pos_contract: m("contrat v{n}", "contract v{n}"),

@@ -124,6 +124,32 @@ enum class MessageKey(val id: String) {
     KIOSK_TAKE_OUT("kiosk.take_out"),
     KIOSK_PAY_AT_COUNTER("kiosk.pay_at_counter"),
     KIOSK_ID_CHECK("kiosk.id_check"),
+    // the demo QR sheet (demo.mode=on), in the POS's current language
+    DEMO_HEADER("demo.header"),
+    DEMO_NOTE("demo.note"),
+    DEMO_NO_SIGN_IN("demo.no_sign_in"),
+    /** {0} = server PIN, {1} = manager PIN. */
+    DEMO_SIGN_IN_PINS("demo.sign_in_pins"),
+    DEMO_GUEST_TITLE("demo.guest.title"),
+    /** {0} = the table's label. */
+    DEMO_GUEST_ABOUT("demo.guest.about"),
+    DEMO_STAFF_TITLE("demo.staff.title"),
+    DEMO_STAFF_ABOUT("demo.staff.about"),
+    DEMO_KITCHEN_TITLE("demo.kitchen.title"),
+    DEMO_KITCHEN_ABOUT("demo.kitchen.about"),
+    DEMO_PICKUP_TITLE("demo.pickup.title"),
+    DEMO_PICKUP_ABOUT("demo.pickup.about"),
+    DEMO_PORTAL_TITLE("demo.portal.title"),
+    DEMO_PORTAL_ABOUT("demo.portal.about"),
+    /** {0} = the portal address, or "ask the presenter". */
+    DEMO_PORTAL_ADDRESS("demo.portal.address"),
+    /** {0} = the user name, or "ask the presenter". */
+    DEMO_PORTAL_USER("demo.portal.user"),
+    /** {0} = the password, or "ask the presenter". */
+    DEMO_PORTAL_PASSWORD("demo.portal.password"),
+    DEMO_ASK_PRESENTER("demo.ask_presenter"),
+    DEMO_WIFI_TITLE("demo.wifi.title"),
+    DEMO_WIFI_ABOUT("demo.wifi.about"),
 }
 
 /**

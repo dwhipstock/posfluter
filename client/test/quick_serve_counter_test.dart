@@ -12,6 +12,7 @@ import 'package:pos_client/api.dart';
 import 'package:pos_client/design/tokens.dart';
 import 'package:pos_client/i18n.dart';
 import 'package:pos_client/quickserve/counter_screen.dart';
+import 'package:pos_client/widgets/url_qr.dart';
 
 /// The quick-serve counter, one flow for every order: it opens on a new
 /// order (never stored until its first item), dine in / take out is a toggle,
@@ -259,6 +260,9 @@ class _Store {
       }
     }
     if (p == '/printer/status') return _json({'configured': false});
+    if (p == '/cloud/info') {
+      return _json({'portalUrl': null, 'storeUrl': 'http://192.168.1.50:8080'});
+    }
     return http.Response('{"error":"not found"}', 404);
   });
 }
@@ -666,6 +670,25 @@ void main() {
       await tester.tap(find.byKey(const Key('recall-101')));
       await tester.pumpAndSettle();
       expect(store.statusCalls, ['101:READY', '101:PICKED_UP', '101:READY']);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    }, () => store.client);
+  });
+
+  testWidgets('pickup board: the TV link as text and as a QR of the same URL', (
+    tester,
+  ) async {
+    final store = _Store();
+    await http.runWithClient(() async {
+      await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+      await tester.tap(find.text('Pickup board'));
+      await tester.pumpAndSettle();
+      const url = 'http://192.168.1.50:8080/pickup';
+      expect(find.byKey(UrlQr.qrKey(url)), findsOneWidget);
+      final qr = tester.widget<UrlQr>(find.byType(UrlQr));
+      expect(qr.url, url);
+      expect(find.widgetWithText(SelectableText, url), findsOneWidget);
+      expect(tester.getSize(find.byKey(UrlQr.qrKey(url))).width, 220);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     }, () => store.client);

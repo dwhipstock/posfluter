@@ -13,6 +13,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 
@@ -21,17 +22,17 @@ import kotlinx.serialization.json.jsonObject
  * only surfaces the screen to managers, and the server enforces it: this is
  * the venue's money configuration.
  */
-fun Route.settingsRoutes(settings: SettingsRepository) {
+fun Route.settingsRoutes(settings: SettingsRepository, demoMode: Boolean = false) {
 
     get("/settings") {
         requireManagerSession(call)
-        call.respond(settingsResponse(settings.get(), call.sessionUser()))
+        call.respond(settingsResponse(settings.get(), call.sessionUser(), demoMode))
     }
 
     patch("/settings") {
         requireManagerSession(call)
         val updated = settings.update(call.receive<SettingsPatch>())
-        call.respond(settingsResponse(updated, call.sessionUser()))
+        call.respond(settingsResponse(updated, call.sessionUser(), demoMode))
     }
 
     // Any authenticated staff — the pending-order alert knobs drive every
@@ -52,9 +53,13 @@ fun Route.settingsRoutes(settings: SettingsRepository) {
 internal fun canReadWifiPassword(user: AuthUser): Boolean =
     user.role == "MANAGER" && user.surface == SessionSurface.POS
 
-private fun settingsResponse(s: Settings, user: AuthUser): JsonObject {
-    val json = Json.encodeToJsonElement(s).jsonObject
-    return if (canReadWifiPassword(user)) json
+/**
+ * [demoMode] is read-only here (demo.mode in store.properties, not a venue
+ * setting): it tells Venue settings to show the demo badge and "Print demo QR sheet".
+ */
+private fun settingsResponse(s: Settings, user: AuthUser, demoMode: Boolean): JsonObject {
+    val json = Json.encodeToJsonElement(s).jsonObject + ("demoMode" to JsonPrimitive(demoMode))
+    return if (canReadWifiPassword(user)) JsonObject(json)
     else JsonObject(json + ("wifiPassword" to JsonNull))
 }
 

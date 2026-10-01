@@ -344,6 +344,8 @@ export const de: Record<MsgKey, string> = {
   devices_pos_seen_sec: "vor {n} s",
   devices_pos_lan: "Lokale Adresse",
   devices_pos_public: "Öffentliche Adresse",
+  devices_staff_app: "Personal-App fürs Handy",
+  devices_staff_app_hint: "Das Personal scannt dies (im WLAN des Geschäfts), um die Bestell-App auf dem Handy zu öffnen.",
   devices_pos_install: "Installation",
   devices_pos_version: "Version",
   devices_pos_contract: "Vertrag v{n}",

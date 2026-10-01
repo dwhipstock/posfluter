@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
@@ -17,6 +16,7 @@ import '../widgets/brand.dart';
 import '../widgets/floor_plan.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/resume_refresh.dart';
+import '../widgets/url_qr.dart';
 import 'check_screen.dart';
 import 'floor_plan_edit_screen.dart';
 import 'login_screen.dart';
@@ -1000,17 +1000,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(12),
-              child: _tableQrImage(url),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              url,
-              style: T.small(color: T.receiptInk),
-              textAlign: TextAlign.center,
-            ),
+            UrlQr(url, size: 260, textSize: 14, textColor: T.receiptInk),
             const SizedBox(height: 4),
             Text(
               l.tableQrHint,
@@ -1042,67 +1032,6 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       ),
     );
   }
-
-  /// A 260px scan-to-order QR that can NEVER take the dialog down with it.
-  ///
-  /// The real trap: [AlertDialog] sizes its content with an [IntrinsicWidth],
-  /// which walks the subtree asking for intrinsic dimensions — but [QrImageView]'s
-  /// root is a [LayoutBuilder], and a LayoutBuilder THROWS when asked for
-  /// intrinsics ("LayoutBuilder does not support returning intrinsic dimensions").
-  /// That aborts layout of the whole dialog, so it renders as an invisible scrim
-  /// that reads like a screen lock. The fix is the tight [SizedBox] wrapper: a
-  /// box with tight width+height answers intrinsic queries with its own fixed
-  /// size and never descends into the LayoutBuilder.
-  ///
-  /// Pre-validation + [errorStateBuilder] are the secondary guard: an unencodable
-  /// payload renders the URL as text instead of a blank square.
-  Widget _tableQrImage(String url) {
-    const double size = 260;
-    final validation = QrValidator.validate(
-      data: url,
-      version: QrVersions.auto,
-      errorCorrectionLevel: QrErrorCorrectLevel.M,
-    );
-    return SizedBox(
-      width: size,
-      height: size,
-      child: validation.status != QrValidationStatus.valid
-          ? _qrFallback(url, size)
-          : QrImageView(
-              data: url,
-              size: size,
-              version: QrVersions.auto,
-              errorCorrectionLevel: QrErrorCorrectLevel.M,
-              backgroundColor: Colors.white,
-              eyeStyle: const QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: Colors.black,
-              ),
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: Colors.black,
-              ),
-              errorStateBuilder: (ctx, err) => _qrFallback(url, size),
-            ),
-    );
-  }
-
-  /// Visible stand-in when the QR itself can't render — the guest can still
-  /// reach the menu by typing the URL, and the dialog stays legible.
-  Widget _qrFallback(String url, double size) => SizedBox(
-    width: size,
-    height: size,
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          url,
-          style: const TextStyle(color: T.receiptInk),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    ),
-  );
 
   /// Print the table's scan-to-order QR on the thermal printer. The QR payload
   /// is built server-side (same /m/t/{token} link as the on-screen code). Never

@@ -16,6 +16,7 @@ import '../screens/sales_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/shift_screen.dart';
 import '../widgets/resume_refresh.dart';
+import '../widgets/url_qr.dart';
 import 'quick_serve_i18n.dart';
 
 /// The quick-serve counter (Copper Lantern Express), one flow for every
@@ -221,11 +222,19 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
       if (lan != null) base = lan;
     } catch (_) {}
     if (!mounted) return;
+    final url = '$base/pickup';
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(q.pickupBoard),
-        content: SelectableText(q.pickupBoardBody('$base/pickup')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(q.pickupBoardBody, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            UrlQr(url),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

@@ -24,6 +24,7 @@ import 'package:pos_client/screens/login_screen.dart';
 import 'package:pos_client/screens/menu_management_screen.dart';
 import 'package:pos_client/screens/tender_screen.dart';
 import 'package:pos_client/screens/zones_screen.dart';
+import 'package:pos_client/widgets/url_qr.dart';
 
 const _shotsDir = String.fromEnvironment('SHOTS_DIR');
 const _shotPrefix = String.fromEnvironment('SHOT_PREFIX');
@@ -251,6 +252,27 @@ void main() {
       const ZonesScreen(),
       expectText: 'U-1',
       act: _checkTableLabels(many: '4 seats', one: '1 seat'),
+    );
+  });
+
+  testWidgets('floor: long-press a table shows its menu link and the QR of '
+      'that same link', (tester) async {
+    // a LAN store address (the QR is never offered for a loopback one)
+    await Api.setServerUrlOverride('http://192.168.1.50:8080');
+    addTearDown(() => Api.setServerUrlOverride(null));
+    const url = 'http://192.168.1.50:8080/m/t/BruSo2-3qt4QqmQuzp1oOw';
+    await _shoot(
+      tester,
+      'floor-table-qr',
+      const ZonesScreen(),
+      act: (tester) async {
+        await tester.longPress(find.text('U-1').first);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(UrlQr.qrKey(url)), findsOneWidget);
+        expect(tester.widget<UrlQr>(find.byType(UrlQr)).url, url);
+        expect(find.widgetWithText(SelectableText, url), findsOneWidget);
+      },
     );
   });
 

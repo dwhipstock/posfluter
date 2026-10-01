@@ -622,6 +622,66 @@ scripts/demo-up.sh` to demo the authenticator (restart the store to apply). The
 store logs `Staff app MFA: <on|off> (<source>)` at startup; a bad value means
 `on` (logged) and never fails startup.
 
+## Demo mode
+
+One store switch for the pitch demo, default `off`: `demo.mode=on|off` in the
+store's `store.properties`. Never turn it on in a real store. Managers see it
+in **More → Venue settings → Demo mode** (on or off; it is changed in the
+file, not on the screen).
+
+Demo mode on:
+
+- **Staff app MFA is off**: the staff phone app signs in with the PIN only,
+  whatever `staff.app.mfa` says. With demo mode off, `staff.app.mfa` works as
+  described above.
+- **Print demo QR sheet** appears in Venue settings. It prints one slip on the
+  store's receipt printer (80 mm), in the language the POS is set to (English
+  by default): the header "DEMO MODE — demo QR codes", a line saying it is
+  printed only for the demo, then one block per app with what it is, its link,
+  its QR code and how to sign in:
+  - Guest ordering at a table (the first table; left off for a quick-serve store)
+  - Staff phone app (PIN 9999 server, 1234 manager)
+  - Kitchen screen (when `kitchen.printing=on`; staff PIN)
+  - Pickup board, for a separate screen like a TV (quick-serve stores)
+  - Manager portal: address, username and password from `demo.portal.*`
+  - Guest Wi-Fi join code, when guest Wi-Fi is set up in Venue settings
+
+  No kiosk or card-reader pairing is printed (those codes expire).
+
+The manager-portal block reads three more keys from the same file. They are
+for the demo only: never commit them, and they are never logged (the store
+logs only whether they are set). Any one left unset prints "ask the presenter".
+
+```properties
+demo.mode=on
+demo.portal.url=https://<the client's portal>
+demo.portal.user=<demo owner sign-in>
+demo.portal.password=<its password>
+```
+
+**Tablet**:
+
+```sh
+scripts/tablet-demo-mode.sh on    # demo.mode=on + restart the app
+DEMO_PORTAL_URL=https://… DEMO_PORTAL_USER=… scripts/tablet-demo-mode.sh on
+                                  # also the portal sign-in (asks for the password, no echo)
+scripts/tablet-demo-mode.sh off   # back to normal
+adb logcat -s TabletStore | grep 'Demo mode'
+```
+
+A demo APK (`POS_DEMO_BUILD=true`) has `demo.mode=on` built in; `demo.mode` in
+store.properties wins over it.
+
+**Windows POS**: `demo.mode` and `demo.portal.*` in
+`%LOCALAPPDATA%\<brand>\store.properties` (the template lists them), then close
+and reopen the app.
+
+**Desktop / docker store**: `POS_DEMO_MODE=on|off` (with
+`POS_DEMO_PORTAL_URL`, `POS_DEMO_PORTAL_USER`, `POS_DEMO_PORTAL_PASSWORD`), or
+the keys in the `POS_CONFIG_FILE` file (the env var wins). The store logs
+`Demo mode: <on|off> (<source>)` at startup; a bad value means `off` (logged)
+and never fails startup.
+
 ## Kitchen tickets and the kitchen screen (optional)
 
 Restaurants only, **off by default**. With it off nothing changes: no Send

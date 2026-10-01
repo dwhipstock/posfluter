@@ -73,6 +73,13 @@ print.receipts=digital
 #legal.age=21
 #staff.app.mfa=on
 #kitchen.printing=off
+
+# Demo mode for the pitch demo: staff app by PIN only, and "Print demo QR
+# sheet" in Venue settings. Never on in a real store.
+#demo.mode=off
+#demo.portal.url=
+#demo.portal.user=
+#demo.portal.password=
 ''';
 
   static Map<String, String> _readProps(File f) {
@@ -111,7 +118,7 @@ print.receipts=digital
         'POS_BILLS_DIR': '${dir.path}\\bills',
         'POS_PHOTOS_DIR': '${dir.path}\\photos',
         // every other switch (print.receipts, payment.terminal*, cash.rounding,
-        // staff.app.mfa, kitchen.printing, image.*) is read from this file
+        // staff.app.mfa, demo.*, kitchen.printing, image.*) is read from this file
         'POS_CONFIG_FILE': propsFile.path,
         'POS_VENUE': ?venue,
         if (props['forecourt.url']?.isNotEmpty ?? false)

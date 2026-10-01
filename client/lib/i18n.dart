@@ -3427,6 +3427,36 @@ class L {
     'Druck fehlgeschlagen – Drucker offline',
     'Druk het misluk — drukker vanlyn',
   );
+  String get sectionDemoMode =>
+      _t('Mode démo', 'Demo mode', 'Modo demo', 'Demo-Modus', 'Demo-modus');
+  String get demoModeOn => _t(
+    'Activé (demo.mode dans store.properties). L’application du personnel se connecte avec le NIP seulement.',
+    'On (demo.mode in store.properties). The staff app signs in with a PIN only.',
+    'Activado (demo.mode en store.properties). La app del personal inicia sesión solo con el PIN.',
+    'Ein (demo.mode in store.properties). Die Personal-App meldet sich nur mit der PIN an.',
+    'Aan (demo.mode in store.properties). Die personeel-app meld net met ’n PIN aan.',
+  );
+  String get demoModeOff => _t(
+    'Désactivé (demo.mode dans store.properties).',
+    'Off (demo.mode in store.properties).',
+    'Desactivado (demo.mode en store.properties).',
+    'Aus (demo.mode in store.properties).',
+    'Af (demo.mode in store.properties).',
+  );
+  String get printDemoSheet => _t(
+    'Imprimer la fiche QR de démo',
+    'Print demo QR sheet',
+    'Imprimir la hoja QR de demo',
+    'Demo-QR-Blatt drucken',
+    'Druk demo-QR-blad',
+  );
+  String get demoSheetPrinted => _t(
+    'Fiche QR de démo envoyée à l’imprimante',
+    'Demo QR sheet sent to the printer',
+    'Hoja QR de demo enviada a la impresora',
+    'Demo-QR-Blatt an den Drucker gesendet',
+    'Demo-QR-blad na die drukker gestuur',
+  );
   String get printAllTableQr => _t(
     'Imprimer les codes QR de toutes les tables',
     'Print all table QR codes',
@@ -4899,6 +4929,13 @@ class L {
     'Integrada en la caja (la página /terminal o el lector en la tableta)',
     'In die Kasse integriert (die Seite /terminal oder das Lesegerät am Tablet)',
     'Ingebou in die kasregister (die /terminal-bladsy, of die leser op die tablet)',
+  );
+  String get terminalPageQrLabel => _t(
+    'Lecteur de carte de démonstration : ouvrez cette page sur un téléphone pour jouer le lecteur',
+    'Practice card reader: open this page on a phone to play the card reader',
+    'Lector de tarjetas de práctica: abre esta página en un teléfono para hacer de lector',
+    'Übungs-Kartenleser: diese Seite auf einem Handy öffnen, um den Kartenleser zu spielen',
+    'Oefen-kaartleser: maak hierdie bladsy op ’n foon oop om die kaartleser te speel',
   );
   String get pairTerminal => _t(
     'Associer un terminal',

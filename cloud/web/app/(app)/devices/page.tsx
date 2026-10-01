@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/states";
 import { useStores } from "@/lib/store";
+import { staffAppLink } from "@/lib/links";
+import { UrlQr } from "@/components/url-qr";
 import { cn } from "@/lib/utils";
 
 type T = (key: MsgKey, vars?: Record<string, string | number>) => string;
@@ -157,6 +159,8 @@ function StoreCard({ store: s, onChanged }: { store: StorePos; onChanged: () => 
           <Detail label={t("devices_pos_version")} value={version || null} />
         </dl>
 
+        <StaffAppQr venueId={s.venueId} />
+
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 text-xs font-medium text-neutral-500">
             <MonitorSmartphone className="h-3.5 w-3.5" />
@@ -170,6 +174,25 @@ function StoreCard({ store: s, onChanged }: { store: StorePos; onChanged: () => 
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The store's staff phone app: the portal's stable per-store link (it redirects
+ * to the store's current LAN address), as text and as a QR of that same link.
+ * The origin is the browser's, so it is filled in after mount.
+ */
+function StaffAppQr({ venueId }: { venueId: string }) {
+  const t = useT();
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => setOrigin(window.location.origin), []);
+  if (!origin) return null;
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-medium text-neutral-500">{t("devices_staff_app")}</div>
+      <p className="text-xs text-neutral-400">{t("devices_staff_app_hint")}</p>
+      <UrlQr url={staffAppLink(origin, venueId)} />
+    </div>
   );
 }
 

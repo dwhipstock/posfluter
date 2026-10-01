@@ -952,6 +952,16 @@ class Api {
   static Future<String> slipsTicket() async =>
       (await _post('/slips/ticket'))['ticket'] as String;
 
+  /// Demo mode only (demo.mode=on): print the one-slip demo QR sheet in
+  /// [lang] (the POS's current language). Throws [ApiException] with code
+  /// `demo_mode_off` when the store is not in demo mode.
+  static Future<PrinterStatus> printDemoSheet(String lang) async =>
+      PrinterStatus.fromJson(
+        await _post(
+          '/printer/demo-sheet/print?lang=${Uri.encodeQueryComponent(lang)}',
+        ),
+      );
+
   /// Bulk-print every active table's QR slip (manager, venue setup).
   static Future<PrintAllResult> printAllTableSlips() async =>
       PrintAllResult.fromJson(await _post('/tables/slips/print-all'));
@@ -2241,6 +2251,9 @@ class VenueSettings {
   final String? wifiPassword;
   final String wifiSecurity; // WPA | WEP | nopass
   final bool wifiHidden;
+
+  /// demo.mode=on in the store's store.properties (read-only here).
+  final bool demoMode;
   VenueSettings(
     this.cardProcessor,
     this.bankName,
@@ -2261,6 +2274,7 @@ class VenueSettings {
     this.wifiPassword,
     this.wifiSecurity = 'WPA',
     this.wifiHidden = false,
+    this.demoMode = false,
   });
   factory VenueSettings.fromJson(Map<String, dynamic> j) => VenueSettings(
     j['cardProcessor'],
@@ -2282,6 +2296,7 @@ class VenueSettings {
     wifiPassword: j['wifiPassword'],
     wifiSecurity: j['wifiSecurity'] ?? 'WPA',
     wifiHidden: j['wifiHidden'] ?? false,
+    demoMode: j['demoMode'] ?? false,
   );
 }
 
