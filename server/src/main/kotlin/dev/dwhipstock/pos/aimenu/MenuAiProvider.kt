@@ -120,14 +120,18 @@ class GeminiMenuProvider(
                 putJsonObject("generation_config") { put("temperature", 0); put("thinking_level", thinkingLevel) }
             }.toString().toByteArray()
         }
-        val post = { m: String ->
-            send("Gemini", http, ImageHttpRequest("POST", "$baseUrl/v1beta/interactions",
-                mapOf("x-goog-api-key" to apiKey), body(m), "application/json"))
-        }
         val deadline = System.currentTimeMillis() + budgetMs
-        fun timeLeft() = System.currentTimeMillis() < deadline
+        fun left() = deadline - System.currentTimeMillis()
+        fun timeLeft() = left() > 0
+        // every HTTP call gets only what is left of the budget: a slow first try plus a slow
+        // retry can never together run past it (the abandoned call ends on its own read timeout)
+        val post = { m: String ->
+            val request = ImageHttpRequest("POST", "$baseUrl/v1beta/interactions",
+                mapOf("x-goog-api-key" to apiKey), body(m), "application/json")
+            withDeadline(left()) { send("Gemini", http, request) }
+        }
         var res = post(model)
-        if (res.status == 503 && timeLeft()) { pause(RETRY_PAUSE_MS); res = post(model) }
+        if (res.status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); res = post(model) }
         // busy, or this model's daily free quota used up: the fallback model has its own quota
         if ((res.status == 503 || res.status == 429) && model != FALLBACK_MODEL && timeLeft()) res = post(FALLBACK_MODEL)
         val json = parseJsonObject(res.text)
@@ -141,6 +145,21 @@ class GeminiMenuProvider(
             ?.joinToString("")
         if (text.isNullOrBlank()) throw ImageGenException.refused("Gemini", status?.takeIf { it != "completed" })
         return text
+    }
+
+    /** [call] on its own thread, given at most [ms]; past it, a timeout (image_timeout → menu_ai_timeout). */
+    private fun <T> withDeadline(ms: Long, call: () -> T): T {
+        if (ms <= 0) throw ImageGenException(504, ImageGenException.TIMEOUT, "Gemini did not answer in ${budgetMs / 1000}s")
+        val task = java.util.concurrent.FutureTask(call)
+        Thread(task, "gemini-menu-call").apply { isDaemon = true }.start()
+        return try {
+            task.get(ms, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            task.cancel(true)
+            throw ImageGenException(504, ImageGenException.TIMEOUT, "Gemini did not answer in ${budgetMs / 1000}s", cause = e)
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw e.cause ?: e
+        }
     }
 
     override fun toString() = "GeminiMenuProvider($model)"

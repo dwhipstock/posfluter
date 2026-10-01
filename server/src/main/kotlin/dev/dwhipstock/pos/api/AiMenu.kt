@@ -36,7 +36,7 @@ data class MenuAiRevertRequest(val managerPin: String? = null, val force: Boolea
 private const val MAX_MENU_PHOTO_BYTES = 12 * 1024 * 1024
 
 /** The session's user and device and the approving manager: rate limit key and AI log line. */
-private fun ApplicationCall.aiCaller(approverId: String) = sessionUser().let {
+internal fun ApplicationCall.aiCaller(approverId: String) = sessionUser().let {
     AiCaller(it.userId, approverId, it.deviceId, it.languageCode)
 }
 

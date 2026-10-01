@@ -188,12 +188,36 @@ class MenuAiRoutesTest {
         assertNull(transaction { Categories.selectAll().where { Categories.nameEn eq "Salads" }.firstOrNull() })
         assertEquals(listOf("item.deleted", "item.updated", "item.variant_updated", "category.deleted"),
             outbox().drop(outboxBeforeRevert))
-        assertEquals("true", Json.parseToJsonElement(manager.get("/menu-ai/history").bodyAsText())
-            .jsonArray.single().jsonObject.s("reverted"))
+        suspend fun history() = Json.parseToJsonElement(manager.get("/menu-ai/history").bodyAsText())
+            .jsonArray.map { it.jsonObject }
+        // the undo is in the history too (newest first), so it can itself be undone
+        val (undo, original) = history()
+        assertEquals("true", original.s("reverted"))
+        assertEquals(setId, original.s("id"))
+        assertTrue(undo.s("summary").startsWith("Undo: "), undo.s("summary"))
+        assertEquals("false", undo.s("reverted"))
+        assertEquals(4, undo.s("changeCount").toInt())
         // once only
         assertEquals(HttpStatusCode.Conflict, manager.post("/menu-ai/history/$setId/revert") {
             contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234"}""")
         }.status)
+
+        // undo the undo: the AI change is back (same ids), and the original can be undone again
+        val redo = manager.post("/menu-ai/history/${undo.s("id")}/revert") {
+            contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234"}""")
+        }
+        assertEquals(HttpStatusCode.OK, redo.status, redo.bodyAsText())
+        assertEquals(2025L, price("lantern-burger:regular"))
+        assertEquals(false, item("salmon")!![Items.active])
+        assertNull(item(newItem)!![Items.deletedAt])
+        assertEquals(item(newItem)!![Items.categoryId],
+            transaction { Categories.selectAll().where { Categories.nameEn eq "Salads" }.single()[Categories.id] })
+        assertEquals("false", history().first { it.s("id") == setId }.s("reverted"))
+        assertEquals(HttpStatusCode.OK, manager.post("/menu-ai/history/$setId/revert") {
+            contentType(ContentType.Application.Json); setBody("""{"managerPin":"1234"}""")
+        }.status)
+        assertEquals(before, price("lantern-burger:regular"))
+        assertTrue(item(newItem)!![Items.deletedAt] != null)
     }
 
     @Test

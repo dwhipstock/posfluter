@@ -183,12 +183,18 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     final prices = picked
         .where((c) => c.details.any((d) => d.field == 'price') && !c.isNew)
         .length;
-    final bulk = p.bulk && (removes > 10 || prices > 10);
+    // the store decides what is big: many removals or price changes, "86
+    // everything", or a price cut by half or more / to near zero
+    final bulk = p.bulk;
     if (bulk) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          content: Text(l.aiMenuBulkConfirm(removes, prices)),
+          content: Text(
+            removes > 10 || prices > 10
+                ? l.aiMenuBulkConfirm(removes, prices)
+                : l.aiMenuBigChangeConfirm,
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),

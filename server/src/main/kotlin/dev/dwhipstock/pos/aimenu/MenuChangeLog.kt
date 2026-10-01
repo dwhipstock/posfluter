@@ -1,6 +1,7 @@
 package dev.dwhipstock.pos.aimenu
 
 import dev.dwhipstock.pos.api.CatalogOps
+import dev.dwhipstock.pos.api.CategoryCreateRequest
 import dev.dwhipstock.pos.api.CategoryPatchRequest
 import dev.dwhipstock.pos.api.ItemPatchRequest
 import dev.dwhipstock.pos.api.VariantPatchRequest
@@ -172,6 +173,7 @@ internal object MenuChangeLog {
         "item" -> itemState(id)
         "variant" -> variantState(id)
         "category" -> categoryState(id)
+        UNDO_OF -> null
         else -> orderState()
     }
 
@@ -217,7 +219,7 @@ internal object MenuChangeLog {
                 source = s[MenuChangeSets.sourceKind],
                 summary = s[MenuChangeSets.summary],
                 appliedBy = names[s[MenuChangeSets.userId]] ?: s[MenuChangeSets.userId],
-                changeCount = rows.size,
+                changeCount = rows.count { it[MenuChangeRows.entity] != UNDO_OF },
                 titles = rows.map { it[MenuChangeRows.title] }.filter { it.isNotBlank() }.distinct().take(8),
                 reverted = s[MenuChangeSets.revertedAt] != null,
                 revertedAt = s[MenuChangeSets.revertedAt]?.toString(),
@@ -256,19 +258,48 @@ internal object MenuChangeLog {
             }
         }
 
+        // A category this set created that now holds items the set did not create (added by hand,
+        // or from the portal): undoing would have to delete a category that is not empty. Asked
+        // first like any later edit; forced, the category stays (with those items) and the rest reverts.
+        val createdItems = rows.filter { it[MenuChangeRows.entity] == "item" && it[MenuChangeRows.action] == "create" }
+            .map { it[MenuChangeRows.entityId] }.toSet()
+        val keptCategories = rows.filter { it[MenuChangeRows.entity] == "category" && it[MenuChangeRows.action] == "create" }
+            .filter { r -> categoryHasOtherItems(r[MenuChangeRows.entityId], createdItems) }
+            .map { it[MenuChangeRows.entityId] }.toSet()
+
         if (!force) {
             val changed = rows.filter { r ->
                 val after = r[MenuChangeRows.afterJson]?.let { json.parseToJsonElement(it) }
-                state(r[MenuChangeRows.entity], r[MenuChangeRows.entityId]) != after
+                r[MenuChangeRows.entityId] in keptCategories && r[MenuChangeRows.entity] == "category" ||
+                    state(r[MenuChangeRows.entity], r[MenuChangeRows.entityId]) != after
             }.map { it[MenuChangeRows.title].ifBlank { it[MenuChangeRows.entityId] } }.distinct()
             if (changed.isNotEmpty()) throw MenuRevertConflictException(changed)
+        }
+
+        // the undo is itself a change set (rows that put back what this revert changes), so an
+        // undo can be undone: newest-first here, so reverting the undo replays the original order
+        val undoRows = mutableListOf<Row>()
+        fun undone(r: org.jetbrains.exposed.sql.ResultRow, beforeRevert: JsonObject?) {
+            val inverse = when (r[MenuChangeRows.action]) { "create" -> "delete"; "delete" -> "create"; else -> r[MenuChangeRows.action] }
+            undoRows += Row(r[MenuChangeRows.entity], r[MenuChangeRows.entityId], inverse, r[MenuChangeRows.title], beforeRevert)
         }
 
         for (r in rows) {
             val id = r[MenuChangeRows.entityId]
             val before = r[MenuChangeRows.beforeJson]?.let { json.parseToJsonElement(it).jsonObject }
-            when (r[MenuChangeRows.entity] to r[MenuChangeRows.action]) {
+            val entity = r[MenuChangeRows.entity]
+            if (entity == UNDO_OF) continue
+            if (entity == "category" && r[MenuChangeRows.action] == "create" && id in keptCategories) continue
+            undone(r, state(entity, id)?.let { s ->
+                // a category re-created by an undo of this undo goes back where it was in the list
+                if (entity == "category") categoryStateWithOrder(id) ?: s else s
+            })
+            when (entity to r[MenuChangeRows.action]) {
                 "category" to "create" -> if (categoryState(id) != null) CatalogOps.deleteCategory(id)
+                // only an undo's row: the category it deleted comes back with the same id (items point at it)
+                "category" to "delete" -> if (categoryState(id) == null && before != null) CatalogOps.createCategory(
+                    CategoryCreateRequest(nameFr = before.s("nameFr"), nameEn = before.s("nameEn"),
+                        sortOrder = (before["sortOrder"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()), fixedId = id)
                 "item" to "create" -> if (itemState(id)?.get("deleted")?.jsonPrimitive?.boolean == false) CatalogOps.deleteItem(id)
                 "item" to "delete" -> restoreIfDeleted(id, before!!)
                 "item" to "update" -> {
@@ -304,7 +335,35 @@ internal object MenuChangeLog {
             it[revertedAt] = VenueClock.now()
             it[revertedBy] = userId
         }
-        return rows.size
+        // undoing an undo: the set it undid is applied again, so it can be undone again
+        rows.firstOrNull { it[MenuChangeRows.entity] == UNDO_OF }?.let { link ->
+            MenuChangeSets.update({ MenuChangeSets.id eq link[MenuChangeRows.entityId] }) {
+                it[revertedAt] = null
+                it[revertedBy] = null
+            }
+        }
+        if (undoRows.isNotEmpty()) {
+            val undoId = java.util.UUID.randomUUID().toString()
+            val summary = "Undo: " + set[MenuChangeSets.summary].removePrefix("Undo: ")
+            record(undoId, userId, set[MenuChangeSets.approverId], set[MenuChangeSets.sourceKind], summary,
+                undoRows + Row(UNDO_OF, setId, "link", "", null))
+        }
+        return rows.count { it[MenuChangeRows.entity] != UNDO_OF }
+    }
+
+    /** The marker row of an undo's change set: entity_id = the set it undid. */
+    private const val UNDO_OF = "undo_of"
+
+    private fun categoryHasOtherItems(categoryId: String, createdItems: Set<String>): Boolean =
+        Items.selectAll().where { (Items.categoryId eq categoryId) and Items.deletedAt.isNull() }
+            .any { it[Items.id] !in createdItems }
+
+    private fun categoryStateWithOrder(categoryId: String): JsonObject? {
+        val row = Categories.selectAll().where { Categories.id eq categoryId }.firstOrNull() ?: return null
+        return buildJsonObject {
+            put("nameEn", row[Categories.nameEn]); put("nameFr", row[Categories.nameFr])
+            put("sortOrder", row[Categories.sortOrder])
+        }
     }
 
     private fun variantLive(variantId: String): Boolean =

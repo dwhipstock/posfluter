@@ -47,9 +47,9 @@ fun Route.aiPhotoRoutes(ai: AiPhotoService, photos: PhotoStore, auth: AuthServic
     post("/items/{itemId}/ai-photo/generate") {
         val itemId = call.parameters["itemId"]!!
         val req = runCatching { call.receive<AiGenerateRequest>() }.getOrDefault(AiGenerateRequest())
-        requireManagerOrPin(auth, call, req.managerPin)
+        val who = call.aiCaller(requireManagerOrPin(auth, call, req.managerPin))
         val facts = itemFacts(itemId)
-        call.respond(onIo { ai.generate(itemId, facts, req.count) })
+        call.respond(onIo { ai.generate(itemId, facts, req.count, who) })
     }
 
     post("/items/{itemId}/ai-photo/enhance") {
@@ -72,7 +72,7 @@ fun Route.aiPhotoRoutes(ai: AiPhotoService, photos: PhotoStore, auth: AuthServic
             }
             part.dispose()
         }
-        requireManagerOrPin(auth, call, managerPin)
+        val who = call.aiCaller(requireManagerOrPin(auth, call, managerPin))
         val facts = itemFacts(itemId)
         var data = bytes ?: throw IllegalArgumentException("photo file part required")
         require(contentType in ALLOWED_TYPES) { "only JPEG or PNG photos are supported" }
@@ -81,7 +81,7 @@ fun Route.aiPhotoRoutes(ai: AiPhotoService, photos: PhotoStore, auth: AuthServic
         // a phone photo is far bigger than the model needs: send ~1.5K px
         val sent = Images.downscaleToJpeg(data, 1536)
         val type = if (sent != null) "image/jpeg" else contentType!!
-        call.respond(onIo { ai.enhance(itemId, facts, sent ?: data, type, count) })
+        call.respond(onIo { ai.enhance(itemId, facts, sent ?: data, type, count, who) })
     }
 
     post("/items/{itemId}/ai-photo/choose") {
