@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, KeyRound, Loader2, MonitorSmartphone } from "lucide-react";
 import { post, del } from "@/lib/api";
 import { toast, toastError } from "@/lib/toast";
-import { useApi } from "@/lib/hooks";
+import { useApi, useMe } from "@/lib/hooks";
 import { useFmt, useT } from "@/lib/i18n/context";
 import type { Fmt } from "@/lib/i18n/format";
 import type { MsgKey } from "@/lib/i18n/messages";
@@ -211,6 +211,7 @@ function DeviceRows({
   const fmt = useFmt();
   const [confirm, setConfirm] = useState<PairedDevice | null>(null);
   const [busy, setBusy] = useState(false);
+  const canManage = useCanManageDevices();
 
   const revoke = async () => {
     if (!confirm) return;
@@ -259,7 +260,7 @@ function DeviceRows({
                   {d.pairedAt && <> · {t("devices_paired_on", { date: fmt.dayYear(d.pairedAt) })}</>}
                 </span>
               </div>
-              {status === "active" ? (
+              {!canManage ? null : status === "active" ? (
                 <Button variant="destructive-outline" size="sm" onClick={() => setConfirm(d)}>
                   {t("devices_revoke")}
                 </Button>
@@ -297,8 +298,14 @@ function DeviceRows({
 
 // ── optional: pair an extra terminal ────────────────────────────────────
 
+/** Pairing, revoking and removing terminals is the owner's (a manager or viewer — the demo login too — gets 403). */
+function useCanManageDevices(): boolean {
+  return (useMe().data?.role ?? "owner") === "owner";
+}
+
 function ExtraTerminalCard({ venueIds }: { venueIds: string[] }) {
   const t = useT();
+  const canManage = useCanManageDevices();
   const { venues } = useStores();
   const [open, setOpen] = useState(false);
   const choices = venues.filter((v) => venueIds.includes(v.id));
@@ -316,13 +323,16 @@ function ExtraTerminalCard({ venueIds }: { venueIds: string[] }) {
             </div>
             <CardDescription>{t("devices_extra_sub")}</CardDescription>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-            {open ? <ChevronUp /> : <ChevronDown />}
-            {t(open ? "devices_extra_hide" : "devices_extra_show")}
-          </Button>
+          {canManage && (
+            <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+              {open ? <ChevronUp /> : <ChevronDown />}
+              {t(open ? "devices_extra_hide" : "devices_extra_show")}
+            </Button>
+          )}
         </div>
+        {!canManage && <p className="pt-2 text-xs text-neutral-500">{t("devices_owner_only")}</p>}
       </CardHeader>
-      {open && venue && (
+      {canManage && open && venue && (
         <CardContent className="space-y-4">
           {choices.length > 1 && (
             <div className="space-y-1.5 md:w-72">

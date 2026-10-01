@@ -33,6 +33,7 @@ const AUTH_ERR: Record<string, MsgKey> = {
   bad_totp: "err_bad_totp",
   bad_pending_token: "err_bad_pending_token",
   rate_limited: "err_rate_limited",
+  demo_mode_off: "err_demo_mode_off",
 };
 
 export default function LoginPage() {
@@ -150,8 +151,12 @@ export default function LoginPage() {
               <Label htmlFor="email">{t("login_email")}</Label>
               <Input
                 id="email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                autoComplete="username"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

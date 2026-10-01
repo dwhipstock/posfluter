@@ -71,6 +71,10 @@ services:
       PORTAL_SESSION_MAX_HOURS: "${PORTAL_SESSION_MAX_HOURS:-12}"
       # local demo only: set TOTP_REQUIRED=false in .env.local to skip MFA enrollment
       TOTP_REQUIRED: "${TOTP_REQUIRED:-true}"
+      # live demos: on = the demo login (DEMO_USER_NAME) signs in without TOTP; the owner keeps it
+      PORTAL_DEMO_MODE: "${PORTAL_DEMO_MODE:-off}"
+      DEMO_USER_NAME: "${DEMO_USER_NAME:-}"
+      DEMO_USER_PASSWORD: "${DEMO_USER_PASSWORD:-}"
       VENUE_NAME: "${VENUE_NAME:-Copper Lantern}"
       VENUE_TZ: "${VENUE_TZ:-America/New_York}"
     ports:

@@ -164,12 +164,33 @@ function PageBody({ children }: { children: React.ReactNode }) {
   );
 }
 
+interface ShellProps {
+  groupName: string;
+  /** PORTAL_DEMO_MODE=on: a small badge in the header, so a live demo is never mistaken for the real thing. */
+  demoMode: boolean;
+  children: React.ReactNode;
+}
+
+/** "Demo mode" pill: amber, readable on the light bar and the navy one. */
+function DemoBadge() {
+  const t = useT();
+  return (
+    <span
+      role="status"
+      className="shrink-0 rounded-full bg-amber-400 px-2.5 py-1 text-[11px] font-bold uppercase leading-none tracking-wide text-navy-deep"
+    >
+      {t("demo_badge")}
+    </span>
+  );
+}
+
 /** Signed-in chrome, in the brand's layout: a dark sidebar, or a light top bar. */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const me = useMe();
   const brand = useBrand();
   const groupName = me.data?.tenantName ?? me.data?.venueName ?? "";
+  const demoMode = me.data?.demoMode === true;
 
   // 401s hard-redirect in the api layer; this catches totp_pending (403).
   // Only auth failures bounce — a transient network error must not throw a
@@ -181,9 +202,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [me.error, router]);
 
   return brand.layout === "topbar" ? (
-    <TopBarShell groupName={groupName}>{children}</TopBarShell>
+    <TopBarShell groupName={groupName} demoMode={demoMode}>{children}</TopBarShell>
   ) : (
-    <SidebarShell groupName={groupName}>{children}</SidebarShell>
+    <SidebarShell groupName={groupName} demoMode={demoMode}>{children}</SidebarShell>
   );
 }
 
@@ -192,7 +213,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
  * store picker in one white bar; a light bottom bar on phones. Flat, no
  * sidebar — a different product feel, same pages.
  */
-function TopBarShell({ groupName, children }: { groupName: string; children: React.ReactNode }) {
+function TopBarShell({ groupName, demoMode, children }: ShellProps) {
   const t = useT();
   return (
     <div className="min-h-dvh bg-paper">
@@ -205,6 +226,7 @@ function TopBarShell({ groupName, children }: { groupName: string; children: Rea
             </Suspense>
           </nav>
           <div className="ml-auto flex min-w-0 items-center gap-2">
+            {demoMode && <DemoBadge />}
             <Suspense fallback={null}>
               <StorePicker className="w-40 md:w-52" />
             </Suspense>
@@ -240,7 +262,7 @@ function TopBarShell({ groupName, children }: { groupName: string; children: Rea
 }
 
 /** The dark sidebar layout (desktop) + dark bottom bar (phones). */
-function SidebarShell({ groupName, children }: { groupName: string; children: React.ReactNode }) {
+function SidebarShell({ groupName, demoMode, children }: ShellProps) {
   const t = useT();
   return (
     <div className="min-h-dvh bg-paper md:flex">
@@ -266,6 +288,7 @@ function SidebarShell({ groupName, children }: { groupName: string; children: Re
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 bg-navy px-4 text-white md:hidden">
         <BrandMark compact />
         <div className="flex min-w-0 items-center gap-2">
+          {demoMode && <DemoBadge />}
           <Suspense fallback={null}>
             <StorePicker tone="dark" className="w-36" />
           </Suspense>
@@ -276,7 +299,10 @@ function SidebarShell({ groupName, children }: { groupName: string; children: Re
       <main className="min-w-0 flex-1 pb-24 md:pb-12">
         {/* desktop header: the store picker sits above every page */}
         <div className="sticky top-0 z-30 hidden h-16 items-center justify-between gap-3 border-b border-neutral-200 bg-surface/95 px-8 backdrop-blur md:flex">
-          <span className="truncate text-sm font-semibold text-navy">{groupName}</span>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="truncate text-sm font-semibold text-navy">{groupName}</span>
+            {demoMode && <DemoBadge />}
+          </div>
           <div className="flex items-center gap-3">
             <span className="text-xs font-medium text-neutral-500">{t("store_label")}</span>
             <Suspense fallback={null}>

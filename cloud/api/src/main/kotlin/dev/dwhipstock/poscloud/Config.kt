@@ -12,6 +12,18 @@ data class CloudConfig(
     // Demo-only escape hatch. Production keeps the secure default; isolated
     // sales demos can opt out when account friction matters more than 2FA.
     val totpRequired: Boolean = env("TOTP_REQUIRED")?.toBoolean() ?: true,
+    // Live-demo sign-in (028). PORTAL_DEMO_MODE=on lets the demo login
+    // (DEMO_USER_NAME) sign in with its password alone (no authenticator) and
+    // shows a "Demo mode" badge in the portal. It never relaxes the owner
+    // (ADMIN_EMAIL) or any other real user. Off (the default): the demo login
+    // cannot sign in at all, and its open sessions stop working.
+    val demoMode: Boolean = parseOnOff(env("PORTAL_DEMO_MODE")),
+    // The demo login: a plain username (not an email; letters, digits, - _ .,
+    // 3-40 chars, matched case-insensitively) + DEMO_USER_PASSWORD. Seeded at boot
+    // as a manager of every store (no devices, keys, users or tenant settings);
+    // a changed password re-hashes on the next boot. Both unset = no demo login.
+    val demoUserName: String? = env("DEMO_USER_NAME")?.trim(),
+    val demoUserPassword: String? = env("DEMO_USER_PASSWORD"),
     // Break-glass lockout recovery: set to the owner's email, restart, and their
     // TOTP is wiped so the next login re-enrolls from scratch. Clear it afterwards.
     val resetTotpEmail: String? = env("RESET_TOTP_EMAIL"),
@@ -78,5 +90,12 @@ internal fun parsePairs(raw: String?): Map<String, String> =
         val v = part.substringAfter('=', "").trim()
         if (k.isEmpty() || v.isEmpty()) null else k to v
     }.toMap(LinkedHashMap())
+
+/** A demo login's username: no '@', so it can never collide with an owner's email. */
+internal val DEMO_USERNAME_RE = Regex("^[A-Za-z0-9._-]{3,40}$")
+
+/** on/true/1/yes → true; anything else (unset, off, false) → false. */
+internal fun parseOnOff(raw: String?): Boolean =
+    raw?.trim()?.lowercase() in setOf("on", "true", "1", "yes")
 
 private fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }

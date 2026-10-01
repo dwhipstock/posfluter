@@ -7,6 +7,7 @@
 #   4. adding a store keeps the old keys and mints one new key
 #   5. adopting a running stack (--from-env) keeps its secrets and database volume
 #   6. nothing it prints contains a secret; bad input is refused
+#   4b. the demo login (DEMO_USER_NAME / DEMO_USER_PASSWORD / PORTAL_DEMO_MODE) is kept across re-runs
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,7 +22,7 @@ getv() { grep "^$1=" "$2" | tail -1 | cut -d= -f2-; }
 mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 no_secrets_in() { # no_secrets_in <output> <env file>
   local out="$1" envf="$2" k v
-  for k in DB_PASSWORD ADMIN_PASSWORD STORE_API_KEY; do
+  for k in DB_PASSWORD ADMIN_PASSWORD DEMO_USER_PASSWORD STORE_API_KEY; do
     v="$(getv "$k" "$envf")"
     [[ -z "$v" ]] && continue
     grep -qF "$v" <<<"$out" && bad "output contains $k"
@@ -104,6 +105,35 @@ k2="$(getv STORE_API_KEYS "$ENV")"
 grep -q "sage-poppy: kept" <<<"$out" && grep -q "sage-poppy-2: generated" <<<"$out" || bad "key notes"
 no_secrets_in "$out" "$ENV"
 ok "adding a store keeps the old key and mints one"
+
+# 4b. the demo login
+[[ "$(getv PORTAL_DEMO_MODE "$ENV")" == off && -z "$(getv DEMO_USER_NAME "$ENV")" && -z "$(getv DEMO_USER_PASSWORD "$ENV")" ]] \
+  || bad "no demo login by default"
+out="$("$SCRIPT" sagepoppy sagepoppy-manager.example.com --clients-dir "$CL" --demo-user sp-demo --demo-mode on)"
+[[ "$(getv DEMO_USER_NAME "$ENV")" == sp-demo ]] || bad "demo user"
+[[ "$(getv PORTAL_DEMO_MODE "$ENV")" == on ]] || bad "demo mode on"
+dpw="$(getv DEMO_USER_PASSWORD "$ENV")"
+[[ "$dpw" =~ ^[A-Za-z0-9]{24}$ ]] || bad "demo password not generated"
+grep -q "demo login  : sp-demo" <<<"$out" || bad "the plan does not show the demo login"
+grep -q "DEMO_USER_PASSWORD: generated" <<<"$out" || bad "demo password note"
+no_secrets_in "$out" "$ENV"
+out="$("$SCRIPT" sagepoppy sagepoppy-manager.example.com --clients-dir "$CL")"
+[[ "$(getv DEMO_USER_NAME "$ENV")" == sp-demo && "$(getv PORTAL_DEMO_MODE "$ENV")" == on \
+  && "$(getv DEMO_USER_PASSWORD "$ENV")" == "$dpw" ]] || bad "a bare re-run lost the demo settings"
+# a memorable password set by hand is kept; demo mode switches off
+sed -i.bak 's/^DEMO_USER_PASSWORD=.*/DEMO_USER_PASSWORD=Poppy-Field-2026/' "$ENV"; rm -f "$ENV.bak"
+out="$("$SCRIPT" sagepoppy sagepoppy-manager.example.com --clients-dir "$CL" --demo-mode off)"
+[[ "$(getv DEMO_USER_PASSWORD "$ENV")" == Poppy-Field-2026 ]] || bad "the hand-set demo password was not kept"
+[[ "$(getv PORTAL_DEMO_MODE "$ENV")" == off ]] || bad "demo mode off"
+grep -q "Poppy-Field-2026" <<<"$out" && bad "printed the demo password"
+for badu in demo@example.com ab "has space"; do
+  if "$SCRIPT" sagepoppy sagepoppy-manager.example.com --clients-dir "$CL" --demo-user "$badu" >/dev/null 2>&1; then bad "accepted demo user '$badu'"; fi
+done
+if "$SCRIPT" sagepoppy sagepoppy-manager.example.com --clients-dir "$CL" --demo-mode maybe >/dev/null 2>&1; then bad "accepted --demo-mode maybe"; fi
+[[ "$(getv DEMO_USER_NAME "$ENV")" == sp-demo ]] || bad "a refused run changed the demo user"
+"$SCRIPT" sagepoppy sagepoppy-manager.example.com --clients-dir "$CL" --no-demo-user >/dev/null
+[[ -z "$(getv DEMO_USER_NAME "$ENV")" && -z "$(getv DEMO_USER_PASSWORD "$ENV")" ]] || bad "--no-demo-user left the demo login"
+ok "the demo login: generated once, kept across re-runs, a hand-set password kept, removable"
 
 # 5. adopt a running stack
 OLD="$TMP/old.env"

@@ -693,9 +693,19 @@ logs only whether they are set). Any one left unset prints "ask the presenter".
 ```properties
 demo.mode=on
 demo.portal.url=https://<the client's portal>
-demo.portal.user=<demo owner sign-in>
-demo.portal.password=<its password>
+demo.portal.user=<the portal's DEMO_USER_NAME>
+demo.portal.password=<its DEMO_USER_PASSWORD>
 ```
+
+Use the portal's **demo login** here, never the owner's: set it up with
+`new-client.sh --demo-user <name> --demo-mode on` (hosted, see
+[hosted-client-split.md §8](hosted-client-split.md#8-a-demo-login-for-live-demos-any-client-portal)),
+or locally with `PORTAL_DEMO_MODE=on`, `DEMO_USER_NAME`, `DEMO_USER_PASSWORD`
+in `.env.local`. With `PORTAL_DEMO_MODE=on` that login signs in with its
+password only (no authenticator) and the portal shows a **Demo mode** badge; it
+is a manager (no terminal pairing or revoking). The owner keeps the
+authenticator. Turn `PORTAL_DEMO_MODE` off after the demo: the demo login then
+cannot sign in at all.
 
 **Tablet**:
 

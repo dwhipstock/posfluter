@@ -1,6 +1,9 @@
 package dev.dwhipstock.poscloud
 
+import dev.dwhipstock.poscloud.auth.ROLE_MANAGER
 import dev.dwhipstock.poscloud.auth.hashPassword
+import dev.dwhipstock.poscloud.auth.verifyPassword
+import dev.dwhipstock.poscloud.db.PortalSessions
 import dev.dwhipstock.poscloud.auth.sha256Hex
 import dev.dwhipstock.poscloud.catalog.Scope
 import dev.dwhipstock.poscloud.db.PortalBackupCodes
@@ -108,6 +111,7 @@ object Bootstrap {
                 }
             }
         }
+        seedDemoUser(config, tenant, now)
         config.resetTotpEmail?.let { resetEmail ->
             val users = PortalUsers.selectAll().where {
                 (PortalUsers.tenantId eq tenant) and (PortalUsers.email eq resetEmail)
@@ -125,4 +129,80 @@ object Bootstrap {
             else log.warn("RESET_TOTP_EMAIL: wiped TOTP for '$resetEmail' — next login re-enrolls. Clear the env var now.")
         }
     }
+
+    /** The demo login's display name in the portal. */
+    const val DEMO_DISPLAY_NAME = "Demo"
+
+    /**
+     * The demo login (DEMO_USER_NAME + DEMO_USER_PASSWORD), idempotently: created
+     * when missing; on later boots its password hash follows env (a change also
+     * ends its open sessions) and it is kept a demo manager with no TOTP. It is
+     * stored by its lowercased username in the email column (no '@', so it never
+     * collides with an owner). A demo row env no longer names — the username
+     * changed, or the vars were removed — is retired: unusable password, sessions
+     * ended. An existing NON-demo user is never touched. Passwords are never logged.
+     * Call inside a transaction.
+     */
+    internal fun seedDemoUser(config: CloudConfig, tenant: String, now: OffsetDateTime) {
+        val name = config.demoUserName
+        val password = config.demoUserPassword
+        val username = when {
+            name == null && password == null -> null
+            name == null || password == null -> {
+                log.warn("demo login: set both DEMO_USER_NAME and DEMO_USER_PASSWORD — no demo login seeded")
+                null
+            }
+            !DEMO_USERNAME_RE.matches(name) -> {
+                log.warn("demo login: DEMO_USER_NAME must be 3-40 letters, digits, '-', '_' or '.' — no demo login seeded")
+                null
+            }
+            else -> name.lowercase()
+        }
+        // retire demo rows env no longer names
+        PortalUsers.selectAll().where { (PortalUsers.tenantId eq tenant) and (PortalUsers.isDemo eq true) }
+            .filter { it[PortalUsers.email] != username && it[PortalUsers.passwordHash] != RETIRED_HASH }
+            .forEach { row ->
+                PortalUsers.update({ PortalUsers.id eq row[PortalUsers.id] }) { it[passwordHash] = RETIRED_HASH }
+                PortalSessions.deleteWhere { PortalSessions.userId eq row[PortalUsers.id] }
+                log.info("demo login '${row[PortalUsers.email]}' retired (no longer DEMO_USER_NAME)")
+            }
+        if (username == null || password == null) return
+        val existing = PortalUsers.selectAll().where {
+            (PortalUsers.tenantId eq tenant) and (PortalUsers.email eq username)
+        }.firstOrNull()
+        if (existing == null) {
+            PortalUsers.insert {
+                it[tenantId] = tenant
+                it[email] = username
+                it[passwordHash] = hashPassword(password)
+                it[totpEnabled] = false
+                it[displayName] = DEMO_DISPLAY_NAME
+                it[role] = ROLE_MANAGER
+                it[isDemo] = true
+                it[createdAt] = now
+            }
+            log.info("demo login '$username' created (manager, every store)")
+            return
+        }
+        if (!existing[PortalUsers.isDemo]) {
+            log.warn("demo login: '$username' is already a real portal user — left untouched, no demo login")
+            return
+        }
+        val id = existing[PortalUsers.id]
+        val passwordChanged = !verifyPassword(password, existing[PortalUsers.passwordHash])
+        PortalUsers.update({ PortalUsers.id eq id }) {
+            if (passwordChanged) it[passwordHash] = hashPassword(password)
+            it[role] = ROLE_MANAGER
+            it[displayName] = DEMO_DISPLAY_NAME
+            it[totpEnabled] = false
+            it[totpSecret] = null
+        }
+        if (passwordChanged) {
+            PortalSessions.deleteWhere { PortalSessions.userId eq id }
+            log.info("demo login '$username': password changed, open sessions ended")
+        }
+    }
+
+    /** Not a bcrypt hash: verifyPassword never accepts it. */
+    private const val RETIRED_HASH = "!retired-demo-login"
 }
