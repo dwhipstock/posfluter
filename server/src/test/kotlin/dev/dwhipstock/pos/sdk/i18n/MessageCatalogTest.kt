@@ -176,7 +176,7 @@ class MessageCatalogTest {
 
     @Test
     fun placeholdersSubstitute() {
-        assertEquals("Taxe de vente 13\u00A0% (incluse)", Messages.get(MessageKey.RECEIPT_TAX_INCLUDED, LocaleCode.FR, 13))
+        assertEquals("Taxe de vente 13% (incluse)", Messages.get(MessageKey.RECEIPT_TAX_INCLUDED, LocaleCode.FR, 13))
         assertEquals("Sales tax 13% (included)", Messages.get(MessageKey.RECEIPT_TAX_INCLUDED, LocaleCode.EN, 13))
     }
 

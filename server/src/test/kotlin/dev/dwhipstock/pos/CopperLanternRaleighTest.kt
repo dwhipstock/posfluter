@@ -21,7 +21,10 @@ import dev.dwhipstock.pos.sdk.ReceiptKind
 import dev.dwhipstock.pos.sdk.ReceiptOrder
 import dev.dwhipstock.pos.sdk.ReceiptRenderer
 import dev.dwhipstock.pos.sdk.StoreProfile
+import dev.dwhipstock.pos.sdk.TaxDisplay
 import dev.dwhipstock.pos.sdk.TaxLine
+import dev.dwhipstock.pos.sdk.TaxPolicy
+import dev.dwhipstock.pos.sdk.TaxRounding
 import dev.dwhipstock.pos.sdk.TransactionPipeline
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import java.nio.file.Files
@@ -31,8 +34,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Copper Lantern in Raleigh, North Carolina: USD, NC sales tax 6.75% plus
- * Wake County's 1% prepared food and beverage tax on everything a pub sells,
+ * Copper Lantern in Raleigh, North Carolina: USD, NC sales tax 7.25% (state
+ * 4.75% + Wake County 2% + Wake Transit 0.5%) plus Wake County's 1% prepared
+ * food and beverage tax on everything a pub sells — one "Tax (8.25%)" line
+ * for the guest, rounded once, split for remittance —
  * cash to the nickel (card exact), English receipts and tickets, and ID
  * checks at 21.
  */
@@ -50,19 +55,28 @@ class CopperLanternRaleighTest {
     @Test
     fun ncSalesTaxAndWakePreparedFoodTaxOnTopOfTheMenuPrice() {
         val c = config()
-        // $10.00 of food: NC 6.75% = 0.675 → 0.68 (half-up), Wake 1% = 0.10 → $10.78
+        // $10.00 of food: 8.25% = 0.825 → 0.83 (half-up, once) = NC 7.25% 0.73 + Wake 1% 0.10 → $10.83
         val food = totals(c, 1000)
-        assertEquals(listOf("NC_SALES" to 68L, "WAKE_FOOD" to 10L), food.taxLines.map { it.component.code to it.amount.cents })
-        assertEquals(Money(1078), food.grandTotal)
+        assertEquals(listOf("NC_SALES" to 73L, "WAKE_FOOD" to 10L), food.taxLines.map { it.component.code to it.amount.cents })
+        assertEquals(Money(1083), food.grandTotal)
         // a drink is prepared food and beverage too: the $20.25 pitcher pays both
+        // (8.25% = 1.670625 → 1.67 = 1.47 + 0.20)
         val drink = totals(c, 2025)
-        assertEquals(listOf(137L, 20L), drink.taxLines.map { it.amount.cents })
-        assertEquals(Money(2182), drink.grandTotal)
-        // 7.75% in all, each tax on the same pre-tax base (never compounded)
+        assertEquals(listOf(147L, 20L), drink.taxLines.map { it.amount.cents })
+        assertEquals(Money(2192), drink.grandTotal)
+        // 8.25% in all, each tax on the same pre-tax base (never compounded)
         val hundred = totals(c, 10_000)
-        assertEquals(listOf(675L, 100L), hundred.taxLines.map { it.amount.cents })
-        assertEquals(Money(10_775), hundred.grandTotal)
-        assertEquals(listOf("6.75", "1"), CopperLanternConfig.NC_TAXES.map { it.rateText })
+        assertEquals(listOf(725L, 100L), hundred.taxLines.map { it.amount.cents })
+        assertEquals(Money(10_825), hundred.grandTotal)
+        assertEquals(listOf("7.25", "1"), CopperLanternConfig.NC_TAXES.map { it.rateText })
+        assertEquals(listOf("NCDOR", "Wake County"), CopperLanternConfig.NC_TAXES.map { it.remitTo })
+        // rounded ONCE at 8.25%: 50¢ pays 4¢ (4.125), where rounding each tax would charge 5¢ (3.625 → 4 + 0.5 → 1)
+        assertEquals(listOf(4L, 0L), totals(c, 50).taxLines.map { it.amount.cents })
+        // the guest sees one line; the two taxes are what it is made of
+        val policy = c.taxPolicy as TaxPolicy.AddedTaxes
+        assertEquals(TaxRounding.COMBINED, policy.rounding)
+        assertTrue(policy.display is TaxDisplay.Combined)
+        assertEquals("8.25", policy.combinedRatePercent.stripTrailingZeros().toPlainString())
         // US receipts print no tax registration number
         assertTrue(CopperLanternConfig.NC_TAXES.all { it.registrationNumber.isEmpty() })
     }
@@ -70,11 +84,11 @@ class CopperLanternRaleighTest {
     @Test
     fun cashRoundsToTheNickelAndCardIsExact() {
         val c = config()
-        // $10.78 → cash $10.80; $21.82 → cash $21.80; card pays the exact total
-        assertEquals(Money(1080), c.roundingPolicy.roundCashDue(totals(c, 1000).grandTotal))
-        assertEquals(Money(2180), c.roundingPolicy.roundCashDue(totals(c, 2025).grandTotal))
-        assertEquals(Money(2), c.roundingPolicy.cashAdjustment(Money(1078)))
-        assertEquals(Money(-2), c.roundingPolicy.cashAdjustment(Money(2182)))
+        // $10.83 → cash $10.85; $21.92 → cash $21.90; card pays the exact total
+        assertEquals(Money(1085), c.roundingPolicy.roundCashDue(totals(c, 1000).grandTotal))
+        assertEquals(Money(2190), c.roundingPolicy.roundCashDue(totals(c, 2025).grandTotal))
+        assertEquals(Money(2), c.roundingPolicy.cashAdjustment(Money(1083)))
+        assertEquals(Money(-2), c.roundingPolicy.cashAdjustment(Money(2192)))
         // a cash total ending in 5 or 0 stays
         assertEquals(Money(10_775), c.roundingPolicy.roundCashDue(Money(10_775)))
     }
@@ -121,11 +135,13 @@ class CopperLanternRaleighTest {
             ReceiptItem("Poutine classique", "Classic Poutine", null, null, 1, Money(1300), Money(1300), null),
         ),
         fees = emptyList(),
-        grandTotal = Money(2050 + 138 + 21),
+        // 20.50 × 8.25% = 1.69125 → 1.69 = NC 1.49 + Wake 0.20
+        grandTotal = Money(2050 + 149 + 20),
         taxIncluded = Money.ZERO, taxRatePercent = null, tenders = emptyList(),
-        taxes = listOf(TaxLine(CopperLanternConfig.NC_SALES_TAX, Money(138)), TaxLine(CopperLanternConfig.WAKE_FOOD_TAX, Money(21))),
-        cashDue = Money(2210), cashRounding = Money(1),
+        taxes = listOf(TaxLine(CopperLanternConfig.NC_SALES_TAX, Money(149)), TaxLine(CopperLanternConfig.WAKE_FOOD_TAX, Money(20))),
+        cashDue = Money(2220), cashRounding = Money(1),
         order = ReceiptOrder("#101", takeOut = false),
+        taxDisplay = TaxDisplay.Combined(),
     )
 
     private fun text(lines: List<PrintLine>) = PrinterAdapter.renderText(lines)
@@ -135,23 +151,30 @@ class CopperLanternRaleighTest {
         val policy = config(CopperLanternVenue.EXPRESS).receiptPolicy
         assertEquals(LocaleCode.EN, policy.locale)
         val en = text(ReceiptRenderer.render(bill, policy, ReceiptKind.PROVISIONAL))
-        for (want in listOf("#101 · Dine in", "*** CUSTOMER BILL ***", "*** NOT A RECEIPT ***", "NC sales tax 6.75%",
-            "Wake prepared food tax 1%", "Rounding", "Cash total", "Lantern House Lager (20 oz pint)")) {
+        for (want in listOf("#101 · Dine in", "*** CUSTOMER BILL ***", "*** NOT A RECEIPT ***", "Tax (8.25%)",
+            "Rounding", "Cash total", "Lantern House Lager (20 oz pint)")) {
             assertTrue(want in en, "'$want' missing:\n$en")
         }
-        for (gone in listOf("Sur place", "ADDITION", "REÇU", "GST", "QST", "TPS", "TVQ", " no. ", "Pinte")) {
+        // one combined tax line: the subtotal plus it is the total, to the cent
+        val kv = en.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
+        assertTrue("Subtotal | 20.50" in kv && "Tax (8.25%) | 1.69" in kv && "Total | 22.19" in kv, en)
+        for (gone in listOf("Sur place", "ADDITION", "REÇU", "GST", "QST", "TPS", "TVQ", " no. ", "Pinte",
+            "NC sales tax", "Wake")) {
             assertTrue(gone !in en, "'$gone' on an English bill:\n$en")
         }
         // press-and-hold reprints: each in its own language, one language at a time
         val fr = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.FR), ReceiptKind.PROVISIONAL))
         assertTrue("#101 · Sur place" in fr && "Dine in" !in fr, fr)
-        assertTrue("Taxe de vente (C.-N.)" in fr && "Lager de la Lanterne" in fr, fr)
+        assertTrue("Taxes (8.25%)" in fr && "Lager de la Lanterne" in fr, fr)
         val es = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.ES), ReceiptKind.PROVISIONAL))
-        assertTrue("#101 · Para comer aquí" in es && "Lager de la casa Lantern" in es && "Impuesto sobre las ventas de NC" in es, es)
+        assertTrue("#101 · Para comer aquí" in es && "Lager de la casa Lantern" in es && "Impuesto (8.25%)" in es, es)
         val de = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.DE), ReceiptKind.PROVISIONAL))
-        assertTrue("#101 · Hier essen" in de && "Umsatzsteuer NC" in de, de)
+        assertTrue("#101 · Hier essen" in de && "Steuer (8.25%)" in de, de)
         val af = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.AF), ReceiptKind.PROVISIONAL))
-        assertTrue("#101 · Eet hier" in af && "NC-verkoopbelasting" in af, af)
+        assertTrue("#101 · Eet hier" in af && "Belasting (8.25%)" in af, af)
+        // the same bill itemised (a store whose display is Itemized): the two NC taxes, each with its rate
+        val itemised = text(ReceiptRenderer.render(bill.copy(taxDisplay = TaxDisplay.Itemized), policy, ReceiptKind.PROVISIONAL))
+        assertTrue("NC sales tax 7.25%" in itemised && "Wake prepared food tax 1%" in itemised && "Tax (" !in itemised, itemised)
         // US dates: month first, 12-hour clock
         assertTrue("10/08/2026 6:05 PM" in en, en)
     }
@@ -179,7 +202,7 @@ class CopperLanternRaleighTest {
         val c = config(CopperLanternVenue.EXPRESS)
         val en = text(KioskTicket.render(bill, 101, takeOut = true, alcohol = true, policy = c.receiptPolicy, currency = "USD", legalAge = c.legalAge))
         assertTrue("Alcohol: 21+ only. Staff will check ID at" in en && "the counter." in en, en)
-        assertTrue("Take out" in en && "$22.09" in en && "Pour emporter" !in en, en)
+        assertTrue("Take out" in en && "$22.19" in en && "Tax (8.25%)" in en && "Wake" !in en && "Pour emporter" !in en, en)
         val fr = text(KioskTicket.render(bill, 101, takeOut = true, alcohol = true,
             policy = c.receiptPolicy.withLocale(LocaleCode.FR), currency = "USD", legalAge = 21))
         assertTrue("21 ans et plus" in fr && "Pour emporter" in fr, fr)

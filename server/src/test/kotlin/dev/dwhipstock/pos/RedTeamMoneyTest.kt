@@ -23,8 +23,8 @@ import kotlin.test.assertTrue
 /**
  * Red-team (money & checks), 2026-10-01. Every test here FAILS on main
  * (97e0d94): each one pins the correct behaviour for a bug found by driving
- * the store API. Copper Lantern Glenwood South (NC 6.75% + Wake 1%, nickel cash).
- * Lager pint = $7.50 → $8.09 with tax; amber pint = $7.95 → $8.57.
+ * the store API. Copper Lantern Glenwood South (Tax 8.25% = NC 7.25% + Wake 1%, nickel cash).
+ * Lager pint = $7.50 → $8.12 with tax; amber pint = $7.95 → $8.61.
  */
 class RedTeamMoneyTest {
     private val json = Json { ignoreUnknownKeys = true }
@@ -94,7 +94,7 @@ class RedTeamMoneyTest {
         val huge = c.postJson("/checks/$id/refund", """{"amountCents":${Long.MAX_VALUE},"tenderType":"CASH","reason":"x"}""")
         assertEquals(HttpStatusCode.Conflict, huge.status, "a \$92-quadrillion refund on an \$8.09 check was accepted: ${huge.bodyAsText().take(300)}")
         val info = c.get("/checks/$id/refunds").obj()
-        assertTrue(info.l("refundedCents") in 0..809, info.toString().take(300))
+        assertTrue(info.l("refundedCents") in 0..812, info.toString().take(300))
     }
 
     // CRITICAL: an open item's price overflows Long → negative bill, cash "change" in the quadrillions
@@ -127,8 +127,8 @@ class RedTeamMoneyTest {
         val id = c.open(c.freeTables().next())
         val amber = c.postJson("/checks/$id/lines", """{"itemId":"amber-ale","variantId":"amber-ale:pint","qty":1}""")
             .obj()["lines"]!!.jsonArray.last().jsonObject["id"]!!.jsonPrimitive.int
-        c.lager(id, 2) // $24.73 check: 1 amber + 2 lagers
-        c.cash(id, 2475); c.post("/checks/$id/finalize")
+        c.lager(id, 2) // $24.84 check: 1 amber + 2 lagers
+        c.cash(id, 2485); c.post("/checks/$id/finalize")
         val body = """{"lines":[{"lineId":$amber,"qty":1}],"tenderType":"CASH","reason":"flat"}"""
         assertEquals(HttpStatusCode.Created, c.postJson("/checks/$id/refund", body).status)
         val again = c.postJson("/checks/$id/refund", body)
@@ -145,7 +145,7 @@ class RedTeamMoneyTest {
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":10000}""")
         val table = c.freeTables().next()
-        val id = c.open(table); c.lager(id, 2) // $16.16
+        val id = c.open(table); c.lager(id, 2) // $16.24
         assertEquals(HttpStatusCode.Created, c.cash(id, 500).status) // $5 in the drawer
         // main: closed with expected 10000, over/short +500 — the $5 really is in the drawer
         val refused = c.postJson("/shifts/current/close", """{"closingCountCents":10500}""")
@@ -158,10 +158,10 @@ class RedTeamMoneyTest {
         assertTrue(bill["tableLabel"]!!.jsonPrimitive.content.isNotBlank())
         // the shift is still open; finish the bill, then the Z counts all of its cash
         assertEquals(HttpStatusCode.OK, c.get("/shifts/current/report").status)
-        assertEquals(HttpStatusCode.Created, c.cash(id, 1115).status) // $11.16 → $11.15 in cash
+        assertEquals(HttpStatusCode.Created, c.cash(id, 1125).status) // $11.24 → $11.25 in cash
         assertEquals(HttpStatusCode.OK, c.post("/checks/$id/finalize").status)
-        val z = c.postJson("/shifts/current/close", """{"closingCountCents":11615}""").obj()
-        assertEquals(11615L, z.l("expectedCashCents"), z.toString())
+        val z = c.postJson("/shifts/current/close", """{"closingCountCents":11625}""").obj()
+        assertEquals(11625L, z.l("expectedCashCents"), z.toString())
         assertEquals(0L, z.l("overShortCents"))
     }
 
@@ -174,7 +174,7 @@ class RedTeamMoneyTest {
         val id = c.paidLager(c.freeTables().next())
         c.postJson("/shifts/current/close", """{"closingCountCents":10810}""")
         // no shift open: tenders are refused (no_open_shift) but refunds are not
-        val r = c.postJson("/checks/$id/refund", """{"amountCents":809,"tenderType":"CASH","reason":"x"}""")
+        val r = c.postJson("/checks/$id/refund", """{"amountCents":812,"tenderType":"CASH","reason":"x"}""")
         assertEquals(HttpStatusCode.Conflict, r.status, "cash left the drawer with no shift to account for it")
     }
 
@@ -187,8 +187,8 @@ class RedTeamMoneyTest {
         val id = c.open(c.freeTables().next())
         c.lager(id, 3)
         val one = c.postJson("/checks/$id/lines", """{"itemId":"amber-ale","variantId":"amber-ale:pint","qty":1}""").obj()
-        assertEquals(3281L, one.l("grandTotalCents"))
-        val wholeCash = one.l("cashDueCents") // 3280
+        assertEquals(3296L, one.l("grandTotalCents"))
+        val wholeCash = one.l("cashDueCents") // 3295
         val split = c.postJson("/checks/$id/split", """{"groups":7,"even":true}""").obj()
         val groups = split["split"]!!.jsonObject["groups"]!!.jsonArray.map { it.jsonObject }
         val cashSum = groups.sumOf { it.l("cashDueCents") }
@@ -209,7 +209,7 @@ class RedTeamMoneyTest {
         application { module(dbPath = tempDb(), paymentTerminal = simulator, terminalDevice = device) }
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":10000}""")
-        val id = c.open("t5-5"); c.lager(id, 4) // $32.33
+        val id = c.open("t5-5"); c.lager(id, 4) // $32.48
         val started = c.postJson("/checks/$id/terminal/payments", """{"tipMode":"on_reader"}""")
         assertEquals(HttpStatusCode.Created, started.status, started.bodyAsText())
         val pid = started.obj()["paymentId"]!!.jsonPrimitive.content
@@ -218,7 +218,7 @@ class RedTeamMoneyTest {
         assertEquals("RECORDED", c.get("/terminal/payments/$pid").obj()["status"]!!.jsonPrimitive.content)
         c.post("/checks/$id/finalize")
         val x = c.get("/shifts/current/report").bodyAsText()
-        // the card was charged $38.33; the report must account for the $6.00 tip somewhere
+        // the card was charged $38.48; the report must account for the $6.00 tip somewhere
         assertTrue(x.contains("tip", ignoreCase = true), "tip missing from the X report: $x")
     }
 }

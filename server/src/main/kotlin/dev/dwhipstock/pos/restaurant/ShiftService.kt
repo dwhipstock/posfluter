@@ -314,6 +314,9 @@ class ShiftService(private val config: CustomerConfig) {
                 (Checks.closedAt greaterEq start) and (Checks.closedAt less end)
         }.map { voidEntry(it) }
         val agg = aggregate { (Checks.closedAt greaterEq start) and (Checks.closedAt less end) }
+        val rangeRefunds = Refunds.select(Refunds.taxesJson)
+            .where { (Refunds.createdAt greaterEq start) and (Refunds.createdAt less end) and Refunds.taxesJson.isNotNull() }
+        val taxes = taxBreakdown({ (Checks.closedAt greaterEq start) and (Checks.closedAt less end) }, rangeRefunds)
         ShiftReport(
             shiftId = 0,
             shiftStatus = "RANGE",
@@ -332,6 +335,7 @@ class ShiftService(private val config: CustomerConfig) {
             takeOutCount = agg.modes["TAKE_OUT"] ?: 0,
             tipsCents = agg.tips,
             tipsByServer = agg.tipsByServer,
+            taxes = taxes,
         )
     }
 
@@ -516,7 +520,43 @@ class ShiftService(private val config: CustomerConfig) {
             takeOutCount = agg.modes["TAKE_OUT"] ?: 0,
             tipsCents = agg.tips,
             tipsByServer = agg.tipsByServer,
+            taxes = taxBreakdown({ Checks.shiftId eq shiftId },
+                Refunds.select(Refunds.taxesJson).where { (Refunds.shiftId eq shiftId) and Refunds.taxesJson.isNotNull() }),
         )
+    }
+
+    /**
+     * The added taxes collected, one row per tax AND rate, for remittance:
+     * the closed checks matching [where] (their lock-time breakdown, exactly
+     * what the receipts charged), less the taxes [refunds] handed back. A
+     * guest's one "Tax (8.25%)" line is these rows added up, to the cent.
+     * A rate change (6.75% → 7.25%) keeps the old rate on its own row.
+     * Read row by row: only the sums are kept.
+     */
+    private fun taxBreakdown(
+        where: SqlExpressionBuilder.() -> Op<Boolean>,
+        refunds: org.jetbrains.exposed.sql.Query,
+    ): List<ReportTax> {
+        data class Key(val code: String, val rate: String)
+        val first = linkedMapOf<Key, TaxView>()
+        val sums = linkedMapOf<Key, Long>()
+        fun add(json: String?, sign: Long) {
+            if (json.isNullOrBlank()) return
+            for (line in runCatching { taxLinesFromJson(json) }.getOrDefault(emptyList())) {
+                val v = line.toView()
+                val k = Key(v.code, v.ratePercent)
+                first.putIfAbsent(k, v)
+                sums[k] = Math.addExact(sums[k] ?: 0L, sign * v.amountCents)
+            }
+        }
+        Checks.select(Checks.lockedTaxesJson)
+            .where { where() and (Checks.status eq "CLOSED") and Checks.lockedTaxesJson.isNotNull() }
+            .forEach { add(it[Checks.lockedTaxesJson], 1) }
+        refunds.forEach { add(it[Refunds.taxesJson], -1) }
+        return sums.map { (k, cents) ->
+            val v = first.getValue(k)
+            ReportTax(v.code, v.labelFr, v.labelEn, v.ratePercent, v.remitTo, cents)
+        }
     }
 
     /** A voided bill on the report, with any payments handed back when it was cancelled. */
@@ -606,6 +646,23 @@ data class ShiftReport(
     /** Card tips on top of the bills (reader / Stripe): not revenue, owed to staff. */
     val tipsCents: Long = 0,
     val tipsByServer: List<ServerTips> = emptyList(),
+    /**
+     * The added taxes collected (sales less refunds), one row per tax and
+     * rate, with who each is paid to: NC sales tax 7.25% (NCDOR) and Wake
+     * prepared food tax 1% (Wake County). Empty for a store without added taxes.
+     */
+    val taxes: List<ReportTax> = emptyList(),
+)
+
+/** One added tax on an X / Z / range report: its code, labels, rate ("7.25"), authority and net amount. */
+@Serializable
+data class ReportTax(
+    val code: String,
+    val labelFr: String,
+    val labelEn: String,
+    val ratePercent: String,
+    val remitTo: String = "",
+    val amountCents: Long,
 )
 
 @Serializable

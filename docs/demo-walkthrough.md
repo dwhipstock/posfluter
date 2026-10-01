@@ -104,9 +104,10 @@ doesn't need the internet to take money."
 4. **Printer.** Tap **Print bill**. A provisional bill comes out marked
    "NOT A RECEIPT" (English only), and a preview shows on screen. Press and
    hold Print to print it in French, Spanish, German or Afrikaans instead.
-5. **North Carolina taxes.** Point at the totals: Subtotal, **NC sales tax
-   6.75%** (state 4.75% + Wake County 2%), **Wake prepared food tax 1%**,
-   Total: 7.75% on food and drink.
+5. **North Carolina taxes.** Point at the totals: Subtotal, **Tax (8.25%)**,
+   Total. **Say:** "One line for the guest. Behind it, the reports keep the
+   7.25% NC sales tax for the state and the 1% Wake food tax for the county
+   apart, to the cent."
 6. **Split the bill.** Tap the split icon (it has no text label). "Bill 1" and
    "Bill 2" appear. Tap a bill, then tap items under "Unassigned" to move them.
    (Or **Split evenly** → 2–9 ways.) Each part has its own **Pay**.
@@ -188,8 +189,9 @@ up. The portal can't change a sale, and it never has to be up for a store to sel
    two currencies gets each in its own, a "≈" converted total, and "By currency
    (exact)"; the screenshot is from when the pubs were in CA$.) Pick **Sage &
    Poppy** to see one store.
-2. **Tax report.** Reports → **Sales tax**: NC sales tax and Wake prepared food
-   tax by day for a pub (older days keep their GST and QST); switch to the shop
+2. **Tax report.** Reports → **Sales tax**: NC sales tax 7.25% (remit to
+   NCDOR) and Wake prepared food tax 1% (remit to Wake County) for a pub (older
+   days keep their own rates, and GST and QST); switch to the shop
    for California sales tax. Show the cash-rounding note.
    ![Tax report](screenshots/us-store/14-portal-tax-sage-poppy.png)
 3. **Stock** (shops only): with Sage & Poppy picked, show on-hand units and low

@@ -86,6 +86,8 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
   final _text = TextEditingController();
   String? _pin;
   bool _busy = false;
+  String Function(L) _working = _thinking;
+  static String _thinking(L l) => l.aiMenuThinking;
   Object? _error;
   MenuProposal? _proposal;
   final Set<String> _ticked = {};
@@ -108,11 +110,17 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
   }
 
   /// Runs [call] with the spinner; a wrong PIN is forgotten so the next try asks again.
-  Future<R?> _run<R>(Future<R> Function(String pin) call) async {
+  /// [working] is what the spinner says meanwhile (reading a request,
+  /// reading photos, translating, applying): never "Making photos" for text.
+  Future<R?> _run<R>(
+    Future<R> Function(String pin) call, {
+    required String Function(L) working,
+  }) async {
     final pin = await _managerPin();
     if (pin == null || !mounted) return null;
     setState(() {
       _busy = true;
+      _working = working;
       _error = null;
     });
     try {
@@ -145,20 +153,27 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     if (text.isEmpty) return;
     // sent: drop focus so a touch keyboard doesn't sit over the dialog
     FocusManager.instance.primaryFocus?.unfocus();
-    _show(await _run((pin) => widget.backend.chat(text, pin)));
+    _show(
+      await _run((pin) => widget.backend.chat(text, pin), working: _thinking),
+    );
   }
 
   Future<void> _voice(VoiceClip clip) async {
     final call = widget.backend.chatVoice;
     if (call == null) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    _show(await _run((pin) => call(clip, pin)));
+    _show(await _run((pin) => call(clip, pin), working: _thinking));
   }
 
   Future<void> _photos() async {
     final photos = await widget.pickPhotos();
     if (photos == null || photos.isEmpty || !mounted) return;
-    _show(await _run((pin) => widget.backend.fromPhotos(photos, pin)));
+    _show(
+      await _run(
+        (pin) => widget.backend.fromPhotos(photos, pin),
+        working: (l) => l.aiMenuReadingPhotos,
+      ),
+    );
   }
 
   /// The store's languages beyond the fr / en catalog slots (Copper Lantern: es, de).
@@ -169,7 +184,7 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
   Future<void> _translate() async {
     final call = widget.backend.translate;
     if (call == null) return;
-    _show(await _run(call));
+    _show(await _run(call, working: (l) => l.aiMenuTranslating));
   }
 
   Future<void> _apply() async {
@@ -212,6 +227,7 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     }
     final r = await _run(
       (pin) => widget.backend.apply(p.proposalId, ids, pin, bulk),
+      working: (l) => l.aiMenuApplying,
     );
     if (r == null || !mounted) return;
     setState(() {
@@ -245,7 +261,7 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
       await _run((pin) async {
         await widget.backend.revert(set.id, pin, false);
         return true;
-      });
+      }, working: (l) => l.aiMenuApplying);
     } on MenuRevertConflict catch (c) {
       if (!mounted) return;
       final ok = await showDialog<bool>(
@@ -269,7 +285,7 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
       await _run((pin) async {
         await widget.backend.revert(set.id, pin, true);
         return true;
-      });
+      }, working: (l) => l.aiMenuApplying);
     }
     if (_error != null || !mounted) return;
     _changed = true;
@@ -382,6 +398,16 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
                 maxLines: 3,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _ask(),
+                // a new request: the last answer (or refusal) no longer applies
+                onChanged: (_) {
+                  if (_error != null || _proposal != null) {
+                    setState(() {
+                      _error = null;
+                      _proposal = null;
+                      _ticked.clear();
+                    });
+                  }
+                },
                 decoration: InputDecoration(hintText: l.aiMenuChatHint),
               ),
             ),
@@ -451,7 +477,11 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
               children: [
                 const CircularProgressIndicator(),
                 const SizedBox(height: 10),
-                Text(l.aiWorking, style: T.small()),
+                Text(
+                  _working(l),
+                  key: const Key('ai-menu-working'),
+                  style: T.small(),
+                ),
               ],
             ),
           )

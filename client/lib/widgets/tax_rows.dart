@@ -4,9 +4,10 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../i18n.dart';
 
-/// Subtotal plus one row per tax added on top (NC sales tax, Wake prepared
-/// food tax), shown just above a total. All figures are the server's;
-/// renders nothing when no tax is added.
+/// Subtotal plus one row per tax added on top, shown just above a total —
+/// or, in a store that shows its taxes as one line (Copper Lantern), a
+/// single "Tax (8.25%)" row ([TaxLine.forGuests]). All figures are the
+/// server's; renders nothing when no tax is added.
 class TaxRows extends StatelessWidget {
   final int subtotalCents;
   final List<TaxLine> taxes;
@@ -43,7 +44,8 @@ class TaxRows extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         row(l.subtotal, subtotalCents),
-        for (final tax in taxes) row(l.taxLine(tax), tax.amountCents),
+        for (final tax in TaxLine.forGuests(taxes))
+          row(l.taxLine(tax), tax.amountCents),
       ],
     );
   }

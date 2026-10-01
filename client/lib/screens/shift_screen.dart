@@ -707,6 +707,24 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
               kv('${s.name} (${l.tipCount(s.count)})', money(s.tipCents)),
           ],
         ],
+        // the added taxes for remittance: each tax on its own, with who it is
+        // paid to — guests see them as one line, the books never do
+        if (r.taxes.isNotEmpty) ...[
+          SectionLabel(l.taxCollected),
+          for (final t in r.taxes)
+            kv(
+              t.remitTo.isEmpty
+                  ? l.taxLine(t)
+                  : '${l.taxLine(t)} · ${l.remitTo(t.remitTo)}',
+              money(t.amountCents),
+            ),
+          if (r.taxes.length > 1)
+            kv(
+              l.taxTotal,
+              money(r.taxes.fold(0, (s, t) => s + t.amountCents)),
+              bold: true,
+            ),
+        ],
         SectionLabel(l.topItems),
         for (final i in r.itemMix)
           kv('${l.name(i.nameFr, i.nameEn)} ×${i.qty}', money(i.revenueCents)),

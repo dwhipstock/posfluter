@@ -34,7 +34,8 @@ class ApplicationTest {
         assertEquals(
             """{"status":"ok","pairingRequired":false,"venue":"Copper Lantern — Glenwood South",""" +
                 """"venueId":"vieux-port","brand":"copper-lantern","kind":"restaurant","country":"US",""" +
-                """"currency":"USD","locales":["en","fr","es","de","af"],"legalAge":21,"cashRounding":"nickel"}""",
+                """"currency":"USD","locales":["en","fr","es","de","af"],"legalAge":21,"cashRounding":"nickel",""" +
+                """"taxDisplay":"combined"}""",
             response.bodyAsText(),
         )
     }
@@ -81,14 +82,14 @@ class ApplicationTest {
             setBody("""{"bottles":1}""")
         }.let { assertEquals(HttpStatusCode.OK, it.status) }
 
-        // subtotal: 20.25 + 7.95 + 25.00 corkage = $53.20; NC sales tax 6.75% =
-        // 3.591 → 3.59, Wake prepared food tax 1% = 0.532 → 0.53; total $57.32
+        // subtotal: 20.25 + 7.95 + 25.00 corkage = $53.20; 8.25% once = 4.389 → 4.39,
+        // split NC sales tax 7.25% 3.86 + Wake prepared food tax 1% 0.53; total $57.59
         val check = json.parseToJsonElement(c.get("/checks/$checkId").bodyAsText()).jsonObject
         assertEquals(5320L, check["subtotalCents"]!!.jsonPrimitive.long)
         val taxes = check["taxes"]!!.jsonArray.map { it.jsonObject }
         assertEquals(listOf("NC_SALES", "WAKE_FOOD"), taxes.map { it["code"]!!.jsonPrimitive.content })
-        assertEquals(listOf(359L, 53L), taxes.map { it["amountCents"]!!.jsonPrimitive.long })
-        assertEquals(5732L, check["grandTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(listOf(386L, 53L), taxes.map { it["amountCents"]!!.jsonPrimitive.long })
+        assertEquals(5759L, check["grandTotalCents"]!!.jsonPrimitive.long)
         assertEquals(0L, check["taxIncludedCents"]!!.jsonPrimitive.long)
 
         // Put $30 on the generic card terminal; totals lock at initiation.
@@ -107,21 +108,21 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.Created, confirmed.status)
         val afterCard = json.parseToJsonElement(confirmed.bodyAsText()).jsonObject["check"]!!.jsonObject
         assertEquals(3000L, afterCard["paidCents"]!!.jsonPrimitive.long)
-        assertEquals(2732L, afterCard["outstandingCents"]!!.jsonPrimitive.long)
+        assertEquals(2759L, afterCard["outstandingCents"]!!.jsonPrimitive.long)
 
         // finalize refused while outstanding
         assertEquals(HttpStatusCode.Conflict, c.post("/checks/$checkId/finalize").status)
 
-        // Cash settles the remaining $27.32 (due rounds to $27.30) and returns $7.70 change.
+        // Cash settles the remaining $27.59 (due rounds to $27.60) and returns $7.40 change.
         val tendered = c.post("/checks/$checkId/tenders") {
             contentType(ContentType.Application.Json)
             setBody("""{"type":"CASH","amountTenderedCents":3500}""")
         }
         assertEquals(HttpStatusCode.Created, tendered.status)
         val tender = json.parseToJsonElement(tendered.bodyAsText()).jsonObject["tender"]!!.jsonObject
-        assertEquals(770L, tender["changeCents"]!!.jsonPrimitive.long)
-        assertEquals(-2L, tender["roundingAdjustmentCents"]!!.jsonPrimitive.long)
-        assertEquals(2732L, tender["amountAppliedCents"]!!.jsonPrimitive.long)
+        assertEquals(740L, tender["changeCents"]!!.jsonPrimitive.long)
+        assertEquals(1L, tender["roundingAdjustmentCents"]!!.jsonPrimitive.long)
+        assertEquals(2759L, tender["amountAppliedCents"]!!.jsonPrimitive.long)
 
         val closed = c.post("/checks/$checkId/finalize")
         assertEquals(HttpStatusCode.OK, closed.status)
@@ -141,14 +142,14 @@ class ApplicationTest {
         assertEquals(1, receiptText.lines().count { it.startsWith("Lantern House Lager") })
         assertTrue("Je ne veux pas de glace." in receiptText)
         assertTrue("Corkage" in receiptText)
-        // itemised taxes: subtotal, each North Carolina tax with its rate, total;
+        // the guest sees ONE combined tax line (Tax 8.25%), not the two NC taxes;
         // no GST/QST and no registration-number lines (a US receipt)
         val kv = receiptText.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
         assertTrue("Subtotal | 53.20" in kv, receiptText)
-        assertTrue("NC sales tax 6.75% | 3.59" in kv, receiptText)
-        assertTrue("Wake prepared food tax 1% | 0.53" in kv, receiptText)
-        assertTrue("Total | 57.32" in kv, receiptText)
-        assertTrue("Rounding | -0.02" in kv, receiptText)
+        assertTrue("Tax (8.25%) | 4.39" in kv, receiptText)
+        assertTrue("NC sales tax" !in receiptText && "Wake" !in receiptText, receiptText)
+        assertTrue("Total | 57.59" in kv, receiptText)
+        assertTrue("Rounding | +0.01" in kv, receiptText)
         for (gone in listOf("GST", "QST", "TPS", "TVQ", " no. ", "Merci", "REÇU")) {
             assertTrue(gone !in receiptText, "'$gone' on an English receipt: $receiptText")
         }

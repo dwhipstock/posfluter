@@ -729,6 +729,19 @@ data class HealthResponse(
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
     val looksOverAge: Int? = null,
+    /**
+     * "combined": guests see the added taxes as ONE line at the summed rate
+     * ("Tax (8.25%)", [dev.dwhipstock.pos.sdk.TaxDisplay.Combined]); the
+     * terminal, the staff app and the kiosk collapse the itemised `taxes` of
+     * a check the same way. Left out while itemised (every line on its own).
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val taxDisplay: String? = null,
+    /** The combined line's own word instead of the locale's "Tax"; absent = the locale's. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val taxLabel: String? = null,
 ) {
     companion object {
         fun of(
@@ -748,6 +761,8 @@ data class HealthResponse(
             cashRounding = if (config.roundingPolicy == dev.dwhipstock.pos.sdk.RoundingPolicy.NoRounding) "off" else "nickel",
             kitchenPrinting = kitchenPrinting,
             forecourt = forecourt,
+            taxDisplay = config.taxPolicy.guestDisplay.takeIf { it is dev.dwhipstock.pos.sdk.TaxDisplay.Combined }?.wire,
+            taxLabel = (config.taxPolicy.guestDisplay as? dev.dwhipstock.pos.sdk.TaxDisplay.Combined)?.label,
         )
     }
 }

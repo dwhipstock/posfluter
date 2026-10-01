@@ -455,6 +455,7 @@ export const de: Record<MsgKey, string> = {
   tax_col_rate: "{label} {rate}%",
   tax_by_code: "Nach Steuer",
   tax_col_tax: "Steuer",
+  tax_col_remit: "Abzuführen an",
   nav_stock: "Bestand",
   stock_title: "Bestand",
   stock_sub: "Bestand = letzte Inventur + eingegangen − verkauft ± Korrekturen + Rückgaben, aus synchronisierten Verkäufen und Zählungen.",

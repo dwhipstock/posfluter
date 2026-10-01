@@ -65,24 +65,33 @@ VENUE_TZ = "America/New_York"
 
 # Raleigh, NC taxes added on top of the pre-tax subtotal, as the store charges
 # them (CopperLanternConfig.NC_TAXES): code, French label, English label, rate
-# (percent, decimal string), registration no. (none on US receipts)
+# (percent, decimal string), registration no. (none on US receipts), and who
+# the store pays it to. 7.25% = NC 4.75% + Wake County 2% + Wake Transit 0.5%.
 TAXES = [
-    ("NC_SALES", "NC sales tax", "NC sales tax", "6.75", ""),
-    ("WAKE_FOOD", "Wake prepared food tax", "Wake prepared food tax", "1", ""),
+    ("NC_SALES", "NC sales tax", "NC sales tax", "7.25", "", "NCDOR"),
+    ("WAKE_FOOD", "Wake prepared food tax", "Wake prepared food tax", "1", "", "Wake County"),
 ]
 
 
-def tax_cents(subtotal: int, rate: str) -> int:
-    """One tax on the whole check, rounded half-up to the cent (the store's math)."""
-    thousandths = round(float(rate) * 1000)  # 6.75 -> 6750
-    return (subtotal * thousandths * 2 + 100_000) // 200_000
+def _thousandths(rate: str) -> int:
+    return round(float(rate) * 1000)  # 7.25 -> 7250
 
 
 def taxes_for(subtotal: int) -> list[dict]:
+    """The store's math (TaxRounding.COMBINED): the combined 8.25% rounded
+    half-up once on the whole check, then split into the two taxes by the
+    largest remainder of their exact shares (ties to the first)."""
+    rates = [_thousandths(t[3]) for t in TAXES]
+    total = (subtotal * sum(rates) * 2 + 100_000) // 200_000
+    exact = [subtotal * r for r in rates]  # in 1/100_000 of a cent
+    cents = [e // 100_000 for e in exact]
+    order = sorted(range(len(rates)), key=lambda i: (-(exact[i] - cents[i] * 100_000), i))
+    for k in range(total - sum(cents)):
+        cents[order[k % len(order)]] += 1
     return [
         {"code": code, "labelFr": fr, "labelEn": en, "ratePercent": rate,
-         "registrationNumber": reg, "amountCents": tax_cents(subtotal, rate)}
-        for code, fr, en, rate, reg in TAXES
+         "registrationNumber": reg, "remitTo": remit, "amountCents": c}
+        for (code, fr, en, rate, reg, remit), c in zip(TAXES, cents)
     ]
 
 
@@ -173,7 +182,7 @@ def main() -> None:
                     f"{q(name)},{q(name)},NULL,NULL,{q(name)},{qty},{price},{line_total})"
                 )
 
-            # NC sales tax + Wake prepared food tax on top of the pre-tax subtotal
+            # NC sales tax + Wake prepared food tax on top of the pre-tax subtotal (8.25% in all)
             taxes = taxes_for(subtotal)
             tax = sum(t["amountCents"] for t in taxes)
             gst = qst = 0  # the cloud's GST/QST columns hold Québec-era history only

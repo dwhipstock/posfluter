@@ -29,12 +29,12 @@ class RefundAndCashMovementTest {
     private suspend fun HttpClient.postJson(path: String, body: String) =
         post(path) { contentType(ContentType.Application.Json); setBody(body) }
 
-    /** Ring one lantern-lager:pitcher ($20.25 + NC sales tax 1.37 + Wake 0.20 = $21.82), pay $21.80 cash (due rounds to it), finalize. Returns the check id. */
+    /** Ring one lantern-lager:pitcher ($20.25 + Tax 8.25% 1.67 = NC sales tax 1.47 + Wake 0.20 = $21.92), pay $21.90 cash (due rounds to it), finalize. Returns the check id. */
     private suspend fun HttpClient.finalizeTowerSale(table: String): Int {
         val id = json.parseToJsonElement(postJson("/tables/$table/checks", """{"userId":"manager"}""")
             .bodyAsText()).jsonObject["id"]!!.jsonPrimitive.int
         postJson("/checks/$id/lines", """{"itemId":"lantern-lager","variantId":"lantern-lager:pitcher","qty":1}""")
-        postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2180}""")
+        postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2190}""")
         post("/checks/$id/finalize").let { check(it.status == HttpStatusCode.OK) { "finalize failed: ${it.status}" } }
         return id
     }
@@ -60,45 +60,46 @@ class RefundAndCashMovementTest {
         val recent = json.parseToJsonElement(c.get("/checks/recent").bodyAsText()).jsonArray
             .map { it.jsonObject }
         val summary = recent.first { it["id"]!!.jsonPrimitive.int == checkId }
-        assertEquals(2182L, summary["grandTotalCents"]!!.jsonPrimitive.long)
-        assertEquals(2182L, summary["refundableCents"]!!.jsonPrimitive.long)
+        assertEquals(2192L, summary["grandTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(2192L, summary["refundableCents"]!!.jsonPrimitive.long)
 
         // full refund, cash — every tax reversed exactly (matches the check's two NC taxes)
         val checkTaxes = json.parseToJsonElement(c.get("/checks/$checkId").bodyAsText())
             .jsonObject["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long }
-        assertEquals(listOf(137L, 20L), checkTaxes)
+        assertEquals(listOf(147L, 20L), checkTaxes)
         val checkTax = checkTaxes.sum()
         val refundRes = c.postJson("/checks/$checkId/refund",
-            """{"amountCents":2182,"tenderType":"CASH","reason":"Le client retourne le produit","managerPin":"1234"}""")
+            """{"amountCents":2192,"tenderType":"CASH","reason":"Le client retourne le produit","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, refundRes.status)
         val refundBody = json.parseToJsonElement(refundRes.bodyAsText()).jsonObject
         val refund = refundBody["refund"]!!.jsonObject
-        assertEquals(2182L, refund["grossCents"]!!.jsonPrimitive.long)
+        assertEquals(2192L, refund["grossCents"]!!.jsonPrimitive.long)
         assertEquals(checkTax, refund["taxCents"]!!.jsonPrimitive.long) // full refund → exact tax reversal
-        assertEquals(2182L - checkTax, refund["netCents"]!!.jsonPrimitive.long)
+        assertEquals(2192L - checkTax, refund["netCents"]!!.jsonPrimitive.long)
         assertEquals(checkTaxes, refund["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long })
         assertEquals("CASH", refund["tenderType"]!!.jsonPrimitive.content)
-        // cash back rounds to the nickel like the sale did (21.82 → 21.80); gross stays exact
+        // cash back rounds to the nickel like the sale did (21.92 → 21.90); gross stays exact
         assertEquals(-2L, refund["roundingAdjustmentCents"]!!.jsonPrimitive.long)
-        assertEquals(2180L, refund["paidOutCents"]!!.jsonPrimitive.long)
+        assertEquals(2190L, refund["paidOutCents"]!!.jsonPrimitive.long)
         // the manager (fr preference) opened the check → a French slip (a reprint
         // language), labels pinned exactly
         val slip = refundBody["slipText"]!!.jsonPrimitive.content
         val slipKv = slip.lines().map { it.trim().replace(Regex(" {2,}"), " | ") }
         assertTrue("Sous-total | 20.25" in slipKv, slip)
-        assertTrue("Taxe de vente (C.-N.) 6,75\u00A0% | 1.37" in slipKv, slip)
-        assertTrue("Taxe sur les repas (Wake) 1\u00A0% | 0.20" in slipKv, slip)
+        // the guest's slip: the taxes handed back as one combined line
+        assertTrue("Taxes (8.25%) | 1.67" in slipKv, slip)
+        assertTrue("Wake" !in slip, slip)
         assertTrue("*** REMBOURSEMENT / REFUND ***" in slip, "fr refund header expected:\n$slip")
         assertTrue("Addition d’origine n°\u00A0$checkId" in slip)
         assertTrue("Remboursement n°\u00A0" in slip)
         assertTrue("Total remboursé" in slip)
-        assertTrue("Arrondi | -0.02" in slipKv && "Remis en argent comptant | 21.80" in slipKv, slip)
+        assertTrue("Arrondi | -0.02" in slipKv && "Remis en argent comptant | 21.90" in slipKv, slip)
         assertTrue("Remboursé par" in slip && "Comptant" in slip)
         assertTrue("Motif\u00A0: Le client retourne le produit" in slip) // no-break space, colon, space, reason
 
         // now fully refunded; a second refund is refused
         val info = json.parseToJsonElement(c.get("/checks/$checkId/refunds").bodyAsText()).jsonObject
-        assertEquals(2182L, info["refundedCents"]!!.jsonPrimitive.long)
+        assertEquals(2192L, info["refundedCents"]!!.jsonPrimitive.long)
         assertEquals(0L, info["refundableCents"]!!.jsonPrimitive.long)
         assertEquals(1, info["refunds"]!!.jsonArray.size)
         assertEquals(HttpStatusCode.Conflict,
@@ -127,13 +128,13 @@ class RefundAndCashMovementTest {
         val x = json.parseToJsonElement(c.get("/shifts/current/report").bodyAsText()).jsonObject
         assertEquals(50000L, x["cashPaidInCents"]!!.jsonPrimitive.long)
         assertEquals(20000L, x["cashPaidOutCents"]!!.jsonPrimitive.long)
-        // the cash that left the drawer: 21.80 (the refund's 21.82 rounded to the nickel)
-        assertEquals(2180L, x["cashRefundCents"]!!.jsonPrimitive.long)
+        // the cash that left the drawer: 21.90 (the refund's 21.92 rounded to the nickel)
+        assertEquals(2190L, x["cashRefundCents"]!!.jsonPrimitive.long)
         // the X shows the drawer so far; net rounding: -0.02 on the sale, -0.02 given back
         assertEquals(130000L, x["expectedCashCents"]!!.jsonPrimitive.long)
         assertEquals(0L, x["cashRoundingCents"]!!.jsonPrimitive.long)
 
-        // Z-close: expected = 1000 float + 21.80 cash in − 0 change + 500 in − 200 out − 21.80 cash refund = 1300.00
+        // Z-close: expected = 1000 float + 21.90 cash in − 0 change + 500 in − 200 out − 21.90 cash refund = 1300.00
         val z = json.parseToJsonElement(
             c.postJson("/shifts/current/close", """{"closingCountCents":130000,"managerPin":"1234"}""").bodyAsText()).jsonObject
         assertEquals(130000L, z["expectedCashCents"]!!.jsonPrimitive.long)
@@ -167,7 +168,7 @@ class RefundAndCashMovementTest {
         // refund slip: the check owner (this en manager) sets the language
         val checkId = c.finalizeTowerSale("t6")
         val refundRes = c.postJson("/checks/$checkId/refund",
-            """{"amountCents":2182,"tenderType":"CASH","reason":"changed mind","managerPin":"1234"}""")
+            """{"amountCents":2192,"tenderType":"CASH","reason":"changed mind","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, refundRes.status)
         val slip = json.parseToJsonElement(refundRes.bodyAsText()).jsonObject["slipText"]!!.jsonPrimitive.content
         assertTrue("*** REFUND ***" in slip, "en refund header expected:\n$slip")
@@ -186,46 +187,46 @@ class RefundAndCashMovementTest {
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":0,"managerPin":"1234"}""")
 
-        // two pitchers = $40.50 + NC sales tax 2.73 (2.73375) + Wake 0.41 (0.405 half-up) = $43.64
+        // two pitchers = $40.50 + Tax 8.25% 3.34 (3.34125: NC sales tax 2.94 + Wake 0.40) = $43.84
         val id = json.parseToJsonElement(c.postJson("/tables/t6/checks", """{"userId":"manager"}""")
             .bodyAsText()).jsonObject["id"]!!.jsonPrimitive.int
         c.postJson("/checks/$id/lines", """{"itemId":"lantern-lager","variantId":"lantern-lager:pitcher","qty":2}""")
         // card is electronic: initiate + confirm
-        c.postJson("/checks/$id/tenders/initiate", """{"type":"CARD","amountCents":4364}""")
-        c.postJson("/checks/$id/tenders/confirm", """{"type":"CARD","amountCents":4364}""")
+        c.postJson("/checks/$id/tenders/initiate", """{"type":"CARD","amountCents":4384}""")
+        c.postJson("/checks/$id/tenders/confirm", """{"type":"CARD","amountCents":4384}""")
         c.post("/checks/$id/finalize").let { assertEquals(HttpStatusCode.OK, it.status) }
 
         val lineId = json.parseToJsonElement(c.get("/checks/$id").bodyAsText())
             .jsonObject["lines"]!!.jsonArray.first().jsonObject["id"]!!.jsonPrimitive.int
 
-        // refund one pitcher by line → its price plus its tax: 20.25 × 43.64 / 40.50
-        // = $21.82 back via Card (not cash, so no drawer hit)
+        // refund one pitcher by line → its price plus its tax: 20.25 × 43.84 / 40.50
+        // = $21.92 back via Card (not cash, so no drawer hit)
         val res = c.postJson("/checks/$id/refund",
             """{"lines":[{"lineId":$lineId,"qty":1}],"tenderType":"CARD","reason":"Change d'avis","managerPin":"1234"}""")
         assertEquals(HttpStatusCode.Created, res.status)
         val first = json.parseToJsonElement(res.bodyAsText()).jsonObject["refund"]!!.jsonObject
-        assertEquals(2182L, first["grossCents"]!!.jsonPrimitive.long)
-        // tax reversed half of each tax, half-up: NC 1.365 → 1.37, Wake 0.205 → 0.21
-        assertEquals(listOf(137L, 21L), first["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long })
+        assertEquals(2192L, first["grossCents"]!!.jsonPrimitive.long)
+        // tax reversed half of each tax, half-up: NC 1.47, Wake 0.20
+        assertEquals(listOf(147L, 20L), first["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long })
 
-        // $21.82 remains refundable; refunding the whole $43.64 again would exceed it
+        // $21.92 remains refundable; refunding the whole $43.84 again would exceed it
         val info = json.parseToJsonElement(c.get("/checks/$id/refunds").bodyAsText()).jsonObject
-        assertEquals(2182L, info["refundableCents"]!!.jsonPrimitive.long)
+        assertEquals(2192L, info["refundableCents"]!!.jsonPrimitive.long)
         assertEquals(HttpStatusCode.Conflict,
-            c.postJson("/checks/$id/refund", """{"amountCents":4364,"tenderType":"CASH","reason":"x","managerPin":"1234"}""").status)
+            c.postJson("/checks/$id/refund", """{"amountCents":4384,"tenderType":"CASH","reason":"x","managerPin":"1234"}""").status)
 
         // the other pitcher by line: rounding already went to the first, so the
         // cap returns exactly what is left, and every tax is reversed in full
         val second = json.parseToJsonElement(c.postJson("/checks/$id/refund",
             """{"lines":[{"lineId":$lineId,"qty":1}],"tenderType":"CARD","reason":"Change d'avis","managerPin":"1234"}""")
             .bodyAsText()).jsonObject["refund"]!!.jsonObject
-        assertEquals(2182L, second["grossCents"]!!.jsonPrimitive.long)
-        assertEquals(listOf(136L, 20L), second["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long })
+        assertEquals(2192L, second["grossCents"]!!.jsonPrimitive.long)
+        assertEquals(listOf(147L, 20L), second["taxes"]!!.jsonArray.map { it.jsonObject["amountCents"]!!.jsonPrimitive.long })
 
         // a Card refund did NOT leave the drawer — cashRefund stays 0
         val x = json.parseToJsonElement(c.get("/shifts/current/report").bodyAsText()).jsonObject
         assertEquals(0L, x["cashRefundCents"]!!.jsonPrimitive.long)
-        assertEquals(4364L, x["refundTotalCents"]!!.jsonPrimitive.long)
+        assertEquals(4384L, x["refundTotalCents"]!!.jsonPrimitive.long)
 
         // an OPEN check can't be refunded
         val open = json.parseToJsonElement(c.postJson("/tables/t5/checks", """{"userId":"manager"}""")

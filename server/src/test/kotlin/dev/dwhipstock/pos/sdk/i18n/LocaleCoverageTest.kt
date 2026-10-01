@@ -15,7 +15,7 @@ import kotlin.test.fail
  * message catalogs (receipts, bills, slips), the staff web app and the
  * customer QR menu. Also: no English left behind in the French and Spanish
  * tables (a value equal to its English one, or a common English word), and
- * French typography (a no-break space before : ; ! ? and inside « »).
+ * French typography (a no-break space before : ; ! ? and inside « »; rates read "8.25%").
  *
  * Reads the main resources straight from disk, not the merged classpath (test
  * resources carry a partial messages_zh on purpose).
@@ -34,7 +34,7 @@ class LocaleCoverageTest {
 
     /** Identical in English and the other language, legitimately. */
     private val sameAsEnglish = setOf(
-        "Total", "Table", "Tables", "Subtotal", "Menu", "Terminal", "{0} {1}%", "#{0}",
+        "Total", "Table", "Tables", "Subtotal", "Menu", "Terminal", "{0} {1}%", "{0} ({1}%)", "#{0}",
         "Tel. {0}", // the phone label: "Tel." in Spanish too
         "Table {0}", // the kitchen ticket's table line: "Table" in French too
     )
@@ -163,7 +163,8 @@ class LocaleCoverageTest {
             if (Regex("""«(?! )|(?<! )»""").containsMatchIn(text)) problems += "$key = \"$value\" (« » need no-break spaces)"
             if ('"' in text && !text.startsWith("*")) problems += "$key = \"$value\" (use « » quotes)"
             if ('\'' in text) problems += "$key = \"$value\" (use the ’ apostrophe)"
-            if (Regex("""\d%""").containsMatchIn(text) || Regex("""\} ?%""").containsMatchIn(text)) problems += "$key = \"$value\" (no-break space before %)"
+            // rates print like money, North American ("8.25%"), so no space before %
+            if (Regex("""[\d}][ \u00A0]%""").containsMatchIn(text)) problems += "$key = \"$value\" (no space before %: rates read 8.25%)"
         }
         if (problems.isNotEmpty()) fail("French typography in $where:\n" + problems.joinToString("\n"))
     }

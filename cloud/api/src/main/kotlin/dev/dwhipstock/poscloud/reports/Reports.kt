@@ -242,7 +242,9 @@ private fun taxRates(closed: List<ResultRow>): List<TaxRateRow> =
 
 @Serializable
 private data class TaxAmount(val code: String, val labelFr: String = "", val labelEn: String = "",
-                             val ratePercent: String = "", val amountCents: Long = 0)
+                             val ratePercent: String = "", val amountCents: Long = 0,
+                             /** Who the store pays it to ("NCDOR", "Wake County"); "" = not said. */
+                             val remitTo: String = "")
 
 private fun taxesOf(json: String?): List<TaxAmount> =
     json?.let { runCatching { lenientJson.decodeFromString<List<TaxAmount>>(it) }.getOrNull() }.orEmpty()
@@ -259,30 +261,41 @@ private fun refundTaxes(row: ResultRow): List<TaxAmount> =
  * less the refunds'. A US sales tax and a Québec QST sit side by side, each in
  * its own currency — never summed together.
  */
-private fun taxCodeTotals(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultRow>): List<TaxCodeRow> {
-    data class Key(val code: String, val currency: String)
+private fun taxCodeTotals(ctx: ReportCtx, closed: List<ResultRow>, refunds: List<ResultRow>): List<TaxCodeRow> =
+    taxRows(ctx, closed.flatMap { row -> taxesOf(row[Checks.taxes]).map { ctx.currencyOf(row[Checks.venueId]) to it } }, refunds)
+
+/**
+ * Sales' taxes (currency, tax) less [refunds]', one row per tax code AND
+ * rate per currency: a rate change (NC sales tax 6.75% → 7.25%) reports the
+ * old and the new rate on their own rows, as charged, never one row at the
+ * first rate seen. A refund's tax nets out of its own rate's row; an older
+ * refund that carries no rate nets out of the code's first row.
+ */
+private fun taxRows(ctx: ReportCtx, sales: List<Pair<String, TaxAmount>>, refunds: List<ResultRow>): List<TaxCodeRow> {
+    data class Key(val code: String, val rate: String, val currency: String)
     val labels = mutableMapOf<Key, TaxAmount>()
     val sums = linkedMapOf<Key, Long>()
-    closed.forEach { row ->
-        val c = ctx.currencyOf(row[Checks.venueId])
-        taxesOf(row[Checks.taxes]).forEach { t ->
-            val k = Key(t.code, c)
-            labels.putIfAbsent(k, t)
-            sums[k] = (sums[k] ?: 0L) + t.amountCents
-        }
+    sales.forEach { (c, t) ->
+        val k = Key(t.code, t.ratePercent, c)
+        // first seen labels the row; a later sale that says who it is paid to fills that in
+        labels.merge(k, t) { old, new -> if (old.remitTo.isEmpty() && new.remitTo.isNotEmpty()) new else old }
+        sums[k] = (sums[k] ?: 0L) + t.amountCents
     }
     refunds.forEach { row ->
         val c = ctx.currencyOf(row[Refunds.venueId])
         refundTaxes(row).forEach { t ->
-            val k = Key(t.code, c)
+            val exact = Key(t.code, t.ratePercent, c)
+            val k = if (exact in sums || t.ratePercent.isNotEmpty()) exact
+                else sums.keys.firstOrNull { it.code == t.code && it.currency == c } ?: exact
             if (t.labelEn.isNotEmpty()) labels.putIfAbsent(k, t)
             sums[k] = (sums[k] ?: 0L) - t.amountCents
         }
     }
     return sums.map { (k, cents) ->
         val l = labels[k]
-        TaxCodeRow(k.code, l?.labelFr.orEmpty(), l?.labelEn.orEmpty(), l?.ratePercent.orEmpty(), k.currency, cents)
-    }.sortedWith(compareBy({ ctx.currencies.indexOf(it.currency) }, { it.code }))
+        TaxCodeRow(k.code, l?.labelFr.orEmpty(), l?.labelEn.orEmpty(), k.rate.ifEmpty { l?.ratePercent.orEmpty() },
+            k.currency, cents, l?.remitTo.orEmpty())
+    }.sortedWith(compareBy({ ctx.currencies.indexOf(it.currency) }, { it.code }, { it.ratePercent }))
 }
 
 /** Rows of a per-check child table for exactly these (venue, check) pairs — check ids repeat across stores. */
@@ -476,13 +489,17 @@ data class TaxTotals(
 @Serializable
 data class TaxRateRow(
     val code: String, val labelFr: String = "", val labelEn: String = "", val ratePercent: String = "",
-    val currency: String = "")
+    val currency: String = "",
+    /** Who the store pays it to ("NCDOR"); "" = not said. */
+    val remitTo: String = "")
 
-/** One tax code's net amount in one currency. */
+/** One tax code's net amount at one rate in one currency, and who it is paid to. */
 @Serializable
 data class TaxCodeRow(
     val code: String, val labelFr: String, val labelEn: String, val ratePercent: String,
-    val currency: String, val amountCents: Long)
+    val currency: String, val amountCents: Long,
+    /** The authority the store remits it to ("NCDOR", "Wake County"); "" = not said. */
+    val remitTo: String = "")
 
 @Serializable
 data class PaymentRow(val type: String, val amountCents: Long, val count: Int)
@@ -848,17 +865,18 @@ private fun tenderSums(ctx: ReportCtx): List<TenderSums> = rowsOf("""
     WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED'
     GROUP BY 1, 2 ORDER BY min(t.tender_id)""") { rs -> TenderSums(rs.getString(1), rs.getString(2), rs.getInt(3), rs.getLong(4), rs.getLong(5)) }
 
-/** One store's charged amount of one tax code (from each sale's own breakdown). */
+/** One store's charged amount of one tax code at one rate (from each sale's own breakdown). */
 private class TaxSums(val venueId: String, val tax: TaxAmount)
 
 private fun taxSums(ctx: ReportCtx): List<TaxSums> = rowsOf("""
     SELECT c.venue_id, t->>'code', min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
-           min(coalesce(t->>'ratePercent', '')), coalesce(sum((t->>'amountCents')::bigint), 0)
+           coalesce(t->>'ratePercent', ''), coalesce(sum((t->>'amountCents')::bigint), 0),
+           max(coalesce(t->>'remitTo', ''))
     FROM checks c CROSS JOIN LATERAL jsonb_array_elements(
            CASE WHEN jsonb_typeof(c.taxes) = 'array' THEN c.taxes ELSE '[]'::jsonb END) t
     WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED' AND t->>'code' IS NOT NULL
-    GROUP BY 1, 2""") { rs ->
-    TaxSums(rs.getString(1), TaxAmount(rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getLong(6)))
+    GROUP BY 1, 2, 5""") { rs ->
+    TaxSums(rs.getString(1), TaxAmount(rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getLong(6), rs.getString(7)))
 }
 
 /** One store's lines of one item on its closed sales in range. */
@@ -880,11 +898,12 @@ private fun itemSums(ctx: ReportCtx): List<ItemSums> = rowsOf("""
 /** [taxRates]: the distinct taxes (code, rate, currency) the in-range sales were charged. */
 private fun taxRatesOf(ctx: ReportCtx): List<TaxRateRow> = rowsOf("""
     SELECT t->>'code', min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
-           coalesce(t->>'ratePercent', ''), coalesce(c.currency, '')
+           coalesce(t->>'ratePercent', ''), coalesce(c.currency, ''),
+           max(coalesce(t->>'remitTo', ''))
     FROM checks c CROSS JOIN LATERAL jsonb_array_elements(
            CASE WHEN jsonb_typeof(c.taxes) = 'array' THEN c.taxes ELSE '[]'::jsonb END) t
     WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED' AND t->>'code' IS NOT NULL
-    GROUP BY 1, 4, 5""") { rs -> TaxRateRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5)) }
+    GROUP BY 1, 4, 5""") { rs -> TaxRateRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6)) }
     .sortedWith(compareBy({ it.code }, { it.ratePercent }))
 
 private fun warnIfUndercountingSums(ctx: ReportCtx, sums: List<CheckSums>) {
@@ -895,28 +914,8 @@ private fun warnIfUndercountingSums(ctx: ReportCtx, sums: List<CheckSums>) {
 }
 
 /** [taxCodeTotals] over summed breakdowns. */
-private fun taxCodeTotalsOf(ctx: ReportCtx, taxes: List<TaxSums>, refunds: List<ResultRow>): List<TaxCodeRow> {
-    data class Key(val code: String, val currency: String)
-    val labels = mutableMapOf<Key, TaxAmount>()
-    val sums = linkedMapOf<Key, Long>()
-    taxes.forEach { s ->
-        val k = Key(s.tax.code, ctx.currencyOf(s.venueId))
-        labels.putIfAbsent(k, s.tax)
-        sums[k] = (sums[k] ?: 0L) + s.tax.amountCents
-    }
-    refunds.forEach { row ->
-        val c = ctx.currencyOf(row[Refunds.venueId])
-        refundTaxes(row).forEach { t ->
-            val k = Key(t.code, c)
-            if (t.labelEn.isNotEmpty()) labels.putIfAbsent(k, t)
-            sums[k] = (sums[k] ?: 0L) - t.amountCents
-        }
-    }
-    return sums.map { (k, cents) ->
-        val l = labels[k]
-        TaxCodeRow(k.code, l?.labelFr.orEmpty(), l?.labelEn.orEmpty(), l?.ratePercent.orEmpty(), k.currency, cents)
-    }.sortedWith(compareBy({ ctx.currencies.indexOf(it.currency) }, { it.code }))
-}
+private fun taxCodeTotalsOf(ctx: ReportCtx, taxes: List<TaxSums>, refunds: List<ResultRow>): List<TaxCodeRow> =
+    taxRows(ctx, taxes.map { ctx.currencyOf(it.venueId) to it.tax }, refunds)
 
 private fun ReportCtx.sums(rows: List<CheckSums>, value: (CheckSums) -> Long) = total(rows, { it.venueId }, value)
 

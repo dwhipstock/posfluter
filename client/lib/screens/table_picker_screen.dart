@@ -190,7 +190,9 @@ class _TablePickerScreenState extends State<TablePickerScreen> {
               Text(l.thisBill, style: T.small(color: T.attention))
             else if (open) ...[
               Text(
-                '${l.billNo(table.openCheckId!)} · ${money(table.openCheckTotalCents ?? 0)}',
+                table.partPaid
+                    ? '${l.billNo(table.openCheckId!)} · ${money(table.openCheckShownCents)} · ${l.partPaid}'
+                    : '${l.billNo(table.openCheckId!)} · ${money(table.openCheckTotalCents ?? 0)}',
                 style: T.small(),
               ),
               Text(

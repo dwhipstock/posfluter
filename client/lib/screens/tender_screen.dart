@@ -385,9 +385,7 @@ class _TenderScreenState extends State<TenderScreen> {
           checkId: _check.id,
           text: receipt,
           headline: headline,
-          autoDismiss: widget.counterOrder
-              ? const Duration(seconds: 8)
-              : null,
+          autoDismiss: widget.counterOrder ? const Duration(seconds: 8) : null,
         ),
       ),
     );
@@ -469,12 +467,29 @@ class _TenderScreenState extends State<TenderScreen> {
     );
   }
 
+  /// The most change the drawer gives: the server refuses cash more than
+  /// this over the amount due (MoneyLimits.MAX_CASH_OVER_DUE_CENTS, $1,000).
+  static const maxCashOverDueCents = 100000;
+
+  /// The most cash the pad takes for this bill: what is due + $1,000.
+  int get _maxCashCents => _cashDue + maxCashOverDueCents;
+
+  /// A digit was refused because the cash would go over [_maxCashCents].
+  bool _cashCapped = false;
+
   void _numpadKey(String key) {
     setState(() {
+      _cashCapped = false;
       if (key == '⌫') {
         _entry = _entry.isEmpty ? '' : _entry.substring(0, _entry.length - 1);
       } else if (_entry.length < 7) {
         final next = _entry + key;
+        // cash: never more than the server would take (a fat-fingered
+        // $9,999,999 would show millions in change, then be refused)
+        if (_method == 'CASH' && int.parse(next) * 100 > _maxCashCents) {
+          _cashCapped = true;
+          return;
+        }
         _entry = int.parse(next) == 0 ? '' : next;
       }
     });
@@ -879,6 +894,17 @@ class _TenderScreenState extends State<TenderScreen> {
                   color: T.primary,
                 ),
               ),
+            ),
+          ),
+        // a digit that would take the cash past due + $1,000: kept out, said gently
+        if (_cashCapped)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              l.cashEntryCapped(money(_maxCashCents)),
+              key: const Key('cash-capped'),
+              textAlign: TextAlign.right,
+              style: T.small(color: T.textMuted),
             ),
           ),
         const SizedBox(height: 8),

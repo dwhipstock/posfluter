@@ -208,7 +208,7 @@ zone, taking the first occurrence of the repeated fall-back hour.
    for the first tablet's cloud reporting, and tablets do not sync with one
    another.
 
-Venue policy is isolated in a typed configuration. The included configuration is fictional: USD minor units, Gregorian dates, English content (French, Spanish, German, Afrikaans selectable), generic tenders, and North Carolina taxes (NC sales tax 6.75% and Wake County's 1% prepared food tax) added on top of pre-tax prices as data (`TaxPolicy.AddedTaxes`). Menu, staff, settings, receipts, and uploaded photos remain venue-scoped.
+Venue policy is isolated in a typed configuration. The included configuration is fictional: USD minor units, Gregorian dates, English content (French, Spanish, German, Afrikaans selectable), generic tenders, and North Carolina taxes (NC sales tax 7.25% and Wake County's 1% prepared food tax, shown to guests as one "Tax (8.25%)" line and rounded once at 8.25%) added on top of pre-tax prices as data (`TaxPolicy.AddedTaxes` with `TaxRounding` / `TaxDisplay`). Menu, staff, settings, receipts, and uploaded photos remain venue-scoped.
 
 The one tender that needs the internet is the optional **Card (Stripe)**
 (Stripe Terminal, test mode, simulated reader; `payments/StripeService.kt`,

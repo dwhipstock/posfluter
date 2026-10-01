@@ -12,6 +12,7 @@ import dev.dwhipstock.pos.restaurant.LineView
 import dev.dwhipstock.pos.restaurant.NotFoundException
 import dev.dwhipstock.pos.restaurant.TableTokens
 import dev.dwhipstock.pos.restaurant.TenderView
+import dev.dwhipstock.pos.restaurant.guestTaxViews
 import dev.dwhipstock.pos.sdk.Outbox
 import dev.dwhipstock.pos.sdk.TenderType
 import dev.dwhipstock.pos.sdk.VenueClock
@@ -104,6 +105,13 @@ data class TableDto(
     /** For the tables-screen card: running total + elapsed time of the open check. */
     val openCheckTotalCents: Long? = null,
     val openCheckOpenedAt: String? = null,
+    /** A part-paid bill (a split bill or a partial payment taken): what is still owed, and what is paid. Left out otherwise. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val openCheckOutstandingCents: Long? = null,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val openCheckPaidCents: Long? = null,
     // floor-plan geometry: logical units on a 0–1000 canvas per zone
     val x: Int = 0, val y: Int = 0,
     val width: Int = 100, val height: Int = 100,
@@ -134,7 +142,11 @@ data class CustomerBillFeeDto(val labelFr: String, val labelEn: String, val amou
 
 /** A tax added on top of the guest's subtotal: label pair, rate ("9.975") and amount. */
 @Serializable
-data class CustomerBillTaxDto(val labelFr: String, val labelEn: String, val ratePercent: String, val amountCents: Long)
+data class CustomerBillTaxDto(
+    val labelFr: String, val labelEn: String, val ratePercent: String, val amountCents: Long,
+    /** "TAX" = every added tax as one line (the store's [dev.dwhipstock.pos.sdk.TaxDisplay.Combined]): the page prints "Tax (8.25%)" in the guest's language. */
+    val code: String = "",
+)
 
 /**
  * The running bill a guest sees at /m/{tableId}/bill. Strictly the table's
@@ -297,7 +309,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
     get("/m/t/{token}/bill") {
         val tableId = customerTable(call)
             ?: throw NotFoundException("unknown table link", "table_link_invalid")
-        call.respond(customerBill(checkService.openCheckForTable(tableId)))
+        call.respond(customerBill(checkService.openCheckForTable(tableId), config.taxPolicy.guestDisplay))
     }
 
     post("/m/t/{token}/pending-lines") {
@@ -306,7 +318,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
         val req = call.receivePublic<SubmitPendingRequest>()
         // the same guest-safe shape as the bill: never the staff view (ids, tenders)
         val check = checkService.submitPendingLines(tableId, req.lines)
-        call.respond(HttpStatusCode.Created, customerBill(check).copy(rejected = check.rejected))
+        call.respond(HttpStatusCode.Created, customerBill(check, config.taxPolicy.guestDisplay).copy(rejected = check.rejected))
     }
 
     // Every other /m/... (the retired /m/{tableId}, /m/{zone}/{n} and
@@ -592,6 +604,8 @@ fun Route.posRoutes(
                         oldestPendingAt = open?.id?.let { checkService.oldestPendingAt(it) },
                         openCheckTotalCents = open?.grandTotalCents,
                         openCheckOpenedAt = open?.openedAt,
+                        openCheckOutstandingCents = open?.takeIf { it.paidCents > 0 }?.outstandingCents,
+                        openCheckPaidCents = open?.paidCents?.takeIf { it > 0 },
                         x = row[DiningTables.x], y = row[DiningTables.y],
                         width = row[DiningTables.width], height = row[DiningTables.height],
                         rotation = row[DiningTables.rotation], shape = row[DiningTables.shape],
@@ -914,7 +928,10 @@ private fun scanAtTablePage(venueName: String): String = """<!DOCTYPE html>
 </html>"""
 
 /** Customer-safe projection of a CheckView; null check (no open check) → explicit empty state. */
-private fun customerBill(check: CheckView?): CustomerBillDto {
+private fun customerBill(
+    check: CheckView?,
+    display: dev.dwhipstock.pos.sdk.TaxDisplay = dev.dwhipstock.pos.sdk.TaxDisplay.Itemized,
+): CustomerBillDto {
     if (check == null) return CustomerBillDto(open = false)
     val (itemNames, variantNames) = transaction {
         dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ITEM) to
@@ -937,7 +954,7 @@ private fun customerBill(check: CheckView?): CustomerBillDto {
         pendingLines = check.pendingLines.map(::line),
         grandTotalCents = check.grandTotalCents,
         subtotalCents = check.subtotalCents,
-        taxes = check.taxes.map { CustomerBillTaxDto(it.labelFr, it.labelEn, it.ratePercent, it.amountCents) },
+        taxes = guestTaxViews(check.taxes, display).map { CustomerBillTaxDto(it.labelFr, it.labelEn, it.ratePercent, it.amountCents, it.code) },
         cashDueCents = check.cashDueCents,
         cashRoundingCents = check.cashRoundingCents,
     )

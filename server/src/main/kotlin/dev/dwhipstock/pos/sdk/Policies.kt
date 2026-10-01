@@ -28,16 +28,43 @@ sealed interface TaxPolicy {
     /**
      * Taxes added on top of pre-tax prices, itemised per [components] (e.g.
      * GST / TPS and QST / TVQ). Each component is its own rate on the SAME
-     * taxable base, rounded half-up to the cent once per check — never
-     * compounded, never per line. Always printed: it changes the total.
+     * taxable base — never compounded, never per line. Always printed: it
+     * changes the total.
+     *
+     * Rounding, once per check (never per line), is [rounding]:
+     * - [TaxRounding.PER_COMPONENT] (the default): each component rounds
+     *   half-up to the cent on its own (Québec's GST and QST are two taxes
+     *   on the receipt).
+     * - [TaxRounding.COMBINED]: the COMBINED rate is rounded half-up once —
+     *   the bill's tax is exactly round(base × 8.25%) — and that amount is
+     *   then split into the components for remittance by the largest
+     *   remainder of their exact shares (ties to the first). The components
+     *   always add up to the combined amount, so the back-office split
+     *   reconciles to the receipts to the cent; a component is at most 1¢
+     *   away from rounding it on its own.
+     *
+     * [display] is what guests see (receipts, bills, the pay screen, the
+     * kiosk ticket, the table-QR bill): every component on its own line
+     * ([TaxDisplay.Itemized]) or one line at the combined rate
+     * ([TaxDisplay.Combined], "Tax (8.25%)"). Back-office reports always
+     * show the components (with [TaxComponent.remitTo]).
      */
-    data class AddedTaxes(val components: List<TaxComponent>) : TaxPolicy {
+    data class AddedTaxes(
+        val components: List<TaxComponent>,
+        val rounding: TaxRounding = TaxRounding.PER_COMPONENT,
+        val display: TaxDisplay = TaxDisplay.Itemized,
+    ) : TaxPolicy {
         init {
             require(components.map { it.code }.toSet().size == components.size) { "tax codes must be unique" }
         }
 
+        /** The rate a combined line shows: every component's added up ("8.25"). */
+        val combinedRatePercent: BigDecimal get() = dev.dwhipstock.pos.sdk.combinedRate(components)
+
         override fun assess(taxableBase: Money): TaxAssessment {
-            val lines = components.map { TaxLine(it, it.on(taxableBase)) }
+            val combined = rounding == TaxRounding.COMBINED && components.size > 1 && taxableBase.cents > 0
+            val lines = if (combined) combinedLines(taxableBase)
+            else components.map { TaxLine(it, it.on(taxableBase)) }
             return TaxAssessment(
                 taxIncluded = Money.ZERO,
                 taxAdded = Money(lines.sumOf { it.amount.cents }),
@@ -45,7 +72,28 @@ sealed interface TaxPolicy {
                 lines = lines,
             )
         }
+
+        /** One half-up rounding of the combined rate, shared into the components (largest remainder). */
+        private fun combinedLines(base: Money): List<TaxLine> {
+            val hundred = BigDecimal(100)
+            val b = BigDecimal(base.cents)
+            val total = b.multiply(combinedRatePercent).divide(hundred, 0, RoundingMode.HALF_UP).longValueExact()
+            // exact shares in cents: floor each, then the leftover cents go to the largest fractions
+            val exact = components.map { b.multiply(it.ratePercent).divide(hundred, 12, RoundingMode.HALF_UP) }
+            val cents = exact.map { it.setScale(0, RoundingMode.FLOOR).longValueExact() }.toMutableList()
+            val byFraction = exact.indices.sortedWith(
+                compareByDescending<Int> { exact[it] - BigDecimal(cents[it]) }.thenBy { it },
+            )
+            // the floors are at most components.size − 1 short of the rounded total, never over
+            var left = total - cents.sum()
+            var k = 0
+            while (left > 0) { cents[byFraction[k % byFraction.size]]++; left--; k++ }
+            return components.mapIndexed { i, c -> TaxLine(c, Money(cents[i])) }
+        }
     }
+
+    /** How guests see the taxes ([AddedTaxes.display]); Itemized for any other policy. */
+    val guestDisplay: TaxDisplay get() = (this as? AddedTaxes)?.display ?: TaxDisplay.Itemized
 
     data object NoTax : TaxPolicy {
         override fun assess(taxableBase: Money) = TaxAssessment(Money.ZERO, Money.ZERO, showOnReceipt = false)
@@ -63,6 +111,8 @@ data class TaxComponent(
     val labelEn: String,
     val ratePercent: BigDecimal,
     val registrationNumber: String,
+    /** Who this tax is paid to ("NCDOR", "Wake County"): back-office reports only, never on a guest's bill. */
+    val remitTo: String = "",
 ) {
     /** This component on [base], half-up to the cent. */
     fun on(base: Money): Money =
@@ -78,6 +128,54 @@ data class TaxComponent(
 
 /** One assessed tax: which component, and how much. */
 data class TaxLine(val component: TaxComponent, val amount: Money)
+
+/** How [TaxPolicy.AddedTaxes] rounds to the cent (once per check either way). */
+enum class TaxRounding {
+    /** Each component half-up on its own (GST and QST). */
+    PER_COMPONENT,
+
+    /** The combined rate half-up once, split into the components by largest remainder. */
+    COMBINED,
+}
+
+/** What guests see of [TaxPolicy.AddedTaxes] (reports always itemise). */
+sealed interface TaxDisplay {
+    /** One line per component: "GST/TPS 5%", "TVQ/QST 9.975%". */
+    data object Itemized : TaxDisplay
+
+    /**
+     * One line at the combined rate: "Tax (8.25%)". [label] overrides the
+     * localised word ("Tax", "Taxes", "Impuesto", …); null = the locale's.
+     */
+    data class Combined(val label: String? = null) : TaxDisplay
+
+    /** The wire name ([dev.dwhipstock.pos] `/health` `taxDisplay`). */
+    val wire: String get() = if (this is Combined) "combined" else "itemized"
+}
+
+/** Every rate added up, exact ("7.25" + "1" = "8.25"). */
+fun combinedRate(components: List<TaxComponent>): BigDecimal =
+    components.fold(BigDecimal.ZERO) { a, c -> a + c.ratePercent }
+
+/**
+ * What a guest-facing surface prints for [lines] under [display]: the lines
+ * as they are ([TaxDisplay.Itemized], or a single tax), or one synthetic
+ * line (code "TAX") at the summed rate and amount — the sum of the very
+ * amounts the reports itemise, so the two always reconcile.
+ */
+fun guestTaxLines(lines: List<TaxLine>, display: TaxDisplay): List<TaxLine> {
+    if (display !is TaxDisplay.Combined || lines.size < 2) return lines
+    val label = display.label.orEmpty()
+    return listOf(
+        TaxLine(
+            TaxComponent(COMBINED_TAX_CODE, label, label, combinedRate(lines.map { it.component }), registrationNumber = ""),
+            Money(lines.sumOf { it.amount.cents }),
+        ),
+    )
+}
+
+/** The code of [guestTaxLines]' one combined line (its labels may be empty: the locale's word for "Tax"). */
+const val COMBINED_TAX_CODE = "TAX"
 
 data class TaxAssessment(
     val taxIncluded: Money, // part of the total already

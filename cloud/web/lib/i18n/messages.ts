@@ -676,6 +676,8 @@ export const messages = {
   tax_col_rate: m("{label} {rate} %", "{label} {rate}%"),
   tax_by_code: m("Par taxe", "By tax"),
   tax_col_tax: m("Taxe", "Tax"),
+  // who the store pays each tax to (NC sales tax → NCDOR, Wake food tax → Wake County)
+  tax_col_remit: m("Versée à", "Remit to"),
   // ── stock (retail stores) ───────────────────────────────────────────────
   nav_stock: m("Inventaire", "Stock"),
   stock_title: m("Inventaire", "Stock"),

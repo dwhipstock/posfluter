@@ -105,7 +105,7 @@ Copper Lantern is now a fictional pub brand in **Raleigh, North Carolina**
 | address / phone | Montréal, +1 514 | Glenwood South 412 Lantern Row, Raleigh, NC 27601 · (919) 555-0142; Plateau 430 Lantern Row · (919) 555-0187; Express 418 Lantern Row · (919) 555-0163 (all fictional) |
 | zone | America/Toronto | America/New_York (same clock) |
 | money | CAD | **USD**, still `$1,234.56`; cash still rounds to the nickel, card exact |
-| tax | GST 5% + QST 9.975%, registration numbers | **NC sales tax 6.75%** (state 4.75% + Wake County 2%) + **Wake prepared food tax 1%** on all food and drink = 7.75%; codes `NC_SALES`, `WAKE_FOOD`; no registration lines |
+| tax | GST 5% + QST 9.975%, registration numbers | **8.25% on all food and drink**: NC sales tax 7.25% (state 4.75% + Wake County 2% + Wake Transit 0.5%; Raleigh adds none) + Wake prepared food tax 1%. Guests see one line, **Tax (8.25%)**; the reports keep the two apart. Codes `NC_SALES`, `WAKE_FOOD`; no registration lines. See [North Carolina tax](#north-carolina-tax-825) |
 | receipts, tickets | French + English lines | **English only** by default; press-and-hold print in FR / ES / DE / AF still works |
 | app language | English first | English first; FR / ES / DE / AF selectable |
 | legal age | 18 | **21** (kiosk note "Alcohol — 21+ only…", a 21+ ID badge on kiosk orders at the counter; `POS_LEGAL_AGE` / `legal.age` still override) |
@@ -157,8 +157,46 @@ deleted: copy `.demo/<store>/pos.db`, or on the tablet back up the app's data):
 
 **Check it**: `GET /health` says `"currency":"USD"`, `"country":"US"`,
 `"legalAge":21` and `"venue":"Copper Lantern — Glenwood South"`;
-`GET /settings` has the Raleigh address; a test receipt shows the two NC tax
-lines and no French.
+`GET /settings` has the Raleigh address; a test receipt shows one
+**Tax (8.25%)** line and no French; `GET /health` also says
+`"taxDisplay":"combined"`.
+
+### North Carolina tax (8.25%)
+
+What a Copper Lantern guest pays on top of the menu price (prepared food and
+drink in Raleigh, Wake County), and who the store pays it to:
+
+| tax | rate | made of | paid to | code |
+| --- | --- | --- | --- | --- |
+| NC sales tax | 7.25% | NC 4.75% + Wake County 2% + Wake Transit 0.5% (Raleigh 0%) | NC Department of Revenue (NCDOR) | `NC_SALES` |
+| Wake prepared food & beverage tax | 1.00% | | Wake County | `WAKE_FOOD` |
+| **guests see** | **8.25%** | one line, "Tax (8.25%)" | | |
+
+- **Guests see one line.** Receipts, bills, the check and pay screens, the
+  split bills, the kiosk ticket, the table-QR bill, refund slips and the staff
+  phone app show `Tax (8.25%)` (Taxes / Impuesto / Steuer / Belasting in the
+  other languages) with one amount.
+- **The books keep them apart.** The X, Z and date-range reports on the
+  tablet ("Tax collected") and the portal's Sales tax report show NC sales tax
+  7.25% (remit to NCDOR) and Wake prepared food tax 1% (remit to Wake County)
+  on their own rows. The two rows always add up to the receipts' tax, to the
+  cent.
+- **Rounding: once, at 8.25%.** The store rounds the check's tax ONCE, half-up
+  to the cent, at the combined 8.25% — so the amount on the receipt is exactly
+  8.25% of the subtotal, as a guest would check it. That amount is then split
+  into the two taxes by the larger fraction of their exact shares (a tie goes
+  to the NC sales tax). Example: $0.50 of food → 8.25% = 4.125¢ → **4¢**
+  (NC 4¢, Wake 0¢); rounding each tax on its own would have charged 5¢. Each
+  tax is at most 1¢ away from rounding it on its own, and the two always add
+  up to the receipt. Split bills and refunds share out these same amounts.
+- **Set in code, not data.** The rates, the one-line display and the
+  combined rounding are `CopperLanternConfig.NC_TAXES` with
+  `TaxRounding.COMBINED` / `TaxDisplay.Combined` (the shared SDK tax model;
+  Sage & Poppy, Pronghorn and the GST/QST tests keep their own lines and
+  per-tax rounding). Nothing is stored per store, so an existing store charges
+  8.25% as soon as it runs the new build — no migration step. Sales closed
+  before keep the 6.75% + 1% they were charged (reports show the old rate on
+  its own row); a bill whose payment had already started keeps its total.
 
 **Portal**: the brand pack is USD. The cloud env now lists
 `vieux-port=Copper Lantern — Glenwood South` in `STORES`, the three Copper

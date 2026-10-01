@@ -52,6 +52,8 @@ export interface TaxCodeRow {
   ratePercent: string;
   currency: Currency;
   amountCents: number;
+  /** Who the store pays it to ("NCDOR", "Wake County"); "" or absent = not said. */
+  remitTo?: string;
 }
 
 /** Exact headline figures of the stores selling in one currency. */
@@ -184,6 +186,7 @@ export interface TaxRate {
   /** Decimal string, e.g. "9.975". */
   ratePercent: string;
   currency?: Currency;
+  remitTo?: string;
 }
 
 export interface TaxReport {

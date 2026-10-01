@@ -161,7 +161,9 @@ additive.
       "registrationNumber": "123456789 RT0001", "amountCents": 2326 },
     { "code": "QST", "labelFr": "TVQ", "labelEn": "QST", "ratePercent": "9.975",
       "registrationNumber": "1234567890 TQ0001", "amountCents": 4640 }
-  ],
+  ],                                  // optional per entry: "remitTo": who the store pays it to
+                                      // ("NCDOR", "Wake County"); the tax report shows it and
+                                      // keeps one row per code AND rate
   "corkageBottles": 0,
   "fees": [ { "code": "corkage", "labelFr": "Droit de bouchon", "labelEn": "Corkage", "amountCents": 20000 } ],
   "lines": [

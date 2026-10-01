@@ -174,7 +174,7 @@ class AddedTaxesTest {
         assertTrue(en.indexOf("QST/TVQ 9.975% | 1.00") < en.indexOf("Total | 11.50"))
 
         val fr = rows(LocaleCode.FR)
-        for (row in listOf("Sous-total | 10.00", "TPS/GST 5\u00A0% | 0.50", "TVQ/QST 9,975\u00A0% | 1.00", "Total | 11.50",
+        for (row in listOf("Sous-total | 10.00", "TPS/GST 5% | 0.50", "TVQ/QST 9.975% | 1.00", "Total | 11.50",
                 "N°\u00A0TPS/GST\u00A0: 123456789 RT0001", "N°\u00A0TVQ/QST\u00A0: 1234567890 TQ0001")) {
             assertTrue(row in fr, "missing '$row' in\n${fr.joinToString("\n")}")
         }

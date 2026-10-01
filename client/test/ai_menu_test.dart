@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_client/api.dart';
@@ -58,10 +60,14 @@ class _Fake {
   var pinAsks = 0;
   var conflictOnce = true;
   MenuProposal Function() next = _proposal;
+  Completer<void>? hold;
   final confirmed = <bool>[];
 
   AiMenuBackend get backend => AiMenuBackend(
-    chat: (text, pin) async => next(),
+    chat: (text, pin) async {
+      await hold?.future;
+      return next();
+    },
     fromPhotos: (photos, pin) async => _proposal(),
     apply: (id, ids, pin, bulk) async {
       applied.add(ids);
@@ -380,5 +386,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.reverts.single, ('set1', true));
     expect(find.text('Reverted'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a text request says it is working on it (not "Making photos"), and editing '
+    'the request clears the last answer',
+    (tester) async {
+      final fake = _Fake()
+        ..hold = Completer<void>()
+        ..next = () => MenuProposal.fromJson({
+          'proposalId': '',
+          'summary': '',
+          'refusal': 'off_topic',
+          'changes': const [],
+        });
+      await tester.pumpWidget(_app(fake.dialog()));
+      await tester.enterText(
+        find.byKey(const Key('ai-menu-text')),
+        'tell me a joke',
+      );
+      await tester.tap(find.byKey(const Key('ai-menu-ask')));
+      await tester.pump();
+      expect(find.text('Working on your request…'), findsOneWidget);
+      expect(find.textContaining('Making photos'), findsNothing);
+      fake.hold!.complete();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ai-menu-refusal')), findsOneWidget);
+
+      // typing a new request: the refusal for the old one goes at once
+      await tester.enterText(find.byKey(const Key('ai-menu-text')), '86 the');
+      await tester.pump();
+      expect(find.byKey(const Key('ai-menu-refusal')), findsNothing);
+    },
+  );
+
+  testWidgets('menu photos say they are being read', (tester) async {
+    final fake = _Fake();
+    final hold = Completer<MenuProposal>();
+    final dialog = AiMenuDialog(
+      status: _online,
+      askPin: () async => '1234',
+      pickPhotos: () async => [
+        (bytes: const [1, 2, 3], contentType: 'image/jpeg'),
+      ],
+      backend: AiMenuBackend(
+        chat: fake.backend.chat,
+        fromPhotos: (photos, pin) => hold.future,
+        apply: fake.backend.apply,
+        history: fake.backend.history,
+        revert: fake.backend.revert,
+      ),
+    );
+    await tester.pumpWidget(_app(dialog));
+    await tester.tap(find.byKey(const Key('ai-menu-photos')));
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.text('Reading the menu photos… (up to a minute)'),
+      findsOneWidget,
+    );
+    hold.complete(_proposal());
+    await tester.pumpAndSettle();
   });
 }

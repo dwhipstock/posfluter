@@ -46,7 +46,7 @@ import kotlin.test.assertTrue
  * handing the money back, more of an 86'd item is refused, guests with the
  * same items in a by-item split pay the same, card tips are in the reports,
  * and merging a kiosk order keeps one number per guest.
- * Copper Lantern Glenwood South: lager pint $7.50 → $8.09 with tax.
+ * Copper Lantern Glenwood South: lager pint $7.50 → $8.12 with tax (8.25%).
  */
 class RedTeamMoneyFixesTest {
     private val json = Json { ignoreUnknownKeys = true }
@@ -75,10 +75,10 @@ class RedTeamMoneyFixesTest {
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":10000}""")
         val id = c.open("t5"); c.lager(id)
-        c.postJson("/checks/$id/tenders/confirm", """{"type":"CARD","amountCents":809}""")
+        c.postJson("/checks/$id/tenders/confirm", """{"type":"CARD","amountCents":812}""")
         assertEquals(HttpStatusCode.OK, c.post("/checks/$id/finalize").status)
         // a card sale: not out of the drawer in cash
-        val cash = c.postJson("/checks/$id/refund", """{"amountCents":809,"tenderType":"CASH","reason":"x"}""")
+        val cash = c.postJson("/checks/$id/refund", """{"amountCents":812,"tenderType":"CASH","reason":"x"}""")
         assertEquals(HttpStatusCode.Conflict, cash.status)
         assertEquals("refund_tender_mismatch", cash.code())
         // a manager can approve another way, and it is recorded
@@ -89,7 +89,7 @@ class RedTeamMoneyFixesTest {
         assertEquals("manager", lastPayload("refund.created")["tenderOverrideBy"]!!.jsonPrimitive.content)
         // back to the card: up to what the card paid
         assertEquals(HttpStatusCode.Created,
-            c.postJson("/checks/$id/refund", """{"amountCents":509,"tenderType":"CARD","reason":"x"}""").status)
+            c.postJson("/checks/$id/refund", """{"amountCents":512,"tenderType":"CARD","reason":"x"}""").status)
         assertEquals(HttpStatusCode.Conflict,
             c.postJson("/checks/$id/refund", """{"amountCents":1,"tenderType":"CARD","reason":"x"}""").status)
     }
@@ -115,7 +115,7 @@ class RedTeamMoneyFixesTest {
         val c = loginClient()
         val server = loginClient("9999")
         c.postJson("/shifts", """{"openingFloatCents":10000}""")
-        val id = server.open("t5"); server.lager(id, 2) // $16.16
+        val id = server.open("t5"); server.lager(id, 2) // $16.24
         assertEquals(HttpStatusCode.Created, server.cash(id, 500).status)
         // a plain void still refuses: there is money on it
         val plain = c.postJson("/checks/$id/void", """{"reason":"walked out"}""")
@@ -147,10 +147,10 @@ class RedTeamMoneyFixesTest {
         val (g1, g2) = split["groups"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.int }
         c.postJson("/checks/$id/split/groups/$g1/lines", """{"lineId":$a,"qty":1}""")
         val done = c.postJson("/checks/$id/split/groups/$g2/lines", """{"lineId":$a,"qty":1}""").obj()
-        // $15.00: NC 6.75% 1.0125 → 1.01, Wake 1% 0.15. Each tax's odd cent used to go to
-        // guest 1: $8.09 and $8.07. Now the $1.16 of tax is shared first: $8.08 each
+        // $15.00: 8.25% = 1.2375 → 1.24 (NC 1.09 + Wake 0.15). Each tax's odd cent used to go
+        // to guest 1; now the $1.24 of tax is shared first: $8.12 each
         val totals = done["split"]!!.jsonObject["groups"]!!.jsonArray.map { it.jsonObject.l("grandTotalCents") }
-        assertEquals(listOf(808L, 808L), totals)
+        assertEquals(listOf(812L, 812L), totals)
         assertEquals(done.l("grandTotalCents"), totals.sum())
     }
 
@@ -162,7 +162,7 @@ class RedTeamMoneyFixesTest {
         application { module(dbPath = tempDb(), paymentTerminal = simulator, terminalDevice = device) }
         val c = loginClient()
         c.postJson("/shifts", """{"openingFloatCents":10000}""")
-        val id = c.open("t5-5"); c.lager(id, 4) // $32.33
+        val id = c.open("t5-5"); c.lager(id, 4) // $32.48
         val pid = c.postJson("/checks/$id/terminal/payments", """{"tipMode":"on_reader"}""").obj()["paymentId"]!!.jsonPrimitive.content
         c.postJson("/terminal/ui/tip", """{"tipCents":600}""")
         c.postJson("/terminal/ui/present", """{"entry":"tap","card":"visa","outcome":"approve"}""")
@@ -171,7 +171,7 @@ class RedTeamMoneyFixesTest {
         val x = c.get("/shifts/current/report").obj()
         assertEquals(600L, x.l("tipsCents"))
         val terminal = x["tenderBreakdown"]!!.jsonArray.single().jsonObject
-        assertEquals(3233L, terminal.l("amountCents")) // the bill, not the tip
+        assertEquals(3248L, terminal.l("amountCents")) // the bill, not the tip
         assertEquals(600L, terminal.l("tipCents"))
         val byServer = x["tipsByServer"]!!.jsonArray.single().jsonObject
         assertEquals("manager", byServer["userId"]!!.jsonPrimitive.content)

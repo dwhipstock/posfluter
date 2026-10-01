@@ -874,10 +874,15 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                 table: t,
                 scale: scale,
                 statusColor: tableStatusColor(t, zoneClosed: zone.isClosed),
-                subtitle: t.openCheckId != null
-                    ? money(t.openCheckTotalCents ?? 0)
-                    : l.seatsShort(t.seats),
-                detail: _openedFor(t, now, l),
+                // part paid (one split bill settled): the balance still owed, not the full bill
+                subtitle: t.openCheckId == null
+                    ? l.seatsShort(t.seats)
+                    : t.partPaid
+                    ? l.balanceLeft(money(t.openCheckShownCents))
+                    : money(t.openCheckShownCents),
+                detail: t.partPaid
+                    ? [l.partPaid, _openedFor(t, now, l)].nonNulls.join(' · ')
+                    : _openedFor(t, now, l),
                 // seat count is the only optional line: small free tables
                 // show just their label
                 subtitleOptional: t.openCheckId == null,
