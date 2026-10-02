@@ -8,11 +8,13 @@ import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
 import '../money_input.dart';
+import '../specials_i18n.dart';
 import '../widgets/ai_menu.dart';
 import '../widgets/ai_photos.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/resume_refresh.dart';
+import '../widgets/specials_widgets.dart';
 
 /// Owner-editable menu (M6). Dense item list grouped by category; the 86
 /// switch stays inline-PIN-gated so a server can hand the tablet to a manager.
@@ -444,8 +446,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
               style: T.text(size: 16),
             ),
             subtitle: Text(
-              '${item.variants.map((v) => money(v.priceCents)).join(' / ')}'
-              '${item.active ? '' : '  ·  ${l.offSale}'}',
+              // the menu price, never a special's (that one shows on the POS)
+              '${item.variants.map((v) => money(v.menuPriceCents)).join(' / ')}'
+              '${item.active ? '' : '  ·  ${l.offSale}'}'
+              '${item.dayOnly ? '  ·  ${SpecialsText(l.lang).onlyOn(item.availableDays)}' : ''}'
+              '${item.specials.isNotEmpty ? '  ·  ${SpecialsText(l.lang).specials}' : ''}',
               style: T.small(color: item.active ? T.textMuted : T.destructive),
             ),
             trailing: Switch(
@@ -512,9 +517,15 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
               id: v.id,
               fr: v.labelFr,
               en: v.labelEn,
-              cents: v.priceCents,
+              // the MENU price: a special in force now never becomes the base
+              cents: v.menuPriceCents,
             ),
         ];
+
+  /// Selling days and day prices (existing items: prices are per size id).
+  late final SpecialsEditController _specials = SpecialsEditController.of(
+    widget.item,
+  );
   bool _busy = false;
 
   /// The store's own language first (English in a US store, French in a
@@ -536,13 +547,16 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
       v.labelEn.text,
       v.priceCAD.text,
     ],
+    _specials.snapshot(),
   ].join('\u0000');
+  late final String _initialSpecials;
   late final String _initial;
 
   @override
   void initState() {
     super.initState();
     _initial = _snapshot(); // the opening state
+    _initialSpecials = _specials.snapshot();
   }
 
   bool get _dirty => _snapshot() != _initial;
@@ -613,7 +627,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                 id: sv.id,
                 fr: sv.labelFr,
                 en: sv.labelEn,
-                cents: sv.priceCents,
+                cents: sv.menuPriceCents,
               ),
             );
           }
@@ -638,6 +652,13 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(l.invalidMoneyAmount)));
+      return;
+    }
+    final specialsProblem = _specials.validate(l.lang);
+    if (specialsProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(specialsProblem)));
       return;
     }
     await _guard(() async {
@@ -666,6 +687,8 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
           'abbrev': _abbrev.text.trim(),
           'isAlcohol': _isAlcohol,
           'active': _active,
+          // a full replace, sent only when the manager changed them
+          if (_specials.snapshot() != _initialSpecials) ..._specials.toPatch(),
         });
         for (final v in _variants) {
           if (v.id == null) {
@@ -680,7 +703,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
             if (orig == null ||
                 orig.labelFr != v.labelFr.text.trim() ||
                 orig.labelEn != v.labelEn.text.trim() ||
-                orig.priceCents != cents) {
+                orig.menuPriceCents != cents) {
               await Api.updateVariant(item.id, v.id!, {
                 'labelFr': v.labelFr.text.trim(),
                 'labelEn': v.labelEn.text.trim(),
@@ -901,6 +924,18 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                           : () => setState(() => _variants.add(_VariantEdit())),
                     ),
                   ),
+                  // specials need the sizes' ids: an item gets them once saved
+                  if (!isNew)
+                    SpecialsEditor(
+                      c: _specials,
+                      lang: l.lang,
+                      busy: _busy,
+                      sizeLabels: {
+                        for (final v in widget.item!.variants)
+                          v.id: l.name(v.labelFr, v.labelEn),
+                      },
+                      onChanged: () => setState(() {}),
+                    ),
                   if (!isNew) ...[
                     const SizedBox(height: 4),
                     OutlinedButton.icon(

@@ -135,12 +135,17 @@ class KioskController extends ChangeNotifier {
   /// Categories that have something on sale, in the store's order.
   List<Category> get shownCategories => [
     for (final c in categories)
-      if (items.any((i) => i.category == c.id && i.active)) c,
+      if (items.any((i) => i.category == c.id && i.active && i.availableNow)) c,
   ];
 
   List<Item> get shownItems => [
     for (final i in items)
-      if (i.active && i.variants.isNotEmpty && i.category == category) i,
+      // an item sold only on other days is simply not on the kiosk today
+      if (i.active &&
+          i.availableNow &&
+          i.variants.isNotEmpty &&
+          i.category == category)
+        i,
   ];
 
   // ------------------------------------------------------------ setup
@@ -369,7 +374,7 @@ class KioskController extends ChangeNotifier {
         if ([
               for (final i in o.items)
                 if (byId[i.id] case final n?
-                    when n.active && n.variants.isNotEmpty)
+                    when n.active && n.availableNow && n.variants.isNotEmpty)
                   n,
             ]
             case final shown when shown.isNotEmpty)
@@ -482,7 +487,8 @@ class KioskController extends ChangeNotifier {
         for (final r in await api.upsell(_lines)) {
           final shown = [
             for (final id in r.itemIds)
-              if (byId[id] case final i? when i.active && i.variants.isNotEmpty)
+              if (byId[id] case final i?
+                  when i.active && i.availableNow && i.variants.isNotEmpty)
                 i,
           ];
           if (shown.isNotEmpty) {

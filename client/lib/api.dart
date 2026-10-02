@@ -11,9 +11,11 @@ import 'app_mode.dart';
 import 'connection_monitor.dart';
 import 'desktop_store.dart';
 import 'i18n.dart';
+import 'specials.dart';
 import 'stock/stock_models.dart';
 import 'store_profile.dart';
 
+export 'specials.dart';
 export 'stock/stock_models.dart';
 export 'store_profile.dart';
 
@@ -2860,10 +2862,37 @@ class TableInfo {
 
 class Variant {
   final String id, labelFr, labelEn;
+
+  /// The price NOW: a special's while one is in force (what a line rings at).
   final int priceCents;
-  Variant(this.id, this.labelFr, this.labelEn, this.priceCents);
-  factory Variant.fromJson(Map<String, dynamic> j) =>
-      Variant(j['id'], j['labelFr'], j['labelEn'], j['priceCents']);
+
+  /// While a special is in force: the menu price it replaces; else null.
+  final int? regularPriceCents;
+
+  /// The special in force now (with [regularPriceCents]).
+  final SpecialTag? special;
+  Variant(
+    this.id,
+    this.labelFr,
+    this.labelEn,
+    this.priceCents, {
+    this.regularPriceCents,
+    this.special,
+  });
+  factory Variant.fromJson(Map<String, dynamic> j) => Variant(
+    j['id'],
+    j['labelFr'],
+    j['labelEn'],
+    j['priceCents'],
+    regularPriceCents: (j['regularPriceCents'] as num?)?.toInt(),
+    special: SpecialTag.fromJson(j['special']),
+  );
+
+  /// The menu price (what the menu editor shows and saves), never a special's.
+  int get menuPriceCents => regularPriceCents ?? priceCents;
+
+  /// A special is in force for this size right now.
+  bool get onSpecial => regularPriceCents != null && special != null;
 }
 
 List<Item> _decodeItems(Uint8List bytes) => [
@@ -2938,6 +2967,12 @@ class Item {
 
   /// Extra-language names (es, de, …); see [namesFromJson].
   final Map<String, String> names;
+
+  /// Menu specials: sold only on these days (empty = every day), whether it
+  /// is on sale today, and its day-price rules (for the menu editor).
+  final List<String> availableDays;
+  final bool availableNow;
+  final List<SpecialRule> specials;
   Item(
     this.id,
     this.nameFr,
@@ -2961,6 +2996,9 @@ class Item {
     this.packUnits = 1,
     this.salesWeight = 0,
     this.names = const {},
+    this.availableDays = const [],
+    this.availableNow = true,
+    this.specials = const [],
   });
   factory Item.fromJson(Map<String, dynamic> j) => Item(
     j['id'],
@@ -2985,7 +3023,21 @@ class Item {
     packUnits: j['packUnits'] ?? 1,
     salesWeight: j['salesWeight'] ?? 0,
     names: namesFromJson(j['names']),
+    availableDays: availableDaysFromJson(j['availableDays']),
+    availableNow: j['availableNow'] ?? true,
+    specials: specialRulesFromJson(j['specials']),
   );
+
+  /// Some size is on special right now: its special (the first one).
+  SpecialTag? get specialNow {
+    for (final v in variants) {
+      if (v.onSpecial) return v.special;
+    }
+    return null;
+  }
+
+  /// Sold only on some days (and today is one of them or not: [availableNow]).
+  bool get dayOnly => availableDays.isNotEmpty;
 
   /// The first price (a shelf product has exactly one).
   int get priceCents => variants.isEmpty ? 0 : variants.first.priceCents;
@@ -3015,6 +3067,10 @@ class CheckLine {
 
   /// A gas station's fuel or prepay line: pump, grade, gallons, price per gallon.
   final FuelLine? fuel;
+
+  /// Rung at a menu special: the menu price it replaced and which special.
+  final int? regularUnitPriceCents;
+  final SpecialTag? special;
   CheckLine(
     this.id,
     this.itemId,
@@ -3031,6 +3087,8 @@ class CheckLine {
     this.taxable = true,
     this.depositCents = 0,
     this.fuel,
+    this.regularUnitPriceCents,
+    this.special,
   });
   factory CheckLine.fromJson(Map<String, dynamic> j) => CheckLine(
     j['id'],
@@ -3050,6 +3108,8 @@ class CheckLine {
     fuel: j['fuel'] is Map<String, dynamic>
         ? FuelLine.fromJson(j['fuel'])
         : null,
+    regularUnitPriceCents: (j['regularUnitPriceCents'] as num?)?.toInt(),
+    special: SpecialTag.fromJson(j['special']),
   );
 }
 

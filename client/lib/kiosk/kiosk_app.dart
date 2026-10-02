@@ -603,9 +603,11 @@ class _Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = c.api?.photoUrl(item);
-    final from = item.variants
-        .map((v) => v.priceCents)
-        .reduce((a, b) => a < b ? a : b);
+    final cheapest = item.variants.reduce(
+      (a, b) => a.priceCents <= b.priceCents ? a : b,
+    );
+    final from = cheapest.priceCents;
+    final special = item.specialNow;
     final badge = Container(
       color: _navyDeep,
       alignment: Alignment.center,
@@ -630,13 +632,49 @@ class _Tile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: url == null
-                  ? badge
-                  : Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => badge,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  url == null
+                      ? badge
+                      : Image.network(
+                          url,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => badge,
+                        ),
+                  // a special in force: its name on the photo ("Happy hour")
+                  if (special != null)
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      right: 10,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          key: Key('kiosk-special-${item.id}'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _copper,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            special.name(c.lang),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -664,6 +702,22 @@ class _Tile extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      // the menu price the special replaces, struck through
+                      if (cheapest.regularPriceCents case final reg?) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _money(c, reg),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: _muted,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                        ),
+                      ],
                       const Spacer(),
                       if (item.isAlcohol)
                         const Icon(LucideIcons.idCard, size: 20, color: _muted),

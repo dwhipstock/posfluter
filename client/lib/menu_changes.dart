@@ -95,7 +95,8 @@ List<LineCheck> checkAgainstMenu(
     for (final l in lines)
       () {
         final item = byId[l.itemId];
-        if (item == null || !item.active) {
+        // deleted, 86'd, or sold only on other days (a day-only item)
+        if (item == null || !item.active || !item.availableNow) {
           return const LineCheck(LineFate.unavailable);
         }
         final v = item.variants.where((v) => v.id == l.variantId).firstOrNull;
