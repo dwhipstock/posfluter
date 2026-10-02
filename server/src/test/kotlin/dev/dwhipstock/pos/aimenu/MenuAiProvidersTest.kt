@@ -197,6 +197,12 @@ class MenuAiProvidersTest {
         assertTrue(layout.contains("\"model\":\"${GeminiMenuProvider.LAYOUT_MODEL}\"") && layout.contains("\"thinking_level\":\"medium\""))
         assertTrue(chat.contains("\"model\":\"${GeminiMenuProvider.DEFAULT_MODEL}\"") && chat.contains("\"thinking_level\":\"low\""))
         assertEquals("gemini-x", MenuAiProviders.layout(cfg("menu.ai.layoutModel" to "gemini-x"))!!.model)
+        // several views of one room: the full flash model with the layout's thinking, unless one is set
+        MenuAiProviders.multiView(cfg(), http)!!.complete("sys", "user", photo + photo)
+        val multi = http.requests.last().bodyText
+        assertTrue(multi.contains("\"model\":\"${GeminiMenuProvider.MULTI_VIEW_MODEL}\"") && multi.contains("\"thinking_level\":\"medium\""))
+        assertEquals("gemini-3.5-flash", GeminiMenuProvider.MULTI_VIEW_MODEL)
+        assertEquals("gemini-x", MenuAiProviders.multiView(cfg("menu.ai.layoutModel" to "gemini-x"))!!.model)
     }
 
     @Test

@@ -55,6 +55,8 @@ class GeminiRoomModel(
     companion object {
         const val DEFAULT_MODEL = "gemini-3.5-flash-lite"
         const val FALLBACK_MODEL = "gemini-3.5-flash"
+        /** A new room from several photos (the store's GeminiMenuProvider.MULTI_VIEW_MODEL). */
+        const val MULTI_VIEW_MODEL = "gemini-3.5-flash"
         const val RETRY_PAUSE_MS = 1_500L
         private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     }

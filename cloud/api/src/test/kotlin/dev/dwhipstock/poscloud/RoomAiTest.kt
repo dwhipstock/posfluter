@@ -285,7 +285,7 @@ class RoomAiTest {
         var user = ""
         fake.reply = { system, u, _, _ ->
             user = u
-            assertTrue("Line the views up by the fixed landmarks" in system)
+            assertTrue("landmarks they share (the bar, the walls and corners, doors, windows, pillars)" in system)
             layoutReply
         }
         val r = photos(png(3000, 2000), png(2000, 3000), png(800, 600))
@@ -302,6 +302,21 @@ class RoomAiTest {
         assertEquals(HttpStatusCode.OK, photo(png(40, 30)).status)
         assertEquals(1, fake.lastImages.size)
         assertEquals("Set up the floor plan of this room from the attached picture.", user)
+    }
+
+    @Test
+    fun severalPhotosGoToTheMultiViewModelOneStaysOnTheUsualOne() = testApplication {
+        val multi = FakeModel { _, _, _, _ -> layoutReply }
+        app(RoomAiService(TestSupport.config, fake, fake, multiViewModel = multi))
+        store()
+        fake.reply = { _, _, _, _ -> layoutReply }
+        assertEquals(HttpStatusCode.OK, photo(png(20, 20)).status)
+        assertEquals(1 to 0, fake.calls to multi.calls)
+        assertEquals(HttpStatusCode.OK, photos(png(20, 20), png(20, 20)).status)
+        assertEquals(1 to 1, fake.calls to multi.calls)
+        assertEquals(2, multi.lastImages.size)
+        // the real default: the full flash model merges the views
+        assertEquals("gemini-3.5-flash", dev.dwhipstock.poscloud.rooms.GeminiRoomModel.MULTI_VIEW_MODEL)
     }
 
     @Test

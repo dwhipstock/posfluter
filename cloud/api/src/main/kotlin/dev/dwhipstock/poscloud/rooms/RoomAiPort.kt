@@ -321,11 +321,12 @@ internal object RoomLayoutAi {
           relative positions; the far side of a photo is not the top edge of the plan.
         - Leave a walkway (at least 50) between tables. The bar, the pool table and other fixtures stand along
           or near the walls unless the pictures clearly show them in the middle.
-        - Several pictures are different views of the SAME room (other corners, other angles): combine them
-          into ONE plan of the whole room. Line the views up by the fixed landmarks they share (the bar, the
-          walls and corners, doors, windows, pillars) and draw each table ONCE, even when two pictures show it:
-          a table at the same spot next to the same landmark is the same table. Add from each picture only
-          what the others did not show.
+        - Several pictures are different views of the SAME room (other corners, other angles); each usually
+          shows only part of it. Combine them into ONE plan of the whole room. Line the views up by the fixed
+          landmarks they share (the bar, the walls and corners, doors, windows, pillars), then draw each table
+          and each fixture ONCE: a table or pillar is the same in two pictures when it stands at the same spot
+          beside the same landmarks. Tables that merely look alike in different parts of the room are
+          different tables, so count every table a picture shows that no other picture already showed.
         - Sizes: a 2-seat table is about 70 x 70, a 4-seat about 100 x 100, a 6-seat rect about 180 x 110,
           a booth about 160 x 100. Tables never overlap. Seats 1 to 20: count the chairs, else guess from the size.
         - "number": the table number written on a plan or sketch, else null.
@@ -346,7 +347,7 @@ internal object RoomLayoutAi {
     fun userPrompt(count: Int): String =
         if (count <= 1) "Set up the floor plan of this room from the attached picture."
         else "Set up the floor plan of this room from the $count attached pictures: $count views of the same room, " +
-            "combined into one plan with each table drawn once."
+            "each showing part of it: combine them into one plan of the whole room."
 
     class Parsed(val tables: List<RoomTableDto>, val objects: List<RoomObjectDto>, val notes: String, val refused: Boolean)
 

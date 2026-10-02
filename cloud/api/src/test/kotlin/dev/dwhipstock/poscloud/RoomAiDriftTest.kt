@@ -67,7 +67,7 @@ class RoomAiDriftTest {
         // the floor assistant: an open bill is the only lock
         assertTrue("Tables with \"openBill\": true have guests" in port)
         // several photos of one room: merged by shared landmarks, each table once (the user line too)
-        assertTrue("Line the views up by the fixed landmarks they share" in port)
+        assertTrue("landmarks they share (the bar, the walls and corners, doors, windows, pillars)" in port)
         assertTrue("fun userPrompt(count: Int)" in port)
     }
 }

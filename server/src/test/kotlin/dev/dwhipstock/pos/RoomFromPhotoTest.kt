@@ -176,8 +176,8 @@ class RoomFromPhotoTest {
         assertEquals(2, fake.prompts.size)
         assertEquals(4, fake.images.size)
         val prompt = fake.prompts.last()
-        assertTrue("Line the views up by the fixed landmarks they share" in prompt)
-        assertTrue(prompt.endsWith("4 attached pictures: 4 views of the same room, combined into one plan with each table drawn once."), prompt)
+        assertTrue("landmarks they share (the bar, the walls and corners, doors, windows, pillars)" in prompt)
+        assertTrue(prompt.endsWith("4 attached pictures: 4 views of the same room, each showing part of it: combine them into one plan of the whole room."), prompt)
 
         // each under 12 MB, 36 MB together: refused, the model never asked
         val big = ByteArray(9 * 1024 * 1024).also { it[0] = 0xFF.toByte(); it[1] = 0xD8.toByte() }

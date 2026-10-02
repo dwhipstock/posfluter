@@ -439,12 +439,14 @@ room_chat | room_voice | room_apply | room_revert`; the daily cap counts menu
 and room calls together). Off without a key (409 `menu_ai_disabled`); 409
 `store_not_upgraded` for a store that doesn't take room changes yet.
 
-- `POST /v1/room-ai/photo?venue=` multipart `image` (a phone photo ≤ 12 MB: JPEG / PNG, resized to
-  1600 px here; WebP / HEIC passed as is; else 415 `room_ai_image_type`; none: 400 `room_ai_no_image`;
-  too big: 413 `room_ai_image_too_large`) + `name` + `lang` → `{ proposalId, venueId, model, roomName,
+- `POST /v1/room-ai/photo?venue=` multipart `image`, repeated 1–4 times (views of the same room from
+  different corners, all read in ONE model call and merged into one room; each a phone photo ≤ 12 MB,
+  ≤ 32 MB together: JPEG / PNG, resized to 1600 px here; WebP / HEIC passed as is; else 415
+  `room_ai_image_type`; none: 400 `room_ai_no_image`; a 5th: 400 `room_ai_too_many_images`; too big:
+  413 `room_ai_image_too_large`) + `name` + `lang` → `{ proposalId, venueId, model, roomName,
   labelPrefix, tables: [{ id, label, x, y, width, height, rotation, shape, seats, number }], objects: [{ id,
   type, x, y, width, height, rotation, labelFr, labelEn, icon, shape }], notes, rejected, elapsedMs,
-  refusal, message }`. A NEW room: tables numbered from 1 with the name's first letter. The picture is
+  refusal, message }`. A NEW room: tables numbered from 1 with the name's first letter. The pictures are
   never stored.
 - `POST /v1/room-ai/photo/apply?venue=` `{ proposalId, name? }` → `{ applyId, roomId, applied, summary }`
   (the room, its tables and objects; renamed at apply = relabelled).
