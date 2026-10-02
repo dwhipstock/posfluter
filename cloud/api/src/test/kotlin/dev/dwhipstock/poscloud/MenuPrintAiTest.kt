@@ -127,7 +127,7 @@ class MenuPrintAiTest {
         val html = MenuPdf.html(doc(MenuKind.FULL, r.plan))
         assertTrue("Two smashed patties, aged cheddar" in html)
         // a section without a title gets its category's name
-        assertEquals("Burgers", r.plan.sections.first().title)
+        assertEquals("Burgers", r.plan.sections.first { "burger" in it.itemIds }.title)
     }
 
     @Test

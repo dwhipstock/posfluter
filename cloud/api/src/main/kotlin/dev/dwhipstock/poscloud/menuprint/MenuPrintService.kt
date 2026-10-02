@@ -44,13 +44,14 @@ class MenuPrintService(
     private val config: CloudConfig,
     private val ai: MenuAiService,
     private val model: MenuAiModel? = config.menuAiKey?.let {
-        GeminiMenuModel(it.value, config.menuPrintModel, budgetMs = AI_TIMEOUT_MS, temperature = 0.9)
+        GeminiMenuModel(it.value, config.menuPrintModel, budgetMs = PrintAi.AI_BUDGET_MS, thinkingLevel = PrintAi.THINKING,
+            temperature = 0.9, maxOutputTokens = PrintAi.MAX_OUTPUT_TOKENS)
     },
     private val images: ImageGen = ai.photos.images,
     private val now: () -> Long = System::currentTimeMillis,
     private val clock: () -> Instant = Instant::now,
     private val artDeadlineMs: Long = ArtMaker.DEADLINE_MS,
-    private val aiTimeoutMs: Long = AI_TIMEOUT_MS + 2_000,
+    private val aiTimeoutMs: Long = AI_TIMEOUT_MS,
     plansMax: Int = PLANS_MAX,
 ) {
     private val log = LoggerFactory.getLogger(MenuPrintService::class.java)
@@ -65,7 +66,7 @@ class MenuPrintService(
 
     companion object {
         /** The hard limit on the AI's writing: past it, the plain menu. */
-        const val AI_TIMEOUT_MS = 20_000L
+        const val AI_TIMEOUT_MS = PrintAi.AI_BUDGET_MS + 3_000
         const val PLANS_MAX = 12
         const val ART_MAX = 8
         const val WINDOW_MS = 10 * 60_000L
@@ -118,8 +119,8 @@ class MenuPrintService(
             }
             if (reason == null) {
                 val system = PrintAi.system(kind, lang, MenuAiService.LANGUAGE_NAMES[lang] ?: "English",
-                    PrintWords.dayName(moment.day, "en"), PrintSelect.flyerHasSpecials(catalog))
-                val user = PrintAi.user(PrintAi.menuData(catalog, candidates, lang), notes)
+                    PrintWords.dayName(moment.day, "en"), PrintSelect.flyerHasSpecials(catalog), PrintAi.copyBudget(candidates.size))
+                val user = PrintAi.user(PrintAi.menuData(catalog, candidates, lang, complete = kind.complete), notes)
                 val t0 = now()
                 val call = aiPool.submit<String> { m.complete(system, user, null) }
                 val reply = try {
@@ -133,10 +134,14 @@ class MenuPrintService(
                     log.info("print menu AI via ${m.model}: ${code ?: e.cause?.javaClass?.simpleName}")
                     null
                 }
-                aiPlan = reply?.let { PrintAi.parse(it, kind, catalog, candidates, lang, listOfNotNull(brand.name, who.venue.name)) }
+                val outcome = reply?.let { PrintAi.parseOutcome(it, kind, catalog, candidates, lang, listOfNotNull(brand.name, who.venue.name)) }
+                aiPlan = outcome?.plan
                 if (reply != null && aiPlan == null) reason = "bad_reply"
                 if (aiPlan != null) aiState = "used"
-                ai.record(who, "print", if (aiPlan != null) "used" else reason ?: "failed",
+                // how the reply read (ok, repaired_truncated, not_json…), its size and time: never its content
+                log.info("print menu AI via ${m.model}: ${kind.code}/$lang ${candidates.size} item(s), reply ${outcome?.reason ?: reason} " +
+                    "(${reply?.length ?: 0} chars) in ${now() - t0}ms")
+                ai.record(who, "print", if (aiPlan != null) "used_${outcome?.reason}" else "${reason}_${outcome?.reason ?: "none"}",
                     aiPlan?.plan?.itemIds?.size ?: 0, aiPlan?.dropped ?: 0, now() - t0)
             }
         }
