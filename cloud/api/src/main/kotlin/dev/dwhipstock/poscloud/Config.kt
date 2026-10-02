@@ -77,6 +77,8 @@ data class CloudConfig(
     val menuAiKey: Secret? = env("MENU_AI_GEMINI_API_KEY")?.let(::Secret),
     // The store's default model and the same low thinking; voice may get its own.
     val menuAiModel: String = env("MENU_AI_MODEL") ?: "gemini-3.5-flash-lite",
+    // Printed menus (/v1/menu-print) write their copy with the flash model (quality over speed).
+    val menuPrintModel: String = env("MENU_PRINT_MODEL") ?: "gemini-3.5-flash",
     val menuAiVoiceModel: String? = env("MENU_AI_VOICE_MODEL"),
     // AI requests per store and per portal user per rolling 24 h (on top of 20 per 10 minutes).
     val menuAiDailyCap: Int = env("MENU_AI_DAILY_CAP")?.toIntOrNull()?.takeIf { it > 0 } ?: 150,

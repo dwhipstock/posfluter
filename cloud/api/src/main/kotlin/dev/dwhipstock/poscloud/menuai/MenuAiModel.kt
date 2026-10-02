@@ -74,6 +74,8 @@ class GeminiMenuModel(
     private val thinkingLevel: String = "low",
     private val budgetMs: Long = 60_000L,
     private val pause: (Long) -> Unit = { Thread.sleep(it) },
+    /** 0 for menu edits (the same request gives the same proposal); printed menus want fresh wording. */
+    private val temperature: Double = 0.0,
 ) : MenuAiModel {
     override val id = "gemini"
 
@@ -101,7 +103,7 @@ class GeminiMenuModel(
                 }
                 // JSON mode without a schema: an empty {"type":"object"} schema makes the model answer "{}"
                 putJsonObject("response_format") { put("type", "text"); put("mime_type", "application/json") }
-                putJsonObject("generation_config") { put("temperature", 0); put("thinking_level", thinkingLevel) }
+                putJsonObject("generation_config") { put("temperature", if (temperature == 0.0) 0 else temperature); put("thinking_level", thinkingLevel) }
             }.toString().toByteArray()
         }
         val deadline = System.currentTimeMillis() + budgetMs

@@ -76,6 +76,8 @@ services:
       MENU_AI_MODEL: "${MENU_AI_MODEL:-gemini-3.5-flash-lite}"
       MENU_AI_VOICE_MODEL: "${MENU_AI_VOICE_MODEL:-}"
       MENU_AI_DAILY_CAP: "${MENU_AI_DAILY_CAP:-150}"
+      MENU_AI_BFL_API_KEY: "${MENU_AI_BFL_API_KEY:-}"
+      MENU_PRINT_MODEL: "${MENU_PRINT_MODEL:-}"
     depends_on:
       db:
         condition: service_healthy
