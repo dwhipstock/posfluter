@@ -48,7 +48,11 @@ data class MenuItemDto(
     // photo provenance (022): original | ai_generated | ai_enhanced; null = not sent
     val photoSource: String? = null,
     // names beyond fr/en the store sent (es, de, ...; 026)
-    val names: Map<String, String> = emptyMap())
+    val names: Map<String, String> = emptyMap(),
+    /** Menu specials (CONTRACT §10 "Specials"): sold only on these days; null = every day. */
+    val availableDays: List<String>? = null,
+    /** The item's day prices; null = none. */
+    val specials: List<MenuSpecialInput>? = null)
 
 @Serializable
 data class MenuCategoryDto(
@@ -179,4 +183,7 @@ private fun itemDto(scope: Scope, row: ResultRow, variants: List<ResultRow>, nam
     size = row[CatalogItems.sizeLabel],
     photoSource = row[CatalogItems.photoSource],
     names = names.of("item", scope.venueId, row[CatalogItems.id]),
+    availableDays = MenuSpecials.daysOf(MenuSpecials.parse("availableDays", row[CatalogItems.availableDays])).ifEmpty { null },
+    specials = MenuSpecials.specialsOf(MenuSpecials.parse("specials", row[CatalogItems.specials]))
+        .map { MenuSpecialInput(it.days, it.from, it.to, it.label, it.prices) }.ifEmpty { null },
 )

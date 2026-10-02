@@ -779,7 +779,9 @@ midnight. A line's price is decided when it is rung (the special's when one
 is in force and cheaper; the cheapest of several) and kept on the line.
 Outside its days an item can't be rung (409 `item_unavailable`, with
 `availableDays`). Snapshots leave both keys out when null. A store whose
-database predates them baselines them `null` at `""` (064), like 058.
+database predates them baselines them `null` at `""` (064), like 058. The cloud stores them as text (036) and re-writes
+them in canonical form on every feed entry it serves; a receiver should still
+re-canonicalize what it reads before comparing.
 
 ### Merge
 For each field, the write with the greater stamp wins (two `""` stamps: the

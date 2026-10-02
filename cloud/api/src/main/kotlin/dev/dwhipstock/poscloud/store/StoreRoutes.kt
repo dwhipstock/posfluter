@@ -322,7 +322,9 @@ fun Route.storeRoutes(config: CloudConfig) {
                 cursor = rows.lastOrNull()?.seq ?: since,
                 serverTimeMs = System.currentTimeMillis(),
                 epoch = epoch,
-                changes = rows.map { MenuChangeDto(it.seq, it.entity, it.id, Json.parseToJsonElement(it.data)) },
+                // jsonb reorders keys: the specials registers go down in their canonical text again
+                changes = rows.map { MenuChangeDto(it.seq, it.entity, it.id,
+                    dev.dwhipstock.poscloud.menu.MenuSpecials.canonicalFeedData(it.entity, Json.parseToJsonElement(it.data))) },
             )
         }
         call.respond(response)
