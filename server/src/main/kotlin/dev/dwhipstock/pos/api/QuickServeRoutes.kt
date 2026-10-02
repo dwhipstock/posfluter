@@ -1,20 +1,15 @@
 package dev.dwhipstock.pos.api
 
-import dev.dwhipstock.pos.StoreAssets
 import dev.dwhipstock.pos.restaurant.CounterSettingsUpdate
 import dev.dwhipstock.pos.restaurant.KioskOrderLine
 import dev.dwhipstock.pos.restaurant.KioskOrderRequest
 import dev.dwhipstock.pos.restaurant.KioskUpsellRequest
 import dev.dwhipstock.pos.restaurant.QuickServeService
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveText
-import io.ktor.server.response.header
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -63,8 +58,7 @@ private val qsJson = Json { ignoreUnknownKeys = true }
  *    paid orders) and their status, the counter settings, and a kiosk pairing
  *    code (manager). Payment is the usual check tender / finalize: the order
  *    is committed (numbered, sent to the kitchen) when its check closes;
- *  - the pickup board (open, like the customer menu: order numbers only):
- *    `GET /pickup` (the page for a TV) and `GET /pickup/board`;
+ *  - the pickup board is [pickupBoardRoutes] (shared with carry-out);
  *  - the self-order kiosks (open routes, each checked here): `POST /kiosk/pair`
  *    with the code, then `X-Device-Token` on `GET /kiosk/config`,
  *    `POST /kiosk/upsell` (the "Add a drink?" rows for a cart) and
@@ -74,8 +68,6 @@ fun Route.quickServeRoutes(
     qs: QuickServeService, storeName: String, venueId: String, currency: String, locales: List<String>,
     legalAge: Int = 21,
 ) {
-    val page by lazy { StoreAssets.readText("pickup.html") }
-
     get("/counter/orders") { call.respond(qs.list()) }
     get("/counter/waiting") { call.respond(qs.waiting()) }
     post("/counter/orders") {
@@ -111,15 +103,6 @@ fun Route.quickServeRoutes(
     post("/counter/kiosks/{deviceId}/unpair") {
         requireManagerSession(call)
         call.respond(qs.unpairKiosk(call.parameters["deviceId"]!!, call.sessionUser().userId))
-    }
-
-    get("/pickup") {
-        call.response.header(HttpHeaders.CacheControl, "no-store")
-        call.respondText(page, ContentType.Text.Html)
-    }
-    get("/pickup/board") {
-        call.response.header(HttpHeaders.CacheControl, "no-store")
-        call.respond(qs.board())
     }
 
     post("/kiosk/pair") {

@@ -71,9 +71,17 @@ data class Receipt(
  * follow the receipt's print language ([MessageKey.KIOSK_TAKE_OUT]), one
  * language only.
  */
-data class ReceiptOrder(val number: String, val takeOut: Boolean) {
+data class ReceiptOrder(
+    val number: String,
+    val takeOut: Boolean,
+    /** A restaurant's carry-out order: "Order #105 · Carry-out", printed instead of a table. */
+    val carryOut: Boolean = false,
+    /** The call-in customer's name, when one was taken (carry-out). */
+    val customer: String? = null,
+) {
     fun label(locale: LocaleCode): String =
-        "$number · " + Messages.get(if (takeOut) MessageKey.KIOSK_TAKE_OUT else MessageKey.KIOSK_DINE_IN, locale)
+        if (carryOut) Messages.get(MessageKey.RECEIPT_CARRY_OUT_ORDER, locale, number.removePrefix("#"))
+        else "$number · " + Messages.get(if (takeOut) MessageKey.KIOSK_TAKE_OUT else MessageKey.KIOSK_DINE_IN, locale)
 }
 
 data class ReceiptItem(
@@ -243,10 +251,16 @@ object ReceiptRenderer {
         }
         if (policy.retail) {
             add(PrintLine.KeyValue(msg(RECEIPT_REGISTER) + " " + receipt.tableLabel, msg(RECEIPT_SALE) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
+        } else if (receipt.order?.carryOut == true) {
+            // a carry-out order is at no table: its number is the headline below
+            add(PrintLine.Text(msg(RECEIPT_BILL) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
         } else {
             add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
         }
-        receipt.order?.let { add(PrintLine.Large(it.label(locale))) }
+        receipt.order?.let {
+            add(PrintLine.Large(it.label(locale)))
+            it.customer?.let { name -> add(PrintLine.Text(msg(MessageKey.RECEIPT_CUSTOMER, name))) }
+        }
         add(PrintLine.KeyValue(msg(RECEIPT_OPEN), policy.formatDate(receipt.openedAt)))
         // provisional: "Printed at" (this snapshot); final: the close/paid time
         add(PrintLine.KeyValue(

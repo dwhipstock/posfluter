@@ -56,6 +56,8 @@ import dev.dwhipstock.pos.payments.simulator.simulatorRoutes
 import dev.dwhipstock.pos.api.printerRoutes
 import dev.dwhipstock.pos.api.kitchenRoutes
 import dev.dwhipstock.pos.api.quickServeRoutes
+import dev.dwhipstock.pos.api.carryOutRoutes
+import dev.dwhipstock.pos.api.pickupBoardRoutes
 import dev.dwhipstock.pos.api.demoSheetRoutes
 import dev.dwhipstock.pos.api.forecourtRoutes
 import dev.dwhipstock.pos.base.BadRequestException
@@ -389,18 +391,29 @@ fun Application.module(
     val retailService = dev.dwhipstock.pos.retail.RetailService(
         config, checkService, productLookup ?: dev.dwhipstock.pos.retail.OpenFoodFactsLookup(), ageCheckMode)
     if (config.profile.kind == StoreProfile.Kind.RETAIL) retailService.ensureRegister()
-    // quick-serve (Copper Lantern Express): numbered counter orders, kiosks, the pickup board
-    val quickServe = if (config.profile.kind != StoreProfile.Kind.QUICK_SERVE) null
-        else dev.dwhipstock.pos.restaurant.QuickServeService(config, checkService).also { qs ->
-            qs.ensureCounter()
-            qs.cleanupLegacy()
+    // numbered orders (one sequence per store and day) for whatever uses them:
+    // the quick-serve counter and its kiosks, a restaurant's carry-out; and
+    // their kitchen side (hold until paid, "#101 · Take out" / "#105 · TO GO")
+    val caps = config.profile.capabilities
+    val pickupOrders = if (caps.none { it in dev.dwhipstock.pos.sdk.Capability.NUMBERED }) null
+        else dev.dwhipstock.pos.orders.PickupOrders(config, checkService).also { o ->
             kitchenService?.let { k ->
-                qs.kitchen = k
-                k.holdSend = qs::holdKitchen
-                k.ticketLabel = qs::ticketLabel
-                k.onCheckDone = qs::kitchenDone
+                o.kitchen = k
+                k.holdSend = o::holdKitchen
+                k.ticketLabel = o::ticketLabel
+                k.onCheckDone = o::kitchenDone
+                k.onSent = o::kitchenSent
             }
         }
+    // quick-serve (Copper Lantern Express): the counter, kiosks
+    val quickServe = if (pickupOrders == null || dev.dwhipstock.pos.sdk.Capability.COUNTER_ORDERS !in caps) null
+        else dev.dwhipstock.pos.restaurant.QuickServeService(config, checkService, orders = pickupOrders).also { qs ->
+            qs.ensureCounter()
+            qs.cleanupLegacy()
+        }
+    // carry-out at a table-service restaurant (a Carry-out spot on the floor)
+    val carryOut = if (pickupOrders == null || dev.dwhipstock.pos.sdk.Capability.CARRY_OUT !in caps) null
+        else dev.dwhipstock.pos.restaurant.CarryOutService(checkService, pickupOrders).also { it.ensureLocation() }
     // stock counting / receiving in the store (retail); on hand stays the cloud's
     val stockService = dev.dwhipstock.pos.retail.StockService(config)
     val shiftService = ShiftService(config)
@@ -654,6 +667,8 @@ fun Application.module(
             quickServeRoutes(it, config.displayName, config.venueId, config.profile.currency,
                 config.profile.locales.map { l -> l.tag }, config.legalAge)
         }
+        carryOut?.let { carryOutRoutes(it) }
+        if (dev.dwhipstock.pos.sdk.Capability.PICKUP_BOARD in caps) pickupOrders?.let { pickupBoardRoutes(it) }
         forecourtRoutes(forecourt, authService)
         // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in
         // production, where Caddy fronts the sync API and the Next.js portal on one

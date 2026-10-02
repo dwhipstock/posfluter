@@ -16,6 +16,12 @@ import dev.dwhipstock.pos.sdk.PrintJob
 import dev.dwhipstock.pos.sdk.i18n.LocaleCode
 import dev.dwhipstock.pos.sdk.i18n.Messages
 import dev.dwhipstock.pos.sdk.VenueClock
+import dev.dwhipstock.pos.orders.CounterOrderView
+import dev.dwhipstock.pos.orders.CounterOrders
+import dev.dwhipstock.pos.orders.OrderSource
+import dev.dwhipstock.pos.orders.PickupBoard
+import dev.dwhipstock.pos.orders.PickupOrders
+import dev.dwhipstock.pos.orders.SaleLocations
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.ResultRow
@@ -38,31 +44,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * One quick-serve order (055, 056): its check, dine in / take out, source and
- * status. [orderNumber] (the customer's number, 101...) is given when a kiosk
- * order is placed (the guest's one number, on their ticket, through payment,
- * the kitchen and the board) or when a counter order is paid. [kioskNumber]
- * (K12) is only on orders from before that.
- */
-object CounterOrders : Table("counter_orders") {
-    val checkId = integer("check_id")
-    val businessDate = varchar("business_date", 10)
-    val orderNumber = integer("order_number").nullable()
-    val kioskNumber = integer("kiosk_number").nullable()
-    /** DINE_IN | TAKE_OUT */
-    val serviceMode = varchar("service_mode", 10)
-    /** POS | KIOSK */
-    val orderSource = varchar("source", 10)
-    /** DRAFT | WAITING (unpaid) -> PREPARING -> READY -> PICKED_UP (paid); CANCELLED (a numbered kiosk order never paid) */
-    val status = varchar("status", 12)
-    val createdAt = utcTimestamp("created_at")
-    val paidAt = utcTimestamp("paid_at").nullable()
-    val readyAt = utcTimestamp("ready_at").nullable()
-    val pickedUpAt = utcTimestamp("picked_up_at").nullable()
-    override val primaryKey = PrimaryKey(checkId)
-}
-
 /** The counter's settings (056): the default dine in / take out. */
 object CounterConfig : Table("counter_config") {
     val key = varchar("config_key", 64)
@@ -77,27 +58,6 @@ object KioskDevices : Table("kiosk_devices") {
     val pairedAt = utcTimestamp("paired_at")
     override val primaryKey = PrimaryKey(deviceId)
 }
-
-@Serializable
-data class CounterOrderView(
-    val checkId: Int,
-    /** The customer's number: a kiosk order's from when it is placed, a counter order's from when it is paid. */
-    val orderNumber: Int? = null,
-    /** An older kiosk order's waiting number (K12); new kiosk orders have their [orderNumber] instead. */
-    val kioskNumber: Int? = null,
-    val serviceMode: String,
-    val source: String,
-    /** DRAFT | WAITING | PREPARING | READY | PICKED_UP */
-    val status: String,
-    /** The check's own status: OPEN (unpaid) | TOTAL_LOCKED | CLOSED (paid) | VOID | CANCELLED. */
-    val checkStatus: String,
-    val totalCents: Long,
-    val outstandingCents: Long,
-    val itemCount: Int,
-    val hasAlcohol: Boolean,
-    val createdAt: String,
-    val businessDate: String,
-)
 
 @Serializable
 data class KioskOrderLine(
@@ -138,16 +98,6 @@ data class KioskOrderResult(
 )
 
 @Serializable
-data class PickupBoard(
-    val venue: String,
-    val preparing: List<Int>,
-    val ready: List<Int>,
-    val serverTime: String,
-    /** The numbers (of both columns) that are take out; the rest are dine in. */
-    val takeOut: List<Int> = emptyList(),
-)
-
-@Serializable
 data class CounterSettings(
     val defaultServiceMode: String = "TAKE_OUT",
     /** Print the guest's ticket (number, items, total) on the receipt printer when a kiosk order is placed. */
@@ -183,6 +133,10 @@ data class KioskDeviceView(val deviceId: String, val name: String, val pairedAt:
  *    pickup board and goes to the kitchen. Nothing unpaid ever does.
  *  - READY (the kitchen screen's last bump, or staff) -> PICKED_UP (staff).
  *    Only a paid order can be ready or picked up.
+ *
+ * The numbering, the pickup board and the kitchen / receipt side are the
+ * store-wide [PickupOrders] (a restaurant's carry-out uses them too); this is
+ * the counter's own part: ringing at the POS, the kiosks, the counter settings.
  */
 class QuickServeService(
     private val config: CustomerConfig,
@@ -191,27 +145,27 @@ class QuickServeService(
     private val today: () -> LocalDate = { VenueClock.today() },
     private val clock: () -> Instant = { VenueClock.now() },
     /** An unpaid order older than this is dropped (a guest who never came to pay). */
-    private val expireAfter: Duration = Duration.ofMinutes(30),
-) : CounterHook {
+    expireAfter: Duration = Duration.ofMinutes(30),
+    /** The store's numbered orders (shared with carry-out when both are on). */
+    val orders: PickupOrders = PickupOrders(config, checks, today, clock, expireAfter),
+) {
     private val log = LoggerFactory.getLogger(QuickServeService::class.java)
 
     /** Kitchen tickets, when on: an order is sent the moment it is paid. */
-    var kitchen: KitchenService? = null
-
-    init {
-        checks.counter = this
-    }
+    var kitchen: KitchenService?
+        get() = orders.kitchen
+        set(value) { orders.kitchen = value }
 
     companion object {
         const val COUNTER_ZONE = "counter"
         const val COUNTER_TABLE = "counter-1"
-        const val FIRST_NUMBER = 101
-        val MODES = setOf("DINE_IN", "TAKE_OUT")
+        const val FIRST_NUMBER = PickupOrders.FIRST_NUMBER
+        val MODES = PickupOrders.MODES
         /** Where staff can move a paid order. */
-        val STATUSES = listOf("PREPARING", "READY", "PICKED_UP")
-        val UNPAID = listOf("DRAFT", "WAITING")
+        val STATUSES = PickupOrders.STATUSES
+        val UNPAID = PickupOrders.UNPAID
         /** A numbered kiosk order that was never paid (expired, cleared): its number is not given again. */
-        const val CANCELLED = "CANCELLED"
+        const val CANCELLED = PickupOrders.CANCELLED
         /** The first counter's statuses (PR #58): an unpaid row in one of these is an old test order. */
         private val LEGACY = listOf("NEW", "PREPARING", "READY", "PICKED_UP")
         private const val CODE_TTL_SECONDS = 600
@@ -225,24 +179,9 @@ class QuickServeService(
     }
 
     /** The counter "table" every order sits on (seeded; re-created if someone removed it). */
-    fun ensureCounter() = transaction {
-        Zones.insertIgnore {
-            it[id] = COUNTER_ZONE; it[nameFr] = "Comptoir"; it[nameEn] = "Counter"; it[sortOrder] = 0
-            it[labelPrefix] = "C"
-        }
-        if (DiningTables.selectAll().where { DiningTables.id eq COUNTER_TABLE }.empty()) {
-            DiningTables.insert {
-                it[id] = COUNTER_TABLE; it[zoneId] = COUNTER_ZONE; it[label] = "1"
-                it[shape] = "SQUARE"; it[seats] = 0
-            }
-        }
-    }
+    fun ensureCounter() = SaleLocations.ensureRegister(COUNTER_ZONE, COUNTER_TABLE, "Comptoir", "Counter", "C")
 
-    private fun normMode(mode: String): String {
-        val m = mode.trim().uppercase().replace('-', '_')
-        require(m in MODES) { "serviceMode must be DINE_IN or TAKE_OUT" }
-        return m
-    }
+    private fun normMode(mode: String): String = orders.normMode(mode)
 
     // ------------------------------------------------------------ settings
 
@@ -290,19 +229,10 @@ class QuickServeService(
         ensureCounter()
         val checkId = checks.openCounterCheck(COUNTER_TABLE, userId)
         for (l in lines) checks.addLine(checkId, l.itemId, l.variantId, l.qty, cleanNote(l.note))
-        val date = today().toString()
         val kiosk = source == "KIOSK"
-        CounterOrders.insert {
-            it[CounterOrders.checkId] = checkId
-            it[businessDate] = date
-            // a kiosk guest gets the number now (it is on their ticket); the counter's on payment
-            it[orderNumber] = if (kiosk) nextNumber(date) else null
-            it[kioskNumber] = null
-            it[serviceMode] = m
-            it[orderSource] = source
-            it[status] = if (kiosk) "WAITING" else "DRAFT"
-            it[createdAt] = clock()
-        }
+        // a kiosk guest gets the number now (it is on their ticket); the counter's on payment
+        orders.open(checkId, if (kiosk) OrderSource.KIOSK else OrderSource.POS, m,
+            status = if (kiosk) "WAITING" else "DRAFT", numberNow = kiosk)
         checkId
     }
 
@@ -420,147 +350,26 @@ class QuickServeService(
         checks.cancelUnpaid(checkId, "discarded")
     }
 
-    // ------------------------------------------------------------ the check's side (CounterHook)
-
-    /** Paid in full, inside the closing transaction: PREPARING, and a counter order's number. */
-    override fun paid(checkId: Int) {
-        val row = CounterOrders.selectAll().where { CounterOrders.checkId eq checkId }.firstOrNull() ?: return
-        if (row[CounterOrders.status] !in UNPAID) return
-        val numbered = row[CounterOrders.orderNumber] != null
-        val date = today().toString()
-        CounterOrders.update({ CounterOrders.checkId eq checkId }) {
-            // a counter order is numbered on the day it is paid; a kiosk order
-            // keeps the number on the guest's ticket (and the day it was placed)
-            if (!numbered) {
-                it[businessDate] = date
-                it[orderNumber] = nextNumber(date)
-            }
-            it[status] = "PREPARING"
-            it[paidAt] = clock()
-        }
-    }
-
-    /** The close committed: the kitchen gets the order now. */
-    override fun afterPaid(checkId: Int) {
-        val v = transaction { CounterOrders.selectAll().where { CounterOrders.checkId eq checkId }.firstOrNull() } ?: return
-        if (v[CounterOrders.status] != "PREPARING") return
-        sendToKitchen(checkId, "POS")
-        log.info("Order #${v[CounterOrders.orderNumber]} paid (${v[CounterOrders.serviceMode]}), to the kitchen")
-    }
-
-    /**
-     * Its check was cancelled (last item removed, discarded, expired): an
-     * unpaid order is not kept. A kiosk order's number stays taken (the guest
-     * may still hold the ticket): its row is kept as CANCELLED, a gap in the day.
-     */
-    override fun cancelled(checkId: Int) {
-        transaction {
-            CounterOrders.deleteWhere {
-                (CounterOrders.checkId eq checkId) and (CounterOrders.status inList UNPAID) and CounterOrders.orderNumber.isNull()
-            }
-            CounterOrders.update({ (CounterOrders.checkId eq checkId) and (CounterOrders.status inList UNPAID) }) {
-                it[status] = CANCELLED
-            }
-        }
-    }
-
-    // the receipt says "Dine in" / "Take out" in its own print language (a
-    // reprint in French or Spanish too), never two languages at once
-    override fun receiptOrder(checkId: Int): dev.dwhipstock.pos.sdk.ReceiptOrder? =
-        committed(checkId)?.let { row ->
-            dev.dwhipstock.pos.sdk.ReceiptOrder(
-                number = row[CounterOrders.orderNumber]?.let { "#$it" } ?: "—",
-                takeOut = row[CounterOrders.serviceMode] == "TAKE_OUT",
-            )
-        }
-
-    /** The order row when it is committed (paid, numbered), else null. */
-    private fun committed(checkId: Int): ResultRow? = transaction {
-        CounterOrders.selectAll().where { CounterOrders.checkId eq checkId }.firstOrNull()
-            ?.takeIf { it[CounterOrders.orderNumber] != null && it[CounterOrders.status] in STATUSES }
-    }
+    // ------------------------------------------------------------ the kitchen's side ([PickupOrders])
 
     /** The kitchen never gets a counter order before it is paid (a numbered kiosk order neither). */
-    fun holdKitchen(checkId: Int): Boolean = transaction {
-        CounterOrders.selectAll().where { CounterOrders.checkId eq checkId }.firstOrNull()
-            ?.let { it[CounterOrders.status] !in STATUSES } ?: false
-    }
-
-    /** The next number for [date]: 101 on a new day, then one more each paid order. Inside a transaction. */
-    private fun nextNumber(date: String): Int =
-        (CounterOrders.selectAll().where { CounterOrders.businessDate eq date }
-            .mapNotNull { it[CounterOrders.orderNumber] }.maxOrNull() ?: (FIRST_NUMBER - 1)) + 1
-
-    private fun sendToKitchen(checkId: Int, sender: String) {
-        val k = kitchen ?: return
-        try { k.send(checkId, sender) } catch (e: Exception) { log.warn("kitchen send for order $checkId failed: ${e.message}") }
-    }
+    fun holdKitchen(checkId: Int): Boolean = orders.holdKitchen(checkId)
 
     // ------------------------------------------------------------ status
 
     /** Staff move a paid order along (or back): PREPARING, READY, PICKED_UP. Unpaid: refused. */
-    fun setStatus(checkId: Int, status: String): CounterOrderView {
-        val s = status.trim().uppercase().replace('-', '_')
-        require(s in STATUSES) { "status must be one of $STATUSES" }
-        transaction {
-            val row = requireOrder(checkId)
-            if (row[CounterOrders.orderNumber] == null || row[CounterOrders.status] !in STATUSES ||
-                checks.getCheck(checkId).status != "CLOSED")
-                throw ConflictException("order is not paid", "order_not_paid")
-            CounterOrders.update({ CounterOrders.checkId eq checkId }) {
-                it[CounterOrders.status] = s
-                when (s) {
-                    "READY" -> { it[readyAt] = clock(); it[pickedUpAt] = null }
-                    "PICKED_UP" -> it[pickedUpAt] = clock()
-                    else -> { it[readyAt] = null; it[pickedUpAt] = null }
-                }
-            }
-        }
-        return view(checkId)
-    }
+    fun setStatus(checkId: Int, status: String): CounterOrderView = orders.setStatus(checkId, status)
 
     /** The kitchen screen bumped the order's last card: a paid order being prepared is ready. */
-    fun kitchenDone(checkId: Int) {
-        val moved = transaction {
-            CounterOrders.update({
-                (CounterOrders.checkId eq checkId) and (CounterOrders.status eq "PREPARING") and
-                    CounterOrders.orderNumber.isNotNull()
-            }) { it[status] = "READY"; it[readyAt] = clock() }
-        }
-        if (moved > 0) log.info("Order for check $checkId is ready (kitchen screen)")
-    }
+    fun kitchenDone(checkId: Int) = orders.kitchenDone(checkId)
 
-    private fun requireOrder(checkId: Int) =
-        CounterOrders.selectAll().where { CounterOrders.checkId eq checkId }.firstOrNull()
-            ?: throw NotFoundException("no counter order for check $checkId", "order_not_found")
+    private fun requireOrder(checkId: Int) = orders.requireOrder(checkId)
 
-    fun view(checkId: Int): CounterOrderView = transaction { viewOf(requireOrder(checkId)) }
+    fun view(checkId: Int): CounterOrderView = orders.view(checkId)
 
-    private fun viewOf(row: ResultRow): CounterOrderView {
-        val id = row[CounterOrders.checkId]
-        val c = checks.getCheck(id)
-        val alcohol = transaction {
-            val ids = c.lines.mapNotNull { it.itemId }.toSet()
-            ids.isNotEmpty() && Items.selectAll().where { (Items.id inList ids) and (Items.isAlcohol eq true) }.count() > 0
-        }
-        return CounterOrderView(
-            checkId = id,
-            orderNumber = row[CounterOrders.orderNumber],
-            kioskNumber = row[CounterOrders.kioskNumber],
-            serviceMode = row[CounterOrders.serviceMode],
-            source = row[CounterOrders.orderSource],
-            status = row[CounterOrders.status],
-            checkStatus = c.status,
-            totalCents = c.grandTotalCents,
-            outstandingCents = c.outstandingCents,
-            itemCount = c.lines.sumOf { it.qty },
-            hasAlcohol = alcohol,
-            createdAt = VenueClock.iso(row[CounterOrders.createdAt]),
-            businessDate = row[CounterOrders.businessDate],
-        )
-    }
+    private fun viewOf(row: ResultRow): CounterOrderView = orders.viewOf(row)
 
-    private fun joined() = CounterOrders.join(Checks, JoinType.INNER, CounterOrders.checkId, Checks.id)
+    private fun joined() = orders.joined()
 
     /**
      * The counter's Orders panel: today's paid orders, newest first
@@ -570,7 +379,8 @@ class QuickServeService(
         val date = today().toString()
         joined().selectAll().where {
             (CounterOrders.businessDate eq date) and CounterOrders.orderNumber.isNotNull() and
-                (Checks.status eq "CLOSED") and (CounterOrders.status inList STATUSES)
+                (Checks.status eq "CLOSED") and (CounterOrders.status inList STATUSES) and
+                (CounterOrders.orderSource inList OrderSource.PAY_FIRST)
         }.orderBy(CounterOrders.orderNumber to SortOrder.DESC).limit(200).map { viewOf(it) }
     }
 
@@ -579,28 +389,14 @@ class QuickServeService(
         expire()
         return transaction {
             joined().selectAll().where {
-                (CounterOrders.status eq "WAITING") and (Checks.status inList LIVE)
+                (CounterOrders.status eq "WAITING") and (Checks.status inList LIVE) and
+                    (CounterOrders.orderSource inList OrderSource.PAY_FIRST)
             }.orderBy(CounterOrders.createdAt to SortOrder.ASC).map { viewOf(it) }
         }
     }
 
-    /** Unpaid orders older than [expireAfter], nothing tendered: dropped (their checks cancelled). */
-    fun expire(): Int {
-        val cutoff = clock().minus(expireAfter)
-        val stale = transaction {
-            joined().selectAll().where {
-                (CounterOrders.status inList UNPAID) and (Checks.status inList LIVE) and
-                    (CounterOrders.createdAt less cutoff)
-            }.map { it[CounterOrders.checkId] }
-        }
-        var n = 0
-        for (id in stale) {
-            if (checks.hasTenders(id)) continue
-            try { checks.cancelUnpaid(id, "expired"); n++ } catch (e: Exception) { log.warn("expiring order $id failed: ${e.message}") }
-        }
-        if (n > 0) log.info("Dropped $n unpaid counter order(s) older than ${expireAfter.toMinutes()} min")
-        return n
-    }
+    /** Unpaid orders older than the expiry, nothing tendered: dropped (their checks cancelled). */
+    fun expire(): Int = orders.expire()
 
     /**
      * Once, at startup: the first counter (PR #58) numbered and listed orders
@@ -611,7 +407,8 @@ class QuickServeService(
     fun cleanupLegacy(): Int {
         val rows = transaction {
             joined().selectAll().where {
-                (CounterOrders.status inList LEGACY) and (Checks.status inList LIVE)
+                (CounterOrders.status inList LEGACY) and (Checks.status inList LIVE) and
+                    (CounterOrders.orderSource inList OrderSource.PAY_FIRST)
             }.map { it[CounterOrders.checkId] }
         }
         var n = 0
@@ -632,41 +429,19 @@ class QuickServeService(
         }
         // a paid order the first counter never placed: off the board
         transaction {
-            CounterOrders.update({ CounterOrders.status eq "NEW" }) { it[status] = "PICKED_UP" }
+            CounterOrders.update({ (CounterOrders.status eq "NEW") and (CounterOrders.orderSource inList OrderSource.PAY_FIRST) }) {
+                it[status] = "PICKED_UP"
+            }
         }
         if (n > 0) log.info("Counter: cleaned up $n old unpaid / empty test order(s)")
         return n
     }
 
     /** The pickup board: today's paid numbers being prepared and ready. */
-    fun board(): PickupBoard = transaction {
-        val date = today().toString()
-        val rows = joined().selectAll().where {
-            (CounterOrders.businessDate eq date) and (CounterOrders.status inList listOf("PREPARING", "READY")) and
-                CounterOrders.orderNumber.isNotNull() and (Checks.status eq "CLOSED")
-        }.orderBy(CounterOrders.orderNumber to SortOrder.ASC).toList()
-        PickupBoard(
-            venue = config.displayName,
-            preparing = rows.filter { it[CounterOrders.status] == "PREPARING" }.map { it[CounterOrders.orderNumber]!! },
-            ready = rows.filter { it[CounterOrders.status] == "READY" }
-                .sortedBy { it[CounterOrders.readyAt] }.map { it[CounterOrders.orderNumber]!! },
-            serverTime = VenueClock.iso(clock()),
-            takeOut = rows.filter { it[CounterOrders.serviceMode] == "TAKE_OUT" }.map { it[CounterOrders.orderNumber]!! },
-        )
-    }
+    fun board(): PickupBoard = orders.board()
 
     /** What a kitchen ticket / card says instead of a table: "#101 · Take out". Null = not a counter order. */
-    fun ticketLabel(checkId: Int, language: KitchenLanguage): String? = transaction {
-        val row = CounterOrders.selectAll().where { CounterOrders.checkId eq checkId }.firstOrNull() ?: return@transaction null
-        val takeOut = row[CounterOrders.serviceMode] == "TAKE_OUT"
-        val mode = when (language) {
-            KitchenLanguage.FR -> if (takeOut) "Pour emporter" else "Sur place"
-            KitchenLanguage.EN -> if (takeOut) "Take out" else "Dine in"
-            KitchenLanguage.BOTH -> if (takeOut) "Pour emporter / Take out" else "Sur place / Dine in"
-        }
-        val number = row[CounterOrders.orderNumber]?.let { "#$it" } ?: row[CounterOrders.kioskNumber]?.let { "K$it" } ?: "—"
-        "$number · $mode"
-    }
+    fun ticketLabel(checkId: Int, language: KitchenLanguage): String? = orders.ticketLabel(checkId, language)
 
     // ------------------------------------------------------------------ kiosks
 

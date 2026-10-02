@@ -33,6 +33,7 @@ IconData? floorObjectTypeIcon(String type, String? icon) => switch (type) {
   'KITCHEN' => Icons.soup_kitchen,
   'RESTROOMS' => Icons.wc,
   'STAGE' => Icons.mic_external_on, // a stage for live music
+  'CARRY_OUT' => Icons.shopping_bag, // to-go orders wait here (tappable)
   'CUSTOM' => floorObjectIcons[icon] ?? Icons.star,
   _ => null,
 };

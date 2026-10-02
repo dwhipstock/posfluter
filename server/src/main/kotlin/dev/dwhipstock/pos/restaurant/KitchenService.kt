@@ -217,6 +217,9 @@ class KitchenService(
     /** Quick-serve: told (after commit) when the last open card of a check is bumped — the order is ready. */
     var onCheckDone: ((checkId: Int) -> Unit)? = null
 
+    /** Numbered orders (carry-out): told (after commit) when a send put new items on a ticket. Never throws back. */
+    var onSent: ((checkId: Int) -> Unit)? = null
+
     companion object {
         val OUTPUTS = setOf("printer", "screen", "both")
         val DRINK_CATEGORIES = listOf("beer-cider", "wine", "cocktails")
@@ -561,6 +564,9 @@ class KitchenService(
             }
         }
         if (result.printJobs > 0) queue.wake()
+        if (result.tickets > 0) onSent?.let { hook ->
+            try { hook(checkId) } catch (e: Exception) { log.warn("kitchen sent hook for check $checkId failed: ${e.message}") }
+        }
         return result
     }
 

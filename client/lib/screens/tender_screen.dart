@@ -41,11 +41,15 @@ class TenderScreen extends StatefulWidget {
   /// number and sends it to the kitchen); the receipt shows the number big
   /// and closes itself so the next order opens.
   final bool counterOrder;
+
+  /// Shown big on the receipt screen (a carry-out order: "Order #105 · Carry-out").
+  final String? headline;
   const TenderScreen({
     super.key,
     required this.check,
     this.groupId,
     this.counterOrder = false,
+    this.headline,
     this.stripeStatus,
     this.cardReader,
     this.cardReaderSupported,
@@ -367,7 +371,7 @@ class _TenderScreenState extends State<TenderScreen> {
     // the sale), so surface a toast if the printer looks offline.
     _warnIfPrinterOffline();
     // counter: the number the customer is called by, given as it was paid
-    String? headline;
+    String? headline = widget.headline;
     if (widget.counterOrder) {
       try {
         final o = await QuickServeApi.order(_check.id);

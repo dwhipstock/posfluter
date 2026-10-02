@@ -150,6 +150,9 @@ internal object RoomLayoutRules {
         "COLUMN" to "PILLAR", "DOOR" to "ENTRANCE", "EXIT" to "ENTRANCE", "HOST" to "HOST_STAND",
         "TOILETS" to "RESTROOMS", "WC" to "RESTROOMS", "RESTROOM" to "RESTROOMS", "BATHROOM" to "RESTROOMS",
         "BANDSTAND" to "STAGE", "LIVE_MUSIC" to "STAGE", "MUSIC_STAGE" to "STAGE", "BAND" to "STAGE",
+        "CARRYOUT" to "CARRY_OUT", "TAKEOUT" to "CARRY_OUT", "TAKE_OUT" to "CARRY_OUT", "TO_GO" to "CARRY_OUT",
+        "TOGO" to "CARRY_OUT", "TAKEAWAY" to "CARRY_OUT", "PICKUP" to "CARRY_OUT", "PICK_UP" to "CARRY_OUT",
+        "PICKUP_COUNTER" to "CARRY_OUT", "CARRY_OUT_SPOT" to "CARRY_OUT",
     )
 
     class Result(val tables: List<RoomTableDto>, val objects: List<RoomObjectDto>, val rejected: List<String>)
@@ -349,7 +352,7 @@ internal object RoomLayoutAi {
           a booth about 160 x 100. Tables never overlap. Seats 1 to 20: count the chairs, else guess from the size.
         - "number": the table number written on a plan or sketch, else null.
         - Object types: BAR_FRONT (the bar counter), POOL (pool table), PILLAR, ENTRANCE, HOST_STAND, KITCHEN,
-          RESTROOMS, STAGE (a stage or bandstand for live music). Anything else fixed in the room (a jukebox, a piano, a fireplace) is CUSTOM with a short
+          RESTROOMS, STAGE (a stage or bandstand for live music), CARRY_OUT (a carry-out / to-go / pickup spot, where to-go orders wait; usually by the door). Anything else fixed in the room (a jukebox, a piano, a fireplace) is CUSTOM with a short
           name (1 to 3 words) and an icon from: ${FLOOR_OBJECT_ICONS.joinToString(", ")} ("star" if none fits).
           ${if (bilingual) "The store is bilingual: give nameEn and nameFr (Québec French) for CUSTOM objects."
             else "Write nameEn; leave nameFr \"\"."} Leave the names "" on the other types.

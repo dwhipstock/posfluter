@@ -34,6 +34,8 @@ import org.jetbrains.exposed.sql.update
 val FLOOR_OBJECT_TYPES = setOf(
     "POOL", "BAR_FRONT", "PILLAR",
     "ENTRANCE", "HOST_STAND", "KITCHEN", "RESTROOMS", "STAGE",
+    // a carry-out (to-go) spot: tappable in service, opens the carry-out orders
+    "CARRY_OUT",
     // made by the manager (by hand or "Add from photo"): label + icon + shape
     "CUSTOM",
 )
@@ -196,7 +198,7 @@ private fun validateObjectGeometry(x: Int, y: Int, width: Int, height: Int,
 }
 
 private fun requireObjectZone(zoneId: String): ResultRow =
-    Zones.selectAll().where { Zones.id eq zoneId }.firstOrNull()
+    Zones.selectAll().where { Zones.id eq zoneId }.firstOrNull()?.takeUnless { dev.dwhipstock.pos.orders.SaleLocations.isOffFloor(zoneId) }
         ?: throw NotFoundException("zone $zoneId not found")
 
 private fun requireObject(objectId: String): ResultRow =

@@ -126,6 +126,10 @@ enum class MessageKey(val id: String) {
     KIOSK_TICKET_TITLE("kiosk.ticket_title"),
     KIOSK_DINE_IN("kiosk.dine_in"),
     KIOSK_TAKE_OUT("kiosk.take_out"),
+    /** A restaurant's carry-out order on its bill / receipt: {0} = the number ("105"). */
+    RECEIPT_CARRY_OUT_ORDER("receipt.carry_out_order"),
+    /** The carry-out customer's name under it: {0} = the name. */
+    RECEIPT_CUSTOMER("receipt.customer"),
     KIOSK_PAY_AT_COUNTER("kiosk.pay_at_counter"),
     KIOSK_ID_CHECK("kiosk.id_check"),
     // the demo QR sheet (demo.mode=on), in the POS's current language

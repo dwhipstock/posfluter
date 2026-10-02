@@ -20,6 +20,7 @@ export 'store_profile.dart';
 part 'kitchen/kitchen_api.dart';
 part 'forecourt/forecourt_api.dart';
 part 'quickserve/quick_serve_api.dart';
+part 'carryout/carry_out_api.dart';
 
 /// Thin API client for the store server. The client owns NO money logic —
 /// pricing, tax, rounding all live server-side (architecture principle #2).
@@ -2463,7 +2464,7 @@ class FloorObject {
   final String id;
 
   /// POOL | BAR_FRONT | PILLAR | ENTRANCE | HOST_STAND | KITCHEN | RESTROOMS |
-  /// STAGE | CUSTOM
+  /// STAGE | CARRY_OUT (tappable in service: the carry-out orders) | CUSTOM
   final String type;
   final int x, y, width, height, rotation;
 
@@ -3461,6 +3462,9 @@ class ShiftReport {
   /// Quick-serve: paid counter orders eaten in / taken out (0 elsewhere).
   final int dineInCount, takeOutCount;
 
+  /// A restaurant's paid carry-out orders (0 elsewhere).
+  final int carryOutCount;
+
   /// Card tips on top of the bills (reader / Stripe), and per server.
   final int tipsCents;
   final List<ServerTips> tipsByServer;
@@ -3493,6 +3497,7 @@ class ShiftReport {
     this.cashRoundingCents = 0,
     this.dineInCount = 0,
     this.takeOutCount = 0,
+    this.carryOutCount = 0,
     this.tipsCents = 0,
     this.tipsByServer = const [],
     this.taxes = const [],
@@ -3522,6 +3527,7 @@ class ShiftReport {
     cashRoundingCents: j['cashRoundingCents'] ?? 0,
     dineInCount: j['dineInCount'] ?? 0,
     takeOutCount: j['takeOutCount'] ?? 0,
+    carryOutCount: j['carryOutCount'] ?? 0,
     tipsCents: j['tipsCents'] ?? 0,
     tipsByServer: ((j['tipsByServer'] as List?) ?? const [])
         .map((t) => ServerTips.fromJson(t))

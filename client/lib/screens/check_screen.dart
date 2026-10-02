@@ -46,11 +46,18 @@ class CheckScreen extends StatefulWidget {
   final void Function(bool paid)? onFinished;
   final Future<void> Function()? onDiscard;
   final Widget? panelTop;
+
+  /// A restaurant's carry-out order: the normal check (kitchen send, split,
+  /// bill), but at no table. [tableLabel] is its headline ("Order #105 ·
+  /// Carry-out"), it cannot be moved to a table, and the receipt screen
+  /// shows the headline.
+  final bool carryOut;
   const CheckScreen({
     super.key,
     required this.checkId,
     required this.tableLabel,
     this.counterOrder = false,
+    this.carryOut = false,
     this.createOrder,
     this.onFinished,
     this.onDiscard,
@@ -792,6 +799,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               // only while money is fluid: no tender, no split (server re-guards)
               onPressed:
                   !widget.counterOrder &&
+                      !widget.carryOut &&
                       check.status == 'OPEN' &&
                       check.split == null
                   ? () => _moveOrMerge(check)
@@ -1149,7 +1157,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       // hold line breaks): one line of text, 2 rows max
                       Text(
                         oneLine(
-                          widget.counterOrder
+                          widget.counterOrder || widget.carryOut
                               ? widget.tableLabel
                               : '${l.table} ${widget.tableLabel}',
                         ),
@@ -1174,7 +1182,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     ],
                   ),
                 ),
-                if (KitchenApi.enabled && !widget.counterOrder)
+                if (KitchenApi.enabled &&
+                    !widget.counterOrder &&
+                    !widget.carryOut)
                   TextButton.icon(
                     style: TextButton.styleFrom(
                       foregroundColor: T.onPrimary,
@@ -1196,7 +1206,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                       color: T.attention,
                     ),
                   ),
-                if (!widget.counterOrder)
+                if (!widget.counterOrder && !widget.carryOut)
                   IconButton(
                     icon: const Icon(LucideIcons.plusCircle),
                     color: T.onPrimary,
@@ -1448,6 +1458,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                           builder: (_) => TenderScreen(
                                             check: _check ?? check,
                                             counterOrder: widget.counterOrder,
+                                            headline: widget.carryOut
+                                                ? widget.tableLabel
+                                                : null,
                                           ),
                                         ),
                                       );

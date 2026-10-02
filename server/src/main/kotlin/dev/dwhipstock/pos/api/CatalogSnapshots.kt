@@ -130,7 +130,7 @@ internal fun allCategoriesJson(): JsonArray {
 /** Every zone's names in the store's other languages: `[{ id, names }]` (the first catalog.snapshot chunk). */
 internal fun allZoneNamesJson(): JsonArray? {
     val zoneNames = namesTable(Translations.ZONE) ?: return null
-    return JsonArray(Zones.selectAll().orderBy(Zones.sortOrder).map { z ->
+    return JsonArray(Zones.selectAll().where { Zones.id notInList dev.dwhipstock.pos.orders.SaleLocations.OFF_FLOOR }.orderBy(Zones.sortOrder).map { z ->
         buildJsonObject { put("id", z[Zones.id]); put("names", names(zoneNames[z[Zones.id]].orEmpty())) }
     })
 }

@@ -5,6 +5,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
+import '../carryout/carry_out_i18n.dart';
+import '../carryout/carry_out_screen.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
@@ -80,10 +82,23 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   // Feed every successful poll into the alert controller (arrival chime +
   // escalation), reusing this one poll rather than a second path.
   Future<List<Zone>> _fetchZones() async {
+    // carry-out rides the same poll: open count for the spots, header button
+    final carry = CarryOutApi.summary().catchError((_) => null);
     final zones = await Api.zones();
     _alerts.ingest(zones, DateTime.now());
     _lastZones = zones;
+    _carry = await carry;
     return zones;
+  }
+
+  /// The store's carry-out (open orders, spots, header button); null = none.
+  CarryOutSummary? _carry;
+
+  Future<void> _openCarryOut() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const CarryOutScreen()));
+    _reload();
   }
 
   Future<List<Zone>> _fetchZonesSerialized() async {
@@ -210,6 +225,14 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
         actions: [
           const LangActions(color: T.onPrimary),
           const SizedBox(width: 4),
+          // carry-out without a spot on the floor: only when the store turned it on
+          if (_carry?.headerButton ?? false)
+            _HeaderAction(
+              key: const Key('carryout-header'),
+              icon: LucideIcons.shoppingBag,
+              label: C.of(context).carryOut,
+              onPressed: _openCarryOut,
+            ),
           // the kitchen screen: only when the store has kitchen tickets on
           if (KitchenApi.enabled)
             _HeaderAction(
@@ -841,7 +864,9 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
   /// Service-mode floor plan: tables at their real coords; tap = open/resume
   /// the check, exactly like the old card grid.
   Widget _floorPlan(Zone zone, L l) {
-    if (zone.tables.isEmpty) {
+    final carry = _carry;
+    bool isSpot(FloorObject o) => carry != null && o.type == 'CARRY_OUT';
+    if (zone.tables.isEmpty && !zone.objects.any(isSpot)) {
       return Center(
         child: Text(
           l.emptyZoneOnboarding,
@@ -855,11 +880,24 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       contentBounds: floorContentBounds(zone),
       builder: (scale) => [
         // structural props first — they sit beneath the tables as quiet context
-        for (final o in zone.objects)
+        for (final o in zone.objects.where((o) => !isSpot(o)))
           placedObject(
             o,
             scale,
             child: FloorObjectShape(object: o, scale: scale),
+          ),
+        // a Carry-out spot is tappable: the carry-out orders (no table, so
+        // the room's occupied count and legend ignore it)
+        for (final o in zone.objects.where(isSpot))
+          placedObject(
+            o,
+            scale,
+            child: CarryOutSpot(
+              object: o,
+              scale: scale,
+              openCount: carry!.openCount,
+              onTap: _openCarryOut,
+            ),
           ),
         for (final t in zone.tables)
           placedTable(
@@ -1243,6 +1281,7 @@ class _HeaderAction extends StatelessWidget {
   /// Null when a parent (the overflow menu button) handles the tap.
   final VoidCallback? onPressed;
   const _HeaderAction({
+    super.key,
     required this.icon,
     required this.label,
     this.tooltip,
