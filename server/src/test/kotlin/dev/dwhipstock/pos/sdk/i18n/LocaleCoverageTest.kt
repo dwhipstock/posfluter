@@ -37,6 +37,7 @@ class LocaleCoverageTest {
         "Total", "Table", "Tables", "Subtotal", "Menu", "Terminal", "{0} {1}%", "{0} ({1}%)", "#{0}",
         "Tel. {0}", // the phone label: "Tel." in Spanish too
         "Table {0}", // the kitchen ticket's table line: "Table" in French too
+        "Happy hour", // a menu special's name: the loanword in French and Afrikaans too
     )
 
     /** Proper nouns and loanwords a French or Spanish string may carry. */

@@ -73,7 +73,11 @@ object ItemSchedules {
     }
 
     /** The venue's business moment now (or at [at]). */
-    fun moment(at: Instant = VenueClock.now()): MenuSpecials.Moment = MenuSpecials.moment(at, VenueClock.zone)
+    fun moment(at: Instant = VenueClock.now(clock)): MenuSpecials.Moment = MenuSpecials.moment(at, VenueClock.zone)
+
+    /** Test seam: the clock specials are priced by (a Tuesday, 5:59 pm…). */
+    @Volatile
+    var clock: java.time.Clock = java.time.Clock.systemUTC()
 
     /** A line's price as rung now: the unit price, and the special it came from (null = the menu price). */
     data class Priced(val unitPriceCents: Long, val regularCents: Long, val special: MenuSpecials.Special?) {

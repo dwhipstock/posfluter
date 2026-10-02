@@ -151,6 +151,14 @@
   .mcard .en { color: var(--muted); font-size: 12px; }
   .mcard .desc { color: var(--muted-strong); font-size: 12px; margin-top: 5px; min-height: 32px; }
   .mcard .price { color: var(--accent); font-size: 14px; margin-top: 2px; font-weight: 700; }
+  /* menu specials: the special's name and the struck menu price; a dish not sold today is greyed */
+  .mcard .special { display: inline-block; margin-top: 6px; background: #fff1d6; color: #7a3d00; border-radius: 6px;
+                    padding: 2px 7px; font-size: 12px; font-weight: 700; }
+  .mcard .price s { color: var(--muted-strong); font-weight: 500; margin-right: 4px; }
+  .mcard.off { opacity: .55; }
+  .mcard .days { display: inline-block; margin-top: 6px; background: var(--surface-alt); color: var(--ink);
+                 border-radius: 6px; padding: 2px 7px; font-size: 12px; font-weight: 700; }
+  .lspecial { color: #7a3d00; font-size: 12px; font-weight: 700; }
   .mcard select, .mcard input { width: 100%; min-height: 40px; margin-top: 7px; padding: 8px; background: var(--paper);
                                 border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
   .mcard .add { width: 100%; min-height: 44px; margin-top: 8px; background: var(--accent); color: var(--accent-ink);
@@ -348,7 +356,7 @@ const STR = {
     rounding: "Arrondi", cashTotal: "Total comptant",
     total: "Total", emptyCheck: "Aucun article — touchez « Ajouter des articles » pour commencer.",
     basket: "Panier", addToCheck: "Ajouter à l’addition", subtotal: "Sous-total", taxWord: "Taxes", note: "Note (facultative)",
-    add: "＋ Ajouter", sizes: "formats", viewBasket: "Voir le panier", addedOne: "Ajouté ✓",
+    add: "＋ Ajouter", sizes: "formats", days: ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"], daysShort: ["lun.","mar.","mer.","jeu.","ven.","sam.","dim."], daysAnd: " et ", onlyDays: d => `${d} seulement`, happyHour: "Happy hour", daySpecial: d => `Spécial du ${d}`, special: "Spécial", notToday: "Pas offert aujourd’hui", viewBasket: "Voir le panier", addedOne: "Ajouté ✓",
     linesAdded: "Ajouté à l’addition ✓", accepted: "Confirmé ✓", rejected: "Refusé",
     noPending: "Rien à confirmer", pendingSub: "Les commandes passées par les clients sur leur téléphone s’affichent ici.",
     cardPending: "Un paiement par carte est encore en cours sur le terminal — vérification…",
@@ -372,7 +380,7 @@ const STR = {
     rounding: "Rounding", cashTotal: "Cash total",
     total: "Total", emptyCheck: "No items yet — tap Add items to start",
     basket: "Basket", addToCheck: "Add to bill", subtotal: "Subtotal", taxWord: "Tax", note: "Note (optional)",
-    add: "＋ Add", sizes: "sizes", viewBasket: "View basket", addedOne: "Added ✓",
+    add: "＋ Add", sizes: "sizes", days: ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], daysShort: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], daysAnd: " & ", onlyDays: d => `${d} only`, happyHour: "Happy hour", daySpecial: d => `${d} special`, special: "Special", notToday: "Not sold today", viewBasket: "View basket", addedOne: "Added ✓",
     linesAdded: "Added to bill ✓", accepted: "Confirmed ✓", rejected: "Rejected",
     noPending: "Nothing to confirm", pendingSub: "Customer phone orders arrive here.",
     cardPending: "A card payment is still in progress on the reader — checking…",
@@ -396,7 +404,7 @@ const STR = {
     rounding: "Redondeo", cashTotal: "Total en efectivo",
     total: "Total", emptyCheck: "Todavía no hay productos: toca Agregar productos para empezar",
     basket: "Carrito", addToCheck: "Agregar a la cuenta", subtotal: "Subtotal", taxWord: "Impuesto", note: "Nota (opcional)",
-    add: "＋ Agregar", sizes: "tamaños", viewBasket: "Ver carrito", addedOne: "Agregado ✓",
+    add: "＋ Agregar", sizes: "tamaños", days: ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"], daysShort: ["lun","mar","mié","jue","vie","sáb","dom"], daysAnd: " y ", onlyDays: d => `Solo ${d}`, happyHour: "Hora feliz", daySpecial: d => `Especial del ${d}`, special: "Especial", notToday: "No se vende hoy", viewBasket: "Ver carrito", addedOne: "Agregado ✓",
     linesAdded: "Agregado a la cuenta ✓", accepted: "Confirmado ✓", rejected: "Rechazado",
     noPending: "Nada por confirmar", pendingSub: "Aquí llegan los pedidos que los clientes hacen desde su teléfono.",
     cardPending: "Un pago con tarjeta sigue en curso en el lector — comprobando…",
@@ -420,7 +428,7 @@ const STR = {
     rounding: "Rundung", cashTotal: "Summe bar",
     total: "Summe", emptyCheck: "Noch keine Artikel – „Artikel hinzufügen“ tippen",
     basket: "Warenkorb", addToCheck: "Auf die Rechnung", subtotal: "Zwischensumme", taxWord: "Steuer", note: "Notiz (optional)",
-    add: "＋ Hinzufügen", sizes: "Größen", viewBasket: "Warenkorb ansehen", addedOne: "Hinzugefügt ✓",
+    add: "＋ Hinzufügen", sizes: "Größen", days: ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"], daysShort: ["Mo","Di","Mi","Do","Fr","Sa","So"], daysAnd: " und ", onlyDays: d => `Nur ${d}`, happyHour: "Happy Hour", daySpecial: d => `${d}sangebot`, special: "Angebot", notToday: "Heute nicht im Angebot", viewBasket: "Warenkorb ansehen", addedOne: "Hinzugefügt ✓",
     linesAdded: "Auf die Rechnung gebucht ✓", accepted: "Bestätigt ✓", rejected: "Abgelehnt",
     noPending: "Nichts zu bestätigen", pendingSub: "Bestellungen der Gäste per Handy erscheinen hier.",
     cardPending: "Eine Kartenzahlung läuft noch am Kartenleser – wird geprüft …",
@@ -444,7 +452,7 @@ const STR = {
     rounding: "Afronding", cashTotal: "Totaal kontant",
     total: "Totaal", emptyCheck: "Nog geen items nie – tik “Voeg items by” om te begin",
     basket: "Mandjie", addToCheck: "Voeg by rekening", subtotal: "Subtotaal", taxWord: "Belasting", note: "Nota (opsioneel)",
-    add: "＋ Voeg by", sizes: "groottes", viewBasket: "Bekyk mandjie", addedOne: "Bygevoeg ✓",
+    add: "＋ Voeg by", sizes: "groottes", days: ["Maandag","Dinsdag","Woensdag","Donderdag","Vrydag","Saterdag","Sondag"], daysShort: ["Ma","Di","Wo","Do","Vr","Sa","So"], daysAnd: " en ", onlyDays: d => `Net ${d}`, happyHour: "Happy hour", daySpecial: d => `${d}-spesiaal`, special: "Spesiaal", notToday: "Word nie vandag verkoop nie", viewBasket: "Bekyk mandjie", addedOne: "Bygevoeg ✓",
     linesAdded: "By rekening gevoeg ✓", accepted: "Bevestig ✓", rejected: "Afgekeur",
     noPending: "Niks om te bevestig nie", pendingSub: "Bestellings wat gaste op hul foon plaas, verskyn hier.",
     cardPending: "’n Kaartbetaling is nog besig op die kaartleser — word nagegaan…",
@@ -566,7 +574,7 @@ function checkCart() {
   for (const c of cart) {
     const item = items.find(i => i.id === c.itemId);
     const v = item && item.variants.find(x => x.id === c.variantId);
-    if (!item || item.active === false || !v) {
+    if (!item || item.active === false || item.availableNow === false || !v) {
       if (c.status !== "gone") { c.status = "gone"; changed = true; }
     } else if (v.priceCents !== c.priceCents) {
       if (c.status !== "repriced" || c.newPriceCents !== v.priceCents) { c.status = "repriced"; c.newPriceCents = v.priceCents; changed = true; }
@@ -1044,7 +1052,7 @@ function renderCheck() {
   const body = document.getElementById("check-body");
 
   const lineRow = l => `
-    <div class="row"><span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
+    <div class="row"><span class="nm">${l.qty} × ${lineName(l)}${l.special ? `<div class="lspecial">${esc(specialName(l.special))}</div>` : ""}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
     <span>${money(l.lineTotalCents)}</span></div>`;
 
   const feeRow = f => `
@@ -1158,23 +1166,48 @@ function renderMenu() {
   document.getElementById("chips").innerHTML = cats.map(c =>
     `<button class="chip ${c.id === cat ? "on" : ""}" onclick="pickCat(${jsArg(c.id)})">${esc(catName(c))}</button>`).join("");
   document.getElementById("mgrid").innerHTML = items.filter(i => i.category === cat).map(i => `
-    <div class="mcard">
+    <div class="mcard${i.availableNow === false ? " off" : ""}">
       ${i.photoVersion ? `<img class="photo" loading="lazy" src="/photos/${encodeURIComponent(i.id)}?v=${i.photoVersion}&w=512" data-fallback="${esc(i.abbrev)}" onerror="photoFallback(this)">` : `<div class="ph">${esc(i.abbrev)}</div>`}
       <div class="fr">${esc(iname(i))}</div>
       <div class="en">${esc(inameAlt(i))}</div>
       <div class="desc">${esc(idesc(i))}</div>
-      <div class="price">${i.variants.length === 1 ? money(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
-      ${i.variants.length > 1 ? `<select id="v-${esc(i.id)}">` + i.variants.map(v => `<option value="${esc(v.id)}">${esc(vlabel(v))} ${money(v.priceCents)}</option>`).join("") + `</select>` : ""}
+      ${i.availableNow === false && i.availableDays ? `<div class="days">${esc(onlyDaysText(i.availableDays))}</div>` : ""}
+      ${i.availableNow !== false && onSpecial(i) ? `<div class="special">${esc(specialName(onSpecial(i).special))}</div>` : ""}
+      <div class="price">${i.variants.length === 1 ? priceHtml(i.variants[0]) : i.variants.length + " " + T().sizes}</div>
+      ${i.availableNow === false ? "" : `
+      ${i.variants.length > 1 ? `<select id="v-${esc(i.id)}">` + i.variants.map(v => `<option value="${esc(v.id)}">${esc(vlabel(v))} ${money(v.priceCents)}${v.special ? " · " + esc(specialName(v.special)) : ""}</option>`).join("") + `</select>` : ""}
       <input type="text" id="n-${esc(i.id)}" placeholder="${T().note}">
-      <button class="add" onclick="addToCart(${jsArg(i.id)})">${T().add}</button>
+      <button class="add" onclick="addToCart(${jsArg(i.id)})">${T().add}</button>`}
     </div>`).join("");
   for (const id in draft) { const el = document.getElementById(id); if (el) el.value = draft[id]; }
 }
 function pickCat(id) { cat = id; renderMenu(); }
+// ---- menu specials ----------------------------------------------------------
+const DAY_CODES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+/** A special's name in the server's language: its own name, else "Happy hour" / "Tuesday special". */
+function specialName(sp) {
+  if (!sp) return "";
+  if (sp.label) return sp.label;
+  if (sp.from) return T().happyHour;
+  const days = sp.days || [];
+  if (days.length === 1 && DAY_CODES.includes(days[0])) return T().daySpecial(T().days[DAY_CODES.indexOf(days[0])]);
+  return T().special;
+}
+/** "Fri & Sat only" */
+function onlyDaysText(days) {
+  const names = (days || []).filter(d => DAY_CODES.includes(d)).map(d => T().daysShort[DAY_CODES.indexOf(d)]);
+  if (!names.length) return "";
+  const list = names.length === 1 ? names[0] : names.slice(0, -1).join(", ") + T().daysAnd + names[names.length - 1];
+  return T().onlyDays(list);
+}
+const onSpecial = i => (i.variants || []).find(v => typeof v.regularPriceCents === "number");
+const priceHtml = v => typeof v.regularPriceCents === "number"
+  ? `<s>${money(v.regularPriceCents)}</s>${money(v.priceCents)}` : money(v.priceCents);
 
 function addToCart(itemId) {
   const item = items.find(i => i.id === itemId);
   if (!item) return;
+  if (item.availableNow === false) { toast(T().notToday, true); return; }
   const sel = document.getElementById("v-" + itemId);
   const variant = sel ? item.variants.find(v => v.id === sel.value) : item.variants[0];
   const noteEl = document.getElementById("n-" + itemId);

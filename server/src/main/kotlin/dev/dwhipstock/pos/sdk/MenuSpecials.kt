@@ -213,7 +213,7 @@ object MenuSpecials {
         return when (names.size) {
             0 -> ""
             1 -> names[0]
-            else -> names.dropLast(1).joinToString(", ") + Messages.get(MessageKey.SPECIAL_DAYS_AND, locale) + names.last()
+            else -> Messages.get(MessageKey.SPECIAL_DAYS_AND, locale, names.dropLast(1).joinToString(", "), names.last())
         }
     }
 

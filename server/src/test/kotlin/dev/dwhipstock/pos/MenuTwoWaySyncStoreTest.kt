@@ -220,8 +220,9 @@ class MenuTwoWaySyncStoreTest {
         assertEquals(1200, price("nachos-ab12:regular"))
         assertEquals("Nachos con queso", transaction { Translations.get(Translations.ITEM, "nachos-ab12", "es") })
         assertEquals("Botanas", transaction { Translations.get(Translations.CATEGORY, "snacks-x7k2", "es") })
-        // nothing was minted by the store for any of it
-        assertTrue(transaction { MenuClock.regs("item", "nachos-ab12").values.all { it.hlc == stamp } })
+        // nothing was minted by the store for any of it (fields this feed entry doesn't
+        // stamp — the specials, from an older cloud — stay "before sync")
+        assertTrue(transaction { MenuClock.regs("item", "nachos-ab12").values.all { it.hlc == stamp || it.hlc == Hlc.LEGACY } })
     }
 
     @Test

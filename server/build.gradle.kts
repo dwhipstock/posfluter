@@ -64,3 +64,11 @@ tasks.register<JavaExec>("runTerminal") {
     mainClass.set("dev.dwhipstock.pos.tools.TerminalSimulatorMainKt")
     standardInput = System.`in`
 }
+
+// The demo's day specials (customers/copperlantern/CopperLanternSpecials) change
+// prices by the venue clock (Tuesday burgers, weekday happy hour): off in the
+// suite, so its fixed totals stay fixed whatever day CI runs; the specials
+// tests seed them themselves.
+tasks.withType<Test>().configureEach {
+    environment("POS_DEMO_SPECIALS", "off")
+}

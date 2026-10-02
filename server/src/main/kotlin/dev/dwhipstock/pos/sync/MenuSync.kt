@@ -57,7 +57,19 @@ object MenuMerge {
     fun regsOf(entity: String, obj: JsonObject): Map<String, Reg> {
         val clock = MenuFields.clock(obj)
         val fields = MenuFields.flat(entity, obj, clock.keys.filter { it.startsWith(MenuFields.NAMES) })
-        return fields.mapValues { (f, v) -> Reg(v, clock[f] ?: Hlc.LEGACY) }
+        return fields.mapValues { (f, v) -> Reg(canonical(entity, f, v), clock[f] ?: Hlc.LEGACY) }
+    }
+
+    /**
+     * The specials' values in their canonical text (CONTRACT §10 "Specials"):
+     * the cloud's JSONB may hand them back with their keys in another order,
+     * which must not read as an edit (and bounce back up).
+     */
+    private fun canonical(entity: String, f: String, v: JsonElement): JsonElement = when {
+        entity != MenuFields.ITEM || v is JsonNull -> v
+        f == "specials" -> dev.dwhipstock.pos.sdk.MenuSpecials.specialsJson(dev.dwhipstock.pos.sdk.MenuSpecials.specialsOf(v))
+        f == "availableDays" -> dev.dwhipstock.pos.sdk.MenuSpecials.daysJson(dev.dwhipstock.pos.sdk.MenuSpecials.daysOf(v))
+        else -> v
     }
 
     /**

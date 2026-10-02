@@ -53,6 +53,12 @@
   .card .en { color: var(--muted); font-size: 12px; margin-top: 1px; }
   .card .desc { color: var(--muted-strong); font-size: 12px; margin-top: 5px; min-height: 32px; }
   .card .price { color: var(--accent); font-size: 14px; margin-top: 2px; font-weight: 700; }
+  /* menu specials: the special's name, and the menu price it replaces (dark, struck) */
+  .card .special { display: inline-block; margin-top: 6px; background: #fff1d6; color: #7a3d00; border-radius: 6px;
+                   padding: 2px 7px; font-size: 12px; font-weight: 700; }
+  .card .price s { color: var(--muted-strong); font-weight: 500; margin-right: 4px; }
+  .chip.specials { border-color: #d9a24a; }
+  .chip.specials.on { background: #7a3d00; border-color: #7a3d00; color: #fff; }
   .card select, .card input[type=text] { width: 100%; min-height: 40px; margin-top: 7px; padding: 8px;
                                         background: var(--paper); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
   .card .add { width: 100%; min-height: 44px; margin-top: 8px; background: var(--accent); color: var(--accent-ink);
@@ -175,12 +181,14 @@ const TABLE_LABEL = "{{TABLE_LABEL}}";
 const savedLang = (() => { try { return localStorage.getItem("menu_lang"); } catch (_) { return null; } })();
 let lang = savedLang || "en";
 const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans" };
+/** The "Today's specials" chip (not a category id: those are slugs). */
+const SPECIALS = "__specials__";
 const STR = {
   fr: {
     orderFromPhone: "Table " + TABLE_LABEL + " — commandez de votre téléphone",
     langLabel: "Langue",
     basket: "Panier", send: "Envoyer la commande", note: "Note (facultative)",
-    addToBasket: "＋ Ajouter au panier", sizes: "formats",
+    addToBasket: "＋ Ajouter au panier", sizes: "formats", days: ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"], happyHour: "Happy hour", daySpecial: d => `Spécial du ${d}`, special: "Spécial", todaysSpecials: "Spéciaux du jour",
     doneTitle: "Commande envoyée !", doneText: "Notre équipe confirmera votre commande sous peu.",
     orderMore: "Commander autre chose", failed: "L’envoi a échoué. Veuillez réessayer.",
     billLocked: "Votre addition est en cours de paiement — adressez-vous au personnel.",
@@ -198,7 +206,7 @@ const STR = {
     orderFromPhone: "Table " + TABLE_LABEL + " — order from your phone",
     langLabel: "Language",
     basket: "Basket", send: "Send order", note: "Note (optional)",
-    addToBasket: "＋ Add to basket", sizes: "sizes",
+    addToBasket: "＋ Add to basket", sizes: "sizes", days: ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], happyHour: "Happy hour", daySpecial: d => `${d} special`, special: "Special", todaysSpecials: "Today’s specials",
     doneTitle: "Order sent!", doneText: "Staff will confirm your order shortly.",
     orderMore: "Order more", failed: "Failed to send, please retry",
     billLocked: "Bill is being paid — please ask staff",
@@ -216,7 +224,7 @@ const STR = {
     orderFromPhone: "Mesa " + TABLE_LABEL + " — pida desde su teléfono",
     langLabel: "Idioma",
     basket: "Carrito", send: "Enviar pedido", note: "Nota (opcional)",
-    addToBasket: "＋ Añadir al carrito", sizes: "tamaños",
+    addToBasket: "＋ Añadir al carrito", sizes: "tamaños", days: ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"], happyHour: "Hora feliz", daySpecial: d => `Especial del ${d}`, special: "Especial", todaysSpecials: "Especiales de hoy",
     doneTitle: "¡Pedido enviado!", doneText: "El personal confirmará su pedido en breve.",
     orderMore: "Pedir algo más", failed: "No se pudo enviar. Inténtelo de nuevo.",
     billLocked: "Su cuenta se está pagando; consulte al personal.",
@@ -234,7 +242,7 @@ const STR = {
     orderFromPhone: "Tisch " + TABLE_LABEL + " – bestellen Sie per Handy",
     langLabel: "Sprache",
     basket: "Warenkorb", send: "Bestellung senden", note: "Notiz (optional)",
-    addToBasket: "＋ In den Warenkorb", sizes: "Größen",
+    addToBasket: "＋ In den Warenkorb", sizes: "Größen", days: ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"], happyHour: "Happy Hour", daySpecial: d => `${d}sangebot`, special: "Angebot", todaysSpecials: "Heutige Angebote",
     doneTitle: "Bestellung gesendet!", doneText: "Unser Team bestätigt Ihre Bestellung in Kürze.",
     orderMore: "Mehr bestellen", failed: "Senden fehlgeschlagen. Bitte versuchen Sie es erneut.",
     billLocked: "Ihre Rechnung wird gerade bezahlt – bitte wenden Sie sich an das Personal.",
@@ -252,7 +260,7 @@ const STR = {
     orderFromPhone: "Tafel " + TABLE_LABEL + " – bestel met u foon",
     langLabel: "Taal",
     basket: "Mandjie", send: "Stuur bestelling", note: "Nota (opsioneel)",
-    addToBasket: "＋ Voeg by mandjie", sizes: "groottes",
+    addToBasket: "＋ Voeg by mandjie", sizes: "groottes", days: ["Maandag","Dinsdag","Woensdag","Donderdag","Vrydag","Saterdag","Sondag"], happyHour: "Happy hour", daySpecial: d => `${d}-spesiaal`, special: "Spesiaal", todaysSpecials: "Vandag se spesiale",
     doneTitle: "Bestelling gestuur!", doneText: "Ons personeel sal u bestelling binnekort bevestig.",
     orderMore: "Bestel nog", failed: "Kon nie stuur nie. Probeer asseblief weer.",
     billLocked: "U rekening word tans betaal – vra asseblief die personeel.",
@@ -331,6 +339,7 @@ async function load() {
     const [itemsResponse, categoriesResponse] = await Promise.all([fetch("/items"), fetch("/categories")]);
     if (!itemsResponse.ok || !categoriesResponse.ok) throw new Error("catalog request failed");
     [items, categories] = await Promise.all([itemsResponse.json(), categoriesResponse.json()]);
+    items = sellable(items);
     cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
   } catch (_) {
     menuError = true;
@@ -354,9 +363,14 @@ function render() {
   renderBill();
 
   const cats = categories.filter(c => items.some(i => i.category === c.id)).map(c => c.id);
-  document.getElementById("chips").innerHTML = cats.map(c =>
+  // "Today's specials" first, while any is on
+  const specials = items.filter(onSpecial);
+  if (cat === SPECIALS && !specials.length) cat = cats[0];
+  document.getElementById("chips").innerHTML = (specials.length
+    ? `<button class="chip specials ${cat === SPECIALS ? "on" : ""}" onclick="pickCat(SPECIALS)">★ ${esc(T().todaysSpecials)}</button>` : "") +
+    cats.map(c =>
     `<button class="chip ${c === cat ? "on" : ""}" onclick="pickCat(${jsArg(c)})">${esc(catName(c))}</button>`).join("");
-  const visibleItems = items.filter(i => i.category === cat);
+  const visibleItems = cat === SPECIALS ? specials : items.filter(i => i.category === cat);
   document.getElementById("grid").innerHTML = menuError
     ? `<div class="menu-status">${T().menuUnavailable}</div>`
     : !items.length
@@ -368,9 +382,10 @@ function render() {
       <div class="fr">${esc(iname(i))}</div>
       <div class="en">${esc(inameAlt(i))}</div>
       <div class="desc">${esc(idesc(i))}</div>
-      <div class="price">${i.variants.length === 1 ? cad(i.variants[0].priceCents) : i.variants.length + " " + T().sizes}</div>
+      ${onSpecial(i) ? `<div class="special">${esc(specialName(onSpecial(i).special))}</div>` : ""}
+      <div class="price">${i.variants.length === 1 ? priceHtml(i.variants[0]) : i.variants.length + " " + T().sizes}</div>
       ${i.variants.length > 1 ? `<select id="v-${esc(i.id)}">` + i.variants.map(v =>
-        `<option value="${esc(v.id)}">${esc(vlabel(v))} ${cad(v.priceCents)}</option>`).join("") + `</select>` : ""}
+        `<option value="${esc(v.id)}">${esc(vlabel(v))} ${cad(v.priceCents)}${v.special ? " · " + esc(specialName(v.special)) : ""}</option>`).join("") + `</select>` : ""}
       <input type="text" id="n-${esc(i.id)}" placeholder="${T().note}">
       <button class="add" onclick="add(${jsArg(i.id)})">${T().addToBasket}</button>
     </div>`).join("");
@@ -480,8 +495,9 @@ async function reloadMenu() {
     const [ir, cr] = await Promise.all([fetch("/items"), fetch("/categories")]);
     if (!ir.ok || !cr.ok) return;
     [items, categories] = await Promise.all([ir.json(), cr.json()]);
+    items = sellable(items);
     menuError = false;
-    if (!items.some(i => i.category === cat)) cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
+    if (cat !== SPECIALS && !items.some(i => i.category === cat)) cat = categories.find(c => items.some(i => i.category === c.id))?.id ?? items[0]?.category;
   } catch (_) { return; }
   const changed = checkBasket();
   render();
@@ -650,6 +666,25 @@ function photoFallback(img) {
   img.replaceWith(d);
 }
 function pickCat(c) { cat = c; render(); }
+/** Menu specials: a special's name in the guest's language (its own name, else "Happy hour" / "Tuesday special"). */
+function specialName(sp) {
+  if (!sp) return "";
+  if (sp.label) return sp.label;
+  if (sp.from) return T().happyHour;
+  const days = sp.days || [];
+  if (days.length === 1) {
+    const i = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].indexOf(days[0]);
+    if (i >= 0) return T().daySpecial(T().days[i]);
+  }
+  return T().special;
+}
+/** The size on special now, if any (its price is the special's; regularPriceCents the menu's). */
+const onSpecial = i => (i.variants || []).find(v => typeof v.regularPriceCents === "number");
+/** Price text: the special price after the struck menu price. */
+const priceHtml = v => typeof v.regularPriceCents === "number"
+  ? `<s>${cad(v.regularPriceCents)}</s>${cad(v.priceCents)}` : cad(v.priceCents);
+/** Only what the store sells today: a dish sold on other days (prime rib on Fridays) isn't shown. */
+const sellable = list => (list || []).filter(i => i.availableNow !== false);
 const lineName = l => {
   const name = nm(l, l.nameFr, l.nameEn);
   const variant = l.variantLabelFr || l.variantLabelEn
