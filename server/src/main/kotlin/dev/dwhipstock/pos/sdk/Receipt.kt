@@ -100,6 +100,8 @@ data class ReceiptItem(
     val names: Map<String, String> = emptyMap(),
     /** The same for the size label (only when it prints). */
     val variantNames: Map<String, String> = emptyMap(),
+    /** Rung at a menu special: printed under the line ("Happy hour", "Tuesday special"). */
+    val special: MenuSpecials.Tag? = null,
 )
 
 /** Fuel on a receipt: "Pump 3 · 10.052 gal @ 3.299/gal", or a prepay for a pump. */
@@ -271,6 +273,7 @@ object ReceiptRenderer {
         for (item in receipt.items) {
             add(PrintLine.KeyValue(itemText(item, locale), item.lineTotal.let(policy::money)))
             if (item.qty > 1) add(PrintLine.Text("  @${item.unitPrice.let(policy::money)}"))
+            item.special?.let { add(PrintLine.Text("  * " + MenuSpecials.label(it, locale))) }
             item.note?.let { add(PrintLine.Text("  • $it")) }
             item.fuel?.let { f ->
                 val v = f.volumeMilli; val p = f.priceMills

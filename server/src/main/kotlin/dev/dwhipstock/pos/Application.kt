@@ -222,10 +222,14 @@ fun Application.module(
             sagePoppy -> SagePoppySeed.seedIfEmpty()
             venue.quickServe -> {
                 dev.dwhipstock.pos.customers.copperlantern.CopperLanternExpressSeed.seedIfEmpty()
+                // the demo's specials (once): a Tuesday burger, weekday happy hour
+                dev.dwhipstock.pos.customers.copperlantern.CopperLanternSpecials.seed(venue)
                 CopperLanternSeed.seedTranslations(express = true)
             }
             else -> {
                 CopperLanternSeed.seedIfEmpty(venue)
+                // the demo's specials (once): Prime Rib Fri & Sat, Sunday Roast, a Tuesday burger, weekday happy hour
+                dev.dwhipstock.pos.customers.copperlantern.CopperLanternSpecials.seed(venue)
                 CopperLanternSeed.seedTranslations()
             }
         }

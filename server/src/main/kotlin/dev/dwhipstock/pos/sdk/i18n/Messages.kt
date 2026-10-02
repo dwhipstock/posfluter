@@ -158,6 +158,16 @@ enum class MessageKey(val id: String) {
     DEMO_ASK_PRESENTER("demo.ask_presenter"),
     DEMO_WIFI_TITLE("demo.wifi.title"),
     DEMO_WIFI_ABOUT("demo.wifi.about"),
+    // menu specials ([dev.dwhipstock.pos.sdk.MenuSpecials]): day names and a special's name
+    DAY_MON("day.mon"), DAY_TUE("day.tue"), DAY_WED("day.wed"), DAY_THU("day.thu"),
+    DAY_FRI("day.fri"), DAY_SAT("day.sat"), DAY_SUN("day.sun"),
+    /** The end of a list of days: {0} = the others ("Monday, Tuesday"), {1} = the last: "{0} & {1}". */
+    SPECIAL_DAYS_AND("special.days_and"),
+    SPECIAL_EVERY_DAY("special.every_day"),
+    SPECIAL_HAPPY_HOUR("special.happy_hour"),
+    /** {0} = the day ("Tuesday"): "Tuesday special". */
+    SPECIAL_DAY("special.day"),
+    SPECIAL_GENERIC("special.generic"),
 }
 
 /**

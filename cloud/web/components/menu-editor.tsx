@@ -36,6 +36,7 @@ import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { ItemPhotoPanel } from "@/components/ai-photo";
 import { useAiStatus } from "@/components/menu-ai";
+import { SpecialsSection } from "@/components/menu-specials";
 
 type T = ReturnType<typeof useT>;
 
@@ -160,6 +161,7 @@ const ERR_KEY: Record<DraftError, MsgKey> = {
   size_required: "menu_err_size_required",
   size_label_required: "menu_err_size_label_required",
   price_invalid: "menu_err_price_invalid",
+  specials_invalid: "menu_err_specials_invalid",
 };
 
 /** Create (item = null) or edit one item. */
@@ -374,6 +376,17 @@ function ItemForm({
             <Plus /> {t("menu_add_size")}
           </Button>
         </div>
+
+        {item ? (
+          <SpecialsSection
+            draft={draft}
+            onChange={set}
+            showErrors={errors.includes("specials_invalid")}
+            sizeLabel={(v) => name(v.labelFr || v.labelEn, v.labelEn, v.names)}
+          />
+        ) : (
+          <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">{t("menu_special_save_first")}</p>
+        )}
 
         {errors.length > 0 && (
           <ul className="space-y-0.5 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">

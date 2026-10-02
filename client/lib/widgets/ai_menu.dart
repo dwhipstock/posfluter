@@ -609,8 +609,14 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     );
   }
 
-  String _value(L l, String field, String v) => field == 'available'
-      ? (v == 'true' ? l.aiMenuField('available') : l.offSale)
+  // 'available' is on/off sale ("true"/"false") or, for a day-only item, the
+  // store's own words ("Only Fri & Sat"), shown as they are
+  String _value(L l, String field, String v) => field != 'available'
+      ? v
+      : v == 'true'
+      ? l.aiMenuField('available')
+      : v == 'false'
+      ? l.offSale
       : v;
 
   Widget _historyView(L l) {

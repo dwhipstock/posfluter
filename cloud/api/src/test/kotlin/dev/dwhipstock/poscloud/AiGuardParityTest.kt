@@ -66,7 +66,13 @@ class AiGuardParityTest {
         assertEquals(emptyMap(), fine.filter { AiGuard.checkText(it) != null }.associateWith { AiGuard.checkText(it) })
         val requests = listOf("raise the poutine by one dollar", "86 the salmon", "ajoute une salade César à 14",
             "añade una ensalada César a 14", "Caesar Salad für 14 unter Salate hinzufügen", "voeg ’n Caesar-slaai by vir 14",
-            "the secret sauce burger is now 16", "take the Java blend off the menu", "translate the menu into Spanish and German")
+            "the secret sauce burger is now 16", "take the Java blend off the menu", "translate the menu into Spanish and German",
+            // menu specials, in every language
+            "prime rib only on Fridays and Saturdays", "burgers $9.95 on Tuesdays", "happy hour 3-6 beers $5",
+            "côte de bœuf seulement le vendredi et le samedi", "burgers à 9,95 $ le mardi", "happy hour de 15 h à 18 h, bières à 5 $",
+            "costilla solo los viernes y sábados", "hamburguesas a 9,95 $ los martes", "hora feliz de 3 a 6, cervezas a 5 $",
+            "Prime Rib nur freitags und samstags", "Burger dienstags für 9,95 $", "Happy Hour 15 bis 18 Uhr, Bier für 5 $",
+            "ribbetjie net Vrydae en Saterdae", "burgers R9,95 op Dinsdae", "happy hour 3 tot 6, bier vir 5 dollar")
         assertEquals(emptyList(), requests.filter { AiGuard.offTopic(it) || AiGuard.hatefulRequest(it) })
     }
 

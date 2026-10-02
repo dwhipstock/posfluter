@@ -135,6 +135,9 @@ object CheckLines : IntIdTable("check_lines") {
     val namesJson = text("names_json").nullable().databaseGenerated()
     val variantNamesJson = text("variant_names_json").nullable().databaseGenerated()
     val showVariant = bool("show_variant").nullable().databaseGenerated()
+    // rung at a menu special (064): the menu price it replaced and which special (MenuSpecials.Tag JSON)
+    val regularUnitPriceCents = long("regular_unit_price_cents").nullable().databaseGenerated()
+    val specialJson = text("special_json").nullable().databaseGenerated()
 }
 
 /**

@@ -3,6 +3,16 @@
 // API calls that turn the item as loaded into the item as edited. No React,
 // no fetch: lib/menu-edit.test.ts covers it.
 import type { MenuItem, MenuVariant } from "./types";
+import {
+  availableDaysValue,
+  loadedSpecials,
+  normalizeDays,
+  sameValue,
+  specialDraftOf,
+  specialsValue,
+  validateSpecials,
+  type SpecialDraft,
+} from "./menu-specials";
 
 export interface VariantDraft {
   /** The size's id; absent for a size added in this edit. */
@@ -26,9 +36,13 @@ export interface ItemDraft {
   active: boolean;
   isAlcohol: boolean;
   variants: VariantDraft[];
+  /** Sold only on these days; [] = every day. */
+  availableDays: string[];
+  /** Day prices (an existing item only: they are keyed by size id). */
+  specials: SpecialDraft[];
 }
 
-export type DraftError = "name_required" | "category_required" | "size_required" | "size_label_required" | "price_invalid";
+export type DraftError = "name_required" | "category_required" | "size_required" | "size_label_required" | "price_invalid" | "specials_invalid";
 
 export interface PlannedCall {
   method: "POST" | "PATCH" | "DELETE";
@@ -84,7 +98,14 @@ export function draftFromItem(item: MenuItem): ItemDraft {
         price: centsToInput(v.priceCents),
         names: { ...(v.names ?? {}) },
       })),
+    availableDays: normalizeDays(item.availableDays),
+    specials: (item.specials ?? []).map(specialDraftOf),
   };
+}
+
+/** The draft's sizes that already exist (a special price needs a size id). */
+export function savedSizeIds(d: ItemDraft): string[] {
+  return d.variants.map((v) => v.id).filter((id): id is string => !!id);
 }
 
 export function emptyDraft(categoryId: string, defaultSize: string): ItemDraft {
@@ -98,6 +119,8 @@ export function emptyDraft(categoryId: string, defaultSize: string): ItemDraft {
     active: true,
     isAlcohol: false,
     variants: [{ labelEn: defaultSize, labelFr: "", price: "", names: {} }],
+    availableDays: [],
+    specials: [],
   };
 }
 
@@ -109,6 +132,7 @@ export function validateDraft(d: ItemDraft): DraftError[] {
   if (d.variants.length === 0) out.push("size_required");
   if (d.variants.some((v) => !v.labelEn.trim())) out.push("size_label_required");
   if (d.variants.some((v) => parseCents(v.price) === null)) out.push("price_invalid");
+  if (validateSpecials(d.specials, savedSizeIds(d)).some((e) => e.length > 0)) out.push("specials_invalid");
   return out;
 }
 
@@ -169,6 +193,11 @@ export function planEdit(item: MenuItem, d: ItemDraft): PlannedCall[] {
   if (d.isAlcohol !== item.isAlcohol) patch.isAlcohol = d.isAlcohol;
   const names = namesDiff(item.names, d.names);
   if (names) patch.names = names;
+  // specials: each list is one value, sent whole when it changed
+  const days = availableDaysValue(d.availableDays);
+  if (!sameValue(days, availableDaysValue(item.availableDays ?? []))) patch.availableDays = days;
+  const specials = specialsValue(d.specials, savedSizeIds(d));
+  if (!sameValue(specials, loadedSpecials(item.specials))) patch.specials = specials;
   if (Object.keys(patch).length) calls.push({ method: "PATCH", path: base, body: patch });
 
   const byId = new Map<string, MenuVariant>(item.variants.map((v) => [v.id, v]));

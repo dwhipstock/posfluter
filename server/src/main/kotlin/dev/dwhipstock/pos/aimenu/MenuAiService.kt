@@ -13,6 +13,9 @@ import dev.dwhipstock.pos.api.VariantPatchRequest
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.ItemSchedules
+import dev.dwhipstock.pos.sdk.MenuSpecials
+import kotlinx.serialization.json.JsonPrimitive
 import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.sdk.MenuAiConfig
@@ -592,7 +595,7 @@ class MenuAiService(
         val oldPrices = parsed.ops.filterIsInstance<MenuOp.UpdateItem>().flatMap { it.prices.keys }
             .associateWith { facts.variantPrices[it] ?: 0L }
         proposals[proposalId] = Proposal(ops, source, parsed.summary, now(), oldPrices)
-        val changes = transaction { ops.map { (id, op) -> preview(id, op, ops) } }
+        val changes = transaction { ops.map { (id, op) -> preview(id, op, ops, (who?.lang ?: "en").lowercase()) } }
         log.info("AI menu via ${p.id}/${p.model}: ${changes.size} change(s), ${parsed.rejected.size} rejected, ${elapsed}ms")
         val bulk = bulkReasons(parsed.ops, oldPrices)
         return MenuProposalDto(proposalId, p.id, p.model, parsed.summary, changes, parsed.rejected, elapsed,
@@ -678,7 +681,7 @@ class MenuAiService(
             - Mark beer, wine, spirits and cocktails "isAlcohol": true.
             - $lang
             - If a menu request is unclear or impossible, return "ops": [].
-        """.trimIndent()
+        """.trimIndent() + "\n" + MenuChangeSetParser.SPECIALS_PROMPT
     }
 
     /** The live menu as the model sees it, and the ids it may use. Call inside a transaction. */
@@ -690,6 +693,8 @@ class MenuAiService(
         // for the rename language-bleed guard: today's names, core languages and any extra ones
         val itemNames = items.associate { it[Items.id] to (it[Items.nameEn] to it[Items.nameFr]) }
         val categoryNames = cats.associate { it[Categories.id] to (it[Categories.nameEn] to it[Categories.nameFr]) }
+        // menu specials: what each item has now (the model keeps or changes them)
+        val schedules = ItemSchedules.all()
         val extraNames = if (Translations.present())
             Translations.of(Translations.ITEM).mapKeys { "item:${it.key}" } +
                 Translations.of(Translations.CATEGORY).mapKeys { "category:${it.key}" }
@@ -707,6 +712,14 @@ class MenuAiService(
                     put("id", i[Items.id]); put("category", i[Items.categoryId])
                     put("nameEn", i[Items.nameEn]); put("nameFr", i[Items.nameFr])
                     if (!i[Items.active]) put("active", false)
+                    schedules[i[Items.id]]?.let { sc ->
+                        if (sc.availableDays.isNotEmpty()) putJsonArray("availableDays") { sc.availableDays.forEach { add(JsonPrimitive(it)) } }
+                        if (sc.specials.isNotEmpty()) putJsonArray("specials") { sc.specials.forEach { sp -> addJsonObject {
+                            putJsonArray("days") { sp.days.forEach { add(JsonPrimitive(it)) } }
+                            sp.from?.let { put("from", it) }; sp.to?.let { put("to", it) }; sp.label?.let { put("label", it) }
+                            putJsonArray("prices") { sp.prices.forEach { (vid, c) -> addJsonObject { put("variant", vid); put("priceMinor", c) } } }
+                        } } }
+                    }
                     putJsonArray("variants") {
                         variants[i[Items.id]].orEmpty().forEach { v -> addJsonObject {
                             put("id", v[ItemVariants.id]); put("labelEn", v[ItemVariants.labelEn])
@@ -722,7 +735,9 @@ class MenuAiService(
             variantPrices = variants.values.flatten().associate { it[ItemVariants.id] to it[ItemVariants.priceCents] },
             maxPriceMinor = 1000L * Math.pow(10.0, fractionDigits.toDouble()).toLong(),
             itemNames = itemNames, categoryNames = categoryNames, extraNames = extraNames,
-            requestLang = (who?.lang ?: "en").lowercase())
+            requestLang = (who?.lang ?: "en").lowercase(),
+            itemDays = schedules.mapValues { it.value.availableDays },
+            itemSpecials = schedules.mapValues { (_, sc) -> sc.specials.map(::newSpecial) })
         return json.toString().replace("<", "\\u003c").replace(">", "\\u003e") to facts
     }
 
@@ -740,7 +755,32 @@ class MenuAiService(
     private fun changed(field: String, before: String?, after: String?, label: String? = null) =
         if (after != null && after != before) MenuChangeDetail(field, label, before, after) else null
 
-    private fun preview(id: String, op: MenuOp, ops: Map<String, MenuOp>): MenuChangeDto = when (op) {
+    private fun newSpecial(s: MenuSpecials.Special) = NewSpecial(s.days, s.from, s.to, s.label, s.prices)
+
+    private fun special(s: NewSpecial) = MenuSpecials.Special(s.days, s.from, s.to, s.prices, s.label)
+
+    /**
+     * A specials change's before / after, as price lines: each new special,
+     * per size, "menu price → special price"; each removed one "special
+     * price → menu price". The label says which size and which special.
+     */
+    private fun specialDetails(op: MenuOp.SetSpecials, lang: String): List<MenuChangeDetail> {
+        val before = ItemSchedules.of(op.itemId).specials.map(::newSpecial)
+        val vs = ItemVariants.selectAll().where { ItemVariants.itemId eq op.itemId }.associateBy { it[ItemVariants.id] }
+        val several = vs.values.count { it[ItemVariants.deletedAt] == null } > 1
+        fun label(s: NewSpecial, vid: String) = listOfNotNull(
+            vs[vid]?.get(ItemVariants.labelEn)?.takeIf { several }, MenuChangeSetParser.describeSpecial(s, lang)).joinToString(" · ")
+        fun regular(vid: String) = vs[vid]?.get(ItemVariants.priceCents)
+        val added = op.specials.filter { it !in before }.flatMap { s ->
+            s.prices.map { (vid, p) -> MenuChangeDetail("price", label(s, vid), regular(vid)?.let(::money), money(p)) }
+        }
+        val removed = before.filter { it !in op.specials }.flatMap { s ->
+            s.prices.mapNotNull { (vid, p) -> regular(vid)?.let { MenuChangeDetail("price", label(s, vid), money(p), money(it)) } }
+        }
+        return added + removed
+    }
+
+    private fun preview(id: String, op: MenuOp, ops: Map<String, MenuOp>, lang: String = "en"): MenuChangeDto = when (op) {
         is MenuOp.AddCategory -> MenuChangeDto(id, "add_category", pick(op.nameEn, op.nameFr), details = listOfNotNull(
             MenuChangeDetail("nameEn", after = op.nameEn), MenuChangeDetail("nameFr", after = op.nameFr)))
         is MenuOp.AddItem -> MenuChangeDto(id, "add_item", pick(op.nameEn, op.nameFr), categoryName(op.category, ops),
@@ -781,6 +821,21 @@ class MenuAiService(
             val title = if (op.entity == "item") itemTitle(op.id) else categoryName(op.id, ops)
             MenuChangeDto(id, "set_name", title, details = listOf(MenuChangeDetail("name", op.lang,
                 Translations.get(op.entity, op.id, op.lang), op.name)))
+        }
+        is MenuOp.SetDays -> {
+            val row = Items.selectAll().where { Items.id eq op.itemId }.first()
+            MenuChangeDto(id, "update_item", pick(row[Items.nameEn], row[Items.nameFr]), categoryName(row[Items.categoryId], ops),
+                details = listOf(MenuChangeDetail("available",
+                    before = MenuChangeSetParser.describeAvailability(ItemSchedules.of(op.itemId).availableDays, lang),
+                    after = MenuChangeSetParser.describeAvailability(op.days, lang))))
+        }
+        is MenuOp.SetSpecials -> {
+            val row = Items.selectAll().where { Items.id eq op.itemId }.first()
+            MenuChangeDto(id, "update_item", pick(row[Items.nameEn], row[Items.nameFr]), categoryName(row[Items.categoryId], ops),
+                details = specialDetails(op, lang).ifEmpty {
+                    listOf(MenuChangeDetail("price", before = MenuChangeSetParser.describeSpecials(
+                        ItemSchedules.of(op.itemId).specials.map(::newSpecial), lang), after = MenuChangeSetParser.describeSpecials(op.specials, lang)))
+                })
         }
         is MenuOp.ReorderCategories -> {
             val before = Categories.selectAll().orderBy(Categories.sortOrder)
@@ -909,6 +964,16 @@ class MenuAiService(
                         ?.let { pick(it[Categories.nameEn], it[Categories.nameFr]) } ?: op.id
                 Translations.set(op.entity, op.id, op.lang, op.name)
                 rows += MenuChangeLog.Row("translation", key, "update", "$title (${op.lang})", before)
+            }
+            is MenuOp.SetDays -> {
+                val before = MenuChangeLog.scheduleState(op.itemId)
+                CatalogOps.patchItem(op.itemId, ItemPatchRequest(availableDays = op.days))
+                rows += MenuChangeLog.Row("schedule", op.itemId, "update", itemTitle(op.itemId), before)
+            }
+            is MenuOp.SetSpecials -> {
+                val before = MenuChangeLog.scheduleState(op.itemId)
+                CatalogOps.patchItem(op.itemId, ItemPatchRequest(specials = op.specials.map(::special)))
+                rows += MenuChangeLog.Row("schedule", op.itemId, "update", itemTitle(op.itemId), before)
             }
             is MenuOp.ReorderCategories -> {
                 val before = MenuChangeLog.orderState()

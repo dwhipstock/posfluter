@@ -284,7 +284,10 @@ managers can edit them here. Reads below; edits under "Menu edits".
   ```
   (live rows only; `photoVersion` null when no photo — photo URL is
   `/v1/menu/items/{id}/photo?venue={venueId}&v={photoVersion}`.) Items also
-  carry `barcode`, `brand`, `subcategory`, `size` (null for the pubs), and the
+  carry `barcode`, `brand`, `subcategory`, `size` (null for the pubs), the
+  menu specials (CONTRACT §10 "Specials") `availableDays` (e.g. `["fri","sat"]`;
+  null = every day) and `specials` (`[ { "days", "from"?, "to"?, "label"?,
+  "prices": { "<variantId>": cents } } ]`; null = none), and the
   response carries `total` (products: one per item id across the stores).
 
   **Paged / filtered** (a retail store has ~5,000 products): any of
@@ -319,6 +322,14 @@ no store could take it, the call fails with that reason as its `code`
 
 - `POST /v1/menu/items` `{ nameEn, nameFr?, names?: {lang: text}, descriptionEn?, descriptionFr?, categoryId, isAlcohol?, active?, abbrev?, variants: [{ labelEn, labelFr?, priceCents, names? }] }` → 201. The id is the cloud's (`nachos-x7k2`), the same at every store.
 - `PATCH /v1/menu/items/{id}` — any of `nameEn, nameFr, names (lang → text, "" removes), descriptionEn, descriptionFr, categoryId, isAlcohol, active (86), abbrev`.
+  Menu specials: `availableDays` (day codes `mon`…`sun`; `[]` or all seven = every
+  day) and `specials` (the whole list, replaced; `[]` = none; at most 10; each
+  `{ days (≥1), from?/to? "HH:mm" both or neither and not equal, label? (≤ 40),
+  prices: { variantId: cents 0–9,999,999 } (≥1) }`). Stored and sent to the
+  store in the canonical form of CONTRACT §10. 400 `bad_day`, `bad_time`,
+  `bad_price`, `special_no_days`, `special_no_price`, `too_many_specials`; a
+  special pricing a size the item doesn't have at a store skips that store
+  (`size_not_found`; 400 when no store took it).
 - `DELETE /v1/menu/items/{id}` — soft; history keeps it.
 - `POST /v1/menu/items/{id}/variants` `{ labelEn, labelFr?, priceCents, names? }` → 201;
   `PATCH /v1/menu/items/{id}/variants/{variantId}` `{ labelEn?, labelFr?, priceCents?, sortOrder?, names? }`;

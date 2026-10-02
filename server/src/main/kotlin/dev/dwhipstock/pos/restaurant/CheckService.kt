@@ -6,6 +6,7 @@ import dev.dwhipstock.pos.orders.SaleLocations
 import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.base.BadRequestException
 import dev.dwhipstock.pos.sdk.VenueClock
+import dev.dwhipstock.pos.base.ItemSchedules
 
 import dev.dwhipstock.pos.base.CleanText
 import dev.dwhipstock.pos.base.GrantsRepo
@@ -335,17 +336,19 @@ class CheckService(private val config: CustomerConfig) {
                 ItemVariants.deletedAt.isNull() }
             .firstOrNull() ?: throw NotFoundException("variant $variantId of item $itemId not found")
         val item = Items.selectAll().where { Items.id eq itemId }.first()
+        val priced = ItemSchedules.price(itemId, variantId, variant[ItemVariants.priceCents])
 
         val lineId = CheckLines.insertAndGetId {
             it[CheckLines.checkId] = checkId
             it[CheckLines.itemId] = itemId
             it[CheckLines.variantId] = variantId
             it[CheckLines.qty] = qty
-            it[unitPriceCents] = variant[ItemVariants.priceCents]
+            it[unitPriceCents] = priced.unitPriceCents
             it[CheckLines.note] = note
             it[createdAt] = VenueClock.now()
             captureShelfFacts(it, item)
             LineSnapshot.capture(it, item, variant)
+            captureSpecial(it, priced)
             variant[ItemVariants.costCents]?.let { c -> it[unitCostCents] = c }
         }.value
 
@@ -367,7 +370,8 @@ class CheckService(private val config: CustomerConfig) {
             put("itemId", itemId)
             put("variantId", variantId)
             put("qty", qty)
-            put("unitPriceCents", variant[ItemVariants.priceCents])
+            put("unitPriceCents", priced.unitPriceCents)
+            priced.tag?.let { put("regularUnitPriceCents", priced.regularCents) }
             note?.let { n -> put("note", n) }
         })
         loadCheck(checkId)
@@ -391,6 +395,7 @@ class CheckService(private val config: CustomerConfig) {
             CheckLines.taxable, CheckLines.depositCents, CheckLines.ageRestricted, CheckLines.unitCostCents,
             CheckLines.nameFr, CheckLines.nameEn, CheckLines.variantLabelFr, CheckLines.variantLabelEn,
             CheckLines.categoryId, CheckLines.namesJson, CheckLines.variantNamesJson, CheckLines.showVariant,
+            CheckLines.regularUnitPriceCents, CheckLines.specialJson,
         )
         val sent = KitchenSentLines.select(KitchenSentLines.lineId)
             .where { KitchenSentLines.checkId eq checkId }.map { it[KitchenSentLines.lineId] }.toSet()
@@ -518,12 +523,14 @@ class CheckService(private val config: CustomerConfig) {
                     ItemVariants.deletedAt.isNull() }
                 .firstOrNull() ?: throw NotFoundException("variant ${line.variantId} not found")
             val item = Items.selectAll().where { Items.id eq line.itemId }.first()
+            val priced = ItemSchedules.price(line.itemId, line.variantId, variant[ItemVariants.priceCents])
             val lineId = CheckLines.insertAndGetId {
                 it[checkId] = check.id
                 it[itemId] = line.itemId
                 it[variantId] = line.variantId
                 it[qty] = line.qty
-                it[unitPriceCents] = variant[ItemVariants.priceCents]
+                it[unitPriceCents] = priced.unitPriceCents
+                captureSpecial(it, priced)
                 it[note] = CleanText.field(line.note)
                 it[status] = "PENDING"
                 it[createdAt] = VenueClock.now()
@@ -1202,6 +1209,7 @@ class CheckService(private val config: CustomerConfig) {
                     note = row[CheckLines.note],
                     names = LineSnapshot.names(row, itemNames),
                     variantNames = if (showVariant) LineSnapshot.variantNames(row, variantNames) else emptyMap(),
+                    special = ItemSchedules.tagOf(row[CheckLines.specialJson]),
                 )
             }
         val tenders = Tenders.selectAll()
@@ -1319,6 +1327,7 @@ class CheckService(private val config: CustomerConfig) {
                     },
                     names = LineSnapshot.names(row, itemNames),
                     variantNames = if (showVariant) LineSnapshot.variantNames(row, variantNames) else emptyMap(),
+                    special = ItemSchedules.tagOf(row[CheckLines.specialJson]),
                 )
             }
         val tenders = Tenders.selectAll().where { Tenders.transactionId eq checkId }.map { row ->
@@ -2654,6 +2663,8 @@ class CheckService(private val config: CustomerConfig) {
                     fuel = row[CheckLines.fuelSaleId]?.let { fuel[it] },
                     names = LineSnapshot.names(row, itemNames),
                     variantNames = if (showVariant) LineSnapshot.variantNames(row, variantNames) else emptyMap(),
+                    regularUnitPriceCents = row[CheckLines.regularUnitPriceCents],
+                    special = ItemSchedules.tagOf(row[CheckLines.specialJson]),
                 ))
             }
         val lines = allLines.filter { it.first == "ACTIVE" }.map { it.second }
@@ -2838,6 +2849,13 @@ data class LineView(
     /** The item's / size's names in the store's other languages, as rung. */
     val names: Map<String, String> = emptyMap(),
     val variantNames: Map<String, String> = emptyMap(),
+    /** Rung at a menu special: the menu price it replaced, and which special (days, window, own name). */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val regularUnitPriceCents: Long? = null,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val special: dev.dwhipstock.pos.sdk.MenuSpecials.Tag? = null,
 )
 
 /** One promotion on a sale: [amountCents] off, [taxableCents] of it off taxable goods. */
@@ -2957,4 +2975,11 @@ internal fun captureShelfFacts(st: org.jetbrains.exposed.sql.statements.UpdateBu
     st[CheckLines.depositCents] =
         dev.dwhipstock.pos.sdk.Crv.perUnit(dev.dwhipstock.pos.sdk.Crv.size(item[Items.crvSize]), item[Items.packUnits]).cents
     st[CheckLines.ageRestricted] = item[Items.ageRestricted]
+}
+
+/** A line rung at a menu special keeps the menu price it replaced and which special it was (064). */
+internal fun captureSpecial(st: org.jetbrains.exposed.sql.statements.UpdateBuilder<*>, priced: ItemSchedules.Priced) {
+    val tag = priced.tag ?: return
+    st[CheckLines.regularUnitPriceCents] = priced.regularCents
+    st[CheckLines.specialJson] = ItemSchedules.tagJson(tag)
 }
