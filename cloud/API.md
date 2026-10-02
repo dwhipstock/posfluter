@@ -333,6 +333,51 @@ no store could take it, the call fails with that reason as its `code`
 
 `GET /v1/auth/me` also returns `role` (`owner | manager | viewer`) and `canEditMenu`.
 
+### Menu AI (the Menu page's "Ask AI"; owners and managers, ONE store)
+
+The store's AI menu assistant (docs/ai-menu.md) for the portal. The model only
+proposes; the cloud validates the proposal against the store's menu with the
+store's own rules (`cloud/api/.../menuai/`, ported from `server/.../aimenu/`),
+and **Apply** runs the ticked changes through the portal's menu edits above —
+same validation, cloud HLC stamps and menu feed, so the store gets them on its
+next sync exactly like a hand edit. Off unless `MENU_AI_GEMINI_API_KEY` is set
+(model `MENU_AI_MODEL`, default `gemini-3.5-flash-lite`, low thinking).
+
+Every call but status needs `?venue=<id>` (400 `venue_required` without it,
+404 `bad_venue` for another tenant's store), an owner or manager (403
+`menu_edit_forbidden`), and the assistant on (409 `menu_ai_disabled`).
+
+- `GET /v1/menu-ai/status` → `{ enabled, canUse, model }` (any signed-in user; `model` only for editors).
+- `POST /v1/menu-ai/chat` `{ text, lang? }` → a proposal. `lang` (`en|fr|es|de|af`, the portal's
+  language) is the fallback language for the summary and the fixed replies; the model answers in the
+  language of the request.
+- `POST /v1/menu-ai/chat/voice` multipart `audio` (WAV / OGG / AAC / MP3 / FLAC, ≤ 5 MB; the portal
+  sends 16 kHz mono WAV) + `lang` → a proposal with `transcript` (what it heard). Other types: 415
+  `menu_ai_audio_type`. The clip is never stored or logged.
+- Proposal: `{ proposalId, venueId, currency, model, summary, changes: [{ id, kind, title, category,
+  details: [{ field, label, before, after, beforeMinor, afterMinor }], needs }], rejected: [..],
+  elapsedMs, refusal, message, bulk, bulkReasons, transcript }`. `kind`: `add_category | add_item |
+  update_item | remove_item | rename_category | reorder_categories | set_name`; `field`: `nameEn |
+  nameFr | descriptionEn | descriptionFr | category | available | price | name (label = language) |
+  order`. With `refusal` (`off_topic | no_change | menu_ai_incomplete | menu_ai_too_many_changes`)
+  there are no changes and `message` is the fixed reply (never the model's words).
+- `POST /v1/menu-ai/apply` `{ proposalId, changeIds, confirmBulk? }` → `{ applyId, applied,
+  createdItemIds, summary }`. All or nothing, one transaction. A ticked item pulls in the new category it
+  needs. `bulk` proposals (more than 5 changes ticked, any removal, or a price moved by half or more)
+  answer 409 `menu_ai_confirm_required` until `confirmBulk: true`. Only the user who asked can apply
+  (404 `menu_ai_expired` otherwise, or after 30 minutes; `menu_ai_already_applied` the second time).
+  Removals are the portal's soft delete.
+- `POST /v1/menu-ai/revert/{applyId}` → `{ applyId, reverted, skipped }`: puts back every field the apply
+  changed (new items and categories removed, removed items restored), through the same edits, with fresh
+  stamps. A step whose thing changed or went since is skipped. 409 `menu_ai_already_reverted`.
+- Limits: 20 calls per 10 minutes per portal user and per store (429 `menu_ai_too_many` + Retry-After),
+  and `MENU_AI_DAILY_CAP` (default 150) per store and per user per rolling 24 h (429
+  `menu_ai_daily_limit`). AI errors: `menu_ai_timeout | menu_ai_unavailable | menu_ai_quota |
+  menu_ai_auth | menu_ai_error` — the cloud's own short text, never the provider's, never the key.
+- Audit: `menu_ai_log` (033) has one row per call, apply and revert — user, store, kind, outcome,
+  counts, time taken; never the text, the audio, the prompt or a key. `menu_ai_applies` holds each
+  apply's undo.
+
 ## Staff (session-authed; READ-ONLY mirror of each store's staff)
 
 - `GET /v1/staff` →

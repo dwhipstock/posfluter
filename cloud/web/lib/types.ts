@@ -689,6 +689,67 @@ export interface MenuEditResult {
   duplicate?: boolean;
 }
 
+// --- the Menu page's AI assistant (/v1/menu-ai; API.md "Menu AI") ---
+
+export interface AiStatus {
+  /** A key is set: the assistant exists on this portal. */
+  enabled: boolean;
+  /** This user may use it (owner / manager). */
+  canUse: boolean;
+  model?: string | null;
+}
+
+export interface AiChangeDetail {
+  /** nameEn | nameFr | descriptionEn | descriptionFr | category | available | price | name | order */
+  field: string;
+  /** A size (price) or a language (name). */
+  label?: string | null;
+  before?: string | null;
+  after?: string | null;
+  beforeMinor?: number | null;
+  afterMinor?: number | null;
+}
+
+export interface AiChange {
+  id: string;
+  /** add_category | add_item | update_item | remove_item | rename_category | reorder_categories | set_name */
+  kind: string;
+  title: string;
+  category?: string | null;
+  details: AiChangeDetail[];
+  /** The id of the new category this change needs (ticking it ticks that too). */
+  needs?: string | null;
+}
+
+export interface AiProposal {
+  proposalId: string;
+  venueId: string;
+  currency: string;
+  model: string;
+  summary: string;
+  changes: AiChange[];
+  rejected: string[];
+  elapsedMs: number;
+  refusal?: string | null;
+  message?: string | null;
+  bulk: boolean;
+  bulkReasons: string[];
+  transcript?: string | null;
+}
+
+export interface AiApplyResult {
+  applyId: string;
+  applied: number;
+  createdItemIds: string[];
+  summary: string;
+}
+
+export interface AiRevertResult {
+  applyId: string;
+  reverted: number;
+  skipped: number;
+}
+
 export interface MenuResponse extends PagedList {
   categories: MenuCategory[];
   items: MenuItem[];

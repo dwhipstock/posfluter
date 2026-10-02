@@ -72,7 +72,20 @@ data class CloudConfig(
     // live rates: the portal labels the converted figure approximate and shows
     // the rate it used.
     val fxRates: Fx.Rates = Fx.Rates.fromEnv(System.getenv()),
+    // The Menu page's AI assistant (/v1/menu-ai). Off unless a Gemini key is set;
+    // the key is never logged, returned or put in an error (Secret hides it).
+    val menuAiKey: Secret? = env("MENU_AI_GEMINI_API_KEY")?.let(::Secret),
+    // The store's default model and the same low thinking; voice may get its own.
+    val menuAiModel: String = env("MENU_AI_MODEL") ?: "gemini-3.5-flash-lite",
+    val menuAiVoiceModel: String? = env("MENU_AI_VOICE_MODEL"),
+    // AI requests per store and per portal user per rolling 24 h (on top of 20 per 10 minutes).
+    val menuAiDailyCap: Int = env("MENU_AI_DAILY_CAP")?.toIntOrNull()?.takeIf { it > 0 } ?: 150,
 )
+
+/** A secret from env: its toString never shows it (a logged config can't leak it). */
+class Secret(val value: String) {
+    override fun toString() = "***"
+}
 
 /** One store (venue) the boot seed provisions for the tenant. */
 data class StoreSeed(val venueId: String, val name: String)

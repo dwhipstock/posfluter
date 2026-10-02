@@ -62,6 +62,19 @@ category it touched. **AI history** in the dialog lists the last 20 with a
   edit), Revert first answers `409 menu_ai_revert_conflict` with the names, and
   the tablet asks "Revert anyway?" before overwriting.
 
+## In the manager portal ("Ask AI" on the Menu page)
+
+The hosted portal has the same chat (typed or spoken) for one store at a time,
+owners and managers only: `POST /v1/menu-ai/chat`, `/chat/voice`, `/apply`,
+`/revert/{applyId}` (cloud/API.md "Menu AI"). The model, prompt and safety rails
+are the store's, PORTED into `cloud/api/.../menuai/` (two separate Gradle builds;
+`AiGuardParityTest` fails if the copied rules drift from `AiGuard.kt` /
+`MenuChangeSet.kt` here, so change both). Apply goes through the portal's own
+menu edits (cloud HLC stamps, menu feed), so the store receives AI changes made
+in the portal exactly like hand edits there. Stricter confirm than the tablet:
+more than 5 changes, any removal, or a price moved by half or more. Undo is
+one tap. Off unless the cloud has `MENU_AI_GEMINI_API_KEY`.
+
 ## Turning it on
 
 | Setting | Values |

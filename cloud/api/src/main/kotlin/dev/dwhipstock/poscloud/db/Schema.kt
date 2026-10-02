@@ -159,6 +159,37 @@ object Events : Table("events") {
     override val primaryKey = PrimaryKey(tenantId, eventId)
 }
 
+/** One AI menu assistant call or apply (033): who, which store, kind, outcome. Never text, audio or keys. */
+object MenuAiLog : Table("menu_ai_log") {
+    val id = long("id").autoIncrement()
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val userId = long("user_id")
+    val kind = text("kind")
+    val outcome = text("outcome")
+    val changes = integer("changes")
+    val rejected = integer("rejected")
+    val elapsedMs = long("elapsed_ms")
+    val ref = text("ref").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+    override val primaryKey = PrimaryKey(id)
+}
+
+/** An applied AI proposal and how to undo it (033). */
+object MenuAiApplies : Table("menu_ai_applies") {
+    val id = text("id")
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val userId = long("user_id")
+    val summary = text("summary")
+    val changes = integer("changes")
+    val undo = jsonb("undo")
+    val createdAt = timestampWithTimeZone("created_at")
+    val revertedAt = timestampWithTimeZone("reverted_at").nullable()
+    val revertedBy = long("reverted_by").nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
 /** One portal export: who took which dataset, in which format, for which stores and dates (032). */
 object ExportLog : Table("export_log") {
     val id = long("id").autoIncrement()
