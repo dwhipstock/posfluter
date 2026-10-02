@@ -1,0 +1,1197 @@
+{
+ "source": "server/.../customers/copperlantern/CopperLanternSeed.kt (the store's demo pub menu, mirrored for cloud tests)",
+ "categories": [
+  {
+   "id": "beer-cider",
+   "nameFr": "Bières et cidres",
+   "nameEn": "Beer & Cider"
+  },
+  {
+   "id": "wine",
+   "nameFr": "Vins",
+   "nameEn": "Wine"
+  },
+  {
+   "id": "cocktails",
+   "nameFr": "Cocktails",
+   "nameEn": "Cocktails"
+  },
+  {
+   "id": "starters",
+   "nameFr": "Entrées",
+   "nameEn": "Starters"
+  },
+  {
+   "id": "burgers-sandwiches",
+   "nameFr": "Burgers et sandwichs",
+   "nameEn": "Burgers & Sandwiches"
+  },
+  {
+   "id": "mains-salads",
+   "nameFr": "Plats et salades",
+   "nameEn": "Mains & Salads"
+  },
+  {
+   "id": "desserts",
+   "nameFr": "Desserts",
+   "nameEn": "Desserts"
+  }
+ ],
+ "items": [
+  {
+   "id": "lantern-lager",
+   "nameFr": "Lager de la Lanterne",
+   "nameEn": "Lantern House Lager",
+   "descriptionFr": "Lager désaltérante et maltée, brassée à Raleigh.",
+   "descriptionEn": "Crisp, malty lager brewed in Raleigh.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "lantern-lager:pint",
+     "labelFr": "Pinte 20 oz",
+     "labelEn": "20 oz pint",
+     "priceCents": 750
+    },
+    {
+     "id": "lantern-lager:pitcher",
+     "labelFr": "Pichet 60 oz",
+     "labelEn": "60 oz pitcher",
+     "priceCents": 2025
+    }
+   ]
+  },
+  {
+   "id": "amber-ale",
+   "nameFr": "Ambrée cuivrée",
+   "nameEn": "Copper Amber Ale",
+   "descriptionFr": "Rousse aux notes de caramel et de noix grillées.",
+   "descriptionEn": "Amber ale with caramel and toasted-nut notes.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "amber-ale:pint",
+     "labelFr": "Pinte 20 oz",
+     "labelEn": "20 oz pint",
+     "priceCents": 795
+    },
+    {
+     "id": "amber-ale:pitcher",
+     "labelFr": "Pichet 60 oz",
+     "labelEn": "60 oz pitcher",
+     "priceCents": 2150
+    }
+   ]
+  },
+  {
+   "id": "north-ipa",
+   "nameFr": "IPA du Nord",
+   "nameEn": "North Trail IPA",
+   "descriptionFr": "IPA houblonnée aux arômes d'agrumes et de pin.",
+   "descriptionEn": "Hop-forward IPA with citrus and pine.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "north-ipa:pint",
+     "labelFr": "Pinte 20 oz",
+     "labelEn": "20 oz pint",
+     "priceCents": 825
+    },
+    {
+     "id": "north-ipa:pitcher",
+     "labelFr": "Pichet 60 oz",
+     "labelEn": "60 oz pitcher",
+     "priceCents": 2295
+    }
+   ]
+  },
+  {
+   "id": "maple-stout",
+   "nameFr": "Stout à l'érable",
+   "nameEn": "Maple Oat Stout",
+   "descriptionFr": "Stout crémeux à l'avoine avec une touche d'érable.",
+   "descriptionEn": "Creamy oatmeal stout with a hint of maple.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "maple-stout:pint",
+     "labelFr": "Pinte 20 oz",
+     "labelEn": "20 oz pint",
+     "priceCents": 850
+    },
+    {
+     "id": "maple-stout:pitcher",
+     "labelFr": "Pichet 60 oz",
+     "labelEn": "60 oz pitcher",
+     "priceCents": 2375
+    }
+   ]
+  },
+  {
+   "id": "wheat-beer",
+   "nameFr": "Blanche aux agrumes",
+   "nameEn": "Citrus Wheat",
+   "descriptionFr": "Blanche légère à l'orange et à la coriandre.",
+   "descriptionEn": "Light wheat beer with orange and coriander.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "wheat-beer:pint",
+     "labelFr": "Pinte 20 oz",
+     "labelEn": "20 oz pint",
+     "priceCents": 775
+    },
+    {
+     "id": "wheat-beer:pitcher",
+     "labelFr": "Pichet 60 oz",
+     "labelEn": "60 oz pitcher",
+     "priceCents": 2125
+    }
+   ]
+  },
+  {
+   "id": "canadian-lager",
+   "nameFr": "Lager américaine",
+   "nameEn": "American Lager",
+   "descriptionFr": "Lager légère et rafraîchissante.",
+   "descriptionEn": "Clean, refreshing pale lager.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "canadian-lager:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 650
+    }
+   ]
+  },
+  {
+   "id": "pilsner-can",
+   "nameFr": "Pilsner en canette",
+   "nameEn": "Pilsner Can",
+   "descriptionFr": "Pilsner sèche et herbacée.",
+   "descriptionEn": "Dry, herbal pilsner.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "pilsner-can:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 695
+    }
+   ]
+  },
+  {
+   "id": "porter-can",
+   "nameFr": "Porter robuste",
+   "nameEn": "Robust Porter",
+   "descriptionFr": "Porter aux notes torréfiées de cacao.",
+   "descriptionEn": "Roasty porter with cocoa notes.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "porter-can:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 795
+    }
+   ]
+  },
+  {
+   "id": "hazy-ipa",
+   "nameFr": "IPA voilée locale",
+   "nameEn": "Local Hazy IPA",
+   "descriptionFr": "IPA juteuse d'une microbrasserie de Raleigh.",
+   "descriptionEn": "Juicy IPA from a Raleigh microbrewery.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "hazy-ipa:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 825
+    }
+   ]
+  },
+  {
+   "id": "saison",
+   "nameFr": "Saison fermière",
+   "nameEn": "Farmhouse Saison",
+   "descriptionFr": "Saison sèche, poivrée et effervescente.",
+   "descriptionEn": "Dry, peppery and lively farmhouse ale.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "saison:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 800
+    }
+   ]
+  },
+  {
+   "id": "belgian-blonde",
+   "nameFr": "Blonde belge",
+   "nameEn": "Belgian Blonde",
+   "descriptionFr": "Blonde importée, fruitée et douce.",
+   "descriptionEn": "Fruity, smooth imported blonde ale.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "belgian-blonde:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 875
+    }
+   ]
+  },
+  {
+   "id": "irish-stout",
+   "nameFr": "Stout irlandais",
+   "nameEn": "Irish Stout",
+   "descriptionFr": "Stout sec importé au col crémeux.",
+   "descriptionEn": "Imported dry stout with a creamy head.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "irish-stout:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 850
+    }
+   ]
+  },
+  {
+   "id": "mexican-lager",
+   "nameFr": "Lager mexicaine",
+   "nameEn": "Mexican Lager",
+   "descriptionFr": "Lager légère, servie avec une tranche de lime.",
+   "descriptionEn": "Light lager served with lime.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "mexican-lager:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 795
+    }
+   ]
+  },
+  {
+   "id": "dry-cider",
+   "nameFr": "Cidre sec du verger",
+   "nameEn": "Orchard Dry Cider",
+   "descriptionFr": "Cidre vif et sec, fait de pommes de verger.",
+   "descriptionEn": "Crisp dry cider made with orchard apples.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "dry-cider:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 795
+    }
+   ]
+  },
+  {
+   "id": "berry-cider",
+   "nameFr": "Cidre aux petits fruits",
+   "nameEn": "Berry Cider",
+   "descriptionFr": "Cidre demi-sec aux petits fruits.",
+   "descriptionEn": "Off-dry cider with mixed berries.",
+   "categoryId": "beer-cider",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "berry-cider:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 800
+    }
+   ]
+  },
+  {
+   "id": "na-lager",
+   "nameFr": "Lager sans alcool",
+   "nameEn": "Non-Alcoholic Lager",
+   "descriptionFr": "Lager maltée à moins de 0,5 % d'alcool.",
+   "descriptionEn": "Malty lager with less than 0.5% alcohol.",
+   "categoryId": "beer-cider",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "na-lager:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 575
+    }
+   ]
+  },
+  {
+   "id": "hop-water",
+   "nameFr": "Eau houblonnée",
+   "nameEn": "Sparkling Hop Water",
+   "descriptionFr": "Eau pétillante houblonnée sans alcool.",
+   "descriptionEn": "Alcohol-free sparkling water infused with hops.",
+   "categoryId": "beer-cider",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "hop-water:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 495
+    }
+   ]
+  },
+  {
+   "id": "pinot-noir",
+   "nameFr": "Pinot noir de l'Oregon",
+   "nameEn": "Oregon Pinot Noir",
+   "descriptionFr": "Rouge léger, notes de cerise et d'épices.",
+   "descriptionEn": "Light red with cherry and spice.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "pinot-noir:glass",
+     "labelFr": "Verre",
+     "labelEn": "Glass",
+     "priceCents": 1125
+    },
+    {
+     "id": "pinot-noir:bottle",
+     "labelFr": "Bouteille",
+     "labelEn": "Bottle",
+     "priceCents": 4325
+    }
+   ]
+  },
+  {
+   "id": "cab-merlot",
+   "nameFr": "Cabernet-merlot",
+   "nameEn": "Cabernet Merlot",
+   "descriptionFr": "Rouge souple, notes de mûre et de cèdre.",
+   "descriptionEn": "Smooth red with blackberry and cedar.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "cab-merlot:glass",
+     "labelFr": "Verre",
+     "labelEn": "Glass",
+     "priceCents": 1025
+    },
+    {
+     "id": "cab-merlot:bottle",
+     "labelFr": "Bouteille",
+     "labelEn": "Bottle",
+     "priceCents": 3950
+    }
+   ]
+  },
+  {
+   "id": "malbec",
+   "nameFr": "Malbec argentin",
+   "nameEn": "Argentinian Malbec",
+   "descriptionFr": "Rouge corsé aux notes de prune.",
+   "descriptionEn": "Full-bodied red with plum notes.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "malbec:glass",
+     "labelFr": "Verre",
+     "labelEn": "Glass",
+     "priceCents": 1175
+    },
+    {
+     "id": "malbec:bottle",
+     "labelFr": "Bouteille",
+     "labelEn": "Bottle",
+     "priceCents": 4500
+    }
+   ]
+  },
+  {
+   "id": "riesling",
+   "nameFr": "Riesling des Finger Lakes",
+   "nameEn": "Finger Lakes Riesling",
+   "descriptionFr": "Blanc vif, notes de pomme et d'agrumes.",
+   "descriptionEn": "Bright white with apple and citrus.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "riesling:glass",
+     "labelFr": "Verre",
+     "labelEn": "Glass",
+     "priceCents": 995
+    },
+    {
+     "id": "riesling:bottle",
+     "labelFr": "Bouteille",
+     "labelEn": "Bottle",
+     "priceCents": 3775
+    }
+   ]
+  },
+  {
+   "id": "chardonnay",
+   "nameFr": "Chardonnay boisé",
+   "nameEn": "Oaked Chardonnay",
+   "descriptionFr": "Blanc rond, notes de poire et de vanille.",
+   "descriptionEn": "Round white with pear and vanilla.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "chardonnay:glass",
+     "labelFr": "Verre",
+     "labelEn": "Glass",
+     "priceCents": 1075
+    },
+    {
+     "id": "chardonnay:bottle",
+     "labelFr": "Bouteille",
+     "labelEn": "Bottle",
+     "priceCents": 4150
+    }
+   ]
+  },
+  {
+   "id": "sauvignon-blanc",
+   "nameFr": "Sauvignon blanc",
+   "nameEn": "Sauvignon Blanc",
+   "descriptionFr": "Blanc sec, herbacé et citronné.",
+   "descriptionEn": "Dry white with herbs and lemon.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "sauvignon-blanc:glass",
+     "labelFr": "Verre",
+     "labelEn": "Glass",
+     "priceCents": 1125
+    },
+    {
+     "id": "sauvignon-blanc:bottle",
+     "labelFr": "Bouteille",
+     "labelEn": "Bottle",
+     "priceCents": 4325
+    }
+   ]
+  },
+  {
+   "id": "rose",
+   "nameFr": "Rosé de la vallée de la Yadkin",
+   "nameEn": "Yadkin Valley Rosé",
+   "descriptionFr": "Rosé sec aux notes de fraise.",
+   "descriptionEn": "Dry rosé with strawberry notes.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "rose:glass",
+     "labelFr": "Verre",
+     "labelEn": "Glass",
+     "priceCents": 1025
+    },
+    {
+     "id": "rose:bottle",
+     "labelFr": "Bouteille",
+     "labelEn": "Bottle",
+     "priceCents": 3950
+    }
+   ]
+  },
+  {
+   "id": "sparkling",
+   "nameFr": "Mousseux brut",
+   "nameEn": "Sparkling Brut",
+   "descriptionFr": "Bulles fines, notes de pomme verte et de brioche.",
+   "descriptionEn": "Fine bubbles with green apple and brioche.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "sparkling:glass",
+     "labelFr": "Verre",
+     "labelEn": "Glass",
+     "priceCents": 1250
+    },
+    {
+     "id": "sparkling:bottle",
+     "labelFr": "Bouteille",
+     "labelEn": "Bottle",
+     "priceCents": 4850
+    }
+   ]
+  },
+  {
+   "id": "icewine",
+   "nameFr": "Cidre de glace",
+   "nameEn": "Ice Cider",
+   "descriptionFr": "Cidre de dessert riche, notes de pomme cuite et de caramel.",
+   "descriptionEn": "Rich dessert cider with baked-apple and caramel notes.",
+   "categoryId": "wine",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "icewine:2oz",
+     "labelFr": "Verre 2 oz",
+     "labelEn": "2 oz glass",
+     "priceCents": 1475
+    },
+    {
+     "id": "icewine:375ml",
+     "labelFr": "Bouteille 375 ml",
+     "labelEn": "375 ml bottle",
+     "priceCents": 6475
+    }
+   ]
+  },
+  {
+   "id": "copper-old-fashioned",
+   "nameFr": "Old Fashioned cuivré",
+   "nameEn": "Copper Old Fashioned",
+   "descriptionFr": "Bourbon, érable, amers et orange.",
+   "descriptionEn": "Bourbon, maple, bitters and orange.",
+   "categoryId": "cocktails",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "copper-old-fashioned:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1395
+    }
+   ]
+  },
+  {
+   "id": "lantern-mule",
+   "nameFr": "Mule de la Lanterne",
+   "nameEn": "Lantern Mule",
+   "descriptionFr": "Vodka, bière de gingembre, lime et canneberge.",
+   "descriptionEn": "Vodka, ginger beer, lime and cranberry.",
+   "categoryId": "cocktails",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "lantern-mule:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1300
+    }
+   ]
+  },
+  {
+   "id": "smoked-caesar",
+   "nameFr": "Bloody Mary fumé",
+   "nameEn": "Smoked Bloody Mary",
+   "descriptionFr": "Vodka, jus de tomate épicé, raifort et sel fumé.",
+   "descriptionEn": "Vodka, spiced tomato juice, horseradish and smoked salt.",
+   "categoryId": "cocktails",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "smoked-caesar:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1300
+    }
+   ]
+  },
+  {
+   "id": "maple-sour",
+   "nameFr": "Whisky sour à l'érable",
+   "nameEn": "Maple Whisky Sour",
+   "descriptionFr": "Whisky, citron, érable et blanc d'œuf.",
+   "descriptionEn": "Whisky, lemon, maple and egg white.",
+   "categoryId": "cocktails",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "maple-sour:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1350
+    }
+   ]
+  },
+  {
+   "id": "elderflower-gin",
+   "nameFr": "Gin fizz au sureau",
+   "nameEn": "Elderflower Gin Fizz",
+   "descriptionFr": "Gin, sureau, citron et soda.",
+   "descriptionEn": "Gin, elderflower, lemon and soda.",
+   "categoryId": "cocktails",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "elderflower-gin:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1350
+    }
+   ]
+  },
+  {
+   "id": "espresso-martini",
+   "nameFr": "Martini espresso",
+   "nameEn": "Espresso Martini",
+   "descriptionFr": "Vodka, liqueur de café et espresso.",
+   "descriptionEn": "Vodka, coffee liqueur and espresso.",
+   "categoryId": "cocktails",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "espresso-martini:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1395
+    }
+   ]
+  },
+  {
+   "id": "dark-stormy",
+   "nameFr": "Dark and Stormy",
+   "nameEn": "Dark and Stormy",
+   "descriptionFr": "Rhum brun, bière de gingembre et lime.",
+   "descriptionEn": "Dark rum, ginger beer and lime.",
+   "categoryId": "cocktails",
+   "isAlcohol": true,
+   "variants": [
+    {
+     "id": "dark-stormy:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1300
+    }
+   ]
+  },
+  {
+   "id": "zero-gimlet",
+   "nameFr": "Gimlet sans alcool",
+   "nameEn": "Zero-Proof Gimlet",
+   "descriptionFr": "Spiritueux botanique sans alcool, lime et romarin.",
+   "descriptionEn": "Alcohol-free botanical spirit, lime and rosemary.",
+   "categoryId": "cocktails",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "zero-gimlet:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 850
+    }
+   ]
+  },
+  {
+   "id": "pretzel",
+   "nameFr": "Bretzel géant",
+   "nameEn": "Giant Pub Pretzel",
+   "descriptionFr": "Bretzel chaud, moutarde à la bière et trempette au fromage.",
+   "descriptionEn": "Warm pretzel with beer mustard and cheese dip.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "pretzel:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1225
+    }
+   ]
+  },
+  {
+   "id": "wings",
+   "nameFr": "Ailes de poulet",
+   "nameEn": "Chicken Wings",
+   "descriptionFr": "Une livre d'ailes, sauce au choix.",
+   "descriptionEn": "One pound of wings with your choice of sauce.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "wings:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1675
+    }
+   ]
+  },
+  {
+   "id": "nachos",
+   "nameFr": "Nachos de la maison",
+   "nameEn": "Loaded Pub Nachos",
+   "descriptionFr": "Fromage, haricots, jalapeños, salsa et crème sure.",
+   "descriptionEn": "Cheese, beans, jalapeños, salsa and sour cream.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "nachos:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1750
+    }
+   ]
+  },
+  {
+   "id": "calamari",
+   "nameFr": "Calmars croustillants",
+   "nameEn": "Crispy Calamari",
+   "descriptionFr": "Calmars frits, citron et aïoli.",
+   "descriptionEn": "Fried calamari with lemon and aioli.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "calamari:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1675
+    }
+   ]
+  },
+  {
+   "id": "spinach-dip",
+   "nameFr": "Trempette épinards-artichauts",
+   "nameEn": "Spinach Artichoke Dip",
+   "descriptionFr": "Trempette chaude servie avec croustilles de pita.",
+   "descriptionEn": "Hot dip served with pita chips.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "spinach-dip:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1475
+    }
+   ]
+  },
+  {
+   "id": "poutine",
+   "nameFr": "Poutine classique",
+   "nameEn": "Classic Poutine",
+   "descriptionFr": "Frites, fromage en grains et sauce brune.",
+   "descriptionEn": "Fries, cheese curds and savoury gravy.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "poutine:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1300
+    }
+   ]
+  },
+  {
+   "id": "lantern-burger",
+   "nameFr": "Burger de la Lanterne",
+   "nameEn": "Copper Lantern Burger",
+   "descriptionFr": "Bœuf, cheddar, bacon, oignons et sauce maison.",
+   "descriptionEn": "Beef, cheddar, bacon, onions and house sauce.",
+   "categoryId": "burgers-sandwiches",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "lantern-burger:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1925
+    }
+   ]
+  },
+  {
+   "id": "mushroom-burger",
+   "nameFr": "Burger aux champignons",
+   "nameEn": "Mushroom Swiss Burger",
+   "descriptionFr": "Bœuf, champignons, fromage suisse et aïoli.",
+   "descriptionEn": "Beef, mushrooms, Swiss cheese and aioli.",
+   "categoryId": "burgers-sandwiches",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "mushroom-burger:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1975
+    }
+   ]
+  },
+  {
+   "id": "veggie-burger",
+   "nameFr": "Burger végétarien",
+   "nameEn": "Garden Veggie Burger",
+   "descriptionFr": "Galette végétale, avocat et légumes marinés.",
+   "descriptionEn": "Plant-based patty, avocado and pickled vegetables.",
+   "categoryId": "burgers-sandwiches",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "veggie-burger:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1750
+    }
+   ]
+  },
+  {
+   "id": "club",
+   "nameFr": "Club au poulet",
+   "nameEn": "Grilled Chicken Club",
+   "descriptionFr": "Poulet grillé, bacon, tomate et laitue.",
+   "descriptionEn": "Grilled chicken, bacon, tomato and lettuce.",
+   "categoryId": "burgers-sandwiches",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "club:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1850
+    }
+   ]
+  },
+  {
+   "id": "reuben",
+   "nameFr": "Reuben classique",
+   "nameEn": "Classic Reuben",
+   "descriptionFr": "Corned-beef, suisse, choucroute et sauce russe.",
+   "descriptionEn": "Corned beef, Swiss cheese, sauerkraut and Russian dressing.",
+   "categoryId": "burgers-sandwiches",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "reuben:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1925
+    }
+   ]
+  },
+  {
+   "id": "fish-sandwich",
+   "nameFr": "Sandwich au poisson",
+   "nameEn": "Crispy Fish Sandwich",
+   "descriptionFr": "Aiglefin frit, salade de chou et sauce tartare.",
+   "descriptionEn": "Battered haddock, slaw and tartar sauce.",
+   "categoryId": "burgers-sandwiches",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "fish-sandwich:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1750
+    }
+   ]
+  },
+  {
+   "id": "fish-chips",
+   "nameFr": "Poisson-frites",
+   "nameEn": "Beer-Battered Fish and Chips",
+   "descriptionFr": "Aiglefin en pâte à la bière, frites, salade de chou et sauce tartare.",
+   "descriptionEn": "Haddock, fries, slaw and tartar sauce.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "fish-chips:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 2025
+    }
+   ]
+  },
+  {
+   "id": "steak-frites",
+   "nameFr": "Steak-frites",
+   "nameEn": "Steak Frites",
+   "descriptionFr": "Bavette grillée, beurre aux herbes et frites.",
+   "descriptionEn": "Grilled flank steak, herb butter and fries.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "steak-frites:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 2650
+    }
+   ]
+  },
+  {
+   "id": "shepherd-pie",
+   "nameFr": "Pâté chinois",
+   "nameEn": "Shepherd's Pie",
+   "descriptionFr": "Bœuf braisé, légumes et purée de pommes de terre.",
+   "descriptionEn": "Braised beef, vegetables and mashed potato.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "shepherd-pie:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1925
+    }
+   ]
+  },
+  {
+   "id": "mac-cheese",
+   "nameFr": "Macaroni aux trois fromages",
+   "nameEn": "Three-Cheese Mac",
+   "descriptionFr": "Macaroni crémeux gratiné aux trois fromages.",
+   "descriptionEn": "Creamy baked macaroni with three cheeses.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "mac-cheese:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1675
+    }
+   ]
+  },
+  {
+   "id": "salmon",
+   "nameFr": "Saumon à l'érable",
+   "nameEn": "Maple-Glazed Salmon",
+   "descriptionFr": "Saumon, riz sauvage et légumes de saison.",
+   "descriptionEn": "Salmon, wild rice and seasonal vegetables.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "salmon:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 2475
+    }
+   ]
+  },
+  {
+   "id": "chicken-pot-pie",
+   "nameFr": "Pâté au poulet",
+   "nameEn": "Chicken Pot Pie",
+   "descriptionFr": "Poulet, légumes et pâte feuilletée.",
+   "descriptionEn": "Chicken and vegetables under puff pastry.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "chicken-pot-pie:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1850
+    }
+   ]
+  },
+  {
+   "id": "caesar-salad",
+   "nameFr": "Salade César",
+   "nameEn": "Caesar Salad",
+   "descriptionFr": "Romaine, parmesan, croûtons et vinaigrette César.",
+   "descriptionEn": "Romaine, parmesan, croutons and Caesar dressing.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "caesar-salad:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1300
+    }
+   ]
+  },
+  {
+   "id": "harvest-salad",
+   "nameFr": "Salade de la récolte",
+   "nameEn": "Harvest Salad",
+   "descriptionFr": "Jeunes pousses, pommes, courge, noix de Grenoble et fromage de chèvre.",
+   "descriptionEn": "Greens, apples, squash, walnuts and goat cheese.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "harvest-salad:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1475
+    }
+   ]
+  },
+  {
+   "id": "falafel-bowl",
+   "nameFr": "Bol de falafels",
+   "nameEn": "Falafel Grain Bowl",
+   "descriptionFr": "Falafels, quinoa, houmous et légumes.",
+   "descriptionEn": "Falafel, quinoa, hummus and vegetables.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "falafel-bowl:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1675
+    }
+   ]
+  },
+  {
+   "id": "cauliflower",
+   "nameFr": "Steak de chou-fleur rôti",
+   "nameEn": "Roasted Cauliflower Steak",
+   "descriptionFr": "Chou-fleur, lentilles, tahini et fines herbes.",
+   "descriptionEn": "Cauliflower, lentils, tahini and herbs.",
+   "categoryId": "mains-salads",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "cauliflower:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1750
+    }
+   ]
+  },
+  {
+   "id": "sticky-pudding",
+   "nameFr": "Pouding au caramel",
+   "nameEn": "Sticky Toffee Pudding",
+   "descriptionFr": "Gâteau aux dattes, sauce au caramel et crème glacée.",
+   "descriptionEn": "Date cake, toffee sauce and ice cream.",
+   "categoryId": "desserts",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "sticky-pudding:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 850
+    }
+   ]
+  },
+  {
+   "id": "cheesecake",
+   "nameFr": "Gâteau au fromage à l'érable",
+   "nameEn": "Maple Cheesecake",
+   "descriptionFr": "Garni de pacanes grillées.",
+   "descriptionEn": "Maple cheesecake with toasted pecans.",
+   "categoryId": "desserts",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "cheesecake:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 850
+    }
+   ]
+  },
+  {
+   "id": "brownie",
+   "nameFr": "Brownie au stout",
+   "nameEn": "Stout Brownie",
+   "descriptionFr": "Brownie chaud, sauce chocolat et crème glacée.",
+   "descriptionEn": "Warm brownie with chocolate sauce and ice cream.",
+   "categoryId": "desserts",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "brownie:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 800
+    }
+   ]
+  },
+  {
+   "id": "late-fries",
+   "nameFr": "Frites de fin de soirée",
+   "nameEn": "Late-Night Fries",
+   "descriptionFr": "Panier de frites, aïoli maison.",
+   "descriptionEn": "Basket of fries with house aioli.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "late-fries:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 775
+    }
+   ]
+  },
+  {
+   "id": "mini-burgers",
+   "nameFr": "Mini-burgers",
+   "nameEn": "Midnight Sliders",
+   "descriptionFr": "Trois mini-burgers au cheddar et cornichons.",
+   "descriptionEn": "Three cheddar sliders with pickles.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "mini-burgers:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1300
+    }
+   ]
+  },
+  {
+   "id": "grilled-cheese",
+   "nameFr": "Fromage grillé",
+   "nameEn": "Grilled Cheese",
+   "descriptionFr": "Cheddar vieilli sur pain au levain grillé.",
+   "descriptionEn": "Aged cheddar on sourdough.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "grilled-cheese:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 1025
+    }
+   ]
+  },
+  {
+   "id": "onion-rings",
+   "nameFr": "Rondelles d'oignon",
+   "nameEn": "Onion Rings",
+   "descriptionFr": "Rondelles croustillantes, sauce barbecue.",
+   "descriptionEn": "Crisp onion rings with barbecue sauce.",
+   "categoryId": "starters",
+   "isAlcohol": false,
+   "variants": [
+    {
+     "id": "onion-rings:regular",
+     "labelFr": "Standard",
+     "labelEn": "Regular",
+     "priceCents": 950
+    }
+   ]
+  }
+ ]
+}

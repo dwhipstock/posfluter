@@ -432,7 +432,11 @@ PDFBox, embedded OFL fonts) so phone and computer get the same file. The AI (Gem
 ids, groups sections, writes short copy and picks one of the curated styles; every name, size and price
 is printed from the menu. Its reply is checked (unknown ids dropped, copy clamped; copy naming a business,
 or holding a price, a time, a link or unsafe text is dropped; missing copy = the item's own description).
-No key, a 20 s timeout, an error or bad JSON: the plain menu. Artwork comes from the AI photo makers
+No key, a 35 s timeout, an error or unreadable JSON: the plain menu. Big menus (60–80 items) go to the
+model as a compact list; the menu groups items by category and the AI writes section words and at most 25
+blurbs (the rest keep their own descriptions). A reply with a stray brace, a fence or a cut-off end is read
+for what is complete (`menu_ai_log` outcome `used_<how>` / `bad_reply_<how>`: ok, ok_wrapped, ok_trailing,
+repaired_commas, repaired_truncated, not_json…; never the content). Artwork comes from the AI photo makers
 (FLUX `MENU_AI_BFL_API_KEY`, then Gemini); without them, or past the 75 s deadline, each style's own
 drawn art. Works with no AI at all.
 

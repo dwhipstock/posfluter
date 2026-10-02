@@ -200,7 +200,7 @@ class MenuPrintServiceTest {
         assertEquals(toMake, transaction { MenuPrintArt.selectAll().count() }.toInt())
         // logged as an AI call (counts toward the daily cap), with no text
         val logged = transaction { MenuAiLog.selectAll().map { it[MenuAiLog.kind] to it[MenuAiLog.outcome] } }
-        assertTrue("print" to "used" in logged, logged.toString())
+        assertTrue("print" to "used_ok" in logged, logged.toString())
         assertTrue(r.s("fileName")!!.endsWith("-full-2026-10-06.pdf"))
         assertTrue(r["previews"]!!.jsonArray.size >= 1)
     }
@@ -322,6 +322,19 @@ class MenuPrintServiceTest {
             jobs.map { id -> async { post("/v1/menu-print/$id/render?venue=vieux-port", "{}").status } }.map { it.await() }
         }
         assertEquals(listOf(HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK), results)
+    }
+
+    @Test
+    fun aCutOffReplyIsStillUsedAndLoggedAsRepaired() = testApplication {
+        app(); bootstrap()
+        model.reply = """{"style":"classic","title":"Pints and Plates","tagline":"Good food, good pours.",
+            "sections":[{"category":"beer","title":"On Tap","intro":"Cold and fresh."},{"category":"wine","title":"Wine","intro":"Red and wh"""
+        val (p, _, r) = print("""{"type":"drinks","lang":"en"}""")
+        assertEquals("used", p.s("ai"))
+        val t = pdfText(r)
+        assertTrue("Pints and Plates" in t && "On Tap" in t && "Cold and fresh." in t && "House Lemonade" in t, t)
+        val logged = transaction { MenuAiLog.selectAll().map { it[MenuAiLog.kind] to it[MenuAiLog.outcome] } }
+        assertTrue("print" to "used_repaired_truncated" in logged, logged.toString())
     }
 
     @Test

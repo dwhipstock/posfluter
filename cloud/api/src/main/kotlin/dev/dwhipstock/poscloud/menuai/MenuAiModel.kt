@@ -76,6 +76,8 @@ class GeminiMenuModel(
     private val pause: (Long) -> Unit = { Thread.sleep(it) },
     /** 0 for menu edits (the same request gives the same proposal); printed menus want fresh wording. */
     private val temperature: Double = 0.0,
+    /** A cap on the reply's length (tokens); null = the provider's default. */
+    private val maxOutputTokens: Int? = null,
 ) : MenuAiModel {
     override val id = "gemini"
 
@@ -90,6 +92,7 @@ class GeminiMenuModel(
     }
 
     override fun complete(system: String, user: String, audio: AiAudio?): String {
+        var thinking = thinkingLevel
         val body = { m: String ->
             buildJsonObject {
                 put("model", m)
@@ -103,7 +106,9 @@ class GeminiMenuModel(
                 }
                 // JSON mode without a schema: an empty {"type":"object"} schema makes the model answer "{}"
                 putJsonObject("response_format") { put("type", "text"); put("mime_type", "application/json") }
-                putJsonObject("generation_config") { put("temperature", if (temperature == 0.0) 0 else temperature); put("thinking_level", thinkingLevel) }
+                putJsonObject("generation_config") { put("temperature", if (temperature == 0.0) 0 else temperature); put("thinking_level", thinking)
+                    maxOutputTokens?.let { put("max_output_tokens", it) }
+                }
             }.toString().toByteArray()
         }
         val deadline = System.currentTimeMillis() + budgetMs
@@ -122,6 +127,8 @@ class GeminiMenuModel(
             }
         }
         var (status, text) = post(model)
+        // a model without the asked-for thinking level (the printed menus' "minimal") says 400: once more with "low"
+        if (status == 400 && thinking != "low") { thinking = "low"; post(model).let { status = it.first; text = it.second } }
         if (status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); post(model).let { status = it.first; text = it.second } }
         if ((status == 503 || status == 429) && left() > 0) {
             val fallback = if (model == FALLBACK_MODEL) DEFAULT_MODEL else FALLBACK_MODEL
