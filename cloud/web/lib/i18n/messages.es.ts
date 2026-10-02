@@ -423,6 +423,7 @@ export const es: Record<MsgKey, string> = {
   chart_per_store_gross: "Bruto, una línea por tienda",
   chart_per_store_stacked: "Apilado por tienda",
   dash_today_by_store: "Hoy, por tienda",
+  dash_by_store_range: "{range}, por tienda",
   dash_combined_today: "Todas las tiendas, hoy",
   dash_combined_range: "Todas las tiendas · {range}",
   dash_online_n: "{n} de {total} en línea",

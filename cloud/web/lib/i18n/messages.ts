@@ -631,6 +631,7 @@ export const messages = {
   chart_per_store_gross: m("Ventes brutes, une courbe par établissement", "Gross, one line per store"),
   chart_per_store_stacked: m("Empilé par établissement", "Stacked by store"),
   dash_today_by_store: m("Aujourd’hui, par établissement", "Today, by store"),
+  dash_by_store_range: m("{range}, par établissement", "{range}, by store"),
   dash_combined_today: m("Tous les établissements, aujourd’hui", "All stores, today"),
   dash_combined_range: m("Tous les établissements · {range}", "All stores · {range}"),
   dash_online_n: m("{n} sur {total} en ligne", "{n} of {total} online"),

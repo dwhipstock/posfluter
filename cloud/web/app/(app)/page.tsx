@@ -182,7 +182,7 @@ function Dashboard() {
 
       {fuel && <FuelDashboardKpis range={range} />}
 
-      {combined && <StoreCompare />}
+      {combined && <StoreCompare range={range} rangeLabel={fmt.rangeLabel(range)} isToday={isToday} />}
 
       {summary.error ? (
         <Card>
@@ -411,18 +411,17 @@ const STATUS_KEY: Record<StoreLinkStatus, MsgKey> = {
 };
 
 /**
- * "All stores": one card per store with TODAY's sales, checks and average
- * check (each store's own business day) and whether its POS tablet is online,
- * plus the combined card. Independent of the range picker below it.
+ * "All stores": one card per store with the picked range's sales, checks and
+ * average check (each store's own business days) and whether its POS tablet is
+ * online, plus the combined card. Follows the range picker (it used to show
+ * today whatever was picked, so "Yesterday" read $0 everywhere).
  */
-function StoreCompare() {
+function StoreCompare({ range, rangeLabel, isToday }: { range: { from: string; to: string }; rangeLabel: string; isToday: boolean }) {
   const t = useT();
   const { venues, nameOf, colorOf } = useStores();
   const m = useMoney();
   const kpi = useScopedKpi();
-  const today = todayISO();
-  const todayRange = { from: today, to: today };
-  const byVenue = useApi<ByVenueReport>(reportKey("/v1/reports/by-venue", todayRange), { refreshInterval: 60_000 });
+  const byVenue = useApi<ByVenueReport>(reportKey("/v1/reports/by-venue", range), { refreshInterval: 60_000 });
   const pos = useApi<StorePosResponse>("/v1/devices", { refreshInterval: 30_000 });
   const statusOf = (id: string) => pos.data?.stores.find((s) => s.venueId === id)?.status;
   const rows = byVenue.data?.venues ?? [];
@@ -437,7 +436,7 @@ function StoreCompare() {
   return (
     <section aria-labelledby="store-compare">
       <h2 id="store-compare" className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        {t("dash_today_by_store")}
+        {isToday ? t("dash_today_by_store") : t("dash_by_store_range", { range: rangeLabel })}
       </h2>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {venues.map((v) => {
@@ -466,7 +465,9 @@ function StoreCompare() {
         })}
         <Card className="bg-navy p-4 text-white" data-testid="store-card-combined">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">{t("dash_combined_today")}</span>
+            <span className="text-sm font-semibold">
+              {isToday ? t("dash_combined_today") : t("dash_combined_range", { range: rangeLabel })}
+            </span>
             {pos.data && (
               <span className="ml-auto text-[11px] font-medium text-navy-muted">
                 {t("dash_online_n", { n: online, total: venues.length })}

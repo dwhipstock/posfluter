@@ -43,11 +43,11 @@ object AiGuard {
             "af" to "Ek kan net help om jou spyskaart op te stel en te wysig. Probeer iets soos “voeg ’n Caesar-slaai vir 14 by onder Slaaie”.",
         ),
         Refusal.NO_CHANGE to mapOf(
-            "en" to "I couldn't find a menu change to make from that. Name the item and what to change, for example \"poutine 14\".",
-            "fr" to "Je n'ai trouvé aucun changement de menu à faire. Nommez le produit et ce qu'il faut changer, par exemple « poutine 14 ».",
-            "es" to "No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «poutine 14».",
-            "de" to "Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Poutine 14“.",
-            "af" to "Ek kon nie ’n spyskaartverandering daarin vind nie. Noem die item en wat moet verander, byvoorbeeld “poutine 14”.",
+            "en" to "I couldn't find a menu change to make from that. Name the item and what to change, for example \"Caesar salad 14\".",
+            "fr" to "Je n'ai trouvé aucun changement de menu à faire. Nommez le produit et ce qu'il faut changer, par exemple « salade César 14 ».",
+            "es" to "No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «ensalada César 14».",
+            "de" to "Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Caesar Salad 14“.",
+            "af" to "Ek kon nie ’n spyskaartverandering daarin vind nie. Noem die item en wat moet verander, byvoorbeeld “Caesar salad 14”.",
         ),
         Refusal.INCOMPLETE to mapOf(
             "en" to "The AI's answer was cut off. Please try again.",

@@ -426,6 +426,7 @@ export const af: Record<MsgKey, string> = {
   chart_per_store_gross: "Bruto, een lyn per winkel",
   chart_per_store_stacked: "Gestapel per winkel",
   dash_today_by_store: "Vandag, per winkel",
+  dash_by_store_range: "{range}, per winkel",
   dash_combined_today: "Alle winkels, vandag",
   dash_combined_range: "Alle winkels · {range}",
   dash_online_n: "{n} van {total} aanlyn",

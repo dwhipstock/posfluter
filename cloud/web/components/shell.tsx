@@ -273,7 +273,7 @@ function TopBarShell({ groupName, demoMode, children }: ShellProps) {
 function SidebarShell({ groupName, demoMode, children }: ShellProps) {
   const t = useT();
   return (
-    <div className="min-h-dvh bg-paper md:flex">
+    <div className="min-h-dvh overflow-x-clip bg-paper md:flex">
       {/* The navy column stretches to the full page height; its content is a
           viewport-tall sticky panel whose nav scrolls on its own if needed. */}
       <aside className="z-40 hidden w-60 shrink-0 bg-navy text-white md:block">
@@ -293,12 +293,16 @@ function SidebarShell({ groupName, demoMode, children }: ShellProps) {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 bg-navy px-4 text-white md:hidden">
-        <BrandMark compact />
-        <div className="flex min-w-0 items-center gap-2">
+      {/* phones: logo + demo badge + store picker + language must fit 360 px; wider, the whole
+          page laid out wider than the screen and sheets (the AI assistant) ran off the right edge */}
+      <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 overflow-hidden bg-navy px-3 text-white md:hidden">
+        <span className="min-w-0 shrink overflow-hidden">
+          <BrandMark compact />
+        </span>
+        <div className="flex min-w-0 shrink-0 items-center gap-1.5">
           {demoMode && <DemoBadge />}
           <Suspense fallback={null}>
-            <StorePicker tone="dark" className="w-36" />
+            <StorePicker tone="dark" className="w-28 min-w-0" />
           </Suspense>
           <LangToggle tone="dark" />
         </div>
