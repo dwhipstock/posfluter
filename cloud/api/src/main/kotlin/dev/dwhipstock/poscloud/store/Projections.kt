@@ -65,6 +65,8 @@ object Projections {
             event.eventType.startsWith("item.") -> itemEvent(scope, payload)
             event.eventType.startsWith("category.") -> categoryEvent(scope, payload)
             event.eventType.startsWith("zone.") -> zoneEvent(scope, payload)
+            // the store's floor, two-way (CONTRACT §11)
+            event.eventType == "floor.snapshot" -> dev.dwhipstock.poscloud.rooms.RoomState.ingest(scope, payload)
             // check.total_locked / check.cancelled / check.merged / unknown: stored, not projected
             else -> {}
         }

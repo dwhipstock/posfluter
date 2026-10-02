@@ -11,6 +11,8 @@ import dev.dwhipstock.poscloud.menuai.MenuAiException
 import dev.dwhipstock.poscloud.menuai.MenuAiService
 import dev.dwhipstock.poscloud.menuai.menuAiRoutes
 import dev.dwhipstock.poscloud.reports.reportRoutes
+import dev.dwhipstock.poscloud.rooms.RoomAiService
+import dev.dwhipstock.poscloud.rooms.roomRoutes
 import dev.dwhipstock.poscloud.staff.staffRoutes
 import dev.dwhipstock.poscloud.stock.stockRoutes
 import dev.dwhipstock.poscloud.store.staffEndpointRoute
@@ -40,7 +42,11 @@ fun main() {
  * [menuAi]: the Menu page's AI assistant; tests pass one with a fake model.
  * Default: Gemini when MENU_AI_GEMINI_API_KEY is set, else off.
  */
-fun Application.module(config: CloudConfig = CloudConfig(), menuAi: MenuAiService? = null) {
+fun Application.module(
+    config: CloudConfig = CloudConfig(), menuAi: MenuAiService? = null,
+    /** The Rooms page's AI assistant; tests pass one with a fake model. */
+    roomAi: RoomAiService? = null,
+) {
     val db = Db.connect(config)
     Migrations.run(db, File(config.migrationsDir))
     Bootstrap.run(config)
@@ -117,6 +123,7 @@ fun Application.module(config: CloudConfig = CloudConfig(), menuAi: MenuAiServic
             menuRoutes()
             menuEditRoutes()
             menuAiRoutes(menuAi ?: MenuAiService(config))
+            roomRoutes(roomAi ?: RoomAiService(config))
             staffRoutes()
             venueRoutes(config)
         }

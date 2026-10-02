@@ -82,6 +82,8 @@ object Venues : Table("venues") {
     val menuCursor = long("menu_cursor").nullable()
     // menu changes the store could not apply, as it reported at its last feed pull (029)
     val menuFailed = integer("menu_failed").nullable()
+    // last feed pull by a store that applies room changes (035); NULL = no portal room edits
+    val roomsSyncAt = timestampWithTimeZone("rooms_sync_at").nullable()
     override val primaryKey = PrimaryKey(tenantId, id)
 }
 

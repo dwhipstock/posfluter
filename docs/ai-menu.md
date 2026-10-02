@@ -92,6 +92,21 @@ day. The accepted photo reaches the store through the menu feed (CONTRACT §10
 "Photos from the portal"): the store downloads it, checks it is a real JPEG or
 PNG matching the feed entry, and makes it the item's photo with the AI badge.
 
+## In the manager portal: Rooms ("New room from photo", "Ask AI" per room)
+
+The portal's Rooms page (owners and managers, one store) has the floor-plan
+assistants too, on a phone: take a photo of a room with the phone's camera →
+a proposed NEW room (drawn before anything changes) → Apply; or pick a room
+and type or say a change ("make table 3 round", "add two 2-tops by the
+window") → before / after drawings and the change list → Apply. Undo is one
+tap. The prompts, the room-from-picture rules and the parsers are the store's,
+PORTED verbatim into `cloud/api/.../rooms/RoomAiPort.kt` (`RoomAiDriftTest`
+fails if a block drifts from `RoomLayoutAi.kt` / `FloorEditAi.kt` /
+`AiText.kt` here, so change both). Changes reach the store by the two-way room
+sync (cloud/CONTRACT.md §11); a table with an open bill is never moved,
+reshaped, renumbered or removed from the portal — the cloud leaves it out and
+the store refuses it too. No drag-and-drop editor in the portal, on purpose.
+
 ## Turning it on
 
 | Setting | Values |
