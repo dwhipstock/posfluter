@@ -2977,11 +2977,11 @@ class L {
   /// `refusal` code): never the model's own words.
   String aiMenuRefusal(String code) => code == 'no_change'
       ? _t(
-          'Je n’ai trouvé aucun changement de menu à faire. Nommez le produit et ce qu’il faut changer, par exemple « poutine 14 ».',
-          'I couldn’t find a menu change to make from that. Name the item and what to change, for example “poutine 14”.',
-          'No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «poutine 14».',
-          'Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Poutine 14“.',
-          'Ek kon nie ’n spyskaartverandering daaruit aflei nie. Noem die item en wat moet verander, byvoorbeeld “poutine 14”.',
+          'Je n’ai trouvé aucun changement de menu à faire. Nommez le produit et ce qu’il faut changer, par exemple « salade César 14 ».',
+          'I couldn’t find a menu change to make from that. Name the item and what to change, for example “Caesar salad 14”.',
+          'No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «ensalada César 14».',
+          'Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Caesar Salad 14“.',
+          'Ek kon nie ’n spyskaartverandering daaruit aflei nie. Noem die item en wat moet verander, byvoorbeeld “Caesar salad 14”.',
         )
       : _t(
           'Je peux seulement vous aider à configurer et modifier votre menu. Essayez par exemple « ajoute une salade César à 14 dans Salades ».',

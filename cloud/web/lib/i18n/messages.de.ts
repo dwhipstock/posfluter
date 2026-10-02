@@ -425,6 +425,7 @@ export const de: Record<MsgKey, string> = {
   chart_per_store_gross: "Brutto, eine Linie pro Standort",
   chart_per_store_stacked: "Gestapelt nach Standort",
   dash_today_by_store: "Heute, nach Standort",
+  dash_by_store_range: "{range}, nach Standort",
   dash_combined_today: "Alle Standorte, heute",
   dash_combined_range: "Alle Standorte · {range}",
   dash_online_n: "{n} von {total} online",
