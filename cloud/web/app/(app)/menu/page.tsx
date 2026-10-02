@@ -9,6 +9,7 @@ import type { MenuItem, MenuResponse } from "@/lib/types";
 import { useStores } from "@/lib/store";
 import { StoreTag } from "@/components/store-breakdown";
 import { Badge } from "@/components/ui/badge";
+import { daysText } from "@/components/menu-specials";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
@@ -273,6 +274,10 @@ function ItemRow({ row, onEdit }: { row: MergedItem; onEdit?: () => void }) {
           <span className="truncate text-sm font-medium">{name(item.nameFr, item.nameEn, item.names)}</span>
           {item.isAlcohol && <Wine className="h-3 w-3 shrink-0 text-neutral-400" />}
           {copies.every((c) => !c.active) && <Badge variant="outline">{t("menu_off")}</Badge>}
+          {(item.availableDays?.length ?? 0) > 0 && (
+            <Badge variant="warning">{t("menu_badge_days_only", { days: daysText(t, item.availableDays ?? []) })}</Badge>
+          )}
+          {(item.specials?.length ?? 0) > 0 && <Badge variant="copper">{t("menu_badge_specials")}</Badge>}
           {storeSpecific && copies.map((c) => <StoreTag key={c.venueId} venueId={c.venueId} />)}
         </span>
         <span className="block truncate text-xs text-neutral-500">

@@ -622,6 +622,19 @@ export interface MenuItem {
   size?: string | null;
   /** The store's names beyond fr/en ({es: ..., de: ...}); absent from older servers. */
   names?: Record<string, string>;
+  /** Sold only on these business days ("fri", "sat"); null/absent = every day (CONTRACT §10 "Specials"). */
+  availableDays?: string[] | null;
+  /** Day prices; null/absent = none. */
+  specials?: MenuSpecial[] | null;
+}
+
+/** One menu special: days (mon..sun), an optional "HH:mm" window, an optional own name, size id → cents. */
+export interface MenuSpecial {
+  days: string[];
+  from?: string;
+  to?: string;
+  label?: string;
+  prices: Record<string, number>;
 }
 
 export interface MenuCategory {
