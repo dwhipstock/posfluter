@@ -16,6 +16,7 @@ import '../widgets/floor_object_icons.dart';
 import '../widgets/floor_plan.dart';
 import '../widgets/mic_button.dart';
 import '../widgets/room_layout_preview.dart';
+import '../widgets/room_photo_tray.dart';
 
 /// Manager floor-plan editor. Geometry edits (drag / resize / rotate / shape /
 /// seats) are LOCAL until "Save layout" does one batch write; add / delete /
@@ -585,8 +586,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     final photos = await (widget.pickRoomPhotos ?? _pickRoomPhotos)();
     if (photos == null || photos.isEmpty || !mounted) return;
     _closeSnack(); // never leave a Revert snackbar over the card or panel
-    // several pictures for the model to read: the slowest of the AI asks
-    final req = _AiRequest(const Duration(seconds: 40));
+    // the slowest of the AI asks; each extra view adds a little
+    final req = _AiRequest(Duration(seconds: 40 + 10 * (photos.length - 1)));
     setState(() => _asking = req);
     RoomLayoutProposal proposal;
     try {
@@ -624,55 +625,55 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     _showProposal(proposal);
   }
 
-  /// 1–4 room pictures from the camera, gallery or a picked file.
+  /// 1–4 room pictures in the photo tray: the camera (Android's app, the
+  /// Windows tablet's own page), the gallery or picked files; null = backed out.
   Future<List<RoomPhoto>?> _pickRoomPhotos() async {
-    final l = L.of(context);
     final picker = ImagePicker();
-    final source = picker.supportsImageSource(ImageSource.camera)
-        ? await showDialog<ImageSource>(
-            context: context,
-            builder: (context) => SimpleDialog(
-              title: Text(l.roomFromPicture),
-              children: [
-                SimpleDialogOption(
-                  onPressed: () => Navigator.pop(context, ImageSource.camera),
-                  child: Text(l.aiTakePhoto),
-                ),
-                SimpleDialogOption(
-                  onPressed: () => Navigator.pop(context, ImageSource.gallery),
-                  child: Text(l.aiChooseFromGallery),
-                ),
-              ],
-            ),
-          )
-        : ImageSource.gallery;
-    if (source == null || !mounted) return null;
-    final files = source == ImageSource.camera
-        ? [
-            ?await picker.pickImage(
-              source: source,
-              maxWidth: 2048,
-              maxHeight: 2048,
-              imageQuality: 88,
-            ),
-          ]
-        : await picker.pickMultiImage(
-            maxWidth: 2048,
-            maxHeight: 2048,
-            imageQuality: 88,
-            limit: 4,
-          );
-    if (files.isEmpty || !mounted) return null;
-    final photos = [
-      for (final f in files.take(4))
-        (
-          bytes: await f.readAsBytes(),
-          contentType: f.name.toLowerCase().endsWith('.png')
-              ? 'image/png'
-              : 'image/jpeg',
-        ),
-    ];
-    return photos;
+    RoomPhoto one(XFile f, List<int> bytes) => (
+      bytes: bytes,
+      contentType: f.name.toLowerCase().endsWith('.png')
+          ? 'image/png'
+          : 'image/jpeg',
+    );
+    return showDialog<List<RoomPhoto>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => RoomPhotoTray(
+        filesLabel: Theme.of(context).platform == TargetPlatform.windows,
+        takePhoto: picker.supportsImageSource(ImageSource.camera)
+            ? () async {
+                final f = await picker.pickImage(
+                  source: ImageSource.camera,
+                  maxWidth: 2048,
+                  maxHeight: 2048,
+                  imageQuality: 88,
+                );
+                return f == null ? null : one(f, await f.readAsBytes());
+              }
+            : null,
+        pickPhotos: (limit) async {
+          // pickMultiImage's limit must be at least 2: one left = a single pick
+          final files = limit < 2
+              ? [
+                  ?await picker.pickImage(
+                    source: ImageSource.gallery,
+                    maxWidth: 2048,
+                    maxHeight: 2048,
+                    imageQuality: 88,
+                  ),
+                ]
+              : await picker.pickMultiImage(
+                  maxWidth: 2048,
+                  maxHeight: 2048,
+                  imageQuality: 88,
+                  limit: limit,
+                );
+          return [
+            for (final f in files.take(limit)) one(f, await f.readAsBytes()),
+          ];
+        },
+      ),
+    );
   }
 
   /// Cancel on the AI working card: the request keeps running (nothing to

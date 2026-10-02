@@ -668,6 +668,49 @@ class L {
     'Aus Bild einrichten…',
     'Stel op uit prent…',
   );
+  // the photo tray before "Set up room": 1–4 views of the same room
+  String roomPhotosHint(int max) => _t(
+    'Jusqu’à $max photos de la même salle, prises de coins différents. L’IA les combine en un seul plan.',
+    'Up to $max photos of the same room, taken from different corners. The AI combines them into one plan.',
+    'Hasta $max fotos de la misma sala, tomadas desde distintas esquinas. La IA las combina en un solo plano.',
+    'Bis zu $max Fotos desselben Raums aus verschiedenen Ecken. Die KI fügt sie zu einem Plan zusammen.',
+    'Tot $max foto’s van dieselfde vertrek, uit verskillende hoeke geneem. Die KI voeg hulle saam tot een plan.',
+  );
+  String roomPhotosCount(int n, int max) => _t(
+    '$n photo(s) sur $max',
+    '$n of $max photos',
+    '$n de $max fotos',
+    '$n von $max Fotos',
+    '$n van $max foto’s',
+  );
+  String get roomPhotoTakeAnother => _t(
+    'Prendre une autre photo',
+    'Take another photo',
+    'Tomar otra foto',
+    'Noch ein Foto aufnehmen',
+    'Neem nog ’n foto',
+  );
+  String get roomPhotoChooseFiles => _t(
+    'Choisir des fichiers',
+    'Choose files',
+    'Elegir archivos',
+    'Dateien auswählen',
+    'Kies lêers',
+  );
+  String get roomPhotoRemove => _t(
+    'Retirer la photo',
+    'Remove photo',
+    'Quitar la foto',
+    'Foto entfernen',
+    'Verwyder foto',
+  );
+  String get roomPhotosSetUp => _t(
+    'Créer la salle',
+    'Set up room',
+    'Crear la sala',
+    'Raum einrichten',
+    'Stel vertrek op',
+  );
   String get roomFromPictureOffNote => _t(
     'Nécessite le menu IA et Internet.',
     'Needs AI menu setup and internet.',
