@@ -1,7 +1,7 @@
 // The Rooms page's pure helpers: the room after a proposal, photo proposals, names, highlights, errors.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fitSize, ghostRoom, highlights, objectCaption, objectTypeKey, photoRoom, roomErrorKey, roomName, roomStats } from "./rooms";
+import { addPhotos, fitSize, ghostRoom, highlights, MAX_ROOM_PHOTOS, objectCaption, objectTypeKey, photoRoom, roomErrorKey, roomName, roomStats } from "./rooms";
 import { messages, type MsgKey } from "./i18n/messages";
 import type { FloorEditProposal, FloorObject, FloorTable, RoomDto, RoomPhotoProposal } from "./types";
 
@@ -95,4 +95,15 @@ test("photos are downscaled to 1600 px on the long side, never upscaled", () => 
   assert.deepEqual(fitSize(4032, 3024), { width: 1600, height: 1200 });
   assert.deepEqual(fitSize(3024, 4032), { width: 1200, height: 1600 });
   assert.deepEqual(fitSize(800, 600), { width: 800, height: 600 });
+});
+
+test("the photo tray: 1 to 4 photos in order, the extras dropped and counted", () => {
+  assert.equal(MAX_ROOM_PHOTOS, 4);
+  assert.deepEqual(addPhotos([], ["a"]), { next: ["a"], dropped: 0 });
+  assert.deepEqual(addPhotos(["a"], ["b", "c"]), { next: ["a", "b", "c"], dropped: 0 });
+  // six picked from the gallery at once: the first four go in
+  assert.deepEqual(addPhotos([], ["1", "2", "3", "4", "5", "6"]), { next: ["1", "2", "3", "4"], dropped: 2 });
+  assert.deepEqual(addPhotos(["a", "b", "c", "d"], ["e"]), { next: ["a", "b", "c", "d"], dropped: 1 });
+  assert.deepEqual(addPhotos(["a", "b", "c"], ["d", "e"]), { next: ["a", "b", "c", "d"], dropped: 1 });
+  assert.deepEqual(addPhotos(["a"], []), { next: ["a"], dropped: 0 });
 });

@@ -7,12 +7,12 @@
 // reaches the store on its next sync; every apply can be undone right after.
 // No drag-and-drop editor, on purpose: the drawings are read-only.
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Camera, Check, ImagePlus, Loader2, Mic, Send, Sparkles, Square, Undo2 } from "lucide-react";
+import { ArrowRight, Camera, Check, ImagePlus, Loader2, Mic, Send, Sparkles, Square, Undo2, X } from "lucide-react";
 import { ApiError, post, postForm } from "@/lib/api";
 import { useI18n, useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
 import { clock, MAX_RECORD_SECONDS } from "@/lib/menu-ai";
-import { fitSize, ghostRoom, highlights, photoRoom, roomErrorKey, roomName, roomStats } from "@/lib/rooms";
+import { addPhotos, fitSize, ghostRoom, highlights, MAX_ROOM_PHOTOS, photoRoom, roomErrorKey, roomName, roomStats } from "@/lib/rooms";
 import type { FloorChange, FloorChangeDetail, FloorEditProposal, RoomAiApplyResult, RoomAiRevertResult, RoomDto, RoomPhotoProposal } from "@/lib/types";
 import { toWav, useVoice } from "@/components/menu-ai";
 import { DrawingLegend, RoomDrawing } from "@/components/room-drawing";
@@ -96,13 +96,15 @@ export function PhotoRoomSheet({
 }
 
 type PhotoPhase = "pick" | "busy" | "review" | "done";
+type TrayPhoto = { file: File; url: string };
 
 function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: () => void; onClose: () => void }) {
   const t = useT();
   const { locale } = useI18n();
   const [name, setName] = useState(() => t("rooms_name_default"));
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  // 1–4 views of the same room, each with its thumbnail URL
+  const [photos, setPhotos] = useState<TrayPhoto[]>([]);
+  const [dropped, setDropped] = useState(0);
   const [phase, setPhase] = useState<PhotoPhase>("pick");
   const [proposal, setProposal] = useState<RoomPhotoProposal | null>(null);
   const [applied, setApplied] = useState<RoomAiApplyResult | null>(null);
@@ -113,18 +115,40 @@ function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: ()
   // without `capture`: some phones open only the camera with it, never the photos
   const library = useRef<HTMLInputElement>(null);
 
-  useEffect(() => () => {
-    if (preview) URL.revokeObjectURL(preview);
-  }, [preview]);
+  // the thumbnails' object URLs go when the sheet closes
+  const urls = useRef<string[]>([]);
+  useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
-  const pick = (f: File | null) => {
+  const pick = (list: FileList | null, input: HTMLInputElement) => {
+    const files = Array.from(list ?? []).filter((f) => f.size > 0);
+    input.value = ""; // the same photo can be picked again after a remove
+    if (files.length === 0) return;
     setError(null);
-    setFile(f);
-    setPreview(f ? URL.createObjectURL(f) : null);
+    const { next, dropped: d } = addPhotos<TrayPhoto | File>(photos, files);
+    setDropped(d);
+    setPhotos(
+      next.map((p) => {
+        if (!(p instanceof File)) return p;
+        const url = URL.createObjectURL(p);
+        urls.current.push(url);
+        return { file: p, url };
+      }),
+    );
   };
 
+  const remove = (i: number) => {
+    const gone = photos[i];
+    if (!gone) return;
+    URL.revokeObjectURL(gone.url);
+    urls.current = urls.current.filter((u) => u !== gone.url);
+    setDropped(0);
+    setPhotos(photos.filter((_, j) => j !== i));
+  };
+
+  const full = photos.length >= MAX_ROOM_PHOTOS;
+
   const draw = async () => {
-    if (!file) {
+    if (photos.length === 0) {
       setError(t("rooms_err_no_image"));
       return;
     }
@@ -134,7 +158,9 @@ function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: ()
       const form = new FormData();
       form.append("name", name.trim() || t("rooms_name_default"));
       form.append("lang", locale);
-      form.append("image", await shrink(file), "room.jpg");
+      // every view in the one request: the AI merges them into one room
+      const shrunk = await Promise.all(photos.map((p) => shrink(p.file)));
+      shrunk.forEach((b, i) => form.append("image", b, `room-${i + 1}.jpg`));
       const p = await postForm<RoomPhotoProposal>(withVenue("/v1/room-ai/photo", venue), form);
       setProposal(p);
       setPhase("review");
@@ -202,6 +228,7 @@ function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: ()
 
         {phase === "pick" && (
           <div className="space-y-3">
+            {/* the camera, one shot each time; the gallery, several at once */}
             <input
               ref={input}
               type="file"
@@ -209,22 +236,46 @@ function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: ()
               capture="environment"
               className="sr-only"
               tabIndex={-1}
-              onChange={(e) => pick(e.target.files?.[0] ?? null)}
+              onChange={(e) => pick(e.target.files, e.currentTarget)}
             />
             <input
               ref={library}
               type="file"
               accept="image/*"
+              multiple
               className="sr-only"
               tabIndex={-1}
-              onChange={(e) => pick(e.target.files?.[0] ?? null)}
+              onChange={(e) => pick(e.target.files, e.currentTarget)}
             />
-            {preview ? (
+            {photos.length > 0 ? (
               <div className="space-y-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={preview} alt={t("rooms_photo_alt")} className="max-h-64 w-full rounded-xl bg-neutral-100 object-contain" />
-                <Button variant="secondary" className="w-full" onClick={() => input.current?.click()}>
-                  <ImagePlus /> {t("rooms_retake")}
+                <ul className="grid grid-cols-4 gap-2">
+                  {photos.map((p, i) => (
+                    <li key={p.url} className="relative aspect-square min-w-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.url}
+                        alt={t("rooms_photo_alt", { n: i + 1 })}
+                        className="h-full w-full rounded-lg border border-neutral-200 bg-neutral-100 object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => remove(i)}
+                        aria-label={t("rooms_photo_remove", { n: i + 1 })}
+                        title={t("rooms_photo_remove", { n: i + 1 })}
+                        className="absolute -right-1.5 -top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-ink text-white shadow ring-2 ring-white focus-visible:outline-none focus-visible:ring-accent"
+                      >
+                        <X className="h-4 w-4" aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs tabular-nums text-neutral-700" role="status">
+                  {t("rooms_photos_count", { n: photos.length, max: MAX_ROOM_PHOTOS })}
+                </p>
+                {dropped > 0 && <p className="text-xs text-neutral-700">{t("rooms_photos_limit", { max: MAX_ROOM_PHOTOS })}</p>}
+                <Button variant="secondary" className="h-auto min-h-10 w-full whitespace-normal py-2" disabled={full} onClick={() => input.current?.click()}>
+                  <Camera /> {t("rooms_retake")}
                 </Button>
               </div>
             ) : (
@@ -237,7 +288,7 @@ function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: ()
                 <span className="text-sm font-semibold text-ink">{t("rooms_take_photo")}</span>
               </button>
             )}
-            <Button variant="ghost" size="sm" className="h-auto min-h-8 w-full whitespace-normal py-1.5" onClick={() => library.current?.click()}>
+            <Button variant="ghost" size="sm" className="h-auto min-h-8 w-full whitespace-normal py-1.5" disabled={full} onClick={() => library.current?.click()}>
               <ImagePlus /> {t("rooms_choose_photo")}
             </Button>
             <p className="text-xs text-neutral-600">{t("rooms_photo_hint")}</p>
@@ -278,7 +329,7 @@ function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: ()
 
       <SheetFooter className="flex flex-wrap items-center justify-end gap-2">
         {phase === "pick" && (
-          <Button className="w-full sm:w-auto" disabled={!file} onClick={draw}>
+          <Button className="w-full sm:w-auto" disabled={photos.length === 0} onClick={draw}>
             <Sparkles /> {t("rooms_draw")}
           </Button>
         )}
