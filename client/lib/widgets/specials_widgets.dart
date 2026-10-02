@@ -43,24 +43,35 @@ class SpecialPriceText extends StatelessWidget {
   final Variant variant;
   final String Function(int cents) money;
   final TextStyle style;
+
+  /// After both prices: "+" for an item with sizes ("$5.00+ $7.50+", the
+  /// "from" price, the regular one struck through).
+  final String suffix;
   const SpecialPriceText(
     this.variant, {
     super.key,
     required this.money,
     required this.style,
+    this.suffix = '',
   });
 
   @override
   Widget build(BuildContext context) {
     final reg = variant.regularPriceCents;
-    if (reg == null) return Text(money(variant.priceCents), style: style);
+    if (reg == null) {
+      return Text(
+        '${money(variant.priceCents)}$suffix',
+        maxLines: 1,
+        style: style,
+      );
+    }
     return Text.rich(
       TextSpan(
         children: [
-          TextSpan(text: money(variant.priceCents), style: style),
+          TextSpan(text: '${money(variant.priceCents)}$suffix', style: style),
           const TextSpan(text: ' '),
           TextSpan(
-            text: money(reg),
+            text: '${money(reg)}$suffix',
             style: style.copyWith(
               fontSize: (style.fontSize ?? 14) * 0.75,
               fontWeight: FontWeight.w400,
@@ -250,6 +261,12 @@ class DayChips extends StatelessWidget {
             key: ValueKey('$keyPrefix-$d'),
             label: Text(t.dayShort(d)),
             selected: selected.contains(d),
+            // selected is navy: white text and check on it, never dark on dark
+            labelStyle: T.small(
+              color: selected.contains(d) ? T.onPrimary : T.textPrimary,
+              weight: FontWeight.w600,
+            ),
+            checkmarkColor: T.onPrimary,
             onSelected: onToggle == null ? null : (_) => onToggle!(d),
           ),
       ],

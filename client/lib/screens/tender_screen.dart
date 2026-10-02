@@ -46,12 +46,17 @@ class TenderScreen extends StatefulWidget {
 
   /// Shown big on the receipt screen (a carry-out order: "Order #105 · Carry-out").
   final String? headline;
+
+  /// A carry-out order's number: the bar says "Order #105" (the counter's
+  /// wording) instead of "Bill #5". Null (a table's check): "Bill #".
+  final int? orderNumber;
   const TenderScreen({
     super.key,
     required this.check,
     this.groupId,
     this.counterOrder = false,
     this.headline,
+    this.orderNumber,
     this.stripeStatus,
     this.cardReader,
     this.cardReaderSupported,
@@ -574,12 +579,15 @@ class _TenderScreenState extends State<TenderScreen> {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    final n = widget.orderNumber;
+    final doc = n != null ? Q.of(context).orderNo(n) : l.billNo(_check.id);
     return Scaffold(
       appBar: AppBar(
         title: Text(
           _group == null
-              ? '${l.pay} — ${l.billNo(_check.id)}'
-              : '${l.pay} — ${l.billNo(_check.id)} · ${l.groupTitle(_group!.number)}',
+              ? '${l.pay} — $doc'
+              : '${l.pay} — $doc · ${l.groupTitle(_group!.number)}',
+          key: const Key('pay-title'),
         ),
         actions: const [LangActions()],
       ),

@@ -151,7 +151,7 @@ class CopperLanternRaleighTest {
         val policy = config(CopperLanternVenue.EXPRESS).receiptPolicy
         assertEquals(LocaleCode.EN, policy.locale)
         val en = text(ReceiptRenderer.render(bill, policy, ReceiptKind.PROVISIONAL))
-        for (want in listOf("#101 · Dine in", "*** CUSTOMER BILL ***", "*** NOT A RECEIPT ***", "Tax (8.25%)",
+        for (want in listOf("Order #101 · Dine in", "*** CUSTOMER BILL ***", "*** NOT A RECEIPT ***", "Tax (8.25%)",
             "Rounding", "Cash total", "Lantern House Lager (20 oz pint)")) {
             assertTrue(want in en, "'$want' missing:\n$en")
         }
@@ -164,14 +164,14 @@ class CopperLanternRaleighTest {
         }
         // press-and-hold reprints: each in its own language, one language at a time
         val fr = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.FR), ReceiptKind.PROVISIONAL))
-        assertTrue("#101 · Sur place" in fr && "Dine in" !in fr, fr)
+        assertTrue("Commande n°\u00A0101 · Sur place" in fr && "Dine in" !in fr, fr)
         assertTrue("Taxes (8.25%)" in fr && "Lager de la Lanterne" in fr, fr)
         val es = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.ES), ReceiptKind.PROVISIONAL))
-        assertTrue("#101 · Para comer aquí" in es && "Lager de la casa Lantern" in es && "Impuesto (8.25%)" in es, es)
+        assertTrue("Pedido n.º 101 · Para comer aquí" in es && "Lager de la casa Lantern" in es && "Impuesto (8.25%)" in es, es)
         val de = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.DE), ReceiptKind.PROVISIONAL))
-        assertTrue("#101 · Hier essen" in de && "Steuer (8.25%)" in de, de)
+        assertTrue("Bestellung Nr. 101 · Hier essen" in de && "Steuer (8.25%)" in de, de)
         val af = text(ReceiptRenderer.render(bill, policy.withLocale(LocaleCode.AF), ReceiptKind.PROVISIONAL))
-        assertTrue("#101 · Eet hier" in af && "Belasting (8.25%)" in af, af)
+        assertTrue("Bestelling #101 · Eet hier" in af && "Belasting (8.25%)" in af, af)
         // the same bill itemised (a store whose display is Itemized): the two NC taxes, each with its rate
         val itemised = text(ReceiptRenderer.render(bill.copy(taxDisplay = TaxDisplay.Itemized), policy, ReceiptKind.PROVISIONAL))
         assertTrue("NC sales tax 7.25%" in itemised && "Wake prepared food tax 1%" in itemised && "Tax (" !in itemised, itemised)

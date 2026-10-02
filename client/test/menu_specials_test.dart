@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -66,34 +67,58 @@ http.Response _json(Object b, [int status = 200]) => http.Response.bytes(
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 
-/// A fake store; [requests] records every call that changes something.
-MockClient _store(List<(String, String, Object?)> requests, {Object? check}) =>
-    MockClient((req) async {
-      if (req.method != 'GET') {
-        requests.add((
-          req.method,
-          req.url.path,
-          req.body.isEmpty ? null : jsonDecode(req.body),
-        ));
-      }
-      final body = switch (req.url.path) {
-        '/health' => _fx('health'),
-        '/staff' => _fx('staff'),
-        '/zones' => _fx('zones'),
-        '/alert-config' => {
-          'pendingAlertsEnabled': false,
-          'pendingAlertEscalateSeconds': 90,
-          'pendingAlertVolume': 0,
+/// [_specialItems], plus the IPA's pint on happy hour ($6.00, menu $8.25)
+/// with both its sizes kept: a sized item on special.
+List<dynamic> _sizedSpecialItems() {
+  final items = _specialItems();
+  for (final i in items) {
+    if (i['id'] == 'north-ipa') {
+      final pint = (i['variants'] as List).first as Map<String, dynamic>;
+      i['specials'] = [
+        {
+          ..._happyHour,
+          'prices': {pint['id']: 600},
         },
-        '/items' => _specialItems(),
-        '/categories' => _fx('categories'),
-        '/checks/1' => check ?? _fx('check'),
-        _ when req.method == 'PATCH' => _specialItems().first,
-        _ => null,
-      };
-      if (body == null) return http.Response('{"error":"not found"}', 404);
-      return _json(body);
-    });
+      ];
+      pint['regularPriceCents'] = pint['priceCents'];
+      pint['priceCents'] = 600;
+      pint['special'] = _happyHour;
+    }
+  }
+  return items;
+}
+
+/// A fake store; [requests] records every call that changes something.
+MockClient _store(
+  List<(String, String, Object?)> requests, {
+  Object? check,
+  List<dynamic> Function() items = _specialItems,
+}) => MockClient((req) async {
+  if (req.method != 'GET') {
+    requests.add((
+      req.method,
+      req.url.path,
+      req.body.isEmpty ? null : jsonDecode(req.body),
+    ));
+  }
+  final body = switch (req.url.path) {
+    '/health' => _fx('health'),
+    '/staff' => _fx('staff'),
+    '/zones' => _fx('zones'),
+    '/alert-config' => {
+      'pendingAlertsEnabled': false,
+      'pendingAlertEscalateSeconds': 90,
+      'pendingAlertVolume': 0,
+    },
+    '/items' => items(),
+    '/categories' => _fx('categories'),
+    '/checks/1' => check ?? _fx('check'),
+    _ when req.method == 'PATCH' => _specialItems().first,
+    _ => null,
+  };
+  if (body == null) return http.Response('{"error":"not found"}', 404);
+  return _json(body);
+});
 
 Future<void> _pumpPos(
   WidgetTester tester,
@@ -139,6 +164,19 @@ class _Kiosk extends KioskApi {
   @override
   Future<List<KioskUpsellRow>> upsell(List<Map<String, dynamic>> lines) async =>
       const [];
+}
+
+/// The span in [root] that reads exactly [text].
+TextSpan? _spanOf(InlineSpan root, String text) {
+  TextSpan? hit;
+  root.visitChildren((s) {
+    if (s is TextSpan && s.text == text) {
+      hit = s;
+      return false;
+    }
+    return true;
+  });
+  return hit;
 }
 
 void main() {
@@ -377,4 +415,94 @@ void main() {
     expect(find.text(r'$7.50'), findsOneWidget); // struck through
     c.dispose();
   });
+  testWidgets('editor: a selected day chip is white on navy, readable', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPosTheme(),
+        home: Scaffold(
+          body: DayChips(selected: const {'mon'}, lang: 'en', onToggle: (_) {}),
+        ),
+      ),
+    );
+    Color? colorOf(String text) =>
+        tester.renderObject<RenderParagraph>(find.text(text)).text.style?.color;
+    final mon = tester.widget<FilterChip>(
+      find.byKey(const ValueKey('day-mon')),
+    );
+    expect(mon.selected, isTrue);
+    expect(colorOf(SpecialsText('en').dayShort('mon')), T.onPrimary);
+    expect(mon.checkmarkColor, T.onPrimary);
+    // not selected: dark text on the white chip
+    expect(colorOf(SpecialsText('en').dayShort('tue')), T.textPrimary);
+  });
+
+  testWidgets('a "from" price: the menu price struck through after it too', (
+    tester,
+  ) async {
+    final item = Item.fromJson(
+      _sizedSpecialItems().firstWhere((i) => i['id'] == 'north-ipa'),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SpecialPriceText(
+            item.variants.first,
+            money: (c) => '\$${(c / 100).toStringAsFixed(2)}',
+            style: const TextStyle(fontSize: 18),
+            suffix: '+',
+          ),
+        ),
+      ),
+    );
+    final span =
+        tester.renderObject<RenderParagraph>(find.byType(RichText)).text
+            as TextSpan;
+    expect(span.toPlainText(), r'$6.00+ $8.25+');
+    expect(
+      _spanOf(span, r'$8.25+')?.style?.decoration,
+      TextDecoration.lineThrough,
+    );
+    expect(_spanOf(span, r'$6.00+')?.style?.decoration, isNull);
+  });
+
+  for (final scale in [1.0, 1.15]) {
+    testWidgets('POS: a sized item on special shows its regular "from" price '
+        'struck through, no overflow at ${scale}x text', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final requests = <(String, String, Object?)>[];
+      await _pumpPos(
+        tester,
+        const CheckScreen(checkId: 1, tableLabel: 'U-1'),
+        _store(requests, items: _sizedSpecialItems),
+        () async {
+          final tile = find.byKey(const Key('menu-tile-north-ipa'));
+          expect(tile, findsOneWidget);
+          final price = find.descendant(
+            of: tile,
+            matching: find.textContaining(r'$8.25+', findRichText: true),
+          );
+          expect(price, findsOneWidget);
+          final span =
+              tester.renderObject<RenderParagraph>(price).text as TextSpan;
+          expect(span.toPlainText(), r'$6.00+ $8.25+');
+          expect(
+            _spanOf(span, r'$8.25+')?.style?.decoration,
+            TextDecoration.lineThrough,
+          );
+          // a plain sized item: just its "from" price
+          expect(
+            find.descendant(
+              of: find.byKey(const Key('menu-tile-maple-stout')),
+              matching: find.text(r'$8.50+'),
+            ),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    });
+  }
 }

@@ -58,6 +58,7 @@ void main() {
     Size size = const Size(2560, 1600),
     double dpr = 2,
     TerminalStatus terminal = TerminalStatus.none,
+    int? orderNumber,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = dpr;
@@ -70,12 +71,39 @@ void main() {
             check: Check.fromJson(_check()),
             stripeStatus: () async => StripeStatus.off,
             terminalStatus: () async => terminal,
+            orderNumber: orderNumber,
           ),
         ),
       ),
     );
     await tester.pump();
   }
+
+  testWidgets('a table check says Bill #; a carry-out order says Order #', (
+    tester,
+  ) async {
+    Prefs.instance.lang = 'en';
+    final id = Check.fromJson(_check()).id;
+    await pump(tester);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('pay-title'))).data,
+      'Pay — Bill #$id',
+    );
+    await tester.pumpWidget(const SizedBox());
+    await pump(tester, orderNumber: 105);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('pay-title'))).data,
+      'Pay — Order #105',
+    );
+    await tester.pumpWidget(const SizedBox());
+    Prefs.instance.lang = 'fr';
+    addTearDown(() => Prefs.instance.lang = 'en');
+    await pump(tester, orderNumber: 105);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('pay-title'))).data,
+      allOf(startsWith('Payer — Commande n'), endsWith('105')),
+    );
+  });
 
   Future<void> type(WidgetTester tester, String digits) async {
     for (final d in digits.split('')) {

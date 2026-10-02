@@ -67,21 +67,25 @@ data class Receipt(
 }
 
 /**
- * A quick-serve order on its receipt: "#101" and dine in / take out. The words
- * follow the receipt's print language ([MessageKey.KIOSK_TAKE_OUT]), one
- * language only.
+ * A quick-serve order on its receipt: "Order #101 · Take out", never a table.
+ * The words follow the receipt's print language ([MessageKey.KIOSK_TAKE_OUT]),
+ * one language only. [number] is null before the order has one (a counter
+ * order's bill before it is paid): then just "Take out" / "Dine in".
  */
 data class ReceiptOrder(
-    val number: String,
+    val number: String?,
     val takeOut: Boolean,
     /** A restaurant's carry-out order: "Order #105 · Carry-out", printed instead of a table. */
     val carryOut: Boolean = false,
     /** The call-in customer's name, when one was taken (carry-out). */
     val customer: String? = null,
 ) {
-    fun label(locale: LocaleCode): String =
-        if (carryOut) Messages.get(MessageKey.RECEIPT_CARRY_OUT_ORDER, locale, number.removePrefix("#"))
-        else "$number · " + Messages.get(if (takeOut) MessageKey.KIOSK_TAKE_OUT else MessageKey.KIOSK_DINE_IN, locale)
+    fun label(locale: LocaleCode): String {
+        val n = number?.removePrefix("#")
+        if (carryOut) return Messages.get(MessageKey.RECEIPT_CARRY_OUT_ORDER, locale, n ?: "—")
+        val mode = Messages.get(if (takeOut) MessageKey.KIOSK_TAKE_OUT else MessageKey.KIOSK_DINE_IN, locale)
+        return if (n == null) mode else Messages.get(MessageKey.RECEIPT_ORDER, locale, n) + " · " + mode
+    }
 }
 
 data class ReceiptItem(
@@ -253,8 +257,8 @@ object ReceiptRenderer {
         }
         if (policy.retail) {
             add(PrintLine.KeyValue(msg(RECEIPT_REGISTER) + " " + receipt.tableLabel, msg(RECEIPT_SALE) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
-        } else if (receipt.order?.carryOut == true) {
-            // a carry-out order is at no table: its number is the headline below
+        } else if (receipt.order != null) {
+            // a quick-serve or carry-out order is at no table: its number is the headline below
             add(PrintLine.Text(msg(RECEIPT_BILL) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))
         } else {
             add(PrintLine.KeyValue(msg(RECEIPT_TABLE) + " " + receipt.tableLabel, msg(RECEIPT_BILL) + " " + msg(MessageKey.RECEIPT_NUMBER, receipt.checkId)))

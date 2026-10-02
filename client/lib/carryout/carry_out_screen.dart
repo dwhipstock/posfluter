@@ -26,6 +26,7 @@ Future<void> openCarryOutOrder(BuildContext context, CounterOrder o) async {
         checkId: o.checkId,
         tableLabel: carryOutHeadline(context, o),
         carryOut: true,
+        orderNumber: o.orderNumber,
         panelTop: CarryOutCustomerBar(order: o),
       ),
     ),
@@ -174,7 +175,9 @@ class _CarryOutScreenState extends State<CarryOutScreen> with ResumeRefresh {
       appBar: AppBar(
         backgroundColor: T.navy,
         foregroundColor: T.onPrimary,
-        title: Text(c.carryOut),
+        // the theme's title is navy (for the white bars): white on this one
+        titleTextStyle: T.headline(color: T.onPrimary),
+        title: Text(c.carryOut, key: const Key('carryout-title')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),

@@ -384,12 +384,40 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         _selectedId = null;
         _undo.clear();
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(_topSnackBar(context, Text(l.tableDeleted), short: true));
+      // name the table that went (a sub-table is U-17, not its parent U-16)
+      ScaffoldMessenger.of(context).showSnackBar(
+        _topSnackBar(
+          context,
+          Text(
+            l.tableDeletedNamed(t.displayLabel),
+            key: const Key('table-removed-message'),
+          ),
+          short: true,
+        ),
+      );
     } catch (e) {
-      // table_in_use / has_sub_tables come back as clear localized errors
-      if (mounted) _showEditorError(context, e);
+      if (!mounted) return;
+      // has_sub_tables: name the sub-tables still on it
+      final subs = [
+        for (final s in _tables)
+          if (s.parentTableId == t.id) s.displayLabel,
+      ];
+      if (e is ApiException && e.code == 'has_sub_tables' && subs.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            _topSnackBar(
+              context,
+              Text(
+                l.tableHasSubTables(t.displayLabel, subs.join(', ')),
+                key: const Key('table-removed-message'),
+              ),
+            ),
+          );
+        return;
+      }
+      // table_in_use comes back as a clear localized error
+      _showEditorError(context, e);
     }
   }
 

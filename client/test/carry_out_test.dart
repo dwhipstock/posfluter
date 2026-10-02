@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -136,7 +137,17 @@ void main() {
     tester,
   ) async {
     var taps = 0;
-    final spot = FloorObject('o1', 'CARRY_OUT', 40, 900, 160, 90, 0, null, null);
+    final spot = FloorObject(
+      'o1',
+      'CARRY_OUT',
+      40,
+      900,
+      160,
+      90,
+      0,
+      null,
+      null,
+    );
     for (final lang in ['en', 'fr', 'es', 'de', 'af']) {
       Prefs.instance.lang = lang;
       await pump(
@@ -232,6 +243,8 @@ void main() {
       final screen = tester.widget<CheckScreen>(find.byType(CheckScreen));
       expect(screen.carryOut, isTrue);
       expect(screen.tableLabel, 'Order #105 · Carry-out');
+      // the pay screen says "Order #105", not "Bill #5"
+      expect(screen.orderNumber, 105);
       expect(find.text('Order #105 · Carry-out'), findsOneWidget);
       expect(find.textContaining('Lee'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -243,5 +256,31 @@ void main() {
       }
       expect(store.discarded, [5]);
     }, () => store.client);
+  });
+
+  testWidgets('the list has its title, white on the navy bar, in all five '
+      'languages', (tester) async {
+    const titles = {
+      'en': 'Carry-out',
+      'fr': 'À emporter',
+      'es': 'Para llevar',
+      'de': 'Zum Mitnehmen',
+      'af': 'Wegneem',
+    };
+    final store = _Store();
+    for (final MapEntry(key: lang, value: title) in titles.entries) {
+      Prefs.instance.lang = lang;
+      await http.runWithClient(() async {
+        await pump(tester, const CarryOutScreen());
+        final t = find.byKey(const Key('carryout-title'));
+        expect(tester.widget<Text>(t).data, title);
+        final p = tester.renderObject<RenderParagraph>(
+          find.descendant(of: t, matching: find.byType(RichText)),
+        );
+        expect(p.text.style?.color, T.onPrimary, reason: lang);
+        expect(tester.takeException(), isNull);
+      }, () => store.client);
+      await tester.pumpWidget(const SizedBox());
+    }
   });
 }

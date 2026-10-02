@@ -318,9 +318,11 @@ class PickupOrders(
                 number = "#$n", takeOut = true, carryOut = true, customer = row[CounterOrders.customerName],
             )
         }
-        row.takeIf { it[CounterOrders.orderNumber] != null && it[CounterOrders.status] in STATUSES }?.let {
+        // a quick-serve order is never at a table: numbered, "Order #101 · Take out";
+        // before it has a number (its bill before paying), just "Take out"
+        row.takeIf { it[CounterOrders.status] != CANCELLED }?.let {
             ReceiptOrder(
-                number = it[CounterOrders.orderNumber]?.let { n -> "#$n" } ?: "—",
+                number = it[CounterOrders.orderNumber]?.let { n -> "#$n" },
                 takeOut = it[CounterOrders.serviceMode] == "TAKE_OUT",
             )
         }
