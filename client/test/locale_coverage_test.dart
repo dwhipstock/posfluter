@@ -39,6 +39,7 @@ const _tables = [
   ]),
   _Table('lib/kiosk/kiosk_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
   _Table('lib/carryout/carry_out_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
+  _Table('lib/specials_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
   _Table('lib/retail/retail_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/stock/stock_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/forecourt/forecourt_i18n.dart', ['en', 'es', 'fr']),
@@ -62,6 +63,8 @@ const _sameWords = {
   'Code', 'Chat', 'Name', 'Manager', 'Bank', 'Port', 'Simulator', 'Stations',
   // the same word in Afrikaans
   'item', 'items', 'Kiosk', 'Afrikaans',
+  // a menu special: French and Afrikaans menus say "happy hour" too
+  'Happy', 'hour',
 };
 
 /// A string literal's text, decoded: interpolations become '§'.

@@ -7,6 +7,8 @@ import '../api.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import '../i18n.dart';
+import '../specials_i18n.dart';
+import '../widgets/specials_widgets.dart';
 import '../text_utils.dart';
 import '../kitchen/kitchen_banner.dart';
 import '../kitchen/kitchen_i18n.dart';
@@ -401,6 +403,17 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   Future<void> _addItem(Item item, {bool forceSheet = false}) async {
     if (!item.active) return; // 86'd: visible but not orderable
+    if (!item.availableNow) {
+      // sold only on some days (the store refuses it today anyway)
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            SpecialsText(L.of(context).lang).notToday(item.availableDays),
+          ),
+        ),
+      );
+      return;
+    }
     if (widget.counterOrder && !forceSheet && item.variants.length == 1) {
       _flashTimer?.cancel();
       setState(() => _flashItem = item.id);
@@ -887,27 +900,30 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         _categoryRail(l, entries),
         const VerticalDivider(),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, c) {
-              // responsive grid: ~175pt columns that always fill the pane
-              // (4 across on the landscape tablet);
-              // photo 16:10 + a fixed two-line name + price
-              const pad = 16.0, gap = 14.0;
-              final avail = c.maxWidth - pad * 2;
-              final cols = ((avail + gap) / (172 + gap)).floor().clamp(2, 6);
-              final tileW = (avail - gap * (cols - 1)) / cols;
-              return GridView.builder(
-                padding: const EdgeInsets.all(pad),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: cols,
-                  mainAxisSpacing: gap,
-                  crossAxisSpacing: gap,
-                  mainAxisExtent: tileW * 10 / 16 + _tileTextHeight,
-                ),
-                itemCount: visible.length,
-                itemBuilder: (_, i) => _menuTile(visible[i], l),
-              );
-            },
+          child: _withTodayRow(
+            l,
+            LayoutBuilder(
+              builder: (context, c) {
+                // responsive grid: ~175pt columns that always fill the pane
+                // (4 across on the landscape tablet);
+                // photo 16:10 + a fixed two-line name + price
+                const pad = 16.0, gap = 14.0;
+                final avail = c.maxWidth - pad * 2;
+                final cols = ((avail + gap) / (172 + gap)).floor().clamp(2, 6);
+                final tileW = (avail - gap * (cols - 1)) / cols;
+                return GridView.builder(
+                  padding: const EdgeInsets.all(pad),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    mainAxisSpacing: gap,
+                    crossAxisSpacing: gap,
+                    mainAxisExtent: tileW * 10 / 16 + _tileTextHeight,
+                  ),
+                  itemCount: visible.length,
+                  itemBuilder: (_, i) => _menuTile(visible[i], l),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -993,26 +1009,29 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         _categoryRail(l, entries),
         const VerticalDivider(),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, c) {
-              // ~112pt columns: 6 across on the landscape tablet and the Surface
-              const pad = 8.0, gap = 6.0;
-              final avail = c.maxWidth - pad * 2;
-              final cols = ((avail + gap) / (112 + gap)).floor().clamp(3, 6);
-              final tileW = (avail - gap * (cols - 1)) / cols;
-              return GridView.builder(
-                padding: const EdgeInsets.all(pad),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: cols,
-                  mainAxisSpacing: gap,
-                  crossAxisSpacing: gap,
-                  mainAxisExtent: tileW / 2.2 + _counterTextHeight,
-                ),
-                itemCount: visible.length,
-                itemBuilder: (_, i) =>
-                    _counterTile(visible[i], l, counts[visible[i].id] ?? 0),
-              );
-            },
+          child: _withTodayRow(
+            l,
+            LayoutBuilder(
+              builder: (context, c) {
+                // ~112pt columns: 6 across on the landscape tablet and the Surface
+                const pad = 8.0, gap = 6.0;
+                final avail = c.maxWidth - pad * 2;
+                final cols = ((avail + gap) / (112 + gap)).floor().clamp(3, 6);
+                final tileW = (avail - gap * (cols - 1)) / cols;
+                return GridView.builder(
+                  padding: const EdgeInsets.all(pad),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    mainAxisSpacing: gap,
+                    crossAxisSpacing: gap,
+                    mainAxisExtent: tileW / 2.2 + _counterTextHeight,
+                  ),
+                  itemCount: visible.length,
+                  itemBuilder: (_, i) =>
+                      _counterTile(visible[i], l, counts[visible[i].id] ?? 0),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -1024,9 +1043,11 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   Widget _counterTile(Item item, L l, int inOrder) {
     final inactive = !item.active;
+    final notToday = !inactive && !item.availableNow;
     final flash = _flashItem == item.id;
+    final badge = specialBadgeText(item, l.lang);
     return Opacity(
-      opacity: inactive ? 0.45 : 1,
+      opacity: inactive || notToday ? 0.45 : 1,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -1036,7 +1057,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             color: flash ? T.accent.withValues(alpha: .18) : T.surface,
             borderColor: flash || inOrder > 0 ? T.accent : T.border,
             onTap: inactive ? null : () => _addItem(item),
-            onLongPress: inactive
+            onLongPress: inactive || notToday
                 ? null
                 : () => _addItem(item, forceSheet: true),
             child: Column(
@@ -1074,15 +1095,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                         Row(
                           children: [
                             Expanded(
-                              child: Text(
-                                item.variants.length == 1
-                                    ? money(item.variants.first.priceCents)
-                                    : '${money(item.variants.first.priceCents)}+',
-                                maxLines: 1,
-                                style: T.price(
-                                  size: 15,
-                                  weight: FontWeight.w700,
-                                ),
+                              child: _tilePrice(
+                                item,
+                                T.price(size: 15, weight: FontWeight.w700),
                               ),
                             ),
                             if (inactive)
@@ -1096,6 +1111,22 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               ],
             ),
           ),
+          if (badge != null && !inactive)
+            Positioned(
+              top: 6,
+              left: 6,
+              right: inOrder > 0 ? 44 : 6,
+              child: IgnorePointer(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SpecialBadge(
+                    badge,
+                    key: Key('special-${item.id}'),
+                    muted: notToday,
+                  ),
+                ),
+              ),
+            ),
           // how many are on the order: the cashier sees each tap land
           if (inOrder > 0)
             Positioned(
@@ -1133,21 +1164,46 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
 
   Widget _menuTile(Item item, L l) {
     final inactive = !item.active; // 86'd: greyed + strike-through, NOT hidden
+    // sold only on other days: greyed with its days, a tap says why
+    final notToday = !inactive && !item.availableNow;
+    final badge = specialBadgeText(item, l.lang);
     return Opacity(
-      opacity: inactive ? 0.45 : 1,
+      opacity: inactive || notToday ? 0.45 : 1,
       child: PosPanel(
-        raised: !inactive,
+        key: Key('menu-tile-${item.id}'),
+        raised: !inactive && !notToday,
         onTap: inactive ? null : () => _addItem(item),
-        onLongPress: inactive ? null : () => _addItem(item, forceSheet: true),
+        onLongPress: inactive || notToday
+            ? null
+            : () => _addItem(item, forceSheet: true),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             AspectRatio(
               aspectRatio: 16 / 10,
-              child: ItemPhoto(
-                item,
-                width: 512,
-                fallback: AbbrevFallback(item.abbrev, size: 56),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ItemPhoto(
+                    item,
+                    width: 512,
+                    fallback: AbbrevFallback(item.abbrev, size: 56),
+                  ),
+                  if (badge != null && !inactive)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      right: 8,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SpecialBadge(
+                          badge,
+                          key: Key('special-${item.id}'),
+                          muted: notToday,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             Expanded(
@@ -1179,11 +1235,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
-                            child: Text(
-                              item.variants.length == 1
-                                  ? money(item.variants.first.priceCents)
-                                  : '${money(item.variants.first.priceCents)}+',
-                              style: T.price(size: 18, weight: FontWeight.w700),
+                            child: _tilePrice(
+                              item,
+                              T.price(size: 18, weight: FontWeight.w700),
                             ),
                           ),
                         ),
@@ -1196,6 +1250,73 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// A tile's price: one size's (the special's, the menu price struck through
+  /// beside it), or the first size's with a "+".
+  Widget _tilePrice(Item item, TextStyle style) {
+    final v = item.variants.first;
+    if (item.variants.length == 1) {
+      return SpecialPriceText(v, money: money, style: style);
+    }
+    return Text('${money(v.priceCents)}+', maxLines: 1, style: style);
+  }
+
+  Widget _withTodayRow(L l, Widget grid) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _todaysSpecialsRow(l),
+      Expanded(child: grid),
+    ],
+  );
+
+  /// "Today's specials": a slim row of what is on special (or sold only on
+  /// some days and on today) above the menu; a tap rings it. Hidden when none.
+  Widget _todaysSpecialsRow(L l) {
+    final today = todaysSpecials(_items);
+    if (today.isEmpty) return const SizedBox.shrink();
+    final t = SpecialsText(l.lang);
+    return Container(
+      key: const Key('todays-specials'),
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: const BoxDecoration(
+        color: T.surface,
+        border: Border(bottom: BorderSide(color: T.border)),
+      ),
+      child: Row(
+        children: [
+          const Icon(LucideIcons.sparkles, size: 18, color: T.attention),
+          const SizedBox(width: 6),
+          Text(
+            t.todaysSpecials,
+            style: T.small(color: T.attention, weight: FontWeight.w700),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: today.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
+              itemBuilder: (_, i) {
+                final item = today[i];
+                final v = item.variants.first;
+                final name = l.name(item.nameFr, item.nameEn, item.names);
+                return Center(
+                  child: ActionChip(
+                    key: Key('today-${item.id}'),
+                    label: Text(
+                      v.onSpecial ? '$name · ${money(v.priceCents)}' : name,
+                    ),
+                    onPressed: () => _addItem(item),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1650,6 +1771,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                   '${_lineTitle(line, l)} ×${line.qty}',
                   style: T.small(color: T.textPrimary),
                 ),
+                if (line.special case final sp?)
+                  Text(sp.name(l.lang), style: T.small(color: T.attention)),
                 if (line.note != null) Text(line.note!, style: T.small()),
               ],
             ),
@@ -1724,6 +1847,18 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
               ),
             ],
           ),
+          // rung at a special: its name ("Happy hour") under the item
+          if (line.special case final sp?)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 2),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SpecialBadge(
+                  sp.name(l.lang),
+                  key: Key('line-special-${line.id}'),
+                ),
+              ),
+            ),
           Row(
             children: [
               Expanded(
