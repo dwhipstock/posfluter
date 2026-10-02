@@ -181,3 +181,12 @@ export function fitSize(width: number, height: number, max = 1600): { width: num
   const k = max / long;
   return { width: Math.max(1, Math.round(width * k)), height: Math.max(1, Math.round(height * k)) };
 }
+
+/** "New room from photo": at most this many views of one room in one request (the API's RoomPhoto.MAX_PHOTOS). */
+export const MAX_ROOM_PHOTOS = 4;
+
+/** Photos picked into the tray: kept in order, never more than [max]; [dropped] = how many didn't fit. */
+export function addPhotos<T>(current: readonly T[], incoming: readonly T[], max = MAX_ROOM_PHOTOS): { next: T[]; dropped: number } {
+  const room = Math.max(0, max - current.length);
+  return { next: [...current, ...incoming.slice(0, room)], dropped: Math.max(0, incoming.length - room) };
+}

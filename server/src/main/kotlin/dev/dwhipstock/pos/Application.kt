@@ -436,6 +436,7 @@ fun Application.module(
         voiceProvider = menuAiVoiceProvider ?: menuAiProvider ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.voice(menuAiConfig),
         floorVoiceProvider = menuAiVoiceProvider ?: menuAiProvider
             ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.floorVoice(menuAiConfig),
+        multiViewProvider = menuAiProvider ?: dev.dwhipstock.pos.aimenu.MenuAiProviders.multiView(menuAiConfig),
         reachable = imageReachable ?: dev.dwhipstock.pos.aiphotos.AiPhotoService::tcpReachable,
     ).also { it.start() }
 

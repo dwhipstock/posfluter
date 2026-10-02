@@ -98,6 +98,8 @@ class GeminiMenuProvider(
         // flash-lite: reliable and fast; 3.8-flash was often "high demand" or took minutes (set menu.ai.layoutModel to try it)
         const val LAYOUT_MODEL = "gemini-3.5-flash-lite"
         const val LAYOUT_THINKING = "medium"
+        /** Room from several pictures: the full flash model merges views (each table once). */
+        const val MULTI_VIEW_MODEL = "gemini-3.5-flash"
         const val RETRY_PAUSE_MS = 1_500L
     }
 
@@ -134,8 +136,15 @@ class GeminiMenuProvider(
                 mapOf("x-goog-api-key" to apiKey), body(m), "application/json")
             withDeadline(left()) { send("Gemini", http, request) }
         }
-        var res = post(model)
-        if (res.status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); res = post(model) }
+        // a dropped connection (live: Gemini cut busy calls at ~60 s with an EOF) counts as busy:
+        // straight to the fallback model, no second wait on the same one
+        var dropped = false
+        var res = try { post(model) } catch (e: ImageGenException) {
+            if (e.code != ImageGenException.UNAVAILABLE || !timeLeft()) throw e
+            dropped = true
+            ImageHttpResponse(503, ByteArray(0))
+        }
+        if (!dropped && res.status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); res = post(model) }
         // busy, or this model's daily free quota used up: the fallback model has its own quota
         // (flash itself — the voice model — falls back to lite: a weaker answer beats none at the till)
         val fallback = if (model == FALLBACK_MODEL) DEFAULT_MODEL else FALLBACK_MODEL
@@ -307,6 +316,19 @@ object MenuAiProviders {
         val key = config.apiKey ?: return null
         Scrub.register(key)
         return GeminiMenuProvider(key, http, config.voiceModel ?: config.layoutModel ?: GeminiMenuProvider.VOICE_MODEL,
+            thinkingLevel = GeminiMenuProvider.LAYOUT_THINKING, budgetMs = 280_000L)
+    }
+
+    /**
+     * Room from 2–4 pictures: merging views of one room is where the lite model
+     * undercounts (live: 6–9 of 12 tables), so Gemini uses [GeminiMenuProvider.MULTI_VIEW_MODEL]
+     * unless `menu.ai.layoutModel` names one; the layout's thinking and wait. Others: [layout].
+     */
+    fun multiView(config: MenuAiConfig.Resolved, http: ImageHttp = UrlImageHttp(readTimeoutMs = 300_000)): MenuAiProvider? {
+        if (config.provider != MenuAiConfig.Provider.GEMINI) return layout(config, http)
+        val key = config.apiKey ?: return null
+        Scrub.register(key)
+        return GeminiMenuProvider(key, http, config.layoutModel ?: GeminiMenuProvider.MULTI_VIEW_MODEL,
             thinkingLevel = GeminiMenuProvider.LAYOUT_THINKING, budgetMs = 280_000L)
     }
 

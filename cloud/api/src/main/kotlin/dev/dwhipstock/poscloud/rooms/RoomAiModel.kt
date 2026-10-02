@@ -55,6 +55,8 @@ class GeminiRoomModel(
     companion object {
         const val DEFAULT_MODEL = "gemini-3.5-flash-lite"
         const val FALLBACK_MODEL = "gemini-3.5-flash"
+        /** A new room from several photos (the store's GeminiMenuProvider.MULTI_VIEW_MODEL). */
+        const val MULTI_VIEW_MODEL = "gemini-3.5-flash"
         const val RETRY_PAUSE_MS = 1_500L
         private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     }
@@ -96,8 +98,15 @@ class GeminiRoomModel(
                 throw MenuAiException(503, "menu_ai_unavailable", "interrupted", cause = e)
             }
         }
-        var (status, text) = post(model)
-        if (status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); post(model).let { status = it.first; text = it.second } }
+        // a dropped connection (live: Gemini cut busy calls at ~60 s with an EOF) counts as busy:
+        // straight to the fallback model, no second wait on the same one
+        var dropped = false
+        var (status, text) = try { post(model) } catch (e: MenuAiException) {
+            if (e.code != "menu_ai_unavailable" || left() <= 0) throw e
+            dropped = true
+            503 to ""
+        }
+        if (!dropped && status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); post(model).let { status = it.first; text = it.second } }
         if ((status == 503 || status == 429) && left() > 0) {
             val fallback = if (model == FALLBACK_MODEL) DEFAULT_MODEL else FALLBACK_MODEL
             post(fallback).let { status = it.first; text = it.second }
@@ -134,6 +143,10 @@ class GeminiRoomModel(
 object RoomPhoto {
     const val MAX_SIDE = 1600
     const val MAX_BYTES = 12 * 1024 * 1024
+    /** "New room from photo": up to this many views of one room in one request, in one model call. */
+    const val MAX_PHOTOS = 4
+    /** All of one request's photos together, as uploaded (before the resize). */
+    const val MAX_TOTAL_BYTES = 32 * 1024 * 1024
     private val PASS_THROUGH = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
 
     fun normalizeType(type: String?): String? = when (val t = type?.lowercase()?.substringBefore(';')?.trim()) {

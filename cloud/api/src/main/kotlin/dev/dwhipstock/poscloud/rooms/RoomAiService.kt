@@ -182,6 +182,10 @@ class RoomAiService(
     private val config: CloudConfig,
     private val model: RoomAiModel? = config.menuAiKey?.let { GeminiRoomModel(it.value, config.menuAiModel) },
     private val voiceModel: RoomAiModel? = config.menuAiKey?.let { GeminiRoomModel(it.value, config.menuAiVoiceModel ?: config.menuAiModel) },
+    /** A new room from 2–4 photos: merging views needs the full flash model (the lite one undercounted); null = [model]. */
+    private val multiViewModel: RoomAiModel? = (model as? GeminiRoomModel)?.let {
+        config.menuAiKey?.let { k -> GeminiRoomModel(k.value, GeminiRoomModel.MULTI_VIEW_MODEL, budgetMs = 240_000L) }
+    },
     private val now: () -> Long = System::currentTimeMillis,
     private val callsMax: Int = MenuAiService.CALLS_MAX,
 ) {
@@ -319,24 +323,27 @@ class RoomAiService(
     // --- a new room from a photo ---
 
     /**
-     * A phone photo of a room (or a sketch, a printed plan) → a validated new
+     * 1–4 phone photos of one room from different spots (or a sketch, a
+     * printed plan) → ONE model call that merges the views → a validated new
      * room to preview (the store's RoomLayoutRules with the spread, numbers
-     * from 1). Nothing changes; the picture lives only for this call.
+     * from 1). Nothing changes; the pictures live only for this call.
      */
-    fun photo(who: AiCaller, image: AiImage, name: String?): RoomPhotoProposalDto {
+    fun photo(who: AiCaller, images: List<AiImage>, name: String?): RoomPhotoProposalDto {
+        if (images.isEmpty()) throw BadRequestException("take a photo first", "room_ai_no_image")
+        if (images.size > RoomPhoto.MAX_PHOTOS) throw BadRequestException("at most ${RoomPhoto.MAX_PHOTOS} photos at a time", "room_ai_too_many_images")
         val roomName = name?.trim()?.take(100)?.takeIf { it.isNotEmpty() } ?: defaultName(who.lang)
         if (AiGuard.checkText(roomName) != null) throw BadRequestException("pick a plain room name", "room_bad_name")
         transaction { RoomState.requireEditable(who.venue.scope) }
         val prefix = prefixFor(roomName)
         return tracked(who, "room_photo", { r -> Triple(r.refusal ?: "proposed", r.tables.size + r.objects.size, r.rejected.size) }) {
-            val m = requireModel()
+            val m = (if (images.size > 1) multiViewModel else null) ?: requireModel()
             val started = now()
             fun refuse(r: RoomReplies.R, rejected: List<String> = emptyList()) = RoomPhotoProposalDto("", who.venue.venueId, m.model,
                 roomName, prefix, emptyList(), emptyList(), rejected = AiText.skips(rejected, who.lang), elapsedMs = now() - started,
                 refusal = r.code, message = RoomReplies.reply(r, who.lang))
             val bilingual = transaction { bilingual(who.venue.scope) }
-            val reply = call(m, RoomLayoutAi.systemPrompt(bilingual),
-                "Set up the floor plan of this room from the attached picture(s).", null, listOf(image))
+            // all the views in ONE call: the model merges them into one room
+            val reply = call(m, RoomLayoutAi.systemPrompt(bilingual), RoomLayoutAi.userPrompt(images.size), null, images)
                 ?: return@tracked refuse(RoomReplies.R.ROOM_OFF_TOPIC)
             val parsed = try { RoomLayoutAi.parse(reply) } catch (e: MenuAiReplyException) {
                 log.info("AI room photo via ${m.id}: unusable reply")

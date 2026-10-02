@@ -45,6 +45,32 @@ class MenuAiProvidersTest {
     }
 
     @Test
+    fun geminiSendsEveryRoomPictureAsItsOwnImagePartInOneRequest() {
+        val http = Recorder(200, geminiOk)
+        GeminiMenuProvider(key, http).complete("sys", "user", List(4) { MenuImage(byteArrayOf(it.toByte()), "image/jpeg") })
+        val body = http.requests.single().bodyText
+        assertEquals(4, Regex("\"type\":\"image\"").findAll(body).count())
+        assertEquals(1, Regex("\"type\":\"text\",\"text\"").findAll(body).count())
+    }
+
+    @Test
+    fun geminiDroppedConnectionGoesStraightToTheFallbackModel() {
+        val bodies = mutableListOf<String>()
+        val http = object : ImageHttp {
+            override fun send(request: ImageHttpRequest): ImageHttpResponse {
+                bodies += request.bodyText
+                if (bodies.size == 1) throw java.io.IOException("EOF reached while reading")
+                return ImageHttpResponse(200, geminiOk.toByteArray())
+            }
+        }
+        val out = GeminiMenuProvider(key, http, GeminiMenuProvider.MULTI_VIEW_MODEL, pause = { error("no pause") }).complete("s", "u", photo)
+        assertEquals("""{"ops":[]}""", out)
+        assertEquals(2, bodies.size)
+        assertTrue(bodies[0].contains("\"model\":\"gemini-3.5-flash\""))
+        assertTrue(bodies[1].contains("\"model\":\"${GeminiMenuProvider.DEFAULT_MODEL}\""))
+    }
+
+    @Test
     fun geminiSendsVoiceAsAnAudioPartAndTheOthersSayNo() {
         val http = Recorder(200, geminiOk)
         GeminiMenuProvider(key, http).complete("sys", "user", listOf(MenuImage(ByteArray(2000), "audio/wav")))
@@ -188,6 +214,12 @@ class MenuAiProvidersTest {
         assertTrue(layout.contains("\"model\":\"${GeminiMenuProvider.LAYOUT_MODEL}\"") && layout.contains("\"thinking_level\":\"medium\""))
         assertTrue(chat.contains("\"model\":\"${GeminiMenuProvider.DEFAULT_MODEL}\"") && chat.contains("\"thinking_level\":\"low\""))
         assertEquals("gemini-x", MenuAiProviders.layout(cfg("menu.ai.layoutModel" to "gemini-x"))!!.model)
+        // several views of one room: the full flash model with the layout's thinking, unless one is set
+        MenuAiProviders.multiView(cfg(), http)!!.complete("sys", "user", photo + photo)
+        val multi = http.requests.last().bodyText
+        assertTrue(multi.contains("\"model\":\"${GeminiMenuProvider.MULTI_VIEW_MODEL}\"") && multi.contains("\"thinking_level\":\"medium\""))
+        assertEquals("gemini-3.5-flash", GeminiMenuProvider.MULTI_VIEW_MODEL)
+        assertEquals("gemini-x", MenuAiProviders.multiView(cfg("menu.ai.layoutModel" to "gemini-x"))!!.model)
     }
 
     @Test

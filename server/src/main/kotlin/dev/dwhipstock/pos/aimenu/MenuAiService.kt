@@ -114,6 +114,8 @@ class MenuAiService(
     private val voiceProvider: MenuAiProvider? = null,
     /** Spoken floor-plan requests ([MenuAiProviders.floorVoice]); null = [layoutProvider]. */
     private val floorVoiceProvider: MenuAiProvider? = null,
+    /** Room from 2–4 pictures ([MenuAiProviders.multiView]): merging views needs the stronger model; null = [layoutProvider]. */
+    private val multiViewProvider: MenuAiProvider? = null,
     private val reachable: (String) -> Boolean = AiPhotoService::tcpReachable,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
@@ -150,6 +152,8 @@ class MenuAiService(
     companion object {
         const val MAX_PHOTOS = 6
         const val MAX_ROOM_PHOTOS = 4
+        /** All of one "set up from picture" request's pictures together, as sent (each is ≤ 12 MB). */
+        const val MAX_ROOM_PHOTO_TOTAL_BYTES = 32 * 1024 * 1024
         /** Removals or price changes above this in one Apply need the manager's extra confirm. */
         const val BULK_CONFIRM = 10
         private const val PROPOSAL_TTL_MS = 60 * 60 * 1000L
@@ -330,14 +334,13 @@ class MenuAiService(
         require(images.size <= MAX_ROOM_PHOTOS) { "at most $MAX_ROOM_PHOTOS pictures at a time" }
         val room = transaction { RoomLayoutAi.room(zoneId) }
         return tracked(who, "room_layout") {
-            val p = requireProvider(layout = true)
+            val p = (if (images.size > 1) multiViewProvider?.takeIf { config.enabled } else null) ?: requireProvider(layout = true)
             val started = now()
             fun refuse(r: AiGuard.Refusal, rejected: List<String> = emptyList()) = RoomLayoutProposalDto("", zoneId,
                 p.id, p.model, emptyList(), emptyList(), rejected = AiText.skips(rejected, who?.lang), elapsedMs = now() - started,
                 refusal = r.code, message = AiGuard.reply(r, who?.lang))
             val reply = try {
-                p.complete(RoomLayoutAi.systemPrompt(bilingual),
-                    "Set up the floor plan of this room from the attached picture(s).", images)
+                p.complete(RoomLayoutAi.systemPrompt(bilingual), RoomLayoutAi.userPrompt(images.size), images)
             } catch (e: ImageGenException) {
                 if (e.code == ImageGenException.REFUSED) return@tracked refuse(AiGuard.Refusal.ROOM_OFF_TOPIC)
                 if (e.code == ImageGenException.UNAVAILABLE) probe = false to now()
