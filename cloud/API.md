@@ -331,6 +331,18 @@ no store could take it, the call fails with that reason as its `code`
   special pricing a size the item doesn't have at a store skips that store
   (`size_not_found`; 400 when no store took it).
 - `DELETE /v1/menu/items/{id}` — soft; history keeps it.
+- `POST /v1/menu/items/{id}/copy?venue={store}` `{ from, categoryId? }` → 201: puts the item `from`
+  carries on ONE other store, under the same id (so a later "All stores" edit reaches both): names in
+  every language, descriptions, sizes (same size ids) and prices, category (`categoryId` at that store;
+  default the same id), alcohol flag, tile badge (`abbrev`), availability, selling days, specials, and
+  the photo (a `photo` feed entry, as for a portal AI photo). Every field takes this edit's cloud stamp,
+  like a create; a copy that store once had and deleted comes back with only the copied sizes live.
+  400 `venue_required` (no `venue`), `same_store`, `category_not_found` (no such category at that
+  store: pick one); 404 `bad_venue` / `not_found` (`from` doesn't carry it); 409 `already_on_menu`,
+  `store_not_upgraded`. Taking it off one store is the ordinary `DELETE …?venue={store}`.
+- `GET /v1/menu/stores?item={id}` → `{ canEdit, stores: [{ venueId, name, editable, pending, failed,
+  carries, categoryId?, categories }] }`: every store of the client whatever store is picked (Edit
+  item → Stores); any signed-in user.
 - `POST /v1/menu/items/{id}/variants` `{ labelEn, labelFr?, priceCents, names? }` → 201;
   `PATCH /v1/menu/items/{id}/variants/{variantId}` `{ labelEn?, labelFr?, priceCents?, sortOrder?, names? }`;
   `DELETE …/variants/{variantId}` (not the last size: 409 `last_variant`).
@@ -410,7 +422,10 @@ limits, plus `MENU_AI_PHOTO_DAILY_CAP` (default 30) pictures per store per rolli
 - `POST /v1/menu-ai/photos/{photoId}/accept` → `{ photoId, itemId, photoVersion, photoSource }`: the item's
   photo now (item_photos, `photoVersion`, `photoSource`), and a `photo` entry in the store's menu feed
   (CONTRACT §10). Only the user who made it (404 `menu_ai_photo_expired`); 409
-  `menu_ai_photo_already_accepted` the second time.
+  `menu_ai_photo_already_accepted` the second time. `&everyStore=1` (the portal's "All stores"):
+  the photo also becomes the item's photo at every other store that carries it and takes portal
+  edits, each with its own feed entry; the answer's `stores` lists them (the asked one first), and
+  Undo puts back each store's own previous photo (a store whose photo changed since keeps it).
 - `POST /v1/menu-ai/photos/{photoId}/discard` → `{ photoId, status }`.
 - `POST /v1/menu-ai/photos/{photoId}/undo` → puts back the photo it replaced (or removes it when the item
   had none), the same way. 409 `menu_ai_photo_changed` when the item's photo changed since (a store

@@ -63,17 +63,18 @@ export default function MenuPage() {
 
   const groups = useMemo(() => {
     if (!data) return [];
-    const byCat = new Map<string, MenuItem[]>();
-    for (const item of data.items) {
-      const list = byCat.get(item.categoryId) ?? [];
-      list.push(item);
-      byCat.set(item.categoryId, list);
+    // one row per item id, under its first copy's category (two stores may file it under different ones)
+    const byCat = new Map<string, MergedItem[]>();
+    for (const row of mergeAcrossStores(data.items)) {
+      const list = byCat.get(row.item.categoryId) ?? [];
+      list.push(row);
+      byCat.set(row.item.categoryId, list);
     }
     return [...data.categories]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((c) => ({
         category: c,
-        items: mergeAcrossStores(byCat.get(c.id) ?? []).sort((a, b) => a.item.nameEn.localeCompare(b.item.nameEn)),
+        items: (byCat.get(c.id) ?? []).sort((a, b) => a.item.nameEn.localeCompare(b.item.nameEn)),
       }))
       // a filtered page only shows the categories it has products in
       .filter((g) => g.items.length > 0 || !filters.active);

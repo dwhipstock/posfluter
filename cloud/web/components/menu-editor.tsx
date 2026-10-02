@@ -24,9 +24,20 @@ import {
   type ItemDraft,
   type PlannedCall,
 } from "@/lib/menu-edit";
+import {
+  carryingEditable,
+  categoriesFor,
+  copySource,
+  createOrigin,
+  initialTicks,
+  matchCategory,
+  planStoreCalls,
+  storeChanges,
+  type Ticks,
+} from "@/lib/menu-stores";
 import { scopeApiPath, shortStoreName, useStores } from "@/lib/store";
 import { toast } from "@/lib/toast";
-import type { MenuCategory, MenuEditResult, MenuItem, MenuSyncStatus } from "@/lib/types";
+import type { MenuCategory, MenuEditResult, MenuItem, MenuItemStores, MenuSyncStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +48,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { ItemPhotoPanel } from "@/components/ai-photo";
 import { useAiStatus } from "@/components/menu-ai";
 import { SpecialsSection } from "@/components/menu-specials";
+import { StoresSection } from "@/components/menu-stores";
 
 type T = ReturnType<typeof useT>;
 
@@ -62,6 +74,7 @@ const SKIP_KEY: Record<string, MsgKey> = {
   category_not_found: "menu_skip_category_not_found",
   last_variant: "menu_skip_last_variant",
   category_not_empty: "menu_skip_category_not_empty",
+  already_on_menu: "menu_skip_already_on_menu",
 };
 
 function skipMessage(t: T, store: string, reason: string): string {
@@ -81,21 +94,31 @@ function refusalMessage(t: T, e: unknown, storeName: string): string {
 
 /**
  * Send [calls] in order, scoped to the picked store, each with its own
- * idempotency key from [key]. Stops at the first refusal. Returns the
- * stores some call skipped.
+ * idempotency key from [key]. Stops at the first refusal — except a call for
+ * one named store ([PlannedCall.venueId], Edit item → Stores), whose refusal
+ * for a known reason is that store's skip, as in "All stores" mode. Returns
+ * the stores some call skipped.
  */
 async function runCalls(calls: PlannedCall[], storeId: string | null, key: string): Promise<MenuEditResult["skipped"]> {
   const skipped: MenuEditResult["skipped"] = [];
+  const add = (s: MenuEditResult["skipped"][number]) => {
+    if (!skipped.some((x) => x.venueId === s.venueId && x.reason === s.reason)) skipped.push(s);
+  };
   for (const [i, c] of calls.entries()) {
     const path = scopeApiPath(c.path, storeId);
     const headers = { "Idempotency-Key": `${key}:${i}` };
-    const r =
-      c.method === "POST"
-        ? await post<MenuEditResult>(path, c.body ?? {}, headers)
-        : c.method === "PATCH"
-          ? await patch<MenuEditResult>(path, c.body ?? {}, headers)
-          : await del<MenuEditResult>(path, headers);
-    for (const s of r?.skipped ?? []) if (!skipped.some((x) => x.venueId === s.venueId && x.reason === s.reason)) skipped.push(s);
+    try {
+      const r =
+        c.method === "POST"
+          ? await post<MenuEditResult>(path, c.body ?? {}, headers)
+          : c.method === "PATCH"
+            ? await patch<MenuEditResult>(path, c.body ?? {}, headers)
+            : await del<MenuEditResult>(path, headers);
+      for (const s of r?.skipped ?? []) add(s);
+    } catch (e) {
+      if (c.venueId && e instanceof ApiError && SKIP_KEY[e.code]) add({ venueId: c.venueId, reason: e.code });
+      else throw e;
+    }
   }
   return skipped;
 }
@@ -216,8 +239,6 @@ function ItemForm({
   const { available, name } = useI18n();
   const { storeId, nameOf, venues } = useStores();
   const ai = useAiStatus();
-  // an AI photo is made for one store's item: the picked store, or the only one
-  const photoVenue = storeId ?? (venues.length === 1 ? venues[0].id : null);
   const scopeLine = useScopeLine();
   const showSkips = useSkipToast();
   const sorted = useMemo(() => [...categories].sort((a, b) => a.sortOrder - b.sortOrder), [categories]);
@@ -230,6 +251,44 @@ function ItemForm({
   const [key] = useState(newEditKey);
   const langs = extraLangs(available, item?.names, ...(item?.variants.map((v) => v.names) ?? []));
 
+  // Stores: every store of the client, whatever store is picked (a client with one store has no section)
+  const multiStore = venues.length > 1;
+  const { data: storeData, isValidating: storesLoading, error: storesError } = useApi<MenuItemStores>(
+    multiStore ? `/v1/menu/stores${item ? `?item=${encodeURIComponent(item.id)}` : ""}` : null
+  );
+  const storeList = storeData?.stores;
+  // only the boxes the manager changed are kept: the rest follow the latest list (a cached list
+  // refreshed under the sheet must never turn into a removal nobody asked for)
+  const [touched, setTouched] = useState<Ticks>({});
+  const ticks: Ticks | null = storeList ? { ...initialTicks(storeList, !item, storeId), ...touched } : null;
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [missing, setMissing] = useState<string[]>([]);
+  const [noStore, setNoStore] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  /** The Delete item confirm, for "every store unticked": it goes from each store that carries it. */
+  const [deleteEverywhere, setDeleteEverywhere] = useState(false);
+  const changes = storeList && ticks ? storeChanges(storeList, ticks) : null;
+  // the category the item is in (or goes in) — what each new store matches against
+  const sourceCat =
+    storeList?.find((s) => s.venueId === (storeId ?? item?.venueId))?.categories.find((c) => c.id === draft.categoryId) ??
+    sorted.find((c) => c.id === draft.categoryId);
+  const tickedIds = storeList && ticks ? storeList.filter((s) => ticks[s.venueId]).map((s) => s.venueId) : [];
+  // the stores the item goes to that need a category: a new item's ticked stores, an item's new stores
+  const goingTo = item ? (changes?.adds ?? []) : tickedIds;
+  const ask = storeList
+    ? goingTo.filter((id) => {
+        const s = storeList.find((x) => x.venueId === id);
+        return !!s && matchCategory(s, sourceCat, draft.categoryId) === null;
+      })
+    : [];
+  const storeNames = (ids: string[]) => ids.map((id) => shortStoreName(storeList?.find((s) => s.venueId === id)?.name ?? nameOf(id))).join(", ");
+
+  // an AI photo is made at one store that carries the item; in "All stores" it then goes to every carrying store
+  const carrying = storeList ? carryingEditable(storeList) : [];
+  const photoVenue = storeId ?? carrying[0]?.venueId ?? item?.venueId ?? (venues.length === 1 ? venues[0].id : null);
+  const photoEveryStore = !storeId && carrying.length > 1;
+  const photoAppliesTo = storeId ? [nameOf(storeId)] : carrying.map((s) => shortStoreName(s.name));
+
   const set = (patchDraft: Partial<ItemDraft>) => setDraft((d) => ({ ...d, ...patchDraft }));
   const setVariant = (i: number, p: Partial<ItemDraft["variants"][number]>) =>
     setDraft((d) => ({ ...d, variants: d.variants.map((v, j) => (j === i ? { ...v, ...p } : v)) }));
@@ -237,17 +296,56 @@ function ItemForm({
   const save = async () => {
     const errs = validateDraft(draft);
     setErrors(errs);
-    if (errs.length) return;
-    const calls = item ? planEdit(item, draft) : [createCall(draft)];
-    if (calls.length === 0) return onDone();
+    const stillToPick = storeList ? categoriesFor(storeList, goingTo, picked, sourceCat, draft.categoryId).missing : [];
+    setMissing(stillToPick);
+    const none = !item && multiStore && !!storeList && createOrigin(storeList, tickedIds, storeId) === null;
+    setNoStore(none);
+    if (errs.length || stillToPick.length || none) return;
+    if (item && changes?.removesAll) {
+      setDeleteEverywhere(true);
+      setConfirmDelete(true);
+      return;
+    }
+    if (item && changes && changes.removes.length > 0) return setConfirmRemove(true);
+    await commit();
+  };
+
+  const commit = async () => {
+    setConfirmRemove(false);
     setBusy(true);
+    let created = false;
     try {
-      showSkips("menu_saved", await runCalls(calls, storeId, key));
+      const skipped: MenuEditResult["skipped"] = [];
+      if (item) {
+        // the edit, in the picked scope (not for a store it is leaving)
+        const calls = storeId && changes?.removes.includes(storeId) ? [] : planEdit(item, draft);
+        if (calls.length) skipped.push(...(await runCalls(calls, storeId, key)));
+        if (storeList && changes && (changes.adds.length || changes.removes.length)) {
+          const { byStore } = categoriesFor(storeList, changes.adds, picked, sourceCat, draft.categoryId);
+          const from = copySource(storeList, storeId, item.venueId);
+          skipped.push(...(await runCalls(planStoreCalls(item.id, from, byStore, changes.removes), null, `${key}:stores`)));
+        } else if (calls.length === 0) return onDone();
+      } else if (storeList && multiStore) {
+        // made at one ticked store, then copied to the others (each in its own category)
+        const origin = createOrigin(storeList, tickedIds, storeId)!;
+        const { byStore } = categoriesFor(storeList, tickedIds, picked, sourceCat, draft.categoryId);
+        const create = createCall({ ...draft, categoryId: byStore[origin] ?? draft.categoryId });
+        const r = await post<MenuEditResult>(`${create.path}?venue=${encodeURIComponent(origin)}`, create.body ?? {}, {
+          "Idempotency-Key": `${key}:0`,
+        });
+        created = true;
+        skipped.push(...(r?.skipped ?? []));
+        const rest = Object.fromEntries(Object.entries(byStore).filter(([v]) => v !== origin));
+        if (r?.id && Object.keys(rest).length) skipped.push(...(await runCalls(planStoreCalls(r.id, origin, rest, []), null, `${key}:stores`)));
+      } else {
+        skipped.push(...(await runCalls([createCall(draft)], storeId, key)));
+      }
+      showSkips("menu_saved", skipped);
       onDone();
     } catch (e) {
       toast("error", refusalMessage(t, e, storeId ? nameOf(storeId) : ""));
       // a partial save still changed something: show what the API now has
-      if (item) onDone();
+      if (item || created) onDone();
     } finally {
       setBusy(false);
     }
@@ -257,7 +355,14 @@ function ItemForm({
     if (!item) return;
     setBusy(true);
     try {
-      showSkips("menu_deleted", await runCalls([{ method: "DELETE", path: `/v1/menu/items/${encodeURIComponent(item.id)}` }], storeId, `${key}:delete`));
+      const enc = encodeURIComponent;
+      const calls: PlannedCall[] =
+        deleteEverywhere && storeList
+          ? storeList
+              .filter((s) => s.carries)
+              .map((s) => ({ method: "DELETE", path: `/v1/menu/items/${enc(item.id)}?venue=${enc(s.venueId)}`, venueId: s.venueId }))
+          : [{ method: "DELETE", path: `/v1/menu/items/${enc(item.id)}` }];
+      showSkips("menu_deleted", await runCalls(calls, deleteEverywhere ? null : storeId, `${key}:delete`));
       onDone();
     } catch (e) {
       toast("error", refusalMessage(t, e, storeId ? nameOf(storeId) : ""));
@@ -316,8 +421,29 @@ function ItemForm({
           </Select>
         </Field>
 
+        {multiStore && (
+          <StoresSection
+            stores={storeList}
+            ticks={ticks}
+            onToggle={(id) => ticks && setTouched((tc) => ({ ...tc, [id]: !ticks[id] }))}
+            ask={ask}
+            picked={picked}
+            onPick={(id, c) => setPicked((p) => ({ ...p, [id]: c }))}
+            missing={missing}
+            readOnly={!!storeData && !storeData.canEdit}
+            isNew={!item}
+          />
+        )}
+
         {item && ai?.photos && ai.canUse && (
-          <ItemPhotoPanel venue={photoVenue} item={item} title={name(item.nameFr, item.nameEn, item.names)} onChanged={onPhotoChanged} />
+          <ItemPhotoPanel
+            venue={photoVenue}
+            everyStore={photoEveryStore}
+            appliesTo={multiStore ? photoAppliesTo : []}
+            item={item}
+            title={name(item.nameFr, item.nameEn, item.names)}
+            onChanged={onPhotoChanged}
+          />
         )}
 
         <div className="space-y-3 rounded-lg border border-neutral-100 px-3 py-3">
@@ -388,21 +514,33 @@ function ItemForm({
           <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">{t("menu_special_save_first")}</p>
         )}
 
-        {errors.length > 0 && (
+        {(errors.length > 0 || missing.length > 0 || noStore) && (
           <ul className="space-y-0.5 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">
             {errors.map((e) => (
               <li key={e}>{t(ERR_KEY[e])}</li>
             ))}
+            {missing.map((id) => (
+              <li key={`cat-${id}`}>{t("menu_stores_err_category", { store: storeNames([id]) })}</li>
+            ))}
+            {noStore && <li>{t("menu_stores_err_none")}</li>}
           </ul>
         )}
       </SheetBody>
       <SheetFooter className="flex items-center gap-2">
         {item && (
-          <Button variant="destructive-outline" disabled={busy} onClick={() => setConfirmDelete(true)}>
+          <Button
+            variant="destructive-outline"
+            disabled={busy}
+            onClick={() => {
+              setDeleteEverywhere(false);
+              setConfirmDelete(true);
+            }}
+          >
             <Trash2 /> {t("menu_delete_item")}
           </Button>
         )}
-        <Button className="ml-auto" disabled={busy} onClick={save}>
+        {/* the Stores list must be the current one before a save can add or remove stores */}
+        <Button className="ml-auto" disabled={busy || (multiStore && !storesError && (!storeData || storesLoading))} onClick={save}>
           {t("save")}
         </Button>
       </SheetFooter>
@@ -411,7 +549,8 @@ function ItemForm({
         <DialogContent>
           <DialogTitle>{t("menu_delete_item_q", { name: item ? name(item.nameFr, item.nameEn, item.names) : "" })}</DialogTitle>
           <DialogDescription>
-            {t("menu_delete_item_body")} {scopeLine}
+            {t("menu_delete_item_body")}{" "}
+            {deleteEverywhere ? t("menu_stores_delete_all", { stores: storeNames(changes?.removes ?? []) }) : scopeLine}
           </DialogDescription>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setConfirmDelete(false)}>
@@ -419,6 +558,26 @@ function ItemForm({
             </Button>
             <Button variant="destructive" disabled={busy} onClick={remove}>
               {t("delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <DialogContent>
+          <DialogTitle>
+            {t("menu_stores_remove_q", {
+              name: item ? name(draft.nameFr || draft.nameEn, draft.nameEn, draft.names) : "",
+              stores: storeNames(changes?.removes ?? []),
+            })}
+          </DialogTitle>
+          <DialogDescription>{t("menu_stores_remove_body")}</DialogDescription>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setConfirmRemove(false)}>
+              {t("keep_it")}
+            </Button>
+            <Button variant="destructive" disabled={busy} onClick={commit}>
+              {t("menu_stores_remove")}
             </Button>
           </DialogFooter>
         </DialogContent>
