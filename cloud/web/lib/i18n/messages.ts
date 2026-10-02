@@ -896,7 +896,7 @@ export const messages = {
   ai_off: m("Retiré (86)", "Off (86)"),
   ai_with_category: m("avec sa nouvelle catégorie", "with its new category"),
   ai_skipped: m("{n} suggestion(s) écartée(s) : pas sûres ou absentes de ce menu", "{n} suggestion(s) left out: not safe, or not on this menu"),
-  ai_bulk_title: m("Appliquer ces {n} changements ?", "Apply these {n} changes?"),
+  ai_bulk_title: m("Appliquer {n} changement(s) ?", "Apply {n} change(s)?"),
   ai_bulk_many: m("Cela fait beaucoup de changements d’un coup.", "That’s a lot of changes at once."),
   ai_bulk_removals: m("Des articles seront retirés du menu.", "Some items will be removed from the menu."),
   ai_bulk_prices: m("Certains prix changent de moitié ou plus.", "Some prices change by half or more."),

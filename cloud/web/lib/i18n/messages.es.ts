@@ -661,7 +661,7 @@ export const es: Record<MsgKey, string> = {
   ai_off: "Retirado (86)",
   ai_with_category: "con su categoría nueva",
   ai_skipped: "{n} sugerencia(s) descartada(s): no seguras o no están en este menú",
-  ai_bulk_title: "¿Aplicar estos {n} cambios?",
+  ai_bulk_title: "¿Aplicar {n} cambio(s)?",
   ai_bulk_many: "Son muchos cambios a la vez.",
   ai_bulk_removals: "Se quitarán productos del menú.",
   ai_bulk_prices: "Algunos precios cambian a la mitad o más.",

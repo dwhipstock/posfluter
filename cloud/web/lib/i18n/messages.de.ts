@@ -663,7 +663,7 @@ export const de: Record<MsgKey, string> = {
   ai_off: "Gestrichen (86)",
   ai_with_category: "mit seiner neuen Kategorie",
   ai_skipped: "{n} Vorschlag/Vorschläge weggelassen: nicht sicher oder nicht auf dieser Speisekarte",
-  ai_bulk_title: "Diese {n} Änderungen übernehmen?",
+  ai_bulk_title: "{n} Änderung(en) übernehmen?",
   ai_bulk_many: "Das sind viele Änderungen auf einmal.",
   ai_bulk_removals: "Einige Artikel werden von der Speisekarte entfernt.",
   ai_bulk_prices: "Einige Preise ändern sich um die Hälfte oder mehr.",

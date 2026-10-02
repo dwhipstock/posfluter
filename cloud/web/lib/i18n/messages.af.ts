@@ -664,7 +664,7 @@ export const af: Record<MsgKey, string> = {
   ai_off: "Afgehaal (86)",
   ai_with_category: "met sy nuwe kategorie",
   ai_skipped: "{n} voorstel(le) weggelaat: nie veilig nie, of nie op hierdie spyskaart nie",
-  ai_bulk_title: "Pas hierdie {n} veranderinge toe?",
+  ai_bulk_title: "Pas {n} verandering(e) toe?",
   ai_bulk_many: "Dis baie veranderinge op een slag.",
   ai_bulk_removals: "Sommige items sal van die spyskaart verwyder word.",
   ai_bulk_prices: "Sommige pryse verander met die helfte of meer.",
