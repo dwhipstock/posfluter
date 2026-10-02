@@ -81,7 +81,8 @@ data class AiPhotoUndoResult(val photoId: String, val itemId: String, val photoV
 class AiPhotoService internal constructor(
     private val ai: MenuAiService,
     private val config: CloudConfig,
-    private val images: ImageGen,
+    /** The photo makers (printed menus draw their artwork with the same ones). */
+    internal val images: ImageGen,
     private val now: () -> Long,
 ) {
     private val log = LoggerFactory.getLogger(AiPhotoService::class.java)
@@ -225,6 +226,40 @@ class AiPhotoService internal constructor(
         (MenuAiPhotos.id eq photoId) and (MenuAiPhotos.tenantId eq who.principal.tenantId) and
             (MenuAiPhotos.venueId eq who.venue.venueId)
     }.forUpdate().firstOrNull()
+
+    /**
+     * A printed menu's stand-in photo for an item that has none, kept as the
+     * item's photo because the manager ticked "save them to the items": the
+     * same pending row and [accept] as a preview, so the store gets it on its
+     * next sync and Undo works. Null when it can't be kept (not a usable
+     * picture, an old store app, the item got a photo meanwhile).
+     */
+    internal fun saveForPrint(who: AiCaller, itemId: String, image: GeneratedImage, providerId: String, providerModel: String): AiPhotoAcceptResult? {
+        val clean = runCatching { PhotoCheck.normalize(image) }.getOrNull() ?: return null
+        val scope = who.venue.scope
+        if (!storeSpeaksSync(scope)) return null
+        if (transaction { currentPhoto(scope, itemId) } != null) return null
+        val photoId = UUID.randomUUID().toString()
+        transaction {
+            MenuAiPhotos.insert {
+                it[id] = photoId
+                it[tenantId] = who.principal.tenantId
+                it[venueId] = who.venue.venueId
+                it[MenuAiPhotos.itemId] = itemId
+                it[userId] = who.principal.userId
+                it[MenuAiPhotos.photoSource] = "ai_generated"
+                it[status] = "pending"
+                it[content] = clean.bytes
+                it[contentType] = clean.contentType
+                it[MenuAiPhotos.provider] = providerId.take(40)
+                it[model] = providerModel.take(80)
+                it[createdAt] = CloudTime.now()
+            }
+        }
+        return runCatching { accept(who, photoId) }.onFailure {
+            log.info("print photo for ${who.venue.venueId}/$itemId not kept: ${it.javaClass.simpleName}")
+        }.getOrNull()
+    }
 
     // --- accept / discard / undo ---
 

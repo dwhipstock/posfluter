@@ -192,6 +192,18 @@ object MenuAiApplies : Table("menu_ai_applies") {
     override val primaryKey = PrimaryKey(id)
 }
 
+/** A printed menu's AI picture, by what it was asked for (037): re-generating the wording reuses it. */
+object MenuPrintArt : Table("menu_print_art") {
+    val tenantId = text("tenant_id")
+    val key = text("key")
+    val purpose = text("purpose")
+    val content = binary("content")
+    val contentType = text("content_type")
+    val provider = text("provider")
+    val createdAt = timestampWithTimeZone("created_at")
+    override val primaryKey = PrimaryKey(tenantId, key)
+}
+
 /** An AI-made item photo: a preview until accepted, then what Undo puts back (034). */
 object MenuAiPhotos : Table("menu_ai_photos") {
     val id = text("id")

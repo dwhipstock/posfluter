@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { CategoriesSheet, ItemSheet, MenuSyncBanner, useMenuEditing } from "@/components/menu-editor";
 import { AiSheet, AiStrip } from "@/components/menu-ai";
 import { RoomsLink } from "@/components/rooms-link";
+import { PrintButton, PrintSheet } from "@/components/menu-print";
 
 const PAGE_SIZE = 100;
 
@@ -49,6 +50,7 @@ export default function MenuPage() {
   const [creating, setCreating] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const refresh = () => {
     mutate();
     refreshStatus();
@@ -127,12 +129,15 @@ export default function MenuPage() {
                 </Button>
               </>
             )}
+            {data && total > 0 && <PrintButton onOpen={() => setPrintOpen(true)} />}
             <ExportMenu build={buildDoc} disabled={!data || total === 0} />
           </div>
         }
       />
 
       <MenuSyncBanner status={status} />
+
+      <PrintSheet open={printOpen} onOpenChange={setPrintOpen} />
 
       {canEdit && data && <AiStrip onOpen={() => setAiOpen(true)} />}
 

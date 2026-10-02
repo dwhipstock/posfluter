@@ -78,7 +78,7 @@ object TestSupport {
                     "staff, staff_venues, role_grants, staff_grants, " +
                     "pairing_codes, devices, " +
                     "item_photos, stock_movements, stock_levels, stock_counts, stock_count_lines, stock_receipts, " +
-                    "refund_lines, fuel_sales, menu_feed, menu_hlc, menu_edits, ingest_quarantine, store_staff, export_log, menu_ai_log, menu_ai_applies, menu_ai_photos, floor_things, room_ai_applies RESTART IDENTITY CASCADE"
+                    "refund_lines, fuel_sales, menu_feed, menu_hlc, menu_edits, ingest_quarantine, store_staff, export_log, menu_ai_log, menu_ai_applies, menu_ai_photos, menu_print_art, floor_things, room_ai_applies RESTART IDENTITY CASCADE"
             )
         }
     }

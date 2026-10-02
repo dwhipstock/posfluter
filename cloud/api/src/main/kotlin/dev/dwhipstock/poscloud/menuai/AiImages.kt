@@ -40,6 +40,12 @@ interface ImageProvider {
     val model: String
     fun generate(prompt: String): GeneratedImage
     fun enhance(photo: ByteArray, contentType: String, prompt: String): GeneratedImage
+
+    /**
+     * A picture about [width] × [height] px (a printed menu's header or page
+     * background). A provider that can't size its pictures gives its square.
+     */
+    fun generate(prompt: String, width: Int, height: Int): GeneratedImage = generate(prompt)
 }
 
 /**
@@ -158,10 +164,15 @@ class FluxImageProvider(
 
     private fun seed() = (System.nanoTime() and 0x7fffffff)
 
-    override fun generate(prompt: String) = run(buildJsonObject {
-        put("prompt", prompt); put("width", 1024); put("height", 1024)
+    override fun generate(prompt: String) = generate(prompt, 1024, 1024)
+
+    /** FLUX takes any size in steps of 16 (kept within 256–2048 a side). */
+    override fun generate(prompt: String, width: Int, height: Int) = run(buildJsonObject {
+        put("prompt", prompt); put("width", side(width)); put("height", side(height))
         put("output_format", "jpeg"); put("safety_tolerance", 2); put("seed", seed())
     })
+
+    private fun side(px: Int) = (px.coerceIn(256, 2048) / 16) * 16
 
     override fun enhance(photo: ByteArray, contentType: String, prompt: String) = run(buildJsonObject {
         put("prompt", prompt); put("input_image", Base64.getEncoder().encodeToString(photo))
@@ -253,12 +264,21 @@ class GeminiImageProvider(
     companion object {
         const val DEFAULT_MODEL = "gemini-3.1-flash-image"
         private val SAFETY = Regex("(?i)safety|blocked|prohibited|policy|harm|recitation")
+        private val ASPECTS = listOf("1:1" to 1.0, "3:4" to 0.75, "4:3" to 4 / 3.0, "2:3" to 2 / 3.0, "3:2" to 1.5,
+            "9:16" to 9 / 16.0, "16:9" to 16 / 9.0, "21:9" to 21 / 9.0)
     }
 
-    override fun generate(prompt: String) = call(prompt, null, null, square = true)
-    override fun enhance(photo: ByteArray, contentType: String, prompt: String) = call(prompt, photo, contentType, square = false)
+    override fun generate(prompt: String) = call(prompt, null, null, aspect = "1:1")
+    override fun enhance(photo: ByteArray, contentType: String, prompt: String) = call(prompt, photo, contentType, aspect = null)
 
-    private fun call(prompt: String, photo: ByteArray?, photoType: String?, square: Boolean): GeneratedImage {
+    /** Gemini sizes by aspect ratio: the nearest one it offers, at 2K for print. */
+    override fun generate(prompt: String, width: Int, height: Int): GeneratedImage {
+        val want = width.toDouble() / height.coerceAtLeast(1)
+        val aspect = ASPECTS.minBy { (_, r) -> kotlin.math.abs(kotlin.math.ln(r / want)) }.first
+        return call(prompt, null, null, aspect = aspect, size = "2K")
+    }
+
+    private fun call(prompt: String, photo: ByteArray?, photoType: String?, aspect: String?, size: String = "1K"): GeneratedImage {
         val body = buildJsonObject {
             put("model", model)
             putJsonArray("input") {
@@ -270,8 +290,8 @@ class GeminiImageProvider(
             }
             putJsonObject("response_format") {
                 put("type", "image"); put("mime_type", "image/jpeg")
-                if (square) put("aspect_ratio", "1:1")
-                put("image_size", "1K")
+                aspect?.let { put("aspect_ratio", it) }
+                put("image_size", size)
             }
         }
         val res = try {

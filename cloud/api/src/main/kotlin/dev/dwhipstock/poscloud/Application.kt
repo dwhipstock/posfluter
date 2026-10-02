@@ -10,6 +10,8 @@ import dev.dwhipstock.poscloud.menu.menuRoutes
 import dev.dwhipstock.poscloud.menuai.MenuAiException
 import dev.dwhipstock.poscloud.menuai.MenuAiService
 import dev.dwhipstock.poscloud.menuai.menuAiRoutes
+import dev.dwhipstock.poscloud.menuprint.MenuPrintService
+import dev.dwhipstock.poscloud.menuprint.menuPrintRoutes
 import dev.dwhipstock.poscloud.reports.reportRoutes
 import dev.dwhipstock.poscloud.rooms.RoomAiService
 import dev.dwhipstock.poscloud.rooms.roomRoutes
@@ -46,6 +48,8 @@ fun Application.module(
     config: CloudConfig = CloudConfig(), menuAi: MenuAiService? = null,
     /** The Rooms page's AI assistant; tests pass one with a fake model. */
     roomAi: RoomAiService? = null,
+    /** Printable menus; tests pass one with a fake model and image service. Default: built on [menuAi]. */
+    menuPrint: ((MenuAiService) -> MenuPrintService)? = null,
 ) {
     val db = Db.connect(config)
     Migrations.run(db, File(config.migrationsDir))
@@ -122,7 +126,9 @@ fun Application.module(
             stockRoutes()
             menuRoutes()
             menuEditRoutes()
-            menuAiRoutes(menuAi ?: MenuAiService(config))
+            val ai = menuAi ?: MenuAiService(config)
+            menuAiRoutes(ai)
+            menuPrintRoutes(menuPrint?.invoke(ai) ?: MenuPrintService(config, ai))
             roomRoutes(roomAi ?: RoomAiService(config))
             staffRoutes()
             venueRoutes(config)

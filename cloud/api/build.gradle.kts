@@ -46,6 +46,10 @@ dependencies {
     // Spreadsheet exports: streaming XLSX writer, Apache-2.0, ~130 KB (+ opczip, Apache-2.0)
     implementation("org.dhatim:fastexcel:0.20.2")
 
+    // Printable menus (menuprint/): pure-JVM HTML → PDF on PDFBox (LGPL-2.1 / Apache-2.0);
+    // PDFBox also renders the preview pages and reads the PDF back in tests
+    implementation("io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.87")
+
     // Logging
     implementation("ch.qos.logback:logback-classic:1.5.13")
 

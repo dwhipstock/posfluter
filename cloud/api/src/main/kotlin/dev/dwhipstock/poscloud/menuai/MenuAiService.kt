@@ -272,10 +272,10 @@ class MenuAiService(
         }
     }
 
-    private fun overDailyCap(who: AiCaller): Boolean = transaction {
+    internal fun overDailyCap(who: AiCaller): Boolean = transaction {
         val since = CloudTime.now().minusHours(24)
         val counted = (MenuAiLog.tenantId eq who.principal.tenantId) and (MenuAiLog.createdAt greater since) and
-            (MenuAiLog.kind inList listOf("chat", "voice", "photo")) and
+            (MenuAiLog.kind inList listOf("chat", "voice", "photo", "print")) and
             (MenuAiLog.outcome notInList listOf("rate_limited", "daily_limit", "photo_daily_limit", "refused_name"))
         val store = MenuAiLog.selectAll().where { counted and (MenuAiLog.venueId eq who.venue.venueId) }.count()
         val user = MenuAiLog.selectAll().where { counted and (MenuAiLog.userId eq who.principal.userId) }.count()
