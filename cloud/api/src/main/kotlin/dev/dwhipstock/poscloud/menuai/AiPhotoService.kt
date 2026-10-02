@@ -12,6 +12,7 @@ import dev.dwhipstock.poscloud.db.ItemPhotos
 import dev.dwhipstock.poscloud.db.MenuAiLog
 import dev.dwhipstock.poscloud.db.MenuAiPhotos
 import dev.dwhipstock.poscloud.db.Venues
+import dev.dwhipstock.poscloud.menu.MenuPhotos
 import dev.dwhipstock.poscloud.menu.MenuState
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -19,19 +20,19 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.upsert
 import org.slf4j.LoggerFactory
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 import javax.imageio.ImageIO
@@ -57,8 +58,12 @@ data class AiPhotoPreviewDto(
 @Serializable
 data class AiPhotoRequest(val itemId: String, val mode: String = "generate", val lang: String? = null)
 
+/** [stores]: every store the photo became the item's photo at (the asked one first). */
 @Serializable
-data class AiPhotoAcceptResult(val photoId: String, val itemId: String, val photoVersion: Long, val photoSource: String)
+data class AiPhotoAcceptResult(
+    val photoId: String, val itemId: String, val photoVersion: Long, val photoSource: String,
+    val stores: List<String> = emptyList(),
+)
 
 @Serializable
 data class AiPhotoUndoResult(val photoId: String, val itemId: String, val photoVersion: Long? = null, val photoSource: String? = null)
@@ -98,7 +103,7 @@ class AiPhotoService internal constructor(
         const val MAX_BYTES = 2 * 1024 * 1024
         /** At most this many photos from one assistant request ("photos for every drink"). */
         const val MAX_PER_REQUEST = 10
-        const val FEED_ENTITY = "photo"
+        const val FEED_ENTITY = MenuPhotos.FEED_ENTITY
     }
 
     private class ItemRow(val id: String, val nameEn: String, val nameFr: String, val descriptionEn: String, val category: String)
@@ -263,7 +268,13 @@ class AiPhotoService internal constructor(
 
     // --- accept / discard / undo ---
 
-    fun accept(who: AiCaller, photoId: String): AiPhotoAcceptResult {
+    /**
+     * [everyStore] ("All stores" in the portal): the photo also becomes the
+     * item's photo at every other store that carries the item (and takes
+     * portal edits), each with its own feed entry and its own Undo record
+     * (a row `<photoId>@<venueId>`, undone with [photoId]).
+     */
+    fun accept(who: AiCaller, photoId: String, everyStore: Boolean = false): AiPhotoAcceptResult {
         val result = transaction {
             val row = mine(who, photoId)?.takeIf { it[MenuAiPhotos.userId] == who.principal.userId }
                 ?: throw NotFoundException("that AI photo has expired; make a new one", "menu_ai_photo_expired")
@@ -292,7 +303,34 @@ class AiPhotoService internal constructor(
                 it[prevSource] = item[CatalogItems.photoSource]
                 it[decidedAt] = CloudTime.now()
             }
-            AiPhotoAcceptResult(photoId, itemId, version, source)
+            val others = if (!everyStore) emptyList() else otherCarryingStores(who, itemId).map { other ->
+                val oPrev = currentPhoto(other, itemId)
+                val oPrevSource = CatalogItems.selectAll().where {
+                    (CatalogItems.tenantId eq other.tenantId) and (CatalogItems.venueId eq other.venueId) and (CatalogItems.id eq itemId)
+                }.first()[CatalogItems.photoSource]
+                val v = writePhoto(other, itemId, bytes, row[MenuAiPhotos.contentType], source, oPrev?.get(ItemPhotos.version))
+                MenuAiPhotos.insert {
+                    it[id] = siblingId(photoId, other.venueId)
+                    it[tenantId] = other.tenantId
+                    it[venueId] = other.venueId
+                    it[MenuAiPhotos.itemId] = itemId
+                    it[userId] = who.principal.userId
+                    it[MenuAiPhotos.photoSource] = source
+                    it[status] = "accepted"
+                    it[contentType] = row[MenuAiPhotos.contentType]
+                    it[provider] = row[MenuAiPhotos.provider]
+                    it[model] = row[MenuAiPhotos.model]
+                    it[MenuAiPhotos.version] = v
+                    it[hadPrev] = oPrev != null
+                    it[prevContent] = oPrev?.get(ItemPhotos.content)
+                    it[prevContentType] = oPrev?.get(ItemPhotos.contentType)
+                    it[prevSource] = oPrevSource
+                    it[createdAt] = CloudTime.now()
+                    it[decidedAt] = CloudTime.now()
+                }
+                other.venueId
+            }
+            AiPhotoAcceptResult(photoId, itemId, version, source, listOf(scope.venueId) + others)
         }
         ai.record(who, "photo_accept", "applied", 1, ref = photoId)
         log.info("AI photo $photoId accepted for ${who.venue.venueId}/${result.itemId}")
@@ -315,22 +353,16 @@ class AiPhotoService internal constructor(
             val row = mine(who, photoId) ?: throw NotFoundException("no such AI photo", "menu_ai_photo_not_found")
             if (row[MenuAiPhotos.status] == "undone") throw ConflictException("that was already undone", "menu_ai_already_reverted")
             if (row[MenuAiPhotos.status] != "accepted") throw NotFoundException("that AI photo was never used", "menu_ai_photo_not_found")
-            val scope = who.venue.scope
-            val itemId = row[MenuAiPhotos.itemId]
-            val current = currentPhoto(scope, itemId)
-            if (current == null || current[ItemPhotos.version] != row[MenuAiPhotos.version]) throw ConflictException(
+            val out = restore(who.venue.scope, row) ?: throw ConflictException(
                 "the item's photo was changed since; nothing was undone", "menu_ai_photo_changed")
-            val out = if (row[MenuAiPhotos.hadPrev] == true && row[MenuAiPhotos.prevContent] != null) {
-                val source = row[MenuAiPhotos.prevSource]
-                val v = writePhoto(scope, itemId, row[MenuAiPhotos.prevContent]!!, row[MenuAiPhotos.prevContentType] ?: "image/jpeg",
-                    source, current[ItemPhotos.version])
-                AiPhotoUndoResult(photoId, itemId, v, source)
-            } else {
-                removePhoto(scope, itemId)
-                AiPhotoUndoResult(photoId, itemId)
-            }
-            MenuAiPhotos.update({ MenuAiPhotos.id eq photoId }) {
-                it[status] = "undone"; it[content] = null; it[prevContent] = null; it[decidedAt] = CloudTime.now()
+            // the same photo accepted at the other stores ("All stores"): each gets its own previous photo
+            // back, unless that store's photo was changed since (then it keeps that one)
+            MenuAiPhotos.selectAll().where {
+                (MenuAiPhotos.tenantId eq who.principal.tenantId) and (MenuAiPhotos.id like "$photoId@%") and
+                    (MenuAiPhotos.status eq "accepted")
+            }.forUpdate().toList().forEach { sib ->
+                if (restore(Scope(who.principal.tenantId, sib[MenuAiPhotos.venueId]), sib) == null)
+                    log.info("AI photo $photoId: ${sib[MenuAiPhotos.venueId]} changed its photo since; kept")
             }
             out
         }
@@ -338,6 +370,46 @@ class AiPhotoService internal constructor(
         log.info("AI photo $photoId undone for ${who.venue.venueId}/${result.itemId}")
         return result
     }
+
+    /**
+     * Put back what the accepted photo [row] replaced at [scope] (inside a
+     * transaction), or null when the item's photo there was changed since
+     * (nothing touched). Marks the row undone.
+     */
+    private fun restore(scope: Scope, row: org.jetbrains.exposed.sql.ResultRow): AiPhotoUndoResult? {
+        val id = row[MenuAiPhotos.id]
+        val itemId = row[MenuAiPhotos.itemId]
+        val current = currentPhoto(scope, itemId)
+        if (current == null || current[ItemPhotos.version] != row[MenuAiPhotos.version]) return null
+        val out = if (row[MenuAiPhotos.hadPrev] == true && row[MenuAiPhotos.prevContent] != null) {
+            val source = row[MenuAiPhotos.prevSource]
+            val v = writePhoto(scope, itemId, row[MenuAiPhotos.prevContent]!!, row[MenuAiPhotos.prevContentType] ?: "image/jpeg",
+                source, current[ItemPhotos.version])
+            AiPhotoUndoResult(id, itemId, v, source)
+        } else {
+            removePhoto(scope, itemId)
+            AiPhotoUndoResult(id, itemId)
+        }
+        MenuAiPhotos.update({ MenuAiPhotos.id eq id }) {
+            it[status] = "undone"; it[content] = null; it[prevContent] = null; it[decidedAt] = CloudTime.now()
+        }
+        return out
+    }
+
+    private fun siblingId(photoId: String, venueId: String) = "$photoId@$venueId"
+
+    /** The tenant's other stores that carry [itemId] (live) and take portal edits (inside a transaction). */
+    private fun otherCarryingStores(who: AiCaller, itemId: String): List<Scope> =
+        Venues.selectAll().where { (Venues.tenantId eq who.principal.tenantId) and Venues.menuSyncAt.isNotNull() }
+            .orderBy(Venues.id).map { it[Venues.id] }
+            .filter { it != who.venue.venueId }
+            .map { Scope(who.principal.tenantId, it) }
+            .filter { s ->
+                CatalogItems.selectAll().where {
+                    (CatalogItems.tenantId eq s.tenantId) and (CatalogItems.venueId eq s.venueId) and
+                        (CatalogItems.id eq itemId) and (CatalogItems.deleted eq false)
+                }.any()
+            }
 
     // --- the item's photo, and the store's copy of it ---
 
@@ -347,26 +419,8 @@ class AiPhotoService internal constructor(
      * entry for the store. The version only ever goes up, so the store can
      * tell this photo from a newer one.
      */
-    private fun writePhoto(scope: Scope, itemId: String, bytes: ByteArray, contentType: String, source: String?, prevVersion: Long?): Long {
-        val version = maxOf(now(), (prevVersion ?: 0L) + 1)
-        ItemPhotos.upsert {
-            it[tenantId] = scope.tenantId
-            it[venueId] = scope.venueId
-            it[ItemPhotos.itemId] = itemId
-            it[content] = bytes
-            it[ItemPhotos.contentType] = contentType
-            it[ItemPhotos.version] = version
-            it[updatedAt] = CloudTime.now()
-        }
-        CatalogItems.update({
-            (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and (CatalogItems.id eq itemId)
-        }) {
-            it[photoVersion] = version
-            it[photoSource] = source
-        }
-        MenuState.appendFeed(scope, FEED_ENTITY, itemId, feedEntry(itemId, version, contentType, bytes, source), "portal")
-        return version
-    }
+    private fun writePhoto(scope: Scope, itemId: String, bytes: ByteArray, contentType: String, source: String?, prevVersion: Long?): Long =
+        MenuPhotos.write(scope, itemId, bytes, contentType, source, prevVersion, now())
 
     private fun removePhoto(scope: Scope, itemId: String) {
         ItemPhotos.deleteWhere {
@@ -382,18 +436,6 @@ class AiPhotoService internal constructor(
             put("itemId", itemId); put("deleted", true)
         }, "portal")
     }
-
-    /** The feed entry (CONTRACT §10): what the store needs to fetch and check the binary. Never the bytes. */
-    private fun feedEntry(itemId: String, version: Long, contentType: String, bytes: ByteArray, source: String?): JsonObject =
-        buildJsonObject {
-            put("itemId", itemId)
-            put("deleted", false)
-            put("version", version)
-            put("contentType", contentType)
-            put("bytes", bytes.size)
-            put("sha256", MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) })
-            source?.let { put("source", it) }
-        }
 }
 
 /**

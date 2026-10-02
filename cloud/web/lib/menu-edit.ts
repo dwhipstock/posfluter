@@ -49,6 +49,11 @@ export interface PlannedCall {
   /** API path without the store scope (the caller adds `?venue=`). */
   path: string;
   body?: Record<string, unknown>;
+  /**
+   * One store's call (Edit item → Stores): the path names the store, and a
+   * refusal there is that store's skip — the other stores' calls still run.
+   */
+  venueId?: string;
 }
 
 const MAX_CENTS = 10_000_000;

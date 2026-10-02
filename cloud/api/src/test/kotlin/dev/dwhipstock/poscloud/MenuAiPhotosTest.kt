@@ -323,6 +323,59 @@ class MenuAiPhotosTest {
         assertEquals("menu_ai_photo_none", generate("iced-tea", "enhance").body().s("code"))
     }
 
+    /** "All stores" in the portal: one photo, made at one store, becomes the item's photo at every store that carries it. */
+    @Test
+    fun allStoresAcceptReachesEveryCarryingStoreAndUndoRestoresEach() = testApplication {
+        app()
+        val key3 = "store-key-photos-c"
+        seedTenant("copperlantern", "mile-end", "Mile End")
+        seedStoreKey("copperlantern", "mile-end", key3)
+        bootstrap()
+        bootstrap(key2)
+        pull(key3) // takes portal edits, carries nothing
+        val plateauOwn = jpeg(70, 70, 0x445566)
+        val up = client.post("/v1/ingest/photos/iced-tea") {
+            header(HttpHeaders.Authorization, "Bearer $key2")
+            setBody(MultiPartFormDataContent(formData {
+                append("photo", plateauOwn, Headers.build {
+                    append(HttpHeaders.ContentType, "image/jpeg")
+                    append(HttpHeaders.ContentDisposition, "filename=\"iced-tea.jpg\"")
+                })
+            }))
+        }
+        assertEquals(HttpStatusCode.OK, up.status)
+        val c1 = pull()["cursor"]!!.jsonPrimitive.content.toLong()
+        val c2 = pull(key2)["cursor"]!!.jsonPrimitive.content.toLong()
+        val c3 = pull(key3)["cursor"]!!.jsonPrimitive.content.toLong()
+        val made = jpeg(110, 110, 0x2288CC)
+        flux.image = { GeneratedImage(made, "image/jpeg") }
+        val id = generate("iced-tea").body().s("photoId")!!
+
+        val acc = post("/v1/menu-ai/photos/$id/accept?venue=vieux-port&everyStore=1")
+        assertEquals(HttpStatusCode.OK, acc.status, acc.bodyAsText())
+        assertEquals(listOf("vieux-port", "plateau"), acc.body()["stores"]!!.jsonArray.map { it.jsonPrimitive.content })
+        // a photo entry for each carrying store, none for the other
+        assertEquals(1, photoFeed(pull(since = c1)).size)
+        assertEquals(1, photoFeed(pull(key2, since = c2)).size)
+        assertTrue(photoFeed(pull(key3, since = c3)).isEmpty())
+        assertTrue(storePhoto("iced-tea").readRawBytes().contentEquals(made))
+        assertTrue(storePhoto("iced-tea", key2).readRawBytes().contentEquals(made))
+        assertEquals(HttpStatusCode.NotFound, storePhoto("iced-tea", key3).status)
+
+        // undo: each store gets its own previous photo back (none at vieux-port, its own at plateau)
+        val undo = act(id, "undo")
+        assertEquals(HttpStatusCode.OK, undo.status, undo.bodyAsText())
+        assertEquals(HttpStatusCode.NotFound, storePhoto("iced-tea").status)
+        assertTrue(storePhoto("iced-tea", key2).readRawBytes().contentEquals(plateauOwn))
+        assertEquals("true", photoFeed(pull(since = c1)).last()["data"]!!.jsonObject.s("deleted"))
+        assertEquals("false", photoFeed(pull(key2, since = c2)).last()["data"]!!.jsonObject.s("deleted"))
+
+        // without everyStore: the asked store only (as before)
+        val one = generate("lemonade").body().s("photoId")!!
+        assertEquals(listOf("vieux-port"), act(one, "accept").body()["stores"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(HttpStatusCode.NotFound, storePhoto("lemonade", key2).status)
+    }
+
     @Test
     fun undoRefusesWhenThePhotoChangedSince() = testApplication {
         app()

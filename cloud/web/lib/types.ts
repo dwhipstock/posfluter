@@ -682,6 +682,28 @@ export interface MenuSyncStore {
   failed?: number;
 }
 
+/** One of the client's stores for Edit item → Stores (GET /v1/menu/stores?item=). */
+export interface MenuItemStore {
+  venueId: string;
+  name: string;
+  /** false = the store's app predates two-way sync; edits would never reach it. */
+  editable: boolean;
+  /** Portal edits the store has not pulled yet (it's offline, or about to sync). */
+  pending: number;
+  failed?: number;
+  /** The store has the item on its menu. */
+  carries: boolean;
+  /** Its category there (when it carries it). */
+  categoryId?: string | null;
+  /** The store's own categories, in its order. */
+  categories: MenuCategory[];
+}
+
+export interface MenuItemStores {
+  canEdit: boolean;
+  stores: MenuItemStore[];
+}
+
 export interface MenuSyncStatus {
   canEdit: boolean;
   role: string;
@@ -784,6 +806,8 @@ export interface AiPhotoAcceptResult {
   itemId: string;
   photoVersion: number;
   photoSource: string;
+  /** Every store it became the item's photo at (the asked one first); absent on an older cloud. */
+  stores?: string[];
 }
 
 export interface AiApplyResult {

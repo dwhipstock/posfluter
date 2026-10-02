@@ -84,7 +84,9 @@ fun Route.menuAiRoutes(service: MenuAiService) {
     post("/menu-ai/photos/{photoId}/accept") {
         val id = call.parameters["photoId"]!!.take(64)
         val who = aiCaller(call, service, null, photos = true)
-        call.respond(withContext(Dispatchers.IO) { service.photos.accept(who, id) })
+        // ?everyStore=1 ("All stores" in the portal): also every other store that carries the item
+        val everyStore = call.request.queryParameters["everyStore"].let { it == "1" || it == "true" }
+        call.respond(withContext(Dispatchers.IO) { service.photos.accept(who, id, everyStore) })
     }
 
     post("/menu-ai/photos/{photoId}/discard") {

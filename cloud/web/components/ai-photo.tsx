@@ -40,7 +40,7 @@ export function photoErrorText(t: T, e: unknown): string {
 }
 
 /** The pictures of one request, made one at a time, each with its own Use / Try again / Discard. */
-function usePhotoRunner(venue: string | null, onChanged: () => void) {
+function usePhotoRunner(venue: string | null, onChanged: () => void, everyStore = false) {
   const t = useT();
   const { locale } = useI18n();
   const [states, setStates] = useState<PhotoState[]>([]);
@@ -109,7 +109,9 @@ function usePhotoRunner(venue: string | null, onChanged: () => void) {
 
   const accept = (i: number) =>
     act(i, async () => {
-      await post<AiPhotoAcceptResult>(path(`/v1/menu-ai/photos/${encodeURIComponent(statesRef.current[i].preview!.photoId)}/accept`), {});
+      // "All stores": the photo also goes to every other store that carries the item (Undo puts each one's back)
+      const accept = path(`/v1/menu-ai/photos/${encodeURIComponent(statesRef.current[i].preview!.photoId)}/accept`);
+      await post<AiPhotoAcceptResult>(everyStore ? `${accept}&everyStore=1` : accept, {});
       onChanged();
       return { status: "accepted" };
     });
@@ -311,20 +313,29 @@ export function PhotoAsksView({ venue, asks, onChanged }: { venue: string; asks:
   );
 }
 
-/** The item sheet's "Generate photo" / "Enhance photo" (an existing item, one store). */
+/**
+ * The item sheet's "Generate photo" / "Enhance photo" (an existing item). The
+ * picture is made at [venue] (a store that carries the item); with
+ * [everyStore] ("All stores") accepting it also makes it the photo at every
+ * other store that carries the item. [appliesTo] names the stores that get it.
+ */
 export function ItemPhotoPanel({
   venue,
   item,
   title,
   onChanged,
+  everyStore = false,
+  appliesTo = [],
 }: {
   venue: string | null;
   item: MenuItem;
   title: string;
   onChanged: () => void;
+  everyStore?: boolean;
+  appliesTo?: string[];
 }) {
   const t = useT();
-  const r = usePhotoRunner(venue, onChanged);
+  const r = usePhotoRunner(venue, onChanged, everyStore);
   const state = r.states[0];
   const begin = (mode: "generate" | "enhance") =>
     r.load([{ id: "item", itemId: item.id, title, mode, hasPhoto: item.photoVersion !== null }], true);
@@ -349,6 +360,9 @@ export function ItemPhotoPanel({
         ) : null}
       </div>
       {!venue && <p className="text-xs text-neutral-600">{t("ai_photo_pick_store")}</p>}
+      {venue && appliesTo.length > 0 && (
+        <p className="text-xs text-neutral-700">{t("ai_photo_applies_to", { stores: appliesTo.join(", ") })}</p>
+      )}
       {venue && !state && <p className="text-xs text-neutral-600">{t("ai_photo_hint")}</p>}
       {state && (
         <PhotoCard

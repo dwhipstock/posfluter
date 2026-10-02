@@ -9,6 +9,7 @@ import dev.dwhipstock.poscloud.auth.Principal
 import dev.dwhipstock.poscloud.catalog.Scope
 import dev.dwhipstock.poscloud.db.CatalogCategories
 import dev.dwhipstock.poscloud.db.CatalogItems
+import dev.dwhipstock.poscloud.db.ItemPhotos
 import dev.dwhipstock.poscloud.db.MenuEdits
 import dev.dwhipstock.poscloud.db.MenuFeed
 import dev.dwhipstock.poscloud.db.Venues
@@ -122,6 +123,28 @@ data class MenuSyncStoreDto(
 @Serializable
 data class MenuSyncStatus(val canEdit: Boolean, val role: String, val stores: List<MenuSyncStoreDto>)
 
+/**
+ * Put an item that one store carries on another store too (the portal's
+ * Edit item -> Stores). [from]: the store whose copy is copied; [categoryId]:
+ * the category at the target store (default: the same id as at [from]).
+ */
+@Serializable
+data class MenuItemCopy(val from: String, val categoryId: String? = null)
+
+/**
+ * One of the tenant's stores for Edit item -> Stores: its sync state (as in
+ * [MenuSyncStoreDto]), whether it [carries] the item (and in which category),
+ * and its live categories, so a copy can pick one there.
+ */
+@Serializable
+data class MenuItemStoreDto(
+    val venueId: String, val name: String, val editable: Boolean, val pending: Long, val failed: Int,
+    val carries: Boolean, val categoryId: String? = null, val categories: List<MenuCategoryDto>,
+)
+
+@Serializable
+data class MenuItemStores(val canEdit: Boolean, val stores: List<MenuItemStoreDto>)
+
 private val LANG = Regex("^[a-z]{2,8}(-[a-z0-9]{2,8})?$")
 private const val MAX_PRICE_CENTS = 10_000_000L
 
@@ -234,6 +257,39 @@ private fun result(outcomes: List<Pair<String, String?>>, id: String? = null) = 
 )
 
 /**
+ * [to] takes [from]'s value of every field in [fields], and every name
+ * [from] has (a name only [to] has is removed), all at [stamp].
+ */
+private fun copyRegs(from: Regs, to: Regs, stamp: String, fields: List<String>) {
+    for (f in fields) to.write(f, from.fields[f] ?: JsonNull, stamp)
+    val names = from.names()
+    to.fields.keys.filter { it.startsWith(MenuFields.NAMES) && it.removePrefix(MenuFields.NAMES) !in names }.toList()
+        .forEach { to.write(it, JsonNull, stamp) }
+    to.writeNames(names, stamp)
+}
+
+/** One store's menu sync state for the portal (inside a transaction). */
+private fun syncStore(tenantId: String, v: VenueScope): MenuSyncStoreDto {
+    val row = Venues.selectAll().where { (Venues.tenantId eq tenantId) and (Venues.id eq v.venueId) }.first()
+    val cursor = row[Venues.menuCursor] ?: 0L
+    val pending = MenuFeed.selectAll().where {
+        (MenuFeed.tenantId eq tenantId) and (MenuFeed.venueId eq v.venueId) and (MenuFeed.seq greater cursor)
+    }.count()
+    return MenuSyncStoreDto(
+        v.venueId, v.name, row[Venues.menuSyncAt] != null,
+        row[Venues.menuSyncAt]?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, v.zone) }, pending,
+        row[Venues.menuFailed] ?: 0,
+    )
+}
+
+/** Every store of the tenant, ordered by id (as portalScopes without a venue). Inside a transaction. */
+private fun allVenues(tenantId: String): List<VenueScope> =
+    Venues.selectAll().where { Venues.tenantId eq tenantId }.orderBy(Venues.id).map {
+        VenueScope(Scope(tenantId, it[Venues.id]), it[Venues.name], dev.dwhipstock.poscloud.CloudTime.zone(it[Venues.timezone]),
+            it[Venues.currency], it[Venues.kind])
+    }
+
+/**
  * The portal's menu edits as plain functions: the routes below call them, and
  * so does the AI menu assistant's apply (menuai/), so an AI change takes
  * exactly the path of a hand edit — same validation, same cloud HLC stamp,
@@ -337,6 +393,66 @@ object PortalMenuOps {
                 null
             }
         }, itemId)
+    }
+
+    /**
+     * Put the item [itemId] as [MenuItemCopy.from] has it on the ONE store in
+     * [venues], under the same id (so a later "All stores" edit reaches every
+     * copy): names in every language, descriptions, sizes (same size ids) and
+     * prices, category ([MenuItemCopy.categoryId] there), alcohol flag, tile
+     * badge, availability, selling days, specials, and the photo. Every field
+     * is written with this edit's [stamp], so it lands like a portal create; a
+     * copy the store once had and deleted comes back with only the copied
+     * sizes live. Skip reasons: store_not_upgraded | category_not_found |
+     * already_on_menu.
+     */
+    fun copyItem(principal: Principal, venues: List<VenueScope>, stamp: String, itemId: String, req: MenuItemCopy,
+                 nowMs: Long = System.currentTimeMillis()): MenuEditResult {
+        val target = venues.singleOrNull()
+            ?: throw BadRequestException("pick the one store to put the item on (?venue=)", "venue_required")
+        val fromId = req.from.trim()
+        if (fromId == target.venueId) throw BadRequestException("the item is already on this store; copy it from another one", "same_store")
+        val fromKnown = Venues.selectAll().where { (Venues.tenantId eq principal.tenantId) and (Venues.id eq fromId) }.any()
+        if (!fromKnown) throw NotFoundException("no venue '$fromId' for tenant", "bad_venue")
+        val fromScope = Scope(principal.tenantId, fromId)
+        val source = MenuState.loadItems(fromScope, listOf(itemId))[itemId]?.takeIf { !it.item.deleted }
+            ?: throw NotFoundException("not on that store's menu", "not_found")
+        val categoryId = req.categoryId?.trim()?.takeIf { it.isNotEmpty() } ?: source.item.str("categoryId") ?: ""
+        val scope = target.scope
+        val reason: String? = run {
+            if (!editable(target.venueId, principal.tenantId)) return@run "store_not_upgraded"
+            if (!liveCategory(scope, categoryId)) return@run "category_not_found"
+            val existing = MenuState.loadItems(scope, listOf(itemId))[itemId]
+            if (existing != null && !existing.item.deleted) return@run "already_on_menu"
+            val state = existing ?: ItemState(Regs(itemId))
+            copyRegs(source.item, state.item, stamp, MenuFields.ITEM_FIELDS - "deleted" - "categoryId")
+            state.item.write("categoryId", JsonPrimitive(categoryId), stamp)
+            state.item.write("deleted", JsonPrimitive(false), stamp)
+            val live = source.variants.values.filter { !it.deleted }
+            for (v in live) {
+                val r = state.variants.getOrPut(v.id) { Regs(v.id) }
+                copyRegs(v, r, stamp, MenuFields.VARIANT_FIELDS - "deleted")
+                r.write("deleted", JsonPrimitive(false), stamp)
+            }
+            // sizes the target's old (deleted) copy had that the source doesn't: they stay gone
+            val liveIds = live.map { it.id }.toSet()
+            state.variants.values.filter { it.id !in liveIds && !it.deleted }.forEach { it.write("deleted", JsonPrimitive(true), stamp) }
+            state.canonicalize()
+            MenuState.saveItems(scope, listOf(state))
+            MenuState.appendFeed(scope, MenuFields.ITEM, itemId, state.wire(), "portal")
+            // the photo goes down the way a portal AI photo does (after the item, so the store has it)
+            ItemPhotos.selectAll().where {
+                (ItemPhotos.tenantId eq fromScope.tenantId) and (ItemPhotos.venueId eq fromScope.venueId) and (ItemPhotos.itemId eq itemId)
+            }.firstOrNull()?.let { photo ->
+                val prev = ItemPhotos.selectAll().where {
+                    (ItemPhotos.tenantId eq scope.tenantId) and (ItemPhotos.venueId eq scope.venueId) and (ItemPhotos.itemId eq itemId)
+                }.firstOrNull()?.get(ItemPhotos.version)
+                MenuPhotos.write(scope, itemId, photo[ItemPhotos.content], photo[ItemPhotos.contentType],
+                    source.extras.photoSource, prev, nowMs)
+            }
+            null
+        }
+        return result(listOf(target.venueId to reason), itemId)
     }
 
     /** Soft delete: the item leaves the store's menu; sales history keeps it. */
@@ -504,6 +620,7 @@ object PortalMenuOps {
         "size_not_found" -> BadRequestException("a special prices a size this item doesn't have", "size_not_found")
         "not_found" -> NotFoundException("not on this store's menu", "not_found")
         "category_not_found" -> BadRequestException("no such category at this store", "category_not_found")
+        "already_on_menu" -> ConflictException("the item is already on this store's menu", "already_on_menu")
         "store_not_upgraded" -> ConflictException(
             "this store's app is too old to take menu changes from the portal; edit on the tablet or update it",
             "store_not_upgraded")
@@ -516,21 +633,34 @@ fun Route.menuEditRoutes() {
     /** Who may edit, and each in-scope store's sync state (for the portal's banner). */
     get("/menu/sync-status") {
         val (principal, venues) = dev.dwhipstock.poscloud.portalScopes(call)
+        val stores = transaction { venues.map { v -> syncStore(principal.tenantId, v) } }
+        call.respond(MenuSyncStatus(principal.canEditMenu, principal.role, stores))
+    }
+
+    /**
+     * Edit item -> Stores: every store of the tenant (whichever store is
+     * picked), whether it carries `item` and its live categories. Any
+     * signed-in user may read it (viewers see the list read-only).
+     */
+    get("/menu/stores") {
+        val principal = dev.dwhipstock.poscloud.auth.requirePortal(call)
+        val itemId = call.request.queryParameters["item"]?.trim()?.takeIf { it.isNotEmpty() }?.take(200)
         val stores = transaction {
-            venues.map { v ->
-                val row = Venues.selectAll().where { (Venues.tenantId eq principal.tenantId) and (Venues.id eq v.venueId) }.first()
-                val cursor = row[Venues.menuCursor] ?: 0L
-                val pending = MenuFeed.selectAll().where {
-                    (MenuFeed.tenantId eq principal.tenantId) and (MenuFeed.venueId eq v.venueId) and (MenuFeed.seq greater cursor)
-                }.count()
-                MenuSyncStoreDto(
-                    v.venueId, v.name, row[Venues.menuSyncAt] != null,
-                    row[Venues.menuSyncAt]?.let { dev.dwhipstock.poscloud.CloudTime.iso(it, v.zone) }, pending,
-                    row[Venues.menuFailed] ?: 0,
-                )
+            allVenues(principal.tenantId).map { v ->
+                val sync = syncStore(principal.tenantId, v)
+                val carried = itemId?.let { id ->
+                    CatalogItems.selectAll().where {
+                        (CatalogItems.tenantId eq principal.tenantId) and (CatalogItems.venueId eq v.venueId) and
+                            (CatalogItems.id eq id) and (CatalogItems.deleted eq false)
+                    }.firstOrNull()?.get(CatalogItems.categoryId)
+                }
+                val cats = MenuState.loadCategories(v.scope).values.filter { !it.deleted }
+                    .sortedBy { it.int("sortOrder") ?: 0 }
+                    .map { MenuCategoryDto(it.id, it.str("nameFr") ?: "", it.str("nameEn") ?: "", it.int("sortOrder") ?: 0, it.names()) }
+                MenuItemStoreDto(v.venueId, v.name, sync.editable, sync.pending, sync.failed, carried != null, carried, cats)
             }
         }
-        call.respond(MenuSyncStatus(principal.canEditMenu, principal.role, stores))
+        call.respond(MenuItemStores(principal.canEditMenu, stores))
     }
 
     // --- items ---
@@ -544,6 +674,13 @@ fun Route.menuEditRoutes() {
         val itemId = call.parameters["itemId"]!!
         val req = call.receive<MenuItemPatch>()
         menuEdit { _, venues, stamp -> PortalMenuOps.patchItem(venues, stamp, itemId, req) }
+    }
+
+    /** Put the item on the store picked (`?venue=`), copied from the store [MenuItemCopy.from]. */
+    post("/menu/items/{itemId}/copy") {
+        val itemId = call.parameters["itemId"]!!
+        val req = call.receive<MenuItemCopy>()
+        menuEdit(HttpStatusCode.Created) { principal, venues, stamp -> PortalMenuOps.copyItem(principal, venues, stamp, itemId, req) }
     }
 
     /** Soft delete: the item leaves every store's menu; sales history keeps it. */
