@@ -8,6 +8,8 @@ import dev.dwhipstock.pos.api.VariantPatchRequest
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.ItemSchedules
+import dev.dwhipstock.pos.sdk.MenuSpecials
 import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.base.Users
 import dev.dwhipstock.pos.db.utcTimestamp
@@ -112,6 +114,16 @@ internal object MenuChangeLog {
         }
     }
 
+    /** An item's menu specials (selling days and day prices), in their synced canonical form. */
+    fun scheduleState(itemId: String): JsonObject? {
+        if (Items.selectAll().where { Items.id eq itemId }.empty()) return null
+        val s = ItemSchedules.of(itemId)
+        return buildJsonObject {
+            put("availableDays", MenuSpecials.daysJson(s.availableDays))
+            put("specials", MenuSpecials.specialsJson(s.specials))
+        }
+    }
+
     fun variantState(variantId: String): JsonObject? {
         val row = ItemVariants.selectAll().where { ItemVariants.id eq variantId }.firstOrNull() ?: return null
         return buildJsonObject {
@@ -172,6 +184,7 @@ internal object MenuChangeLog {
         "translation" -> translationState(id)
         "item" -> itemState(id)
         "variant" -> variantState(id)
+        "schedule" -> scheduleState(id)
         "category" -> categoryState(id)
         UNDO_OF -> null
         else -> orderState()
@@ -312,6 +325,10 @@ internal object MenuChangeLog {
                 // a size deleted since (e.g. from the manager portal) stays deleted
                 "variant" to "update" -> if (variantLive(id)) CatalogOps.patchVariant(before!!.s("itemId"), id,
                     VariantPatchRequest(priceCents = before["priceCents"]!!.jsonPrimitive.long))
+                // an item deleted since keeps its (deleted) state
+                "schedule" to "update" -> if (itemState(id)?.get("deleted")?.jsonPrimitive?.boolean == false) CatalogOps.patchItem(id,
+                    ItemPatchRequest(availableDays = MenuSpecials.daysOf(before!!["availableDays"]),
+                        specials = MenuSpecials.specialsOf(before["specials"])))
                 "category" to "update" -> CatalogOps.patchCategory(id,
                     CategoryPatchRequest(nameFr = before!!.s("nameFr"), nameEn = before.s("nameEn")))
                 "translation" to "update" -> {

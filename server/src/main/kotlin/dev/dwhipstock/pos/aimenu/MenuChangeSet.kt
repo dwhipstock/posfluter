@@ -38,7 +38,21 @@ sealed class MenuOp {
     data class ReorderCategories(val order: List<String>) : MenuOp()
     /** "Translate menu": an item's or category's name in one of the store's extra languages (es, de). */
     data class SetName(val entity: String, val id: String, val lang: String, val name: String) : MenuOp()
+    /** Menu specials: the only days the item is sold ("fri", "sat"); empty = every day again. */
+    data class SetDays(val itemId: String, val days: List<String>) : MenuOp()
+    /** Menu specials: the item's whole list of day prices after the change (empty = none). */
+    data class SetSpecials(val itemId: String, val specials: List<NewSpecial>) : MenuOp()
 }
+
+/**
+ * One day price (CONTRACT §10 "Specials"): days (mon..sun, Monday first), an
+ * optional "HH:mm" window (both or neither), an optional own name, and the
+ * special price of each size it covers (size id → minor units).
+ */
+data class NewSpecial(
+    val days: List<String>, val from: String? = null, val to: String? = null,
+    val label: String? = null, val prices: Map<String, Long>,
+)
 
 /** What the model may refer to: the live menu when the proposal was made. */
 class MenuFacts(
@@ -59,6 +73,10 @@ class MenuFacts(
     val extraNames: Map<String, Map<String, String>> = emptyMap(),
     /** The acting user's own UI language: what an unspecified-language rename means. */
     val requestLang: String = "en",
+    /** item id → the days it is sold now (empty / absent = every day). */
+    val itemDays: Map<String, List<String>> = emptyMap(),
+    /** item id → its specials now. */
+    val itemSpecials: Map<String, List<NewSpecial>> = emptyMap(),
 )
 
 class ParsedChangeSet(
@@ -102,7 +120,7 @@ object MenuChangeSetParser {
     private const val MAX_VARIANTS = 8
 
     val KNOWN_OPS = setOf("add_category", "add_item", "update_item", "remove_item", "rename_category",
-        "reorder_categories", "set_name")
+        "reorder_categories", "set_name", "set_days", "set_specials")
 
     private val json = Json { isLenient = false }
 
@@ -319,6 +337,20 @@ object MenuChangeSetParser {
                 require(!text.isNullOrEmpty()) { "a name is required" }
                 MenuOp.SetName(entity, id!!, lang, text)
             }
+            "set_days" -> {
+                val id = item()
+                val d = days(o["days"], allowEmpty = true)
+                require(d != facts.itemDays[id].orEmpty()) { "nothing to change" }
+                MenuOp.SetDays(id, d)
+            }
+            "set_specials" -> {
+                val id = item()
+                val arr = o["specials"] as? JsonArray ?: throw IllegalArgumentException("specials must be a list")
+                require(arr.size <= MAX_SPECIALS) { "at most $MAX_SPECIALS specials per item" }
+                val list = arr.map { special(it, id, facts) }.distinct()
+                require(list != facts.itemSpecials[id].orEmpty()) { "nothing to change" }
+                MenuOp.SetSpecials(id, list)
+            }
             "reorder_categories" -> {
                 val order = (o["order"] as? JsonArray)?.map { it.s() ?: "" }
                 require(!order.isNullOrEmpty()) { "order missing" }
@@ -338,6 +370,133 @@ object MenuChangeSetParser {
         require(v >= 0 && v <= facts.maxPriceMinor) { "price out of range" }
         require(v > 0 || zeroOk) { "a price of 0 is not allowed" }
         return v
+    }
+
+    // --- menu specials (CONTRACT §10 "Specials"; the store's sdk/MenuSpecials.kt) ---
+
+    /** Day codes, Monday first. */
+    val DAYS = listOf("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+    const val MAX_SPECIALS = 10
+    private const val MAX_SPECIAL_LABEL = 40
+
+    /**
+     * The specials ops and rules: appended word for word to both assistants'
+     * prompts (the store's and the portal's), so the drift test that compares
+     * this object covers them.
+     */
+    val SPECIALS_PROMPT = """
+Menu specials (two more ops):
+{"op":"set_days","item":"<item id>","days":["fri","sat"]}  (the only days the item is sold; [] = every day again)
+{"op":"set_specials","item":"<item id>","specials":[{"days":["tue"],"from":"16:00","to":"18:00","label":"","prices":[{"variant":"<variant id>","priceMinor":995}]}]}
+Specials rules:
+- Days are always the codes mon tue wed thu fri sat sun, in any language of the request. "Weekdays" = mon to fri, "weekends" = sat and sun.
+- "<item> only on Fridays and Saturdays", "only sold on Sundays" = set_days for that item. "Every day again" = set_days with [].
+- A cheaper price on some days or hours ("burgers 9.95 on Tuesdays", "happy hour 3-6 beers 5") = set_specials, one op per item concerned: every item that IS what was named (every burger; every beer), judged by its name, not by its category (a sandwich in "Burgers & Sandwiches" is not a burger). Never change the menu price itself (update_item prices) for a special.
+- A special price is below the item's menu price. Give it for each size it applies to: a "5 dollar beer" is the smaller size (the pint, glass or can), not a pitcher, unless the manager says otherwise.
+- set_specials lists ALL of the item's specials after the change: keep the ones the current menu shows under "specials" unless asked to remove them; [] removes every special.
+- "from" and "to" are 24-hour "HH:mm" on the store's clock (3-6 pm = "15:00" to "18:00"); leave both out for the whole day. A happy hour with no days said runs every day (all seven codes). "label" is the special's own short name only when the manager's request says it ("happy hour", "Taco Tuesday"), else "": never invent one.
+""".trim()
+
+    private val SHORT_DAYS = mapOf(
+        "en" to listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"),
+        "fr" to listOf("lun", "mar", "mer", "jeu", "ven", "sam", "dim"),
+        "es" to listOf("lun", "mar", "mié", "jue", "vie", "sáb", "dom"),
+        "de" to listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"),
+        "af" to listOf("Ma", "Di", "Wo", "Do", "Vr", "Sa", "So"),
+    )
+    private val EVERY_DAY = mapOf("en" to "Every day", "fr" to "Tous les jours", "es" to "Todos los días", "de" to "Jeden Tag", "af" to "Elke dag")
+    private val AND = mapOf("en" to " & ", "fr" to " et ", "es" to " y ", "de" to " & ", "af" to " en ")
+    private val ONLY = mapOf("en" to "Only ", "fr" to "Seulement ", "es" to "Solo ", "de" to "Nur ", "af" to "Net ")
+    private val NONE = mapOf("en" to "No specials", "fr" to "Aucun spécial", "es" to "Sin especiales", "de" to "Keine Angebote", "af" to "Geen spesiale")
+
+    private fun l(lang: String) = lang.lowercase().take(2).takeIf { it in SHORT_DAYS } ?: "en"
+
+    /** "Mon–Fri", "Fri & Sat", "Every day" in [lang]. */
+    fun describeDays(days: List<String>, lang: String): String {
+        val k = l(lang)
+        val idx = days.map { DAYS.indexOf(it) }.filter { it >= 0 }.distinct().sorted()
+        if (idx.isEmpty() || idx.size == 7) return EVERY_DAY.getValue(k)
+        val names = SHORT_DAYS.getValue(k)
+        if (idx.size >= 3 && idx.last() - idx.first() == idx.size - 1) return names[idx.first()] + "–" + names[idx.last()]
+        val n = idx.map { names[it] }
+        return if (n.size == 1) n[0] else n.dropLast(1).joinToString(", ") + AND.getValue(k) + n.last()
+    }
+
+    /** Where an item is sold: "Every day" or "Only Fri & Sat". */
+    fun describeAvailability(days: List<String>, lang: String): String =
+        if (days.isEmpty() || days.size == 7) EVERY_DAY.getValue(l(lang)) else ONLY.getValue(l(lang)) + describeDays(days, lang)
+
+    /** "Happy hour · Mon–Fri 16:00–18:00", "Tue". */
+    fun describeSpecial(s: NewSpecial, lang: String): String =
+        listOfNotNull(s.label, describeDays(s.days, lang) + (s.from?.let { " $it–${s.to}" } ?: "")).joinToString(" · ")
+
+    /** A whole list, for the before / after of a change: "No specials" when empty. */
+    fun describeSpecials(list: List<NewSpecial>, lang: String): String =
+        if (list.isEmpty()) NONE.getValue(l(lang)) else list.joinToString("; ") { describeSpecial(it, lang) }
+
+    /** The synced (canonical) form of an item's days, read leniently: null / bad = every day. */
+    fun daysOf(el: JsonElement?): List<String> =
+        runCatching { days(el, allowEmpty = true) }.getOrDefault(emptyList())
+
+    /** The synced (canonical) form of an item's specials (`prices` an object), read leniently. */
+    fun specialsOf(el: JsonElement?): List<NewSpecial> = (el as? JsonArray).orEmpty().mapNotNull { e ->
+        val so = e as? JsonObject ?: return@mapNotNull null
+        runCatching {
+            val from = time(so["from"]); val to = time(so["to"])
+            val prices = (so["prices"] as? JsonObject).orEmpty()
+                .mapNotNull { (k, v) -> (v as? JsonPrimitive)?.longOrNull?.let { k to it } }.toMap().toSortedMap()
+            if (prices.isEmpty() || (from == null) != (to == null)) null
+            else NewSpecial(days(so["days"], allowEmpty = false), from, to, so["label"].s()?.trim()?.takeIf { it.isNotEmpty() }, LinkedHashMap(prices))
+        }.getOrNull()
+    }
+
+    private fun days(el: JsonElement?, allowEmpty: Boolean): List<String> {
+        if (el == null || el is JsonNull) { require(allowEmpty) { "at least one day is required" }; return emptyList() }
+        val arr = el as? JsonArray ?: throw IllegalArgumentException("days must be a list like [\"fri\",\"sat\"]")
+        val wanted = arr.map { d -> d.s()?.trim()?.lowercase()?.take(3).orEmpty() }
+        wanted.forEach { require(it in DAYS) { "unknown day" } }
+        val out = DAYS.filter { it in wanted }
+        require(allowEmpty || out.isNotEmpty()) { "at least one day is required" }
+        return if (allowEmpty && out.size == 7) emptyList() else out
+    }
+
+    private fun time(el: JsonElement?): String? {
+        val raw = el.s()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val m = Regex("^(\\d{1,2}):(\\d{2})$").find(raw) ?: throw IllegalArgumentException("times must be HH:mm")
+        val h = m.groupValues[1].toInt()
+        val mi = m.groupValues[2].toInt()
+        require(h in 0..24 && mi in 0..59 && (h < 24 || mi == 0)) { "times must be HH:mm" }
+        return "%02d:%02d".format(h % 24, mi)
+    }
+
+    private fun special(el: JsonElement, id: String, facts: MenuFacts): NewSpecial {
+        val so = el as? JsonObject ?: throw IllegalArgumentException("a special is not an object")
+        val live = facts.itemVariants.getValue(id)
+        val from = time(so["from"])
+        val to = time(so["to"])
+        require((from == null) == (to == null)) { "a time window needs both from and to" }
+        require(from == null || from != to) { "a time window can't start and end at the same time" }
+        val label = so["label"].s()?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotEmpty() }?.also {
+            require(it.length <= MAX_SPECIAL_LABEL) { "label longer than $MAX_SPECIAL_LABEL characters" }
+            AiGuard.checkText(it)?.let { why -> throw IllegalArgumentException("label: $why") }
+        }
+        val prices = sortedMapOf<String, Long>()
+        (so["prices"] as? JsonArray)?.forEach { p ->
+            val po = p as? JsonObject ?: throw IllegalArgumentException("a price is not an object")
+            val variant = po["variant"].s()
+            require(variant != null && variant in live) { "unknown size of $id" }
+            val v = price(po["priceMinor"], facts)
+            facts.variantPrices[variant]?.let { regular -> require(v < regular) { "a special price must be below the menu price" } }
+            prices[variant] = v
+        }
+        // one price for every size: only the sizes it is cheaper for
+        so["priceMinor"]?.takeUnless { it is JsonNull }?.let { p ->
+            val v = price(p, facts)
+            live.filter { vid -> (facts.variantPrices[vid] ?: Long.MAX_VALUE) > v }.forEach { vid -> prices.putIfAbsent(vid, v) }
+            require(prices.isNotEmpty()) { "a special price must be below the menu price" }
+        }
+        require(prices.isNotEmpty()) { "a special needs a price" }
+        return NewSpecial(days(so["days"], allowEmpty = false), from, to, label, LinkedHashMap(prices))
     }
 
     private fun JsonElement?.s(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull

@@ -219,7 +219,9 @@ internal object CatalogOps {
                 val sizes = ItemVariants.selectAll().where { ItemVariants.itemId eq itemId }.map { it[ItemVariants.id] }.toSet()
                 ItemSchedules.set(itemId, scheduleOf(req.availableDays ?: now.availableDays, req.specials ?: now.specials, sizes))
             }
-            if (req.copy(availableDays = null, specials = null) != ItemPatchRequest()) Items.update({ Items.id eq itemId }) { row ->
+            // a specials-only edit has no items column to set (Exposed refuses an empty UPDATE)
+            val rowEdit = req.copy(availableDays = null, specials = null) != ItemPatchRequest()
+            if (rowEdit) Items.update({ Items.id eq itemId }) { row ->
                 req.nameFr?.let { row[nameFr] = it.trim() }
                 req.nameEn?.let { row[nameEn] = it.trim() }
                 req.descriptionFr?.let { row[descriptionFr] = it.trim() }
