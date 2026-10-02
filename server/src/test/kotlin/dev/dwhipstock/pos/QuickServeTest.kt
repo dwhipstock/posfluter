@@ -244,8 +244,18 @@ class QuickServeTest {
         assertEquals(listOf(101), s.qs.board().preparing)
         assertTrue(s.checks.receiptText(k1.checkId).contains("#101"), s.checks.receiptText(k1.checkId))
         assertEquals(listOf(k2.checkId), s.qs.waiting().map { it.checkId })
+        // its bill before paying: take out, no number yet, never a table
+        val bill = s.checks.printBill(pos.checkId)
+        assertTrue("Take out" in bill && "Table" !in bill, bill)
         s.pay(pos.checkId)
         assertEquals(103, s.qs.view(pos.checkId).orderNumber)
+        // the receipt: "Order #103 · Take out", never "Table 1"
+        val receipt = s.checks.receiptText(pos.checkId)
+        assertTrue("Order #103 · Take out" in receipt, receipt)
+        assertTrue("Table" !in receipt, receipt)
+        // a dine-in kiosk order too
+        assertTrue("Order #101 · Dine in" in s.checks.receiptText(k1.checkId))
+        assertTrue("Table" !in s.checks.receiptText(k1.checkId))
 
         // #102 never comes to pay: dropped, and its number is not given again
         now = now.plusSeconds(25 * 60)

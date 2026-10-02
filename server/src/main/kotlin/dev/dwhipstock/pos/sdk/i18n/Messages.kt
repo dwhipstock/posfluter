@@ -128,6 +128,8 @@ enum class MessageKey(val id: String) {
     KIOSK_TAKE_OUT("kiosk.take_out"),
     /** A restaurant's carry-out order on its bill / receipt: {0} = the number ("105"). */
     RECEIPT_CARRY_OUT_ORDER("receipt.carry_out_order"),
+    /** A quick-serve order on its bill / receipt: {0} = the number ("101"). */
+    RECEIPT_ORDER("receipt.order"),
     /** The carry-out customer's name under it: {0} = the name. */
     RECEIPT_CUSTOMER("receipt.customer"),
     KIOSK_PAY_AT_COUNTER("kiosk.pay_at_counter"),

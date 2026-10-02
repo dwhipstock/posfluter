@@ -444,8 +444,11 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
         backgroundColor: T.navy,
         foregroundColor: T.onPrimary,
         shape: const Border(),
+        // the theme's title is navy (for the white bars): white on this one
+        titleTextStyle: T.headline(color: T.onPrimary),
         title: Text(
           Api.venueName ?? q.orders,
+          key: const Key('counter-title'),
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [

@@ -56,12 +56,17 @@ class CheckScreen extends StatefulWidget {
   /// Carry-out"), it cannot be moved to a table, and the receipt screen
   /// shows the headline.
   final bool carryOut;
+
+  /// A carry-out order's number (105): the pay screen says "Order #105",
+  /// as the counter's receipt does, not the bill number.
+  final int? orderNumber;
   const CheckScreen({
     super.key,
     required this.checkId,
     required this.tableLabel,
     this.counterOrder = false,
     this.carryOut = false,
+    this.orderNumber,
     this.createOrder,
     this.onFinished,
     this.onDiscard,
@@ -1254,15 +1259,14 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     );
   }
 
-  /// A tile's price: one size's (the special's, the menu price struck through
-  /// beside it), or the first size's with a "+".
-  Widget _tilePrice(Item item, TextStyle style) {
-    final v = item.variants.first;
-    if (item.variants.length == 1) {
-      return SpecialPriceText(v, money: money, style: style);
-    }
-    return Text('${money(v.priceCents)}+', maxLines: 1, style: style);
-  }
+  /// A tile's price: one size's, or the first size's with a "+" — either
+  /// way the special's, the menu price struck through beside it.
+  Widget _tilePrice(Item item, TextStyle style) => SpecialPriceText(
+    item.variants.first,
+    money: money,
+    style: style,
+    suffix: item.variants.length == 1 ? '' : '+',
+  );
 
   Widget _withTodayRow(L l, Widget grid) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1662,6 +1666,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                             builder: (_) => TenderScreen(
                                               check: _check ?? check,
                                               counterOrder: widget.counterOrder,
+                                              orderNumber: widget.carryOut
+                                                  ? widget.orderNumber
+                                                  : null,
                                               headline: widget.carryOut
                                                   ? widget.tableLabel
                                                   : null,

@@ -487,6 +487,25 @@ class L {
     'Tisch entfernt',
     'Tafel verwyder',
   );
+
+  /// The room editor, once a table is removed: the one that went (a
+  /// sub-table names itself, never its parent).
+  String tableDeletedNamed(String label) => _t(
+    'Table « $label » retirée',
+    'Table "$label" removed',
+    'Mesa "$label" quitada',
+    'Tisch „$label“ entfernt',
+    'Tafel “$label” verwyder',
+  );
+
+  /// The room editor: a table with sub-tables can't go; names them.
+  String tableHasSubTables(String label, String subs) => _t(
+    'La table « $label » a des sous-tables ($subs) : retirez-les d’abord',
+    'Table "$label" has sub-tables ($subs): remove them first',
+    'La mesa "$label" tiene submesas ($subs): quítalas primero',
+    'Tisch „$label“ hat Untertische ($subs): diese zuerst entfernen',
+    'Tafel “$label” het subtafels ($subs): verwyder hulle eers',
+  );
   String get renameTable => _t(
     'Renommer la table',
     'Rename table',
