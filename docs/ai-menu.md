@@ -75,6 +75,23 @@ in the portal exactly like hand edits there. Stricter confirm than the tablet:
 more than 5 changes, any removal, or a price moved by half or more. Undo is
 one tap. Off unless the cloud has `MENU_AI_GEMINI_API_KEY`.
 
+**AI photos in the portal.** "Generate a picture for the iced tea" (or "photos
+for every drink", in any of the five portal languages, typed or spoken) comes
+back as pictures to make; the item sheet has **Generate photo** and, when the
+item has a photo, **Enhance photo**. Each picture is made in the store's house
+style (the store's `HouseStyle.kt` prompt, ported to `cloud/api/.../menuai/`
+and pinned by a parity test: no people, logos or text; the item's name passes
+the AI guard first), shown as a preview, and only used when the manager taps
+**Use this photo** (**Try again** makes another, **Discard** drops it, **Undo**
+puts the previous photo back). Several pictures need one confirm, then are
+made one at a time with a progress line (at most 10 a request). Providers:
+FLUX `flux-2-pro` with `MENU_AI_BFL_API_KEY`, Gemini `gemini-3.1-flash-image`
+(the `MENU_AI_GEMINI_API_KEY`) when FLUX can't answer. Limits: the
+assistant's, plus `MENU_AI_PHOTO_DAILY_CAP` (default 30) pictures per store a
+day. The accepted photo reaches the store through the menu feed (CONTRACT §10
+"Photos from the portal"): the store downloads it, checks it is a real JPEG or
+PNG matching the feed entry, and makes it the item's photo with the AI badge.
+
 ## Turning it on
 
 | Setting | Values |

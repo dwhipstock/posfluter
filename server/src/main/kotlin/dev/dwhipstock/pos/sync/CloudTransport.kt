@@ -73,4 +73,17 @@ interface CloudTransport {
      * portal's sync status shows them).
      */
     fun fetchMenuChanges(since: Long, epoch: String? = null, failed: Int = 0): MenuPage? = null
+
+    /**
+     * The item's current photo on the cloud, which a `photo` menu feed entry
+     * points at (§10 "Photos from the portal"); [PhotoDownload.status] 404 when
+     * it has none. At most [maxBytes] are read (more: a throw). Throws on a
+     * transport error. Default: not supported (the store keeps it pending).
+     */
+    fun fetchMenuPhoto(itemId: String, maxBytes: Int): PhotoDownload? = null
 }
+
+/** A photo the cloud sent down, as received: the store checks every byte of it ([PhotoSync]). */
+class PhotoDownload(
+    val status: Int, val bytes: ByteArray, val contentType: String?, val version: Long?, val source: String?,
+)

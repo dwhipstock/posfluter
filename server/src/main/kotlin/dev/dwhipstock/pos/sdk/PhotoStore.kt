@@ -28,6 +28,9 @@ interface PhotoStore {
      */
     fun version(itemId: String): Long?
 
+    /** Remove the item's photo (a portal Undo of an AI photo the item did not have before). */
+    fun delete(itemId: String): Boolean = false
+
     data class StoredPhoto(val bytes: ByteArray, val contentType: String, val version: Long)
 }
 
@@ -81,4 +84,11 @@ class FilesystemPhotoStore(private val dir: File) : PhotoStore {
     }
 
     override fun version(itemId: String): Long? = fileFor(itemId)?.lastModified()
+
+    override fun delete(itemId: String): Boolean {
+        val had = fileFor(itemId) != null
+        listOf("jpg", "png").forEach { File(dir, "$itemId.$it").delete() }
+        thumbsDir.listFiles { f -> f.name.startsWith("$itemId-") }?.forEach { it.delete() }
+        return had
+    }
 }

@@ -34,6 +34,8 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { ItemPhotoPanel } from "@/components/ai-photo";
+import { useAiStatus } from "@/components/menu-ai";
 
 type T = ReturnType<typeof useT>;
 
@@ -167,12 +169,15 @@ export function ItemSheet({
   item,
   categories,
   onSaved,
+  onPhotoChanged,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   item: MenuItem | null;
   categories: MenuCategory[];
   onSaved: () => void;
+  /** An AI photo was used or undone (the sheet stays open). */
+  onPhotoChanged?: () => void;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -182,6 +187,7 @@ export function ItemSheet({
             key={item?.id ?? "new"}
             item={item}
             categories={categories}
+            onPhotoChanged={onPhotoChanged ?? onSaved}
             onDone={() => {
               onOpenChange(false);
               onSaved();
@@ -193,10 +199,23 @@ export function ItemSheet({
   );
 }
 
-function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categories: MenuCategory[]; onDone: () => void }) {
+function ItemForm({
+  item,
+  categories,
+  onDone,
+  onPhotoChanged,
+}: {
+  item: MenuItem | null;
+  categories: MenuCategory[];
+  onDone: () => void;
+  onPhotoChanged: () => void;
+}) {
   const t = useT();
   const { available, name } = useI18n();
-  const { storeId, nameOf } = useStores();
+  const { storeId, nameOf, venues } = useStores();
+  const ai = useAiStatus();
+  // an AI photo is made for one store's item: the picked store, or the only one
+  const photoVenue = storeId ?? (venues.length === 1 ? venues[0].id : null);
   const scopeLine = useScopeLine();
   const showSkips = useSkipToast();
   const sorted = useMemo(() => [...categories].sort((a, b) => a.sortOrder - b.sortOrder), [categories]);
@@ -294,6 +313,10 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
             </SelectContent>
           </Select>
         </Field>
+
+        {item && ai?.photos && ai.canUse && (
+          <ItemPhotoPanel venue={photoVenue} item={item} title={name(item.nameFr, item.nameEn, item.names)} onChanged={onPhotoChanged} />
+        )}
 
         <div className="space-y-3 rounded-lg border border-neutral-100 px-3 py-3">
           <label className="flex items-center justify-between gap-3">

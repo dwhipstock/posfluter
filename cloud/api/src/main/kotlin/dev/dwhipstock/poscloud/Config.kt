@@ -80,6 +80,11 @@ data class CloudConfig(
     val menuAiVoiceModel: String? = env("MENU_AI_VOICE_MODEL"),
     // AI requests per store and per portal user per rolling 24 h (on top of 20 per 10 minutes).
     val menuAiDailyCap: Int = env("MENU_AI_DAILY_CAP")?.toIntOrNull()?.takeIf { it > 0 } ?: 150,
+    // AI item photos (/v1/menu-ai/photos): Black Forest Labs FLUX first, the Gemini key
+    // above as the fallback (and the only provider when no BFL key is set).
+    val menuAiBflKey: Secret? = env("MENU_AI_BFL_API_KEY")?.let(::Secret),
+    // AI photos per store per rolling 24 h (each also counts toward MENU_AI_DAILY_CAP).
+    val menuAiPhotoDailyCap: Int = env("MENU_AI_PHOTO_DAILY_CAP")?.toIntOrNull()?.takeIf { it > 0 } ?: 30,
 )
 
 /** A secret from env: its toString never shows it (a logged config can't leak it). */

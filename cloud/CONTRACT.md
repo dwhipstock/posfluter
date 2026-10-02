@@ -23,7 +23,9 @@ Hard rules this contract encodes:
   and *display* them. **The menu (items, sizes, categories) syncs both ways
   (§10)**: tablet edits go up through the outbox; manager-portal edits come
   down through a per-store menu feed; both are merged field by field, last
-  write wins. Photos stay tablet → cloud. The other pulls are **device
+  write wins. Photos go tablet → cloud, except an AI photo a manager accepts
+  in the portal, which comes down through the menu feed (§10 "Photos from the
+  portal"). The other pulls are **device
   revocations** (§4), the owner's remote lock for a lost terminal, and a retail
   store's **on hand per product** (§9), a read-only hint for the count screen.
   Sync never blocks startup, a sale, a count or a login — with no internet
@@ -717,7 +719,8 @@ The menu — items (names in every language, descriptions, category,
 availability, alcohol flag, abbreviation), their sizes (labels, price, order)
 and categories (names, order) — can be edited on the tablet and in the
 manager portal. Photos, retail shelf facts (barcode, brand, CRV…) and costs
-stay tablet-owned (one-way, §2/§3).
+stay tablet-owned (one-way, §2/§3) — except a portal AI photo ("Photos from the
+portal" below).
 
 ### Registers and stamps
 Every synced field is a **last-write-wins register**: its value and the stamp
@@ -829,6 +832,33 @@ upgrade). A `catalog.snapshot` stamps a never-seen field `""` (baseline).
   `venues.menu_sync_at` / `menu_cursor` (portal "waiting for the store" count).
 - An older cloud answers 404: the store asks again in 5 minutes and stays
   one-way meanwhile.
+
+### Photos from the portal (cloud migration 034)
+An AI photo a manager accepts in the portal (or the photo an Undo there puts
+back) is written to `item_photos` like a store upload and appended to that
+store's feed as `{ "entity": "photo", "id": "<itemId>", "data": { "itemId",
+"deleted": false, "version", "contentType", "bytes", "sha256", "source" } }`
+— never the bytes. An Undo to "no photo" is `{ "itemId", "deleted": true }`.
+Only the newest entry per item is served, like any other thing.
+
+- The store queues the entry with the page (same transaction as the cursor,
+  `sync_state` `menu_photos_pending`), then, outside it, fetches
+  `GET /v1/store/menu/photos/{itemId}` (Bearer) → the binary,
+  `X-Photo-Version`, `X-Photo-Source`; 404 = no photo.
+- It applies the photo only when `X-Photo-Version` equals the entry's
+  `version` (otherwise a newer write superseded it — this store's own upload,
+  which reached the cloud first, or a later portal photo with its own entry),
+  the body is at most 2 MB, its bytes are a real JPEG or PNG (magic bytes and
+  header dimensions 16–8192 px, whatever the Content-Type says), and its
+  type, size and sha-256 match the entry. Anything else is dropped and logged.
+- Applied through the tablet's own photo pipeline with the provenance
+  (`ai_generated | ai_enhanced`), while applying-cloud: no
+  `item.photo_uploaded` is queued, so it is not sent back up.
+- A `deleted` entry removes the store's photo once the cloud answers 404.
+- Offline or a cloud error: the entry stays queued and is retried every
+  pull (dropped after 30 tries, e.g. an item this store never got).
+- An older store ignores the `photo` entity (it keeps its own photo; the
+  portal shows the new one until that store next uploads a photo of the item).
 
 ### Portal edits
 API.md, Menu. The portal refuses (409 `store_not_upgraded`) edits for a store

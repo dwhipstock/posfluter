@@ -190,6 +190,29 @@ object MenuAiApplies : Table("menu_ai_applies") {
     override val primaryKey = PrimaryKey(id)
 }
 
+/** An AI-made item photo: a preview until accepted, then what Undo puts back (034). */
+object MenuAiPhotos : Table("menu_ai_photos") {
+    val id = text("id")
+    val tenantId = text("tenant_id")
+    val venueId = text("venue_id")
+    val itemId = text("item_id")
+    val userId = long("user_id")
+    val photoSource = text("source")
+    val status = text("status")
+    val content = binary("content").nullable()
+    val contentType = text("content_type")
+    val provider = text("provider")
+    val model = text("model")
+    val version = long("version").nullable()
+    val hadPrev = bool("had_prev").nullable()
+    val prevContent = binary("prev_content").nullable()
+    val prevContentType = text("prev_content_type").nullable()
+    val prevSource = text("prev_source").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+    val decidedAt = timestampWithTimeZone("decided_at").nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
 /** One portal export: who took which dataset, in which format, for which stores and dates (032). */
 object ExportLog : Table("export_log") {
     val id = long("id").autoIncrement()
