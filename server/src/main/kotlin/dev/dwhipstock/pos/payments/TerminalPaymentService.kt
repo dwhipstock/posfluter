@@ -32,6 +32,7 @@ import dev.dwhipstock.pos.sdk.TenderType
 import dev.dwhipstock.pos.sdk.VenueClock
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -71,6 +72,31 @@ data class TerminalStatusView(
     /** tap_to_pay: Stripe's simulated Tap to Pay reader (test cards picked on the phone). */
     val simulated: Boolean = false,
 )
+
+/** A card payment still on a reader (or the tablet's Stripe reader), for the "still in progress" banner. */
+@Serializable
+data class InFlightCard(
+    val paymentId: String,
+    /** terminal (an integrated reader the store drives) | stripe (the tablet's Stripe SDK). */
+    val source: String,
+    /** simulator | jpmorgan | tap_to_pay | stripe. */
+    val provider: String,
+    val checkId: Int,
+    val groupId: Int? = null,
+    val amountCents: Long,
+    /** PENDING / CREATING (terminal), CREATING / CREATED / CAPTURED (stripe), or where it ended. */
+    val status: String,
+    /** What the reader is asking for, while pending. */
+    val prompt: String? = null,
+    /** The reader didn't answer the last check; it stays pending. */
+    val readerOffline: Boolean = false,
+    val startedAt: String = "",
+) {
+    companion object {
+        const val TERMINAL = "terminal"
+        const val STRIPE = "stripe"
+    }
+}
 
 @Serializable
 data class TerminalPaymentView(
@@ -129,6 +155,10 @@ class TerminalPaymentService(
     companion object {
         private val log = LoggerFactory.getLogger(TerminalPaymentService::class.java)
         private val FINAL = setOf("RECORDED", "DECLINED", "CANCELED", "TIMEOUT", "FAILED")
+        /** Ended without money: the check may open again ([CheckService.releaseLockIfUnpaid]). */
+        private val NOTHING_TAKEN = setOf("DECLINED", "CANCELED", "TIMEOUT", "FAILED")
+        /** A CREATING row older than this is a start the store never finished (it stopped mid-call). */
+        internal const val START_GRACE_MS = 2 * 60_000L
     }
 
     private val moneyLock = ReentrantLock()
@@ -374,10 +404,108 @@ class TerminalPaymentService(
             }
         } catch (e: TerminalException) {
             if (!e.unreachable) throw e
-            log.warn("Card terminal unreachable while cancelling $ref; closed here (check it on the terminal)")
-            return end(paymentId, "CANCELED", errorCode = e.code, error = e.message)
+            // the card may still go through on the reader: keep it pending (the
+            // sweep settles it once the reader answers), never a silent "cancelled"
+            log.warn("Card terminal unreachable while cancelling $ref; it stays pending until the reader answers")
+            throw TerminalException(503, TerminalException.UNAVAILABLE,
+                "the card reader can't be reached, so the payment can't be cancelled yet; it stays pending")
         }
         end(paymentId, "CANCELED", error = "Cancelled")
+    }
+
+    // --- in flight after a restart -----------------------------------------
+
+    /** Card payments still on a reader (PENDING, or CREATING = mid-start), oldest first; [checkId] null = every check. */
+    fun inFlight(checkId: Int? = null): List<InFlightCard> = transaction {
+        TerminalPayments.selectAll()
+            .where { TerminalPayments.status inList dev.dwhipstock.pos.restaurant.CardInFlight.TERMINAL }
+            .orderBy(TerminalPayments.id to SortOrder.ASC)
+            .filter { checkId == null || it[TerminalPayments.checkId] == checkId }
+            .map {
+                InFlightCard(
+                    paymentId = it[TerminalPayments.publicId], source = InFlightCard.TERMINAL,
+                    provider = it[TerminalPayments.provider], checkId = it[TerminalPayments.checkId],
+                    groupId = it[TerminalPayments.billGroupId], amountCents = it[TerminalPayments.amountCents],
+                    status = it[TerminalPayments.status], prompt = it[TerminalPayments.prompt],
+                    startedAt = VenueClock.iso(it[TerminalPayments.createdAt]),
+                )
+            }
+    }
+
+    /**
+     * Settle one payment with its reader, as the cashier's poll would: approved
+     * → recorded once (idempotent), declined / cancelled / timed out → ended and
+     * the check unlocked, still on the reader or the reader unreachable → left
+     * PENDING. A start the store never finished, a reader with no record of it
+     * (the built-in simulator restarted with the store), or a store that no
+     * longer has that reader → FAILED (nothing can be taken on it). Never throws.
+     */
+    fun reconcile(paymentId: String): TerminalPaymentView = moneyLock.withLock {
+        val row = row(paymentId)
+        if (row.status in FINAL) return view(row)
+        try {
+            when {
+                row.status == "CREATING" || row.terminalRef == null ->
+                    if (System.currentTimeMillis() - row.createdAtMs > START_GRACE_MS)
+                        end(paymentId, "FAILED", errorCode = "terminal_start_interrupted",
+                            error = "the store stopped while starting this card payment")
+                    else view(row)
+                !drivesPayments || row.provider != kind.wire -> {
+                    log.warn("Card payment $paymentId was on a ${row.provider} reader; this store now uses ${kind.wire}: closed")
+                    end(paymentId, "FAILED", errorCode = "terminal_changed",
+                        error = "this store no longer uses the ${row.provider} card reader")
+                }
+                else -> refresh(paymentId)
+            }
+        } catch (e: TerminalException) {
+            if (e.code == "terminal_payment_not_found") {
+                log.warn("Card payment $paymentId: the reader has no record of it (it restarted); closed")
+                end(paymentId, "FAILED", errorCode = e.code, error = "the card reader has no record of this payment")
+            } else {
+                log.warn("Card payment $paymentId: the reader didn't settle it (${e.code}); still pending")
+                view(row(paymentId), readerOffline = e.unreachable)
+            }
+        } catch (e: Exception) {
+            log.warn("Card payment $paymentId: settling it failed (${e.message}); still pending")
+            view(row(paymentId))
+        }
+    }
+
+    /**
+     * Manager override: stop a card payment still on the reader, after a
+     * restart. Settled with the reader first (approved meanwhile → recorded,
+     * not cancelled). Then cancelled on the reader, and closed only when the
+     * reader confirms nothing was taken; an approval it reports instead is
+     * recorded. Reader unreachable or busy processing the card → 503 / 409
+     * `card_cancel_unconfirmed` and the payment stays pending.
+     */
+    fun cancelConfirmed(paymentId: String): TerminalPaymentView = moneyLock.withLock {
+        val now = reconcile(paymentId)
+        if (now.status !in dev.dwhipstock.pos.restaurant.CardInFlight.TERMINAL) return now
+        val row = row(paymentId)
+        val ref = row.terminalRef
+            ?: throw ConflictException("the card payment is still starting on the reader; try again in a moment", "card_cancel_unconfirmed")
+        val t = requireTerminal()
+        val res = try {
+            t.cancel(ref, "pos-cancel-$paymentId")
+        } catch (e: TerminalException) {
+            if (e.unreachable) throw TerminalException(503, "card_cancel_unconfirmed",
+                "the card reader can't be reached to confirm the card was not charged; the payment stays pending")
+            throw ConflictException("the card reader didn't confirm the cancel (${e.code}); the payment stays pending",
+                "card_cancel_unconfirmed")
+        }
+        when (res.outcome) {
+            // it went through before the cancel: the guest paid, record it (captured if needed)
+            Outcome.APPROVED -> finalize(row, res, t).also {
+                log.warn("Card terminal $ref: approved before the manager's cancel; recorded (${it.status})")
+            }
+            Outcome.PENDING -> throw ConflictException("the card reader is still processing the card; the payment stays pending",
+                "card_cancel_unconfirmed")
+            else -> {
+                log.info("Card terminal $ref: cancelled by a manager (reader: ${res.outcome})")
+                end(paymentId, "CANCELED", errorCode = "manager_cancelled", error = "Cancelled by a manager")
+            }
+        }
     }
 
     // --- refunds -----------------------------------------------------------
@@ -415,6 +543,7 @@ class TerminalPaymentService(
         val publicId: String, val checkId: Int, val groupId: Int?, val amount: Long, val tip: Long, val currency: String,
         val terminalRef: String?, val status: String, val prompt: String?, val cardJson: String?,
         val declineCode: String?, val errorCode: String?, val lastError: String?, val tenderId: Int?,
+        val provider: String = "", val createdAtMs: Long = 0,
     )
 
     private fun view(row: Row, readerOffline: Boolean = false): TerminalPaymentView {
@@ -436,7 +565,11 @@ class TerminalPaymentService(
     ): TerminalPaymentView {
         mark(paymentId, status, tenderId = tenderId, declineCode = declineCode, errorCode = errorCode,
             error = error, card = card, tip = tip, prompt = null)
-        return view(row(paymentId))
+        val row = row(paymentId)
+        // nothing was taken: a check locked only for this card opens again
+        if (status in NOTHING_TAKEN) runCatching { checks.releaseLockIfUnpaid(row.checkId) }
+            .onFailure { log.warn("unlocking check #${row.checkId} failed: ${it.message}") }
+        return view(row)
     }
 
     private fun pendingFor(checkId: Int, groupId: Int?): List<String> = transaction {
@@ -453,7 +586,8 @@ class TerminalPaymentService(
                 it[TerminalPayments.amountCents], it[TerminalPayments.tipCents], it[TerminalPayments.currency],
                 it[TerminalPayments.terminalRef], it[TerminalPayments.status], it[TerminalPayments.prompt],
                 it[TerminalPayments.cardJson], it[TerminalPayments.declineCode], it[TerminalPayments.errorCode],
-                it[TerminalPayments.lastError], it[TerminalPayments.tenderId])
+                it[TerminalPayments.lastError], it[TerminalPayments.tenderId],
+                it[TerminalPayments.provider], it[TerminalPayments.createdAt].toEpochMilli())
         }
     } ?: throw NotFoundException("card payment $paymentId not found", "terminal_payment_not_found")
 

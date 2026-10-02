@@ -56,3 +56,27 @@ fun Route.terminalRoutes(terminals: TerminalPaymentService) {
     get("/terminal/payments/{pid}") { call.respond(onIo { terminals.refresh(call.parameters["pid"]!!) }) }
     post("/terminal/payments/{pid}/cancel") { call.respond(onIo { terminals.cancel(call.parameters["pid"]!!) }) }
 }
+
+@Serializable
+data class CardPendingCancelRequest(val managerPin: String? = null)
+
+/**
+ * A card payment left on the reader by a restart (see [dev.dwhipstock.pos.payments.PendingCardPayments]):
+ *
+ *   GET  /checks/{id}/card-pending                     settle it with the reader, say where it is
+ *   POST /checks/{id}/card-pending/{paymentId}/cancel  {managerPin} manager override: cancel on the
+ *        reader, closed only when the reader confirms nothing was taken (else recorded)
+ */
+fun Route.cardPendingRoutes(pending: dev.dwhipstock.pos.payments.PendingCardPayments, auth: dev.dwhipstock.pos.base.AuthService) {
+    get("/checks/{id}/card-pending") {
+        val id = call.parameters["id"]?.toIntOrNull() ?: throw IllegalArgumentException("bad check id")
+        call.respond(onIo { pending.status(id) })
+    }
+    post("/checks/{id}/card-pending/{pid}/cancel") {
+        val id = call.parameters["id"]?.toIntOrNull() ?: throw IllegalArgumentException("bad check id")
+        val req = runCatching { call.receive<CardPendingCancelRequest>() }.getOrDefault(CardPendingCancelRequest())
+        // a manager's call: the void grant, or a manager's PIN on the spot
+        val approverId = requireGrant(auth, call, dev.dwhipstock.pos.base.Permissions.VOID, req.managerPin)
+        call.respond(onIo { pending.managerCancel(id, call.parameters["pid"]!!, approverId) })
+    }
+}

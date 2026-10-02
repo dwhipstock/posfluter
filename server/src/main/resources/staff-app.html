@@ -351,6 +351,7 @@ const STR = {
     add: "＋ Ajouter", sizes: "formats", viewBasket: "Voir le panier", addedOne: "Ajouté ✓",
     linesAdded: "Ajouté à l’addition ✓", accepted: "Confirmé ✓", rejected: "Refusé",
     noPending: "Rien à confirmer", pendingSub: "Les commandes passées par les clients sur leur téléphone s’affichent ici.",
+    cardPending: "Un paiement par carte est encore en cours sur le terminal — vérification…",
     billPaying: "Paiement de l’addition en cours — impossible d’ajouter des articles", billGone: "Cette addition a été fermée sur un autre appareil", failed: "L’opération a échoué. Veuillez réessayer.",
     zoneClosed: "Zone fermée", table: "Table", loading: "Chargement…",
     codePrompt: "Entrez le code à 6 chiffres de votre application d’authentification", verify: "Vérifier", backBtn: "‹ Retour",
@@ -374,6 +375,7 @@ const STR = {
     add: "＋ Add", sizes: "sizes", viewBasket: "View basket", addedOne: "Added ✓",
     linesAdded: "Added to bill ✓", accepted: "Confirmed ✓", rejected: "Rejected",
     noPending: "Nothing to confirm", pendingSub: "Customer phone orders arrive here.",
+    cardPending: "A card payment is still in progress on the reader — checking…",
     billPaying: "Bill is being paid — can't add items", billGone: "This bill was closed on another device", failed: "Action failed, please retry",
     zoneClosed: "Zone closed", table: "Table", loading: "Loading…",
     codePrompt: "Enter the 6-digit code from your authenticator app", verify: "Verify", backBtn: "‹ Back",
@@ -397,6 +399,7 @@ const STR = {
     add: "＋ Agregar", sizes: "tamaños", viewBasket: "Ver carrito", addedOne: "Agregado ✓",
     linesAdded: "Agregado a la cuenta ✓", accepted: "Confirmado ✓", rejected: "Rechazado",
     noPending: "Nada por confirmar", pendingSub: "Aquí llegan los pedidos que los clientes hacen desde su teléfono.",
+    cardPending: "Un pago con tarjeta sigue en curso en el lector — comprobando…",
     billPaying: "Se está pagando la cuenta: no se pueden agregar productos", billGone: "Esta cuenta se cerró en otro dispositivo", failed: "No se pudo completar. Inténtalo de nuevo.",
     zoneClosed: "Zona cerrada", table: "Mesa", loading: "Cargando…",
     codePrompt: "Ingresa el código de 6 dígitos de tu app de autenticación", verify: "Verificar", backBtn: "‹ Atrás",
@@ -420,6 +423,7 @@ const STR = {
     add: "＋ Hinzufügen", sizes: "Größen", viewBasket: "Warenkorb ansehen", addedOne: "Hinzugefügt ✓",
     linesAdded: "Auf die Rechnung gebucht ✓", accepted: "Bestätigt ✓", rejected: "Abgelehnt",
     noPending: "Nichts zu bestätigen", pendingSub: "Bestellungen der Gäste per Handy erscheinen hier.",
+    cardPending: "Eine Kartenzahlung läuft noch am Kartenleser – wird geprüft …",
     billPaying: "Rechnung wird bezahlt – keine Artikel mehr möglich", billGone: "Diese Rechnung wurde auf einem anderen Gerät geschlossen", failed: "Aktion fehlgeschlagen, bitte erneut versuchen",
     zoneClosed: "Bereich geschlossen", table: "Tisch", loading: "Wird geladen…",
     codePrompt: "6-stelligen Code aus der Authenticator-App eingeben", verify: "Bestätigen", backBtn: "‹ Zurück",
@@ -443,6 +447,7 @@ const STR = {
     add: "＋ Voeg by", sizes: "groottes", viewBasket: "Bekyk mandjie", addedOne: "Bygevoeg ✓",
     linesAdded: "By rekening gevoeg ✓", accepted: "Bevestig ✓", rejected: "Afgekeur",
     noPending: "Niks om te bevestig nie", pendingSub: "Bestellings wat gaste op hul foon plaas, verskyn hier.",
+    cardPending: "’n Kaartbetaling is nog besig op die kaartleser — word nagegaan…",
     billPaying: "Rekening word betaal – kan nie items byvoeg nie", billGone: "Hierdie rekening is op ’n ander toestel gesluit", failed: "Aksie het misluk, probeer weer",
     zoneClosed: "Area gesluit", table: "Tafel", loading: "Laai tans…",
     codePrompt: "Tik die 6-syferkode van jou verifikasie-app in", verify: "Verifieer", backBtn: "‹ Terug",
@@ -1092,7 +1097,12 @@ function renderCheck() {
     </div>`
     : (check.pendingLines.length ? "" : `<div class="empty"><div class="big">🧾</div><p>${T().emptyCheck}</p></div>`);
 
+  // a card payment left on the reader by a restart: the tablet settles it
+  const cardSec = check.cardPaymentPending
+    ? `<div class="empty card-pending" style="padding:16px">⏳ ${T().cardPending}</div>` : "";
+
   body.innerHTML = `
+    ${cardSec}
     ${pendingSec}
     ${linesSec}
     ${locked ? `<div class="empty" style="padding:16px">${T().billPaying}</div>`

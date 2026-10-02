@@ -165,7 +165,8 @@ class _TerminalPaymentScreenState extends State<TerminalPaymentScreen> {
           _poll();
           return;
         }
-        // anything else (terminal unreachable…): the store closed it
+        // anything else (reader unreachable: the store keeps it pending and
+        // the pay screen follows it with its banner)
       } catch (_) {}
     }
     _timer?.cancel();

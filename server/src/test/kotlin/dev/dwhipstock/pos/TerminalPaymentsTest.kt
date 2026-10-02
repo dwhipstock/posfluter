@@ -291,16 +291,15 @@ class TerminalPaymentsTest {
     }
 
     @Test
-    fun `paid another way while on the reader - the approval is voided, not recorded`() = testApplication {
+    fun `cash while the card is on the reader is refused, the card is what pays`() = testApplication {
         application { module(dbPath = tempDb(), paymentTerminal = simulator, terminalDevice = device()) }
         val (c, id) = checkOf()
         val pid = c.start(id).s("paymentId")
-        assertEquals(HttpStatusCode.Created,
-            c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2190}""").status)
+        val cash = c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2190}""")
+        assertEquals(HttpStatusCode.Conflict, cash.status)
+        assertEquals("card_payment_pending", cash.obj().s("code"))
         c.present("tap")
-        val res = c.poll(pid)
-        assertEquals("CANCELED", res.s("status"))
-        assertEquals("terminal_amount_exceeds_due", res.s("errorCode"))
+        assertEquals("RECORDED", c.poll(pid).s("status"))
         assertEquals(1, transaction { Tenders.selectAll().where { Tenders.transactionId eq id }.count() })
     }
 

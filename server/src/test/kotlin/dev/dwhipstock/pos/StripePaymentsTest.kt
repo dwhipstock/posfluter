@@ -347,6 +347,8 @@ class StripePaymentsTest {
         fake.failOn = { if (it.path == "/v1/payment_intents") SocketTimeoutException("read timed out") else null }
         assertEquals(HttpStatusCode.ServiceUnavailable, c.postJson("/checks/$id/stripe/intents").status)
 
+        // the authorised card is let go (the cashier cancels it)…
+        assertEquals(HttpStatusCode.OK, c.postJson("/stripe/payments/$pid/cancel").status)
         // …and the sale finishes in cash
         c.payCash(id, 2190)
         assertEquals("CLOSED", c.get("/checks/$id").obj()["status"]!!.jsonPrimitive.content)
@@ -382,19 +384,27 @@ class StripePaymentsTest {
     }
 
     @Test
-    fun `authorized after the check was paid another way - released, not captured`() = testApplication {
+    fun `card authorised on the tablet, then cash tried - the card is recorded, the cash refused`() = testApplication {
         val fake = FakeStripe()
         application { module(dbPath = tempDb(), stripeConfig = testKey, stripeHttp = fake) }
         val (c, id) = checkOf()
         val intent = c.intent(id)
         val pi = intent["paymentIntentId"]!!.jsonPrimitive.content
+        // before the card: cash waits for the card payment in progress
+        val blocked = c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2190}""")
+        assertEquals(HttpStatusCode.Conflict, blocked.status)
+        assertEquals("card_payment_pending", blocked.obj()["code"]!!.jsonPrimitive.content)
+        // the guest's card was authorised (the tablet died before its confirm): cash records the card first
         fake.authorize(pi)
-        c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2190}""")
+        val cash = c.postJson("/checks/$id/tenders", """{"type":"CASH","amountTenderedCents":2190}""")
+        assertEquals(HttpStatusCode.Conflict, cash.status)
+        assertEquals("already_paid", cash.obj()["code"]!!.jsonPrimitive.content)
+        assertEquals("succeeded", fake.status(pi))
+        assertEquals(listOf("STRIPE"), transaction { Tenders.selectAll().where { Tenders.transactionId eq id }.map { it[Tenders.type] } })
+        // the tablet's late confirm is the same tender
         val res = c.postJson("/stripe/payments/${intent["paymentId"]!!.jsonPrimitive.content}/confirm")
-        assertEquals(HttpStatusCode.Conflict, res.status)
-        assertEquals("stripe_amount_exceeds_due", res.obj()["code"]!!.jsonPrimitive.content)
-        assertEquals("canceled", fake.status(pi))
-        assertTrue(fake.callsTo("/v1/payment_intents/$pi/capture").isEmpty())
+        assertEquals(HttpStatusCode.Created, res.status)
+        assertEquals(1, transaction { Tenders.selectAll().where { Tenders.transactionId eq id }.count() })
     }
 
     // --- refunds ------------------------------------------------------------

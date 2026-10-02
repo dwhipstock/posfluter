@@ -22,6 +22,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -114,6 +116,10 @@ class StripeService(
         const val VENUE_CURRENCY = "cad"
         private val log = LoggerFactory.getLogger(StripeService::class.java)
         private const val ACCOUNT_TTL_MS = 10 * 60_000L
+        /** A PaymentIntent no card was ever authorised on, this old, is abandoned (the tablet restarted mid-payment). */
+        internal const val ABANDONED_MS = 5 * 60_000L
+        /** A CREATING row older than this is a createIntent the store never finished. */
+        private const val START_GRACE_MS = 2 * 60_000L
         private const val FAILURE_BACKOFF_MS = 10_000L
 
         /** Fictional Montréal address for an auto-created Terminal Location. */
@@ -384,7 +390,7 @@ class StripeService(
             "requires_payment_method" ->
                 throw StripeException(402, StripeException.DECLINED, pi.message ?: "card declined", declineCode = pi.declineCode)
             "canceled" -> {
-                mark(paymentId, "CANCELED")
+                end(paymentId, "CANCELED", null)
                 throw ConflictException("Stripe payment $paymentId was canceled", "stripe_payment_canceled")
             }
             else -> throw StripeException(409, "stripe_not_ready", "PaymentIntent is $st")
@@ -438,8 +444,112 @@ class StripeService(
                 }
             }
         }
-        mark(paymentId, "CANCELED", error = error)
+        end(paymentId, "CANCELED", error)
         row(paymentId).view(stripeStatus)
+    }
+
+    // --- in flight after a restart -----------------------------------------
+
+    /** Stripe payments not yet recorded or ended (the tablet may have taken the card), oldest first; [checkId] null = every check. */
+    fun inFlight(checkId: Int? = null): List<InFlightCard> = transaction {
+        StripePayments.selectAll()
+            .where { (StripePayments.status inList dev.dwhipstock.pos.restaurant.CardInFlight.STRIPE) and StripePayments.tenderId.isNull() }
+            .filter { checkId == null || it[StripePayments.checkId] == checkId }
+            .sortedBy { it[StripePayments.id].value }
+            .map {
+                InFlightCard(
+                    paymentId = it[StripePayments.publicId], source = InFlightCard.STRIPE, provider = "stripe",
+                    checkId = it[StripePayments.checkId], groupId = it[StripePayments.billGroupId],
+                    amountCents = it[StripePayments.amountCents], status = it[StripePayments.status],
+                    startedAt = VenueClock.iso(it[StripePayments.createdAt]),
+                )
+            }
+    }
+
+    /**
+     * Settle one Stripe payment from the PaymentIntent's own state, as the
+     * tablet's confirm would: authorised or captured → recorded once (the
+     * idempotent [confirm]), cancelled at Stripe → ended, no card authorised
+     * for [ABANDONED_MS] → released at Stripe and ended (no money can move on
+     * a cancelled PaymentIntent). Stripe unreachable → left as it is, and
+     * reported as offline. Never throws. Returns the row's status after.
+     */
+    fun reconcile(paymentId: String): Pair<String, Boolean> = moneyLock.withLock {
+        val row = row(paymentId)
+        if (row.tenderId != null || row.status !in dev.dwhipstock.pos.restaurant.CardInFlight.STRIPE) return row.status to false
+        val t = terminal ?: run {
+            log.warn("Stripe payment $paymentId: Stripe is off on this store now; closed")
+            end(paymentId, "FAILED", "Stripe is no longer set up on this store")
+            return "FAILED" to false
+        }
+        val pi = row.pi ?: run {
+            if (System.currentTimeMillis() - row.createdAtMs > START_GRACE_MS) {
+                end(paymentId, "FAILED", "the store stopped while creating this card payment")
+                return "FAILED" to false
+            }
+            return row.status to false
+        }
+        val res = try {
+            remember { t.result(pi) }
+        } catch (e: StripeException) {
+            log.warn("Stripe payment $paymentId: Stripe didn't answer (${e.code}); still pending")
+            return row.status to e.unreachable
+        }
+        when (res.rawStatus) {
+            "requires_capture", "succeeded" -> {
+                runCatching { confirm(paymentId) }.onFailure { log.warn("Stripe payment $paymentId: recording it failed (${it.message})") }
+            }
+            "canceled" -> end(paymentId, "CANCELED", "cancelled at Stripe")
+            "processing" -> {}
+            else -> if (System.currentTimeMillis() - row.createdAtMs > ABANDONED_MS) {
+                log.info("Stripe payment $paymentId: no card authorised on $pi for ${ABANDONED_MS / 60_000} min; released")
+                runCatching { cancel(paymentId) }.onFailure { log.warn("Stripe payment $paymentId: release failed (${it.message})") }
+            }
+        }
+        row(paymentId).status to false
+    }
+
+    /**
+     * Manager override: stop a Stripe payment after a restart. Settled first
+     * (authorised meanwhile → recorded, not cancelled), then the PaymentIntent
+     * is cancelled at Stripe and the payment closed only when Stripe says it
+     * is cancelled; one that turns out authorised or captured is recorded.
+     * Stripe unreachable → 503 `card_cancel_unconfirmed`, still pending.
+     */
+    fun cancelConfirmed(paymentId: String): String = moneyLock.withLock {
+        val (status, offline) = reconcile(paymentId)
+        if (status !in dev.dwhipstock.pos.restaurant.CardInFlight.STRIPE) return status
+        if (offline) throw StripeException(503, "card_cancel_unconfirmed",
+            "Stripe can't be reached to confirm the card was not charged; the payment stays pending")
+        val row = row(paymentId)
+        val t = requireTerminal()
+        // no PaymentIntent was ever handed out: nothing can be charged
+        val pi = row.pi ?: run { end(paymentId, "CANCELED", "Cancelled by a manager"); return "CANCELED" }
+        val after = try {
+            remember { t.cancel(pi, "pos-cancel-$paymentId") }.rawStatus
+        } catch (e: StripeException) {
+            if (e.unreachable) throw StripeException(503, "card_cancel_unconfirmed",
+                "Stripe can't be reached to confirm the card was not charged; the payment stays pending")
+            runCatching { t.result(pi).rawStatus }.getOrNull()
+        }
+        when (after) {
+            "canceled" -> {
+                log.info("Stripe $pi: cancelled by a manager")
+                end(paymentId, "CANCELED", "Cancelled by a manager")
+            }
+            // authorised or captured just before the cancel: the guest paid, record it
+            "requires_capture", "succeeded" -> runCatching { confirm(paymentId) }
+                .onFailure { log.warn("Stripe $pi: approved before the manager's cancel; recording failed (${it.message})") }
+            else -> throw ConflictException("Stripe didn't confirm the cancel ($after); the payment stays pending", "card_cancel_unconfirmed")
+        }
+        row(paymentId).status
+    }
+
+    /** Close a payment that took no money, and open a check that was locked only for it. */
+    private fun end(paymentId: String, status: String, error: String?) {
+        mark(paymentId, status, error = error)
+        val checkId = row(paymentId).checkId
+        runCatching { checks.releaseLockIfUnpaid(checkId) }.onFailure { log.warn("unlocking check #$checkId failed: ${it.message}") }
     }
 
     // --- refunds -----------------------------------------------------------
@@ -482,7 +592,7 @@ class StripeService(
 
     private data class Row(
         val publicId: String, val checkId: Int, val groupId: Int?, val amount: Long, val currency: String,
-        val pi: String?, val status: String, val tenderId: Int?,
+        val pi: String?, val status: String, val tenderId: Int?, val createdAtMs: Long = 0,
     ) {
         fun view(stripeStatus: String?) = StripePaymentView(publicId, status, pi, stripeStatus, amount, currency.uppercase(), tenderId)
     }
@@ -491,7 +601,7 @@ class StripeService(
         StripePayments.selectAll().where { StripePayments.publicId eq paymentId }.firstOrNull()?.let {
             Row(it[StripePayments.publicId], it[StripePayments.checkId], it[StripePayments.billGroupId],
                 it[StripePayments.amountCents], it[StripePayments.currency], it[StripePayments.paymentIntentId],
-                it[StripePayments.status], it[StripePayments.tenderId])
+                it[StripePayments.status], it[StripePayments.tenderId], it[StripePayments.createdAt].toEpochMilli())
         }
     } ?: throw NotFoundException("Stripe payment $paymentId not found", "stripe_payment_not_found")
 
