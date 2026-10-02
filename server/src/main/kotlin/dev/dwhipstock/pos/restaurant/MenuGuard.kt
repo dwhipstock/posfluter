@@ -3,6 +3,8 @@ package dev.dwhipstock.pos.restaurant
 import dev.dwhipstock.pos.base.NotFoundException
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.ItemSchedules
+import dev.dwhipstock.pos.sdk.MenuSpecials
 import dev.dwhipstock.pos.base.Translations
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.selectAll
@@ -21,6 +23,10 @@ data class RejectedLine(
     val index: Int, val itemId: String, val variantId: String, val code: String,
     val priceCents: Long? = null,
     val nameEn: String = "", val nameFr: String = "", val names: Map<String, String> = emptyMap(),
+    /** `item_unavailable` for an item sold only on some days ([dev.dwhipstock.pos.sdk.MenuSpecials]): those days. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val availableDays: List<String> = emptyList(),
 )
 
 /**
@@ -45,6 +51,12 @@ object MenuGuard {
      * Null = the line may be added at [expectedPriceCents] (or at the current
      * price when the client sent none). An item / size that never existed is
      * a 404 (a bad request, not a menu change). Inside a transaction.
+     *
+     * Specials ([ItemSchedules]): an item sold only on some days is
+     * unavailable on the others (its days ride along), and the price now is
+     * the special price while one is in force. A client that still shows the
+     * menu price while a special is on is not refused (the guest pays less
+     * than shown); one that shows a special that has ended is (price_changed).
      */
     fun check(index: Int, itemId: String, variantId: String, expectedPriceCents: Long?): RejectedLine? {
         val item = Items.selectAll().where { Items.id eq itemId }.firstOrNull()
@@ -57,8 +69,14 @@ object MenuGuard {
         )
         if (item[Items.deletedAt] != null || !item[Items.active] || variant[ItemVariants.deletedAt] != null)
             return rejected("item_unavailable")
-        val price = variant[ItemVariants.priceCents]
-        if (expectedPriceCents != null && expectedPriceCents != price) return rejected("price_changed", price)
+        val moment = ItemSchedules.moment()
+        val schedule = ItemSchedules.of(itemId)
+        if (!MenuSpecials.available(schedule, moment))
+            return rejected("item_unavailable").copy(availableDays = schedule.availableDays)
+        val regular = variant[ItemVariants.priceCents]
+        val price = MenuSpecials.priceAt(schedule, variantId, regular, moment).first
+        if (expectedPriceCents != null && expectedPriceCents != price && !(expectedPriceCents == regular && price < regular))
+            return rejected("price_changed", price)
         return null
     }
 

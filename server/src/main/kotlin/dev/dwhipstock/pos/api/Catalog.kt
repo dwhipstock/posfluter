@@ -5,6 +5,8 @@ import dev.dwhipstock.pos.sdk.VenueClock
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.ItemSchedules
+import dev.dwhipstock.pos.sdk.MenuSpecials
 import dev.dwhipstock.pos.restaurant.CheckLines
 import dev.dwhipstock.pos.restaurant.Checks
 import dev.dwhipstock.pos.base.ConflictException
@@ -52,13 +54,21 @@ data class ItemCreateRequest(
     val nameFr: String, val nameEn: String,
     val descriptionFr: String = "", val descriptionEn: String = "",
     val categoryId: String, val abbrev: String,
-    val isAlcohol: Boolean = false, val variants: List<VariantCreateRequest>)
+    val isAlcohol: Boolean = false, val variants: List<VariantCreateRequest>,
+    /** Sold only on these days ("fri", "sat"); empty = every day. */
+    val availableDays: List<String> = emptyList(),
+    /** Specials; their prices are keyed by size id (the created item's ids: menu sync passes them). */
+    val specials: List<SpecialDto> = emptyList())
 
 @Serializable
 data class ItemPatchRequest(
     val nameFr: String? = null, val nameEn: String? = null, val categoryId: String? = null,
     val descriptionFr: String? = null, val descriptionEn: String? = null,
-    val abbrev: String? = null, val isAlcohol: Boolean? = null, val active: Boolean? = null)
+    val abbrev: String? = null, val isAlcohol: Boolean? = null, val active: Boolean? = null,
+    /** Replace the selling days; `[]` = every day again. Null = unchanged. */
+    val availableDays: List<String>? = null,
+    /** Replace the specials; `[]` = none. Null = unchanged. */
+    val specials: List<SpecialDto>? = null)
 
 @Serializable
 data class CategoryCreateRequest(val nameFr: String, val nameEn: String, val sortOrder: Int? = null)
@@ -178,9 +188,11 @@ internal object CatalogOps {
                 it[isAlcohol] = req.isAlcohol
                 it[active] = true
             }
-            req.variants.forEachIndexed { index, v ->
+            val createdVariants = req.variants.mapIndexed { index, v ->
                 insertVariant(itemId, v.copy(sortOrder = v.sortOrder ?: index), variantIds?.getOrNull(index))
             }
+            if (req.availableDays.isNotEmpty() || req.specials.isNotEmpty())
+                ItemSchedules.set(itemId, scheduleOf(req.availableDays, req.specials, createdVariants.toSet()))
             Outbox.write("item.created", "item", itemId, buildJsonObject {
                 put("itemId", itemId)
                 put("nameFr", req.nameFr.trim())
@@ -202,6 +214,11 @@ internal object CatalogOps {
         return transaction {
             requireLiveItem(itemId)
             req.categoryId?.let { requireCategory(it) }
+            if (req.availableDays != null || req.specials != null) {
+                val now = ItemSchedules.of(itemId)
+                val sizes = ItemVariants.selectAll().where { ItemVariants.itemId eq itemId }.map { it[ItemVariants.id] }.toSet()
+                ItemSchedules.set(itemId, scheduleOf(req.availableDays ?: now.availableDays, req.specials ?: now.specials, sizes))
+            }
             Items.update({ Items.id eq itemId }) { row ->
                 req.nameFr?.let { row[nameFr] = it.trim() }
                 req.nameEn?.let { row[nameEn] = it.trim() }
@@ -222,6 +239,7 @@ internal object CatalogOps {
                 req.abbrev?.let { put("abbrev", it.trim()) }
                 req.isAlcohol?.let { put("isAlcohol", it) }
                 req.active?.let { put("active", it) }
+                if (req.availableDays != null || req.specials != null) put("specialsChanged", true)
                 put("item", itemSnapshotJson(itemId))
             })
             itemDto(itemId)
@@ -452,6 +470,12 @@ private fun validateVariantFields(labelFr: String, labelEn: String, priceCents: 
     dev.dwhipstock.pos.sdk.MoneyLimits.requireUnitPrice(priceCents)
 }
 
+/** A schedule from an edit, validated; specials only for [sizes] (the item's size ids, deleted ones included). */
+private fun scheduleOf(days: List<String>, specials: List<SpecialDto>, sizes: Set<String>) = MenuSpecials.Schedule(
+    availableDays = MenuSpecials.normalizeDays(days).let { if (it.size == 7) emptyList() else it },
+    specials = MenuSpecials.normalizeAll(specials, sizes),
+)
+
 private fun requireCategory(categoryId: String) {
     Categories.selectAll().where { Categories.id eq categoryId }.firstOrNull()
         ?: throw NotFoundException("category $categoryId not found")
@@ -513,9 +537,11 @@ private fun itemDto(itemId: String): ItemDto {
     val variants = ItemVariants.selectAll()
         .where { (ItemVariants.itemId eq itemId) and ItemVariants.deletedAt.isNull() }
         .orderBy(ItemVariants.sortOrder)
-        .map { VariantDto(it[ItemVariants.id], it[ItemVariants.labelFr], it[ItemVariants.labelEn], it[ItemVariants.priceCents]) }
+        .toList()
+    val schedule = ItemSchedules.of(itemId)
+    val moment = ItemSchedules.moment()
     val row = Items.selectAll().where { Items.id eq itemId }.first()
-    return itemDtoOf(row, variants)
+    return itemDtoOf(row, variants.map { variantDtoOf(it, emptyMap(), schedule, moment) }, schedule = schedule, moment = moment)
 }
 
 private fun categoryDto(categoryId: String): CategoryDto {

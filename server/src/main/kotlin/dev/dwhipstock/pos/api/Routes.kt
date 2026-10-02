@@ -34,7 +34,22 @@ data class VariantDto(
     val id: String, val labelFr: String, val labelEn: String, val priceCents: Long,
     /** Labels in the store's other languages (es, de…): [dev.dwhipstock.pos.base.Translations]. */
     val names: Map<String, String> = emptyMap(),
+    /**
+     * While a menu special is in force for this size, [priceCents] is the
+     * special price (what a line rings at now) and this is the menu price
+     * it replaces; null otherwise. Menu editors edit THIS one when set.
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val regularPriceCents: Long? = null,
+    /** The special in force now (days, window, own name), when [regularPriceCents] is set. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val special: dev.dwhipstock.pos.sdk.MenuSpecials.Tag? = null,
 )
+
+/** One menu special as the API shows and takes it ([dev.dwhipstock.pos.sdk.MenuSpecials.Special]). */
+typealias SpecialDto = dev.dwhipstock.pos.sdk.MenuSpecials.Special
 
 @Serializable
 data class CategoryDto(
@@ -70,12 +85,42 @@ data class ItemDto(
     val salesWeight: Int = 0,
     /** Names in the store's other languages (es, de…): [dev.dwhipstock.pos.base.Translations]. */
     val names: Map<String, String> = emptyMap(),
+    /** Sold only on these business days ("fri", "sat"); empty = every day. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val availableDays: List<String> = emptyList(),
+    /** False on a day the item isn't sold ([availableDays]): guests don't see it, staff see it greyed. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val availableNow: Boolean = true,
+    /** The item's specials (every one, in force or not), for the menu editor and "today's specials". */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val specials: List<SpecialDto> = emptyList(),
 )
+
+/**
+ * A size as the API shows it at [moment]: its price now (a special's while
+ * one is in force) and, then, the menu price it replaces.
+ */
+internal fun variantDtoOf(
+    row: org.jetbrains.exposed.sql.ResultRow, names: Map<String, String>,
+    schedule: dev.dwhipstock.pos.sdk.MenuSpecials.Schedule?, moment: dev.dwhipstock.pos.sdk.MenuSpecials.Moment,
+): VariantDto {
+    val regular = row[ItemVariants.priceCents]
+    val (price, sp) = if (schedule == null) regular to null
+        else dev.dwhipstock.pos.sdk.MenuSpecials.priceAt(schedule, row[ItemVariants.id], regular, moment)
+    return VariantDto(row[ItemVariants.id], row[ItemVariants.labelFr], row[ItemVariants.labelEn], price, names,
+        regularPriceCents = if (sp != null) regular else null,
+        special = sp?.let { dev.dwhipstock.pos.sdk.MenuSpecials.Tag(it.days, it.from, it.to, it.label) })
+}
 
 /** An item row as the API shows it (menu and retail screens). */
 internal fun itemDtoOf(
     row: org.jetbrains.exposed.sql.ResultRow, variants: List<VariantDto>, photoVersion: Long? = null,
     names: Map<String, String> = emptyMap(),
+    schedule: dev.dwhipstock.pos.sdk.MenuSpecials.Schedule? = null,
+    moment: dev.dwhipstock.pos.sdk.MenuSpecials.Moment? = null,
 ) = ItemDto(
     row[Items.id], row[Items.nameFr], row[Items.nameEn],
     row[Items.descriptionFr], row[Items.descriptionEn], row[Items.categoryId],
@@ -93,6 +138,9 @@ internal fun itemDtoOf(
     size = row[Items.sizeLabel],
     salesWeight = row[Items.salesWeight],
     names = names,
+    availableDays = schedule?.availableDays.orEmpty(),
+    availableNow = schedule == null || moment == null || dev.dwhipstock.pos.sdk.MenuSpecials.available(schedule, moment),
+    specials = schedule?.specials.orEmpty(),
 )
 
 @Serializable
@@ -536,7 +584,11 @@ fun Route.posRoutes(
      */
     get("/menu/version") {
         call.response.header(HttpHeaders.CacheControl, "no-store")
-        call.respond(mapOf("version" to transaction { dev.dwhipstock.pos.sync.MenuClock.menuVersion() }))
+        // it also moves when a special starts or ends or a day-only item comes on or off (the
+        // menu's rows didn't change, but what it shows did): the clients just compare it
+        call.respond(mapOf("version" to transaction {
+            dev.dwhipstock.pos.sync.MenuClock.menuVersion() * 1000 + dev.dwhipstock.pos.base.ItemSchedules.stateKey()
+        }))
     }
 
     get("/items") {
@@ -552,20 +604,23 @@ fun Route.posRoutes(
             val ids = if (query.paged) page.map { it[Items.id] }.toSet() else null
             val names = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.ITEM)
             val variantNames = dev.dwhipstock.pos.base.Translations.of(dev.dwhipstock.pos.base.Translations.VARIANT)
+            // specials: priced at the venue's business moment now
+            val schedules = dev.dwhipstock.pos.base.ItemSchedules.all()
+            val moment = dev.dwhipstock.pos.base.ItemSchedules.moment()
             val variantsByItem = ItemVariants.selectAll()
                 .where { ItemVariants.deletedAt.isNull() }
                 .orderBy(ItemVariants.sortOrder)
                 .toList()
                 .let { rows -> if (ids == null) rows else rows.filter { it[ItemVariants.itemId] in ids } }
                 .groupBy({ it[ItemVariants.itemId] }) {
-                    VariantDto(it[ItemVariants.id], it[ItemVariants.labelFr], it[ItemVariants.labelEn], it[ItemVariants.priceCents],
-                        variantNames[it[ItemVariants.id]].orEmpty())
+                    variantDtoOf(it, variantNames[it[ItemVariants.id]].orEmpty(), schedules[it[ItemVariants.itemId]], moment)
                 }
             page.map {
                 itemDtoOf(
                     it, variantsByItem[it[Items.id]] ?: emptyList(),
                     photoVersion = it[Items.photoPath]?.let { _ -> photos.version(it[Items.id]) },
                     names = names[it[Items.id]].orEmpty(),
+                    schedule = schedules[it[Items.id]], moment = moment,
                 )
             } to matched.size
         }

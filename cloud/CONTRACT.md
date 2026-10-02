@@ -728,7 +728,7 @@ of the write that set it. Fields:
 
 | thing | fields |
 | --- | --- |
-| item | `nameFr nameEn descriptionFr descriptionEn categoryId abbrev isAlcohol active deleted` |
+| item | `nameFr nameEn descriptionFr descriptionEn categoryId abbrev isAlcohol active deleted availableDays specials` |
 | variant | `labelFr labelEn priceCents sortOrder deleted` |
 | category | `nameFr nameEn sortOrder deleted` |
 
@@ -751,6 +751,35 @@ a store's is `s<random>`, so two writers never tie.
 - **Skew guard:** a store stamp more than 2 minutes ahead of the cloud's clock
   is re-stamped with the cloud's on ingest, and the store gets a feed entry
   with `"restamp": true`; for an equal value it adopts the cloud's stamp.
+
+### Specials (store migration 064, cloud migration 036)
+Two item fields, each ONE last-write-wins value (the whole list), in a
+canonical JSON form so both sides compare the same text:
+
+- `availableDays`: the business days the item is sold, day codes
+  `mon tue wed thu fri sat sun`, distinct, **Monday first**:
+  `["fri","sat"]`. `null` (or absent) = every day; all seven is written `null`.
+- `specials`: the item's day prices, `null` (or absent) = none, else a list
+  (at most 10) of objects with keys in THIS order, optional keys left out:
+  ```json
+  [ { "days": ["mon","tue","wed","thu","fri"], "from": "16:00", "to": "18:00",
+      "label": "Happy hour", "prices": { "lantern-lager:pint": 500 } } ]
+  ```
+  `days` as above (at least one); `from`/`to` "HH:mm" 24 h, both or neither
+  (neither = the whole business day), never equal; `label` optional, trimmed,
+  ≤ 40 characters (no label: the reader's language names it — "Happy hour"
+  with a window, else "Tuesday special"); `prices` size id → cents (≥ 0,
+  keys sorted, at least one). Duplicates are dropped.
+
+Meaning (store side, `sdk/MenuSpecials.kt`): days are the venue's business
+days in its own zone, a business day running 4 a.m. → 4 a.m. (1 a.m. Saturday
+is still Friday night); a window is half-open on the venue's wall clock
+(16:00–18:00: 18:00 sharp is the menu price), `to` before `from` runs past
+midnight. A line's price is decided when it is rung (the special's when one
+is in force and cheaper; the cheapest of several) and kept on the line.
+Outside its days an item can't be rung (409 `item_unavailable`, with
+`availableDays`). Snapshots leave both keys out when null. A store whose
+database predates them baselines them `null` at `""` (064), like 058.
 
 ### Merge
 For each field, the write with the greater stamp wins (two `""` stamps: the

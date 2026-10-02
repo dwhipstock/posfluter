@@ -65,7 +65,9 @@ object MenuFields {
     const val CATEGORY = "category"
 
     val ITEM_FIELDS = listOf(
-        "nameFr", "nameEn", "descriptionFr", "descriptionEn", "categoryId", "abbrev", "isAlcohol", "active", "deleted")
+        "nameFr", "nameEn", "descriptionFr", "descriptionEn", "categoryId", "abbrev", "isAlcohol", "active", "deleted",
+        // menu specials (064): each one whole value (null = every day / none), canonical JSON
+        "availableDays", "specials")
     val VARIANT_FIELDS = listOf("labelFr", "labelEn", "priceCents", "sortOrder", "deleted")
     val CATEGORY_FIELDS = listOf("nameFr", "nameEn", "sortOrder", "deleted")
 

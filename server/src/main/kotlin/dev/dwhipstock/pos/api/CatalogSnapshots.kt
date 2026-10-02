@@ -42,6 +42,10 @@ internal fun itemSnapshotJson(itemId: String, photoVersion: Long? = null): JsonO
 private fun namesTable(entity: String): Map<String, Map<String, String>>? =
     if (Translations.present()) Translations.of(entity) else null
 
+/** An item's specials, or null on a database from before 064 (the snapshot then says nothing of them). */
+private fun scheduleOf(itemId: String): dev.dwhipstock.pos.sdk.MenuSpecials.Schedule? =
+    if (dev.dwhipstock.pos.base.ItemSchedules.present()) dev.dwhipstock.pos.base.ItemSchedules.of(itemId) else null
+
 private fun names(map: Map<String, String>): JsonObject = buildJsonObject { map.toSortedMap().forEach { (k, v) -> put(k, v) } }
 
 private fun itemRowSnapshot(
@@ -51,6 +55,7 @@ private fun itemRowSnapshot(
         .orderBy(ItemVariants.sortOrder).toList(),
     itemNames: Map<String, Map<String, String>>? = namesTable(Translations.ITEM),
     variantNames: Map<String, Map<String, String>>? = namesTable(Translations.VARIANT),
+    schedule: dev.dwhipstock.pos.sdk.MenuSpecials.Schedule? = scheduleOf(row[Items.id]),
 ): JsonObject {
     val itemId = row[Items.id]
     val variants = variantRows
@@ -98,6 +103,11 @@ private fun itemRowSnapshot(
         // the names in the store's other languages (es, de…): always sent, so
         // an empty object clears what the portal had
         itemNames?.let { put("names", names(it[itemId].orEmpty())) }
+        // menu specials (064, synced both ways): left out when there are none (= null)
+        schedule?.let { sc ->
+            if (sc.availableDays.isNotEmpty()) put("availableDays", dev.dwhipstock.pos.sdk.MenuSpecials.daysJson(sc.availableDays))
+            if (sc.specials.isNotEmpty()) put("specials", dev.dwhipstock.pos.sdk.MenuSpecials.specialsJson(sc.specials))
+        }
         put("variants", JsonArray(variants))
     }
 }
@@ -184,11 +194,13 @@ internal fun liveItemSnapshots(ids: Collection<String>?): List<JsonObject> {
         .groupBy { it[ItemVariants.itemId] }
     val itemNames = namesTable(Translations.ITEM)
     val variantNames = namesTable(Translations.VARIANT)
+    val schedules = if (dev.dwhipstock.pos.base.ItemSchedules.present()) dev.dwhipstock.pos.base.ItemSchedules.all() else null
     return Items.selectAll().where { Items.deletedAt.isNull() }.orderBy(Items.id).toList()
         .let { rows -> if (wanted == null) rows else rows.filter { it[Items.id] in wanted } }
         .map {
             itemRowSnapshot(it, photoVersion = null, variantRows = variantsByItem[it[Items.id]] ?: emptyList(),
-                itemNames = itemNames, variantNames = variantNames)
+                itemNames = itemNames, variantNames = variantNames,
+                schedule = schedules?.let { s -> s[it[Items.id]] ?: dev.dwhipstock.pos.sdk.MenuSpecials.Schedule() })
         }
 }
 

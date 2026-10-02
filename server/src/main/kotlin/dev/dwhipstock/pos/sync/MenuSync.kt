@@ -12,6 +12,8 @@ import dev.dwhipstock.pos.api.itemSnapshotJson
 import dev.dwhipstock.pos.base.Categories
 import dev.dwhipstock.pos.base.ItemVariants
 import dev.dwhipstock.pos.base.Items
+import dev.dwhipstock.pos.base.ItemSchedules
+import dev.dwhipstock.pos.sdk.MenuSpecials
 import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.db.SyncState
 import dev.dwhipstock.pos.base.ConflictException
@@ -342,6 +344,7 @@ object MenuSync {
             if (MenuMerge.bool(m, "active") == false) CatalogOps.patchItem(id, ItemPatchRequest(active = false))
             applyNames(Translations.ITEM, id, names(m))
             liveVariants.forEach { (vid, v) -> applyNames(Translations.VARIANT, vid, names(v)) }
+            applySchedule(id, m)
             return
         }
         val row = itemSnapshotJson(id)
@@ -394,6 +397,7 @@ object MenuSync {
             applyNames(Translations.VARIANT, vid, names(v))
             if (vDeleted) deletes += vid
         }
+        applySchedule(id, m)
         for (vid in deletes) {
             try { CatalogOps.deleteVariant(id, vid, allowInUse = true) } catch (e: ConflictException) {
                 log.info("menu sync: kept size $vid of $id (${e.code}); the store's copy wins")
@@ -404,6 +408,23 @@ object MenuSync {
                 log.info("menu sync: kept item $id (${e.code}); the store's copy wins")
             }
         }
+    }
+
+    /**
+     * The merged selling days and specials onto the live item. A special's
+     * price for a size this store never had is dropped (the reconcile that
+     * follows sends the store's state back up, so both sides agree again).
+     */
+    private fun applySchedule(id: String, m: Map<String, MenuMerge.Reg>) {
+        if (!ItemSchedules.present()) return
+        val days = MenuSpecials.daysOf(m["availableDays"]?.value)
+        val sizes = ItemVariants.selectAll().where { ItemVariants.itemId eq id }.map { it[ItemVariants.id] }.toSet()
+        val specials = MenuSpecials.specialsOf(m["specials"]?.value).mapNotNull { sp ->
+            sp.prices.filterKeys { it in sizes }.takeIf { it.isNotEmpty() }?.let { sp.copy(prices = it) }
+        }
+        val have = ItemSchedules.of(id)
+        if (have.availableDays == days && have.specials == specials) return
+        CatalogOps.patchItem(id, ItemPatchRequest(availableDays = days, specials = specials))
     }
 
     private fun variantRequest(v: Map<String, MenuMerge.Reg>): VariantCreateRequest {
