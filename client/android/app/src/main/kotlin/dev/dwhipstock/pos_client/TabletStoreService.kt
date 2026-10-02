@@ -18,6 +18,7 @@ import dev.dwhipstock.pos.sdk.ReceiptPrintMode
 import dev.dwhipstock.pos.sdk.DemoMode
 import dev.dwhipstock.pos.sdk.StaffAppMfa
 import dev.dwhipstock.pos.sdk.StripeConfig
+import dev.dwhipstock.pos.sdk.UnpaidExpiry
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import java.io.File
@@ -102,6 +103,8 @@ class TabletStoreService : Service() {
             // cash.rounding=nickel|off; unset → nickel
             val cashRounding = CashRounding.resolve(storeProps?.getProperty(CashRounding.KEY), "store.properties")
             cashRounding.warning?.let { Log.w("TabletStore", "Cash rounding config ignored: $it") }
+            // orders.unpaidExpireMinutes=N; unset → 30 (counted from the order's last activity)
+            val unpaidExpiry = UnpaidExpiry.resolve(storeProps?.getProperty(UnpaidExpiry.KEY), "store.properties")
             if (venueId != null) Log.i("TabletStore", "Store: $venueId (port ${BuildConfig.STORE_PORT})")
             val staffAppMfa = readStaffAppMfa(storeProps)
             // demo.mode=on|off (+ demo.portal.*); unset → the demo APK's own
@@ -150,6 +153,7 @@ class TabletStoreService : Service() {
                     venueId = venueId,
                     legalAgeOverride = legalAge,
                     cashRounding = cashRounding,
+                    unpaidExpiry = unpaidExpiry,
                     imageGenConfig = imageGenConfig,
                     menuAiConfig = menuAiConfig,
                     kitchenPrinting = kitchenPrinting,

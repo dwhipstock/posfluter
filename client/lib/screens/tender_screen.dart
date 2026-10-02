@@ -11,6 +11,7 @@ import '../payments/terminal.dart';
 import '../quickserve/quick_serve_i18n.dart';
 import 'receipt_screen.dart';
 import '../widgets/open_shift_prompt.dart';
+import '../widgets/stale_check.dart';
 import '../widgets/tax_rows.dart';
 
 /// Split-tender payment. Three big method tiles across the top, outstanding
@@ -68,6 +69,10 @@ class _TenderScreenState extends State<TenderScreen> {
   String _entry = ''; // numpad-entered CAD amount (digits only)
   TenderInstructions? _instructions;
   bool _busy = false;
+
+  /// This screen closed the check (the receipt is next): an error after
+  /// that is not "paid on another device".
+  bool _closing = false;
 
   /// null while loading (and when the store has no Stripe key: not shown).
   StripeStatus? _stripe;
@@ -204,6 +209,15 @@ class _TenderScreenState extends State<TenderScreen> {
       // no drawer shift yet: offer to open one right here, then carry on
       await withOpenShift(context, op);
     } catch (e) {
+      // the check went away under Pay (the store expired the unpaid order,
+      // another device paid or cleared it): back to the check screen, which
+      // says so and moves on (a new order / the floor)
+      if (mayBeStaleCheck(e) && mounted && !_closing) {
+        if (await goneStatus(_check.id) != null && mounted) {
+          Navigator.pop(context, false);
+          return;
+        }
+      }
       if (mounted) showApiError(context, e);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -365,6 +379,8 @@ class _TenderScreenState extends State<TenderScreen> {
 
   Future<void> _finishCheck() async {
     await Api.finalizeCheck(_check.id);
+    // closed by this screen: from here on the check being CLOSED is ours
+    _closing = true;
     final receipt = await Api.receiptText(_check.id);
     if (!mounted) return;
     // Best-effort heads-up: the receipt printed server-side (async, never blocks

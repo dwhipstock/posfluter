@@ -497,6 +497,15 @@ class QuickServeTest {
         assertEquals("TAKE_OUT", obj(staff.postJson("/counter/orders/$posId/mode", """{"serviceMode":"TAKE_OUT"}""").bodyAsText())["serviceMode"]!!.jsonPrimitive.content)
         assertEquals(HttpStatusCode.OK, staff.post("/counter/orders/$posId/discard").status)
         assertEquals("CANCELLED", obj(staff.get("/checks/$posId").bodyAsText())["status"]!!.jsonPrimitive.content)
+        // a screen still showing it (expired, or cleared on another device): the bin just
+        // clears, and paying it says the bill is no longer open (not a generic conflict)
+        assertEquals(HttpStatusCode.OK, staff.post("/counter/orders/$posId/discard").status)
+        val stale = staff.postJson("/checks/$posId/tenders", """{"type":"CASH","amountTenderedCents":1000}""")
+        assertEquals(HttpStatusCode.Conflict, stale.status)
+        assertEquals("check_not_open", obj(stale.bodyAsText())["code"]!!.jsonPrimitive.content)
+        // its order row is gone with it (a counter order is never numbered unpaid)
+        assertEquals("order_not_found", obj(staff.postJson("/counter/orders/$posId/mode",
+            """{"serviceMode":"DINE_IN"}""").bodyAsText())["code"]!!.jsonPrimitive.content)
 
         // the counter setting: managers only
         assertEquals("TAKE_OUT", obj(staff.get("/counter/settings").bodyAsText())["defaultServiceMode"]!!.jsonPrimitive.content)

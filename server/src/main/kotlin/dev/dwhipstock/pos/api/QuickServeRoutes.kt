@@ -77,6 +77,7 @@ fun Route.quickServeRoutes(
     }
     get("/counter/orders/{id}") { call.respond(qs.view(orderId(call))) }
     post("/counter/orders/{id}/mode") {
+        qs.orders.touched(orderId(call))
         call.respond(qs.setMode(orderId(call), call.receive<CounterModeRequest>().serviceMode))
     }
     post("/counter/orders/{id}/discard") {

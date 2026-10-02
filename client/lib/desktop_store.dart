@@ -70,6 +70,7 @@ print.receipts=digital
 #payment.terminal.host=192.168.1.20
 
 #cash.rounding=nickel
+#orders.unpaidExpireMinutes=30
 #legal.age=21
 #staff.app.mfa=on
 #kitchen.printing=off
