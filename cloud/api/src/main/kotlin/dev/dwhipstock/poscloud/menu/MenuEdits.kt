@@ -311,10 +311,20 @@ object PortalMenuOps {
         val descFr = cleanText(req.descriptionFr, "descriptionFr", 500)
         val abbrev = cleanAbbrev(req.abbrev)
         val names = cleanNames(req.names)
+        // menu specials: validated once (400 on bad input); the sizes per store below
+        val days = req.availableDays?.let(MenuSpecials::sellingDays)
+        val specials = req.specials?.let { list ->
+            MenuSpecials.normalizeAll(list.map { MenuSpecials.Special(it.days, it.from, it.to, it.label, it.prices) })
+        }
         return result(venues.map { v ->
             v.venueId to editItem(v.scope, itemId, stamp) { s ->
                 if (req.categoryId != null && !liveCategory(v.scope, req.categoryId)) return@editItem "category_not_found"
+                // a special prices sizes by id: a store whose item lacks one of them is skipped
+                if (specials != null && specials.any { sp -> sp.prices.keys.any { it !in s.variants.keys } })
+                    return@editItem "size_not_found"
                 val r = s.item
+                days?.let { r.write("availableDays", MenuSpecials.daysJson(it), stamp) }
+                specials?.let { r.write("specials", MenuSpecials.specialsJson(it), stamp) }
                 nameEn?.let { r.write("nameEn", JsonPrimitive(it), stamp) }
                 nameFr?.let { r.write("nameFr", JsonPrimitive(it), stamp) }
                 descEn?.let { r.write("descriptionEn", JsonPrimitive(it), stamp) }
@@ -491,6 +501,7 @@ object PortalMenuOps {
 
     /** The refusal for a result no store took (the routes answer it; the AI apply rolls its batch back with it). */
     fun refusal(r: MenuEditResult): RuntimeException = when (val reason = r.skipped.firstOrNull()?.reason ?: "not_found") {
+        "size_not_found" -> BadRequestException("a special prices a size this item doesn't have", "size_not_found")
         "not_found" -> NotFoundException("not on this store's menu", "not_found")
         "category_not_found" -> BadRequestException("no such category at this store", "category_not_found")
         "store_not_upgraded" -> ConflictException(

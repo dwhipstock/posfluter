@@ -446,6 +446,9 @@ object CatalogItems : Table("catalog_items") {
     val costCents = long("cost_cents").nullable()
     // per-field write stamps (027, two-way menu sync)
     val clock = jsonb("clock")
+    // menu specials (036): canonical JSON text of the two registers; NULL = every day / none
+    val availableDays = text("available_days").nullable()
+    val specials = text("specials").nullable()
     override val primaryKey = PrimaryKey(tenantId, venueId, id)
 }
 

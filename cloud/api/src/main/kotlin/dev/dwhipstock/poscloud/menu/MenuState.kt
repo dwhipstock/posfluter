@@ -115,7 +115,9 @@ object MenuFields {
     const val VARIANT = "variant"
     const val CATEGORY = "category"
     val ITEM_FIELDS = listOf(
-        "nameFr", "nameEn", "descriptionFr", "descriptionEn", "categoryId", "abbrev", "isAlcohol", "active", "deleted")
+        "nameFr", "nameEn", "descriptionFr", "descriptionEn", "categoryId", "abbrev", "isAlcohol", "active", "deleted",
+        // menu specials (036): each one whole value (null = every day / none), canonical JSON ([MenuSpecials])
+        "availableDays", "specials")
     val VARIANT_FIELDS = listOf("labelFr", "labelEn", "priceCents", "sortOrder", "deleted")
     val CATEGORY_FIELDS = listOf("nameFr", "nameEn", "sortOrder", "deleted")
     const val NAMES = "names."
@@ -194,6 +196,7 @@ class ItemState(val item: Regs, val variants: LinkedHashMap<String, Regs> = Link
 }
 
 object MenuState {
+    private val SPECIAL_FIELDS = listOf("availableDays", "specials")
 
     // --- reading wire snapshots ---
 
@@ -206,6 +209,10 @@ object MenuState {
     fun regsOf(entity: String, obj: JsonObject, id: String): Regs {
         val r = Regs(id)
         for (f in MenuFields.base(entity)) if (f in obj) r.fields[f] = obj[f]!!
+        if (entity == MenuFields.ITEM) for (f in SPECIAL_FIELDS) {
+            // a store leaves them out when null; an older store (no clock) never sends them: keep what is stored
+            if (f in obj || MenuFields.clock(obj)?.containsKey(f) == true) r.fields[f] = MenuSpecials.canonical(f, obj[f])
+        }
         (obj["names"] as? JsonObject)?.forEach { (lang, v) ->
             val code = lang.trim().lowercase()
             val text = (v as? JsonPrimitive)?.contentOrNull?.trim()
@@ -295,6 +302,8 @@ object MenuState {
                 r.fields["isAlcohol"] = JsonPrimitive(row[CatalogItems.isAlcohol])
                 r.fields["active"] = JsonPrimitive(row[CatalogItems.active])
                 r.fields["deleted"] = JsonPrimitive(row[CatalogItems.deleted])
+                r.fields["availableDays"] = MenuSpecials.parse("availableDays", row[CatalogItems.availableDays])
+                r.fields["specials"] = MenuSpecials.parse("specials", row[CatalogItems.specials])
                 r.clock.putAll(clockOf(row[CatalogItems.clock]))
                 out[r.id] = ItemState(r, extras = ItemExtras(
                     row[CatalogItems.photoVersion], row[CatalogItems.photoSource], row[CatalogItems.barcode],
@@ -353,6 +362,8 @@ object MenuState {
             this[CatalogItems.sizeLabel] = s.extras.sizeLabel
             this[CatalogItems.costCents] = s.extras.costCents
             this[CatalogItems.clock] = clockJson(r.clock)
+            this[CatalogItems.availableDays] = MenuSpecials.text(MenuSpecials.canonical("availableDays", r.fields["availableDays"]))
+            this[CatalogItems.specials] = MenuSpecials.text(MenuSpecials.canonical("specials", r.fields["specials"]))
         }
         val variants = items.flatMap { s -> s.variants.values.map { s.item.id to it } }
         if (variants.isNotEmpty()) CatalogVariants.batchUpsert(variants, shouldReturnGeneratedValues = false) { (itemId, v) ->
