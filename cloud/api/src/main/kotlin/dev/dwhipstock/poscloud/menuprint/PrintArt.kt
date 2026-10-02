@@ -59,7 +59,8 @@ object ArtPrompts {
         append(when (purpose) {
             ArtPurpose.HERO -> "A wide horizontal header illustration for a printed restaurant menu, in this manner: ${style.art}. It shows $subject."
             ArtPurpose.DECO -> "A small single spot illustration for a section of a printed menu, in this manner: ${style.art}. " +
-                "It shows only $subject, alone and centred, with plenty of empty space around it."
+                "It shows only $subject — the food or drink itself, as served, never a utensil, tool or other object — " +
+                "alone and centred, with plenty of empty space around it."
             ArtPurpose.BACKGROUND -> "A full-page decorative background for a printed specials flyer, in this manner: ${style.art}. " +
                 "$subject appear only around the edges and in the corners; the whole centre of the page is calm, plain and empty."
             ArtPurpose.PHOTO -> subject
@@ -120,9 +121,12 @@ object ArtPrompts {
                 key(tenantId, "hero", style.key, kind.code, nk))
         }
         if (kind != MenuKind.FLYER && kind != MenuKind.HIGHLIGHTS) {
-            plan.sections.mapNotNull { s -> s.motif?.let(::subject)?.let { m -> decoId(s) to m } }.distinctBy { it.first }
-                .take(MAX_DECOS).forEach { (id, m) ->
-                    out += ArtSlot("deco:$id", ArtPurpose.DECO, prompt(style, ArtPurpose.DECO, m, mood), 768, 768,
+            plan.sections.mapNotNull { s -> s.motif?.let(::subject)?.let { m -> Triple(decoId(s), m, s) } }.distinctBy { it.first }
+                .take(MAX_DECOS).forEach { (id, m, s) ->
+                    // the section's own dishes keep the picture on its food or drink
+                    val dishes = s.itemIds.mapNotNull { c.item(it)?.enName?.let(::subject) }.take(4)
+                    val what = if (dishes.isEmpty()) m else "$m (this section serves: ${dishes.joinToString(", ")})"
+                    out += ArtSlot("deco:$id", ArtPurpose.DECO, prompt(style, ArtPurpose.DECO, what, mood), 768, 768,
                         key(tenantId, "deco", style.key, id, nk))
                 }
         }

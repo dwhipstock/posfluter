@@ -164,6 +164,9 @@ object PrintAi {
         appendLine("- Describe the food and drink only, from their names and descriptions. Never invent facts about the venue")
         appendLine("  (a fireplace, a patio, a view, a garden, its history, its location): the manager's notes are the ONLY source")
         appendLine("  of venue facts, and without notes say nothing about the venue.")
+        appendLine("- The look you pick and the pictures (\"art\", \"motif\") are decoration, NOT facts about the venue: never turn")
+        appendLine("  them into claims in the text (a picture of a fireplace does not mean the venue has one). The tagline speaks of")
+        appendLine("  the food, the drink and the mood only, never of the venue's rooms, furniture or features.")
         appendLine("- Write every text in $languageName ($lang). Warm, appetising, plain words; no emoji, no hashtags, no URLs.")
         appendLine("- Lengths: title ≤ $TITLE_MAX characters, tagline ≤ $TAGLINE_MAX, section title ≤ $SECTION_TITLE_MAX, section intro")
         appendLine("  ≤ $INTRO_MAX, blurb ≤ $BLURB_MAX (one line per item, true to its name and description), footer ≤ $FOOTER_MAX.")
@@ -171,8 +174,9 @@ object PrintAi {
         appendLine(PrintStyles.menuForAi().prependIndent("  "))
         appendLine("- \"art\": one short English phrase saying what the menu's header picture shows (a scene or still life that")
         appendLine("  fits this menu and the notes, e.g. \"a rustic table with craft beers and autumn leaves\"). No text, signs, logos,")
-        appendLine("  brands or people in it. Each section's \"motif\": a short English phrase for its small illustration")
-        appendLine("  (\"hops and barley\", \"a wine glass and grapes\"), never text or a logo.")
+        appendLine("  brands or people in it. Each section's \"motif\": a short English phrase naming the food or drink of THAT")
+        appendLine("  section for its small illustration (\"a burger\", \"a pint of lager\", \"a wine glass and grapes\"): always the")
+        appendLine("  section's own dishes or drinks, never a tool, an object, text or a logo.")
         appendLine()
         appendLine(when (kind) {
             MenuKind.FULL -> "Menu kind: the FULL menu. Every item in the data appears exactly once. Keep one section per category, in the categories' order (\"category\" = its id); you may order items within a section."

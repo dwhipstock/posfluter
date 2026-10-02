@@ -101,6 +101,22 @@ class MenuPrintAiTest {
         val system = PrintAi.system(MenuKind.FULL, "en", "English", null, true)
         assertTrue("Never write, invent or change the business's name" in system)
         assertTrue("the manager's notes are the ONLY source" in system)
+        // the look and the pictures are decoration, never venue claims; the tagline is food, drink and mood
+        assertTrue("are decoration, NOT facts about the venue" in system && "a picture of a fireplace does not mean the venue has one" in system)
+        assertTrue("The tagline speaks of" in system)
+    }
+
+    @Test
+    fun aSectionPictureAlwaysShowsThatSectionsFoodOrDrink() {
+        val plan = PrintSelect.plain(MenuKind.FULL, c, c.items, "en")
+        val slots = dev.dwhipstock.poscloud.menuprint.ArtPrompts.slots("t", MenuKind.FULL, PrintStyles.of(PrintStyles.CLASSIC, PrintBrand.of(null)),
+            plan, c, null, null, retail = false, fillPhotos = false, paperRatio = 8.5 / 11)
+        val burgers = slots.first { it.id == "deco:cat:burgers" }.prompt
+        assertTrue("this section serves: Garden Burger, Pub Burger" in burgers, burgers)
+        assertTrue("the food or drink itself" in burgers && "never a utensil" in burgers)
+        val beer = slots.first { it.id == "deco:cat:beer" }.prompt
+        assertTrue("House Lager" in beer && "Pub Burger" !in beer, beer)
+        assertTrue("naming the food or drink of THAT" in PrintAi.system(MenuKind.FULL, "en", "English", null, true))
     }
 
     @Test
