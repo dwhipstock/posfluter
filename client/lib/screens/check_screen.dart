@@ -14,6 +14,7 @@ import '../menu_changes.dart';
 import '../widgets/menu_change_dialogs.dart';
 import '../quickserve/quick_serve_i18n.dart';
 import '../retail/age_check_dialog.dart';
+import '../widgets/card_pending_banner.dart';
 import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/print_language_picker.dart';
@@ -186,6 +187,10 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       Navigator.of(context).pop();
     }
   }
+
+  /// The check whose card payment the banner follows (a card left on the
+  /// reader by a restart); it stays up to say how it ended.
+  int? _cardBannerFor;
 
   Future<void> _refreshCheck() async {
     if (_checkId == 0) return; // a new counter order: nothing stored yet
@@ -1463,6 +1468,24 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 if (KitchenApi.enabled && !widget.counterOrder) ...[
                   const SizedBox(height: 10),
                   _kitchenRow(check),
+                ],
+                // a card payment still on the reader (a restart mid-payment)
+                if (check.cardPaymentPending || _cardBannerFor == check.id) ...[
+                  const SizedBox(height: 10),
+                  Builder(
+                    builder: (_) {
+                      _cardBannerFor = check.id;
+                      return CardPendingBanner(
+                        key: ValueKey('check-card-banner-${check.id}'),
+                        checkId: check.id,
+                        onSettled: (fresh) {
+                          if (mounted && fresh.id == _checkId) {
+                            setState(() => _check = fresh);
+                          }
+                        },
+                      );
+                    },
+                  ),
                 ],
                 const SizedBox(height: 10),
                 // Pay: full width under the secondary actions, so its label

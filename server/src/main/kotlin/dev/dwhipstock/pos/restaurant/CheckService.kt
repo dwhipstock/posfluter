@@ -208,6 +208,23 @@ class CheckService(private val config: CustomerConfig) {
     /** Numbered orders (the quick-serve counter, carry-out), else null. See [CounterHook]. */
     var counter: CounterHook? = null
 
+    /**
+     * Refuses money and close/void on a check while a card payment for it is
+     * still on the reader (a store restart mid-payment): see [CardPaymentGuard].
+     * Null = no integrated card payments (and the old behaviour).
+     */
+    var cardGuard: CardPaymentGuard? = null
+
+    /**
+     * [statement] in a transaction, after the [cardGuard] has made sure no card
+     * payment for [checkId] / [groupId] is still on the reader. The guard talks
+     * to the reader, so it runs before (never inside) the transaction.
+     */
+    private fun <T> cardSafeTransaction(checkId: Int, groupId: Int?, statement: org.jetbrains.exposed.sql.Transaction.() -> T): T {
+        cardGuard?.requireNoCardInFlight(checkId, groupId)
+        return transaction(statement = statement)
+    }
+
     private fun afterForecourt(view: CheckView): CheckView {
         val hook = forecourt ?: return view
         try { hook.checkChanged(view.id) } catch (e: Exception) { log.warn("forecourt hook failed: ${e.message}") }
@@ -870,7 +887,7 @@ class CheckService(private val config: CustomerConfig) {
      * On a split check [groupId] is required and the tender pays into that
      * group: rounding applies to the GROUP's cash due, independently per group.
      */
-    fun tenderCash(checkId: Int, amountTenderedCents: Long, groupId: Int? = null): TenderView = transaction {
+    fun tenderCash(checkId: Int, amountTenderedCents: Long, groupId: Int? = null): TenderView = cardSafeTransaction(checkId, groupId) {
         val outstanding = lockAndOutstanding(checkId, groupId)
         val cashDue = groupId?.let { evenShareCashDue(checkId, it) }
         val due = cashDue ?: config.roundingPolicy.roundCashDue(outstanding)
@@ -904,7 +921,7 @@ class CheckService(private val config: CustomerConfig) {
      * hand back payment instructions (card terminal / bank details).
      * No tender row yet — money hasn't moved.
      */
-    fun initiateElectronicTender(checkId: Int, type: TenderType, amountCents: Long?, groupId: Int? = null): TenderInstructions = transaction {
+    fun initiateElectronicTender(checkId: Int, type: TenderType, amountCents: Long?, groupId: Int? = null): TenderInstructions = cardSafeTransaction(checkId, groupId) {
         val method = config.tenderMethod(type)
             ?: throw ConflictException("${config.displayName} does not accept $type", "tender_type_not_accepted")
         val outstanding = lockAndOutstanding(checkId, groupId)
@@ -922,7 +939,7 @@ class CheckService(private val config: CustomerConfig) {
     }
 
     /** Step 2: staff saw the money arrive in their bank app — record the tender. Exact cents, no rounding. */
-    fun confirmElectronicTender(checkId: Int, type: TenderType, amountCents: Long, groupId: Int? = null): TenderView = transaction {
+    fun confirmElectronicTender(checkId: Int, type: TenderType, amountCents: Long, groupId: Int? = null): TenderView = cardSafeTransaction(checkId, groupId) {
         if (config.tenderMethod(type) == null) throw ConflictException("${config.displayName} does not accept $type", "tender_type_not_accepted")
         val outstanding = lockAndOutstanding(checkId, groupId)
         val applied = TransactionPipeline.tenderElectronic(outstanding, Money(amountCents))
@@ -1056,7 +1073,7 @@ class CheckService(private val config: CustomerConfig) {
         return TenderView(tenderId, type.name, tenderedCents, applied.cents, rounding.cents, change.cents, groupId, tipCents)
     }
 
-    fun finalizeCheck(checkId: Int): CheckView = afterForecourt(finalizeCheckTx(checkId)).also { view ->
+    fun finalizeCheck(checkId: Int): CheckView = afterForecourt(cardGuard?.requireNoCardInFlight(checkId, null).let { finalizeCheckTx(checkId) }).also { view ->
         counter?.let { c ->
             try { c.afterPaid(view.id) } catch (e: Exception) { log.warn("counter hook failed: ${e.message}") }
         }
@@ -1347,19 +1364,23 @@ class CheckService(private val config: CustomerConfig) {
      * The tenders stay on the check, stamped reversed; a VOID check's money is
      * never in the drawer math, so the cash in and the cash back cancel out.
      */
-    fun voidCheck(checkId: Int, reason: String, managerId: String, reverseTenders: Boolean = false): CheckView =
-        afterKitchen(voidCheckTx(checkId, reason, managerId, reverseTenders = reverseTenders))
+    fun voidCheck(checkId: Int, reason: String, managerId: String, reverseTenders: Boolean = false): CheckView {
+        cardGuard?.requireNoCardInFlight(checkId, null)
+        return afterKitchen(voidCheckTx(checkId, reason, managerId, reverseTenders = reverseTenders))
+    }
 
     /** The store itself voids a check (no one signed in approves it): old test orders being cleaned up. */
-    fun systemVoid(checkId: Int, reason: String): CheckView =
-        afterKitchen(voidCheckTx(checkId, reason, "system", system = true))
+    fun systemVoid(checkId: Int, reason: String): CheckView {
+        cardGuard?.requireNoCardInFlight(checkId, null)
+        return afterKitchen(voidCheckTx(checkId, reason, "system", system = true))
+    }
 
     /**
      * Drop an unpaid check that was never sold: nothing tendered, so nothing to
      * void. Like removing its last line (the check is CANCELLED, not VOID), with
      * [reason] on the sync event. Quick-serve: a discarded or expired order.
      */
-    fun cancelUnpaid(checkId: Int, reason: String): CheckView = afterKitchen(transaction {
+    fun cancelUnpaid(checkId: Int, reason: String): CheckView = afterKitchen(cardSafeTransaction(checkId, null) {
         val check = requireCheck(checkId)
         if (check[Checks.status] !in listOf("OPEN", "TOTAL_LOCKED"))
             throw ConflictException("check $checkId is ${check[Checks.status]}", "check_not_open")
@@ -1375,6 +1396,38 @@ class CheckService(private val config: CustomerConfig) {
         })
         loadCheck(checkId)
     })
+
+    /**
+     * A card attempt ended with nothing taken (declined, cancelled, timed out):
+     * a check that was locked only for it opens again, as before the card was
+     * pressed (items can be added, the split edited; the next tender re-locks
+     * with fresh totals). Kept locked when any money is on it or another card
+     * payment is still in flight. True = unlocked.
+     */
+    fun releaseLockIfUnpaid(checkId: Int): Boolean = transaction {
+        val check = Checks.selectAll().where { Checks.id eq checkId }.firstOrNull() ?: return@transaction false
+        if (check[Checks.status] != "TOTAL_LOCKED") return@transaction false
+        if (Tenders.selectAll().where { Tenders.transactionId eq checkId }.any()) return@transaction false
+        if (CardInFlight.on(checkId).isNotEmpty()) return@transaction false
+        Checks.update({ Checks.id eq checkId }) {
+            it[status] = "OPEN"
+            it[lockedGrandTotalCents] = null
+            it[lockedTaxIncludedCents] = null
+            it[lockedTaxAddedCents] = null
+            it[lockedTaxesJson] = null
+            it[lockedFeesJson] = null
+            it[lockedDiscountsJson] = null
+        }
+        BillGroups.update({ BillGroups.checkId eq checkId }) {
+            it[lockedTotalCents] = null
+            it[lockedTaxesJson] = null
+        }
+        Outbox.write("check.total_unlocked", "check", checkId.toString(), buildJsonObject {
+            put("checkId", checkId)
+            put("reason", "card_not_taken")
+        })
+        true
+    }
 
     /** Money already applied to [checkId] (quick-serve: an unpaid order with a tender can't just expire). */
     fun hasTenders(checkId: Int): Boolean = transaction { !tenderedSoFar(checkId).isZero }
@@ -2638,8 +2691,41 @@ class CheckService(private val config: CustomerConfig) {
             ageCleared = AgeGate.cleared(checkId),
             ageCheckFailed = AgeGate.latest(checkId)?.let { !it[dev.dwhipstock.pos.base.AgeChecks.passed] } == true &&
                 AgeGate.passedAt(checkId) == null,
+            cardPaymentPending = check[Checks.status] in listOf("OPEN", "TOTAL_LOCKED") && CardInFlight.on(checkId).isNotEmpty(),
         )
     }
+}
+
+/**
+ * Asked before any other tender, a void, or a close on a check: a card payment
+ * for it (or for [groupId]'s bill group) may still be on the reader — the store
+ * restarted mid-payment — and the guest must not pay twice. Settles those
+ * payments with the reader first, then throws 409 `card_payment_pending` if
+ * one is still in progress. Never called inside a database transaction.
+ */
+fun interface CardPaymentGuard {
+    fun requireNoCardInFlight(checkId: Int, groupId: Int?)
+}
+
+/** Card payments still in flight on a check, from the database alone (no reader call). */
+object CardInFlight {
+    /** terminal_payments: CREATING = the start call itself, PENDING = on the reader. */
+    val TERMINAL = listOf("CREATING", "PENDING")
+    /** stripe_payments without a tender: no PaymentIntent yet, created (on the tablet's reader), captured but not recorded. */
+    val STRIPE = listOf("CREATING", "CREATED", "CAPTURED")
+
+    /** Bill group ids (null = the whole check) of in-flight card payments on [checkId]. Inside or outside a transaction. */
+    fun on(checkId: Int): List<Int?> = transaction {
+        TerminalPayments.selectAll()
+            .where { (TerminalPayments.checkId eq checkId) and (TerminalPayments.status inList TERMINAL) }
+            .map { it[TerminalPayments.billGroupId] } +
+            StripePayments.selectAll()
+                .where { (StripePayments.checkId eq checkId) and (StripePayments.status inList STRIPE) and StripePayments.tenderId.isNull() }
+                .map { it[StripePayments.billGroupId] }
+    }
+
+    /** A payment for [rowGroup] blocks money on [groupId]: the same group, or either side is the whole check. */
+    fun blocks(rowGroup: Int?, groupId: Int?): Boolean = groupId == null || rowGroup == null || rowGroup == groupId
 }
 
 // These views double as API DTOs for now. TODO: split a real DTO layer when the
@@ -2684,6 +2770,12 @@ data class CheckView(
     val ageCleared: Boolean = true,
     /** The latest ID check failed (under age / expired) and none has passed. */
     val ageCheckFailed: Boolean = false,
+    /**
+     * A card payment for this check is still on the reader (the store or the
+     * tablet restarted mid-payment): other tenders, void and close wait for it.
+     * GET /checks/{id}/card-pending has the details and settles it.
+     */
+    val cardPaymentPending: Boolean = false,
 )
 
 @kotlinx.serialization.Serializable

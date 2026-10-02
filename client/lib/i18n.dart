@@ -4919,6 +4919,20 @@ class L {
       'Die Karte wird verarbeitet – Abbruch jetzt nicht möglich',
       'Die kaart word verwerk — dit kan nie nou gekanselleer word nie',
     ),
+    'card_payment_pending' => _t(
+      'Un paiement par carte est encore en cours sur le terminal pour cette addition',
+      'A card payment is still in progress on the reader for this bill',
+      'Un pago con tarjeta sigue en curso en el lector para esta cuenta',
+      'Für diese Rechnung läuft noch eine Kartenzahlung am Kartenleser',
+      '’n Kaartbetaling is nog besig op die kaartleser vir hierdie rekening',
+    ),
+    'card_cancel_unconfirmed' => _t(
+      'Le terminal n’a pas pu confirmer que la carte n’a pas été débitée — le paiement reste en attente',
+      'The reader couldn’t confirm the card wasn’t charged — the payment stays pending',
+      'El lector no pudo confirmar que no se cobró la tarjeta — el pago sigue pendiente',
+      'Der Kartenleser konnte nicht bestätigen, dass die Karte nicht belastet wurde – die Zahlung bleibt offen',
+      'Die kaartleser kon nie bevestig dat die kaart nie gedebiteer is nie — die betaling bly hangende',
+    ),
     'terminal_already_recorded' => _t(
       'Ce paiement est déjà enregistré — faites un remboursement',
       'That payment is already recorded — refund it instead',
@@ -5021,6 +5035,64 @@ class L {
     'Esperando el teléfono… acerca la tarjeta al teléfono',
     'Warten auf das Telefon … am Telefon bezahlen',
     'Wag vir die foon… tik op die foon',
+  );
+
+  // A card payment left on the reader by a restart (power cut, app crash)
+  String get cardPendingTitle => _t(
+    'Un paiement par carte est encore en cours sur le terminal — vérification…',
+    'A card payment is still in progress on the reader — checking…',
+    'Un pago con tarjeta sigue en curso en el lector — comprobando…',
+    'Eine Kartenzahlung läuft noch am Kartenleser – wird geprüft …',
+    '’n Kaartbetaling is nog besig op die kaartleser — word nagegaan…',
+  );
+  String get cardPendingOffline => _t(
+    'Le terminal ne répond pas — le paiement reste en attente jusqu’à sa réponse',
+    'The reader isn’t answering — the payment stays pending until it does',
+    'El lector no responde — el pago sigue pendiente hasta que responda',
+    'Der Kartenleser antwortet nicht – die Zahlung bleibt offen, bis er antwortet',
+    'Die kaartleser antwoord nie — die betaling bly hangende totdat dit antwoord',
+  );
+  String get cardPendingWait => _t(
+    'Les autres modes de paiement attendent la fin du paiement par carte',
+    'Other payments wait until the card payment is settled',
+    'Los demás pagos esperan a que termine el pago con tarjeta',
+    'Andere Zahlungen warten, bis die Kartenzahlung abgeschlossen ist',
+    'Ander betalings wag totdat die kaartbetaling afgehandel is',
+  );
+  String get cardPendingCancel => _t(
+    'Annuler le paiement par carte',
+    'Cancel card payment',
+    'Cancelar el pago con tarjeta',
+    'Kartenzahlung abbrechen',
+    'Kanselleer kaartbetaling',
+  );
+  String cardPendingAmount(String amount) => _t(
+    'Montant sur le terminal — $amount',
+    'On the reader — $amount',
+    'En el lector — $amount',
+    'Am Kartenleser – $amount',
+    'Op die kaartleser — $amount',
+  );
+  String cardPendingRecorded(String amount, String due) => _t(
+    'Paiement par carte de $amount enregistré — reste $due à payer',
+    'Card payment of $amount recorded — $due still due',
+    'Pago con tarjeta de $amount registrado — faltan $due',
+    'Kartenzahlung über $amount verbucht – noch $due offen',
+    'Kaartbetaling van $amount aangeteken — $due nog uitstaande',
+  );
+  String cardPendingRecordedPaid(String amount) => _t(
+    'Paiement par carte de $amount enregistré — l’addition est réglée',
+    'Card payment of $amount recorded — the bill is paid',
+    'Pago con tarjeta de $amount registrado — la cuenta está pagada',
+    'Kartenzahlung über $amount verbucht – die Rechnung ist bezahlt',
+    'Kaartbetaling van $amount aangeteken — die rekening is betaal',
+  );
+  String get cardPendingNotTaken => _t(
+    'Le paiement par carte n’a pas été effectué — choisissez le mode de paiement',
+    'The card payment was not taken — choose how to pay',
+    'El pago con tarjeta no se realizó — elige cómo pagar',
+    'Die Kartenzahlung kam nicht zustande – Zahlungsart wählen',
+    'Die kaartbetaling het nie deurgegaan nie — kies hoe om te betaal',
   );
   String get terminalTapOnPhone => _t(
     'Le client touche sa carte sur le téléphone',

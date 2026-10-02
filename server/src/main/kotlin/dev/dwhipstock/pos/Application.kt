@@ -51,6 +51,7 @@ import dev.dwhipstock.pos.payments.StripeHttp
 import dev.dwhipstock.pos.payments.StripeService
 import dev.dwhipstock.pos.api.stripeRoutes
 import dev.dwhipstock.pos.api.terminalRoutes
+import dev.dwhipstock.pos.api.cardPendingRoutes
 import dev.dwhipstock.pos.payments.taptopay.tapToPayRoutes
 import dev.dwhipstock.pos.payments.simulator.simulatorRoutes
 import dev.dwhipstock.pos.api.printerRoutes
@@ -190,6 +191,12 @@ fun Application.module(
     jpmOnline: dev.dwhipstock.pos.payments.jpm.JpmOnlineApi? = null,
     // test seam: the Tap to Pay phone reader's hub (a fake clock, an in-memory token)
     phoneReader: dev.dwhipstock.pos.payments.taptopay.PhoneReaderHub? = null,
+    // card payments left on the reader by a restart are settled at startup and
+    // every N seconds (POS_CARD_SWEEP_SECONDS, default 30; 0 = startup and
+    // on demand only). Test seam: a handle on the service.
+    cardSweepSeconds: Long = System.getenv("POS_CARD_SWEEP_SECONDS")?.toLongOrNull()
+        ?: dev.dwhipstock.pos.payments.PendingCardPayments.DEFAULT_SWEEP_SECONDS,
+    onPendingCards: ((dev.dwhipstock.pos.payments.PendingCardPayments) -> Unit)? = null,
 ) {
     // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
     // Angeles for the US store); an existing store keeps its settings row's
@@ -387,6 +394,11 @@ fun Application.module(
         stripe = stripeService, device = terminalDevice, simulatorLinkFactory = simulatorLinkFactory,
         jpmConnector = jpmConnector, jpmOnline = jpmOnline, phoneReader = phoneReader,
     )
+    // a card payment still on the reader after a restart: settled at startup and
+    // on a timer, and every other tender / void / close on its check waits for it
+    val pendingCards = dev.dwhipstock.pos.payments.PendingCardPayments(checkService, terminals, stripeService)
+    checkService.cardGuard = pendingCards
+    onPendingCards?.invoke(pendingCards)
     // fuel pre-authorisation: a card on a pump prepay is a hold, charged for what was pumped
     forecourt?.let { fc ->
         terminals.holdCaptureFor = fc::hasOpenPrepay
@@ -649,6 +661,7 @@ fun Application.module(
         stockRoutes(stockService, authService)
         stripeRoutes(stripeService)
         terminalRoutes(terminals)
+        cardPendingRoutes(pendingCards, authService)
         // the phone card reader (payment.terminal=tap_to_pay): its own bearer token
         terminals.phoneReader?.let { hub ->
             tapToPayRoutes(hub, stripeService, config.displayName, config.profile.currency, paymentTerminal.tapToPaySimulated)
@@ -691,6 +704,9 @@ fun Application.module(
                 ?: detectLanIpv4()?.let { "http://$it:$lanPort" }
         }
     }
+    // after everything is wired: a background thread, never blocking startup
+    pendingCards.start(cardSweepSeconds)
+    monitor.subscribe(ApplicationStopped) { _ -> pendingCards.stop() }
 }
 
 /** See the POS_SEED=none branch in [module]. Clears demo seed residue, but ONLY

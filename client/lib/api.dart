@@ -1106,6 +1106,24 @@ class Api {
   static Future<Check> getCheck(int id) async =>
       Check.fromJson(await _get('/checks/$id'));
 
+  /// A card payment still on the reader for this check (the store or the
+  /// tablet restarted mid-payment): the store settles it with the reader and
+  /// says where it is.
+  static Future<CardPendingStatus> cardPending(int checkId) async =>
+      CardPendingStatus.fromJson(await _get('/checks/$checkId/card-pending'));
+
+  /// Manager override: cancel it on the reader. Closed only when the reader
+  /// confirms nothing was taken; an approval is recorded instead.
+  static Future<CardPendingStatus> cancelPendingCard(
+    int checkId,
+    String paymentId,
+    String? managerPin,
+  ) async => CardPendingStatus.fromJson(
+    await _post('/checks/$checkId/card-pending/$paymentId/cancel', {
+      'managerPin': ?managerPin,
+    }),
+  );
+
   /// [expectedPriceCents]: the unit price the screen showed. The store
   /// refuses (409 price_changed, with the new price) if the menu moved since.
   static Future<Check> addLine(
@@ -3280,6 +3298,10 @@ class Check {
   /// difference from [outstandingCents] (e.g. -2, +1). Card is always exact.
   /// Older servers omit them: cash due = outstanding, no rounding.
   final int cashDueCents, cashRoundingCents;
+
+  /// A card payment for this check is still on the reader (a restart in the
+  /// middle of it): other tenders, void and close wait until it is settled.
+  final bool cardPaymentPending;
   Check(
     this.id,
     this.tableId,
@@ -3302,6 +3324,7 @@ class Check {
     this.discounts = const [],
     int? cashDueCents,
     this.cashRoundingCents = 0,
+    this.cardPaymentPending = false,
   }) : subtotalCents = subtotalCents ?? grandTotalCents,
        cashDueCents = cashDueCents ?? outstandingCents;
   factory Check.fromJson(Map<String, dynamic> j) => Check(
@@ -3331,7 +3354,63 @@ class Check {
     ],
     cashDueCents: j['cashDueCents'],
     cashRoundingCents: j['cashRoundingCents'] ?? 0,
+    cardPaymentPending: j['cardPaymentPending'] ?? false,
   );
+}
+
+/// One card payment still in flight on a check (GET /checks/{id}/card-pending).
+class InFlightCard {
+  final String paymentId, provider, status;
+  final int? groupId;
+  final int amountCents;
+
+  /// What the reader is asking for (present_card, enter_pin, processing…).
+  final String? prompt;
+
+  /// The reader didn't answer: the payment stays pending until it does.
+  final bool readerOffline;
+  const InFlightCard({
+    required this.paymentId,
+    this.provider = '',
+    required this.status,
+    this.groupId,
+    required this.amountCents,
+    this.prompt,
+    this.readerOffline = false,
+  });
+  factory InFlightCard.fromJson(Map<String, dynamic> j) => InFlightCard(
+    paymentId: j['paymentId'] as String,
+    provider: j['provider'] as String? ?? '',
+    status: j['status'] as String? ?? 'PENDING',
+    groupId: j['groupId'] as int?,
+    amountCents: (j['amountCents'] as num?)?.toInt() ?? 0,
+    prompt: j['prompt'] as String?,
+    readerOffline: j['readerOffline'] as bool? ?? false,
+  );
+
+  bool get recorded => status == 'RECORDED';
+}
+
+/// Where a check's in-flight card payments are, after the store asked the reader.
+class CardPendingStatus {
+  final List<InFlightCard> pending;
+
+  /// Settled by this call: RECORDED, or ended with nothing taken.
+  final List<InFlightCard> resolved;
+  final Check check;
+  const CardPendingStatus(this.pending, this.resolved, this.check);
+  factory CardPendingStatus.fromJson(Map<String, dynamic> j) =>
+      CardPendingStatus(
+        [
+          for (final p in (j['pending'] as List? ?? const []))
+            InFlightCard.fromJson(p as Map<String, dynamic>),
+        ],
+        [
+          for (final p in (j['resolved'] as List? ?? const []))
+            InFlightCard.fromJson(p as Map<String, dynamic>),
+        ],
+        Check.fromJson(j['check'] as Map<String, dynamic>),
+      );
 }
 
 /// The outcome of one ID check (the store keeps only this).

@@ -10,6 +10,7 @@ import '../payments/card_reader.dart';
 import '../payments/terminal.dart';
 import '../quickserve/quick_serve_i18n.dart';
 import 'receipt_screen.dart';
+import '../widgets/card_pending_banner.dart';
 import '../widgets/open_shift_prompt.dart';
 import '../widgets/stale_check.dart';
 import '../widgets/tax_rows.dart';
@@ -73,6 +74,44 @@ class _TenderScreenState extends State<TenderScreen> {
   /// This screen closed the check (the receipt is next): an error after
   /// that is not "paid on another device".
   bool _closing = false;
+
+  /// A card payment for this check is still on the reader (a restart in the
+  /// middle of it): every tender waits, the banner follows it.
+  late bool _cardPending = widget.check.cardPaymentPending;
+
+  /// The banner is up: following the card, or saying how it ended.
+  late bool _cardBanner = _cardPending;
+
+  /// Bumped to start a fresh banner (a new pending card after a settled one).
+  int _cardBannerGen = 0;
+
+  void _showCardPending() {
+    if (!mounted) return;
+    setState(() {
+      if (!_cardPending) _cardBannerGen++;
+      _cardPending = true;
+      _cardBanner = true;
+    });
+  }
+
+  /// The card payment ended: recorded (the bill may now be paid) or not taken.
+  Future<void> _cardSettled(Check check) async {
+    if (!mounted) return;
+    setState(() {
+      _check = check;
+      _cardPending = false;
+      _entry = '';
+    });
+    if (check.status != 'TOTAL_LOCKED') return;
+    if (check.outstandingCents == 0) {
+      // let the "recorded" line be read, then close as any paid bill closes
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      if (mounted) await _guard(_finishCheck);
+    } else if (_due == 0 && widget.groupId != null) {
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      if (mounted) Navigator.pop(context, false); // group settled, others owe
+    }
+  }
 
   /// null while loading (and when the store has no Stripe key: not shown).
   StripeStatus? _stripe;
@@ -160,7 +199,9 @@ class _TenderScreenState extends State<TenderScreen> {
     // was interrupted after the last tender, or the app died between the two) has
     // no balance left to tender. Close it directly instead of stranding it — the
     // table would otherwise show it as "due" forever and refuse further tenders.
-    if (_check.status == 'TOTAL_LOCKED' && _check.outstandingCents == 0) {
+    if (_check.status == 'TOTAL_LOCKED' &&
+        _check.outstandingCents == 0 &&
+        !_cardPending) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _guard(_finishCheck);
       });
@@ -208,6 +249,19 @@ class _TenderScreenState extends State<TenderScreen> {
     try {
       // no drawer shift yet: offer to open one right here, then carry on
       await withOpenShift(context, op);
+    } on ApiException catch (e) {
+      // a card payment for this bill is still on the reader: follow it
+      if (e.code == 'card_payment_pending') {
+        _showCardPending();
+        return;
+      }
+      if (mayBeStaleCheck(e) && mounted && !_closing) {
+        if (await goneStatus(_check.id) != null && mounted) {
+          Navigator.pop(context, false);
+          return;
+        }
+      }
+      if (mounted) showApiError(context, e);
     } catch (e) {
       // the check went away under Pay (the store expired the unpaid order,
       // another device paid or cleared it): back to the check screen, which
@@ -351,6 +405,8 @@ class _TenderScreenState extends State<TenderScreen> {
       try {
         final fresh = await Api.getCheck(_check.id);
         if (mounted) setState(() => _check = fresh);
+        // the reader couldn't confirm the cancel: the card is still in progress
+        if (fresh.cardPaymentPending) _showCardPending();
       } catch (_) {}
       if (mounted) setState(() {});
       return;
@@ -530,6 +586,16 @@ class _TenderScreenState extends State<TenderScreen> {
       body: LayoutBuilder(
         builder: (context, c) {
           final summary = <Widget>[
+            if (_cardBanner)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: CardPendingBanner(
+                  key: ValueKey('card-banner-$_cardBannerGen'),
+                  checkId: _check.id,
+                  groupId: widget.groupId,
+                  onSettled: _cardSettled,
+                ),
+              ),
             // outstanding, prominent
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -582,8 +648,9 @@ class _TenderScreenState extends State<TenderScreen> {
                 ),
               ),
             const SizedBox(height: 16),
-            // three big method tiles
+            // three big method tiles (all wait while a card is on the reader)
             Row(
+              key: const ValueKey('tender-tiles'),
               children: [
                 _methodTile('CASH', LucideIcons.banknote, l.cash),
                 const SizedBox(width: 8),
@@ -658,13 +725,20 @@ class _TenderScreenState extends State<TenderScreen> {
                 ),
               ),
           ];
-          final section = _method == 'CASH'
+          final methodSection = _method == 'CASH'
               ? _cashSection(l)
               : _method == 'STRIPE'
               ? _stripeSection(l)
               : _method == 'TERMINAL'
               ? _terminalSection(l)
               : _electronicSection(_method, l);
+          // a card still on the reader: nothing else can take money yet
+          final section = _cardPending
+              ? IgnorePointer(
+                  key: const ValueKey('tenders-wait-for-card'),
+                  child: Opacity(opacity: .45, child: methodSection),
+                )
+              : methodSection;
           // landscape tablet / desktop: summary + tenders left, keypad and the
           // primary button right — no scrolling to reach "Receive"
           if (c.maxWidth >= 900) {
@@ -718,6 +792,7 @@ class _TenderScreenState extends State<TenderScreen> {
     String label, {
     bool enabled = true,
   }) {
+    enabled = enabled && !_cardPending;
     final selected = enabled && _method == value;
     final fg = !enabled
         ? T.textMuted.withValues(alpha: .55)
