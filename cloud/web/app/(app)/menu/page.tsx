@@ -148,6 +148,7 @@ export default function MenuPage() {
             item={editing}
             categories={data.categories}
             onSaved={refresh}
+            onPhotoChanged={refresh}
           />
           <CategoriesSheet open={categoriesOpen} onOpenChange={setCategoriesOpen} categories={data.categories} onSaved={refresh} />
         </>

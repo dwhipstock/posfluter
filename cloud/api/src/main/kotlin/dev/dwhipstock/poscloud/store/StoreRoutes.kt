@@ -328,6 +328,32 @@ fun Route.storeRoutes(config: CloudConfig) {
     get("/store/catalog/changes", revocations)
 
     /**
+     * The item's current photo for THIS store (CONTRACT §10 "Photos from the
+     * portal"): what a `photo` menu feed entry points at. `X-Photo-Version` is
+     * the version it is (the store applies it only when that matches its feed
+     * entry); `X-Photo-Source` its provenance. 404: the item has no photo.
+     */
+    get("/store/menu/photos/{itemId}") {
+        val scope = requireStore(call)
+        val itemId = call.parameters["itemId"]!!.take(200)
+        val (row, source) = transaction {
+            val photo = ItemPhotos.selectAll().where {
+                (ItemPhotos.tenantId eq scope.tenantId) and (ItemPhotos.venueId eq scope.venueId) and (ItemPhotos.itemId eq itemId)
+            }.firstOrNull()
+            photo to photo?.let {
+                CatalogItems.selectAll().where {
+                    (CatalogItems.tenantId eq scope.tenantId) and (CatalogItems.venueId eq scope.venueId) and (CatalogItems.id eq itemId)
+                }.firstOrNull()?.get(CatalogItems.photoSource)
+            }
+        }
+        if (row == null) throw NotFoundException("no photo for item $itemId")
+        call.response.header("X-Photo-Version", row[ItemPhotos.version].toString())
+        source?.let { call.response.header("X-Photo-Source", it) }
+        call.response.header(HttpHeaders.CacheControl, "no-store")
+        call.respondBytes(row[ItemPhotos.content], ContentType.parse(row[ItemPhotos.contentType]))
+    }
+
+    /**
      * On hand per product for THIS store (CONTRACT §9) — read-only, the only
      * other cloud → store data: the count screen's "expected 12" hint. A
      * restaurant gets an empty list. Never gates anything at the store.

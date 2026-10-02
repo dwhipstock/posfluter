@@ -26,7 +26,11 @@ import dev.dwhipstock.poscloud.menu.PortalMenuOps
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -86,6 +90,22 @@ data class AiProposalDto(
     val bulkReasons: List<String> = emptyList(),
     /** Voice: what the model heard (checked plain text). */
     val transcript: String? = null,
+    /**
+     * Items the manager asked a picture for ("generate a picture for the iced
+     * tea", "photos for every drink"): the portal makes each one with
+     * /menu-ai/photos/generate and shows it to accept. Nothing is drawn yet.
+     */
+    val photos: List<AiPhotoAskDto> = emptyList(),
+)
+
+/** One item to make a photo for (the model's `generate_photo` op, checked against the menu). */
+@Serializable
+data class AiPhotoAskDto(
+    val id: String, val itemId: String, val title: String, val category: String? = null,
+    /** generate | enhance */
+    val mode: String,
+    /** The item has a photo now (accepting replaces it). */
+    val hasPhoto: Boolean,
 )
 
 @Serializable
@@ -107,6 +127,8 @@ data class AiStatusDto(
     /** This user may use it (owner / manager). */
     val canUse: Boolean,
     val model: String? = null,
+    /** AI item photos are set up here (a FLUX or Gemini key). */
+    val photos: Boolean = false,
 )
 
 /** One step that puts the menu back (menu_ai_applies.undo), run through the same portal edit path. */
@@ -146,9 +168,14 @@ class MenuAiService(
     private val now: () -> Long = System::currentTimeMillis,
     /** Calls per 10 minutes per user and per store (the store's 20; tests that make many calls raise it). */
     private val callsMax: Int = CALLS_MAX,
+    /** The photo makers: FLUX (MENU_AI_BFL_API_KEY), then Gemini image (MENU_AI_GEMINI_API_KEY). Tests pass fakes. */
+    images: ImageGen = ImageGen.from(config.menuAiBflKey?.value, config.menuAiKey?.value),
 ) {
     private val log = LoggerFactory.getLogger(MenuAiService::class.java)
     private val limiter = MenuAiLimiter(callsMax, CALLS_WINDOW_MS, now)
+
+    /** AI item photos (generate / enhance, accept, undo): same caller rules and limits as the chat. */
+    val photos = AiPhotoService(this, config, images, now)
 
     val enabled: Boolean get() = model != null
     val modelName: String? get() = model?.model
@@ -163,7 +190,10 @@ class MenuAiService(
     private val proposals = ConcurrentHashMap<String, Proposal>()
     private val applied = ConcurrentHashMap<String, Long>()
 
-    init { config.menuAiKey?.let { Scrub.register(it.value) } }
+    init {
+        config.menuAiKey?.let { Scrub.register(it.value) }
+        config.menuAiBflKey?.let { Scrub.register(it.value) }
+    }
 
     companion object {
         const val CALLS_MAX = 20
@@ -179,6 +209,15 @@ class MenuAiService(
         val LANGUAGE_NAMES = mapOf(
             "en" to "English", "fr" to "French", "es" to "Spanish", "de" to "German", "af" to "Afrikaans (South African)",
         )
+        /** The portal's extra op (taken out before the store's parser: [PhotoAsks]). */
+        private val PHOTO_OP = listOf(
+            "{\"op\":\"generate_photo\",\"item\":\"<item id>\",\"mode\":\"generate\"}  (a picture of an existing item:",
+            "  \"generate a picture for the iced tea\", \"photo of the burger\", \"photos for every drink\" = one op per item, at most ${AiPhotoService.MAX_PER_REQUEST};",
+            "  \"mode\" is \"generate\" (a new picture) — also for items that already have a photo — unless the manager's words",
+            "  explicitly ask to improve, retouch or enhance the existing photo (\"photo\": true in the menu): only then \"enhance\".",
+            "  Never for an item this request adds.",
+            "  Asking for a picture changes nothing else about the item; the summary says which pictures will be made.)",
+        ).joinToString("\n            ")
         private val undoJson = Json { encodeDefaults = false; explicitNulls = false; ignoreUnknownKeys = true }
 
         fun lang(raw: String?): String = raw?.trim()?.lowercase()?.take(2)?.takeIf { it in LANGS } ?: "en"
@@ -193,7 +232,7 @@ class MenuAiService(
         return tracked(who, "chat") {
             // plainly not a menu request: the fixed reply, and the model is never asked
             if (AiGuard.offTopic(t) || AiGuard.hatefulRequest(t)) refusal(who, AiGuard.Refusal.OFF_TOPIC)
-            else propose(who, "<manager_request>\n${AiGuard.quote(t, 2000)}\n</manager_request>", null)
+            else propose(who, "<manager_request>\n${AiGuard.quote(t, 2000)}\n</manager_request>", null, t)
         }
     }
 
@@ -203,6 +242,20 @@ class MenuAiService(
 
     /** Daily cap, then the 10-minute window, then the call, then one line in menu_ai_log. */
     private fun tracked(who: AiCaller, kind: String, call: () -> AiProposalDto): AiProposalDto {
+        gate(who, kind)
+        val started = now()
+        return try {
+            call().also { r ->
+                record(who, kind, r.refusal ?: "proposed", r.changes.size + r.photos.size, r.rejected.size, now() - started,
+                    r.proposalId.ifEmpty { null })
+            }
+        } catch (e: MenuAiException) {
+            record(who, kind, e.code, elapsedMs = now() - started); throw e
+        }
+    }
+
+    /** The daily cap, then the 10-minute window (each refusal logged): every AI call, chat or photo, passes here. */
+    internal fun gate(who: AiCaller, kind: String) {
         val userKey = "user:${who.principal.tenantId}:${who.principal.userId}"
         val storeKey = "store:${who.principal.tenantId}:${who.venue.venueId}"
         if (overDailyCap(who)) {
@@ -216,28 +269,19 @@ class MenuAiService(
             throw MenuAiException(429, "menu_ai_too_many",
                 "too many AI requests: at most $callsMax every ${CALLS_WINDOW_MS / 60_000} minutes", retry)
         }
-        val started = now()
-        return try {
-            call().also { r ->
-                record(who, kind, r.refusal ?: "proposed", r.changes.size, r.rejected.size, now() - started,
-                    r.proposalId.ifEmpty { null })
-            }
-        } catch (e: MenuAiException) {
-            record(who, kind, e.code, elapsedMs = now() - started); throw e
-        }
     }
 
     private fun overDailyCap(who: AiCaller): Boolean = transaction {
         val since = CloudTime.now().minusHours(24)
         val counted = (MenuAiLog.tenantId eq who.principal.tenantId) and (MenuAiLog.createdAt greater since) and
-            (MenuAiLog.kind inList listOf("chat", "voice")) and
-            (MenuAiLog.outcome notInList listOf("rate_limited", "daily_limit"))
+            (MenuAiLog.kind inList listOf("chat", "voice", "photo")) and
+            (MenuAiLog.outcome notInList listOf("rate_limited", "daily_limit", "photo_daily_limit", "refused_name"))
         val store = MenuAiLog.selectAll().where { counted and (MenuAiLog.venueId eq who.venue.venueId) }.count()
         val user = MenuAiLog.selectAll().where { counted and (MenuAiLog.userId eq who.principal.userId) }.count()
         store >= config.menuAiDailyCap || user >= config.menuAiDailyCap
     }
 
-    private fun record(
+    internal fun record(
         who: AiCaller, kind: String, outcome: String, changes: Int = 0, rejected: Int = 0, elapsedMs: Long = 0, ref: String? = null,
     ) {
         runCatching {
@@ -264,7 +308,8 @@ class MenuAiService(
     ) = AiProposalDto("", who.venue.venueId, who.venue.currency, model?.model ?: "", "", emptyList(), rejected, elapsed,
         refusal = r.code, message = AiGuard.reply(r, lang), transcript = heard)
 
-    private fun propose(who: AiCaller, request: String, audio: AiAudio?): AiProposalDto {
+    /** [said]: the typed request (for a voice clip, what the model heard is used). */
+    private fun propose(who: AiCaller, request: String, audio: AiAudio?, said: String? = null): AiProposalDto {
         val voice = audio != null
         val m = (if (voice) voiceModel else model)
             ?: throw MenuAiException(409, "menu_ai_disabled", "the AI assistant is not set up on this portal")
@@ -290,17 +335,28 @@ class MenuAiService(
         if (voice && heard.isNullOrBlank()) return refusal(who, AiGuard.Refusal.NO_CHANGE, elapsed = elapsed, lang = lang)
         // never echoed: an unsafe transcript (code, the prompt, a swear) is not shown as "Heard: …"
         if (heard != null && !AiVoice.safe(heard)) return refusal(who, AiGuard.Refusal.OFF_TOPIC, elapsed = elapsed, lang = lang)
+        // picture requests are the portal's own op: taken out before the store's parser sees the reply
+        val split = if (photos.enabled) PhotoAsks.split(reply) else PhotoAsks.Split(reply, emptyList())
         val parsed = try {
-            MenuChangeSetParser.parse(reply, snap.facts(lang), MenuScope.CHAT)
+            MenuChangeSetParser.parse(split.reply, snap.facts(lang), MenuScope.CHAT)
         } catch (e: MenuAiReplyException) {
             log.info("AI menu via ${m.id}: unusable reply")
             return refusal(who, if (e.tooMany) AiGuard.Refusal.TOO_MANY_CHANGES else AiGuard.Refusal.INCOMPLETE,
                 elapsed = elapsed, heard = heard, lang = lang)
         }
         if (parsed.refused) return refusal(who, AiGuard.Refusal.OFF_TOPIC, elapsed = elapsed, heard = heard, lang = lang)
-        if (parsed.ops.isEmpty() && parsed.offensive > 0 && parsed.offensive == parsed.rejected.size)
+        // "enhance" retouches the photo the item has; a model that picks it for a plain "photos for every
+        // drink" would only polish old pictures, so it holds only when the manager's words ask for that
+        val (asks, askRejected) = snap.photoAsks(split.asks, who.lang, PhotoAsks.asksToEnhance(said ?: heard ?: ""))
+        val rejected = parsed.rejected + askRejected
+        if (parsed.ops.isEmpty() && asks.isEmpty() && parsed.offensive > 0 && parsed.offensive == parsed.rejected.size)
             return refusal(who, AiGuard.Refusal.OFF_TOPIC, elapsed = elapsed, heard = heard, lang = lang)
-        if (parsed.ops.isEmpty()) return refusal(who, AiGuard.Refusal.NO_CHANGE, parsed.rejected, elapsed, heard, lang)
+        if (parsed.ops.isEmpty() && asks.isEmpty()) return refusal(who, AiGuard.Refusal.NO_CHANGE, rejected, elapsed, heard, lang)
+        if (parsed.ops.isEmpty()) {
+            log.info("AI menu via ${m.id}/${m.model}: ${asks.size} photo request(s), ${rejected.size} rejected, ${elapsed}ms")
+            return AiProposalDto("", who.venue.venueId, who.venue.currency, m.model, parsed.summary, emptyList(),
+                rejected, elapsed, transcript = heard, photos = asks)
+        }
         sweep()
         val ops = parsed.ops.indices.map { "c${it + 1}" }.zip(parsed.ops).toMap()
         val proposalId = UUID.randomUUID().toString()
@@ -310,9 +366,9 @@ class MenuAiService(
             parsed.summary, now(), oldPrices, snap.bilingual)
         val changes = ops.map { (id, op) -> snap.preview(id, op, ops, who.lang) }
         val bulk = bulkReasons(parsed.ops, oldPrices)
-        log.info("AI menu via ${m.id}/${m.model}: ${changes.size} change(s), ${parsed.rejected.size} rejected, ${elapsed}ms")
+        log.info("AI menu via ${m.id}/${m.model}: ${changes.size} change(s), ${asks.size} photo(s), ${rejected.size} rejected, ${elapsed}ms")
         return AiProposalDto(proposalId, who.venue.venueId, who.venue.currency, m.model, parsed.summary, changes,
-            parsed.rejected, elapsed, bulk = bulk.isNotEmpty(), bulkReasons = bulk, transcript = heard)
+            rejected, elapsed, bulk = bulk.isNotEmpty(), bulkReasons = bulk, transcript = heard, photos = asks)
     }
 
     private fun sweep() {
@@ -580,6 +636,7 @@ class MenuAiService(
             {"op":"rename_category","category":"<category id>","nameEn":"","nameFr":""}
             {"op":"reorder_categories","order":["<category id or new: ref>", ...]}
             {"op":"set_name","entity":"item" or "category","id":"<id>","lang":"${EXTRA_LANGS.joinToString("\" or \"")}","name":""}  (only when asked to translate)
+            ${if (photos.enabled) PHOTO_OP else ""}
             Rules:
             - Prices are whole numbers in the minor unit of $currency ($digits decimals: ${"1" + "0".repeat(digits)} = 1 $currency). Never a string, never a decimal.
             - Refer to existing categories, items and sizes only by the ids in the current menu. A new category
@@ -623,7 +680,32 @@ internal class MenuSnapshot(
     class Item(
         val id: String, val nameEn: String, val nameFr: String, val descriptionEn: String, val descriptionFr: String,
         val categoryId: String, val active: Boolean, val names: Map<String, String>, val variants: List<Variant>,
+        val hasPhoto: Boolean = false,
     )
+
+    /**
+     * The model's picture requests, checked: a live item of this menu, once
+     * each, at most [AiPhotoService.MAX_PER_REQUEST]; "enhance" only for an
+     * item with a photo (else it is a plain "generate"). The rest go to the
+     * skipped count.
+     */
+    fun photoAsks(raw: List<Pair<String, String>>, lang: String, enhanceAsked: Boolean = true): Pair<List<AiPhotoAskDto>, List<String>> {
+        val out = mutableListOf<AiPhotoAskDto>()
+        val rejected = mutableListOf<String>()
+        for ((itemId, mode) in raw) {
+            val row = items[itemId]
+            when {
+                row == null -> rejected += "generate_photo: unknown item"
+                out.any { it.itemId == itemId } -> {}
+                out.size >= AiPhotoService.MAX_PER_REQUEST -> rejected += "generate_photo: more than ${AiPhotoService.MAX_PER_REQUEST} at once"
+                else -> out += AiPhotoAskDto("p${out.size + 1}", itemId, pick(lang, row.nameEn, row.nameFr, row.names),
+                    cats.firstOrNull { it.id == row.categoryId }?.let { pick(lang, it.nameEn, it.nameFr, it.names) },
+                    if (mode == AiPhotoService.ENHANCE && row.hasPhoto && enhanceAsked) AiPhotoService.ENHANCE else AiPhotoService.GENERATE,
+                    row.hasPhoto)
+            }
+        }
+        return out to rejected
+    }
 
     fun facts(requestLang: String) = MenuFacts(
         categoryIds = cats.map { it.id },
@@ -738,7 +820,8 @@ internal class MenuSnapshot(
             }.orderBy(CatalogItems.id).limit(maxItems).map {
                 Item(it[CatalogItems.id], it[CatalogItems.nameEn], it[CatalogItems.nameFr], it[CatalogItems.descriptionEn],
                     it[CatalogItems.descriptionFr], it[CatalogItems.categoryId], it[CatalogItems.active],
-                    names.of("item", v, it[CatalogItems.id]), variants[it[CatalogItems.id]].orEmpty())
+                    names.of("item", v, it[CatalogItems.id]), variants[it[CatalogItems.id]].orEmpty(),
+                    hasPhoto = it[CatalogItems.photoVersion] != null)
             }.filter { it.variants.isNotEmpty() }.associateBy { it.id }
             // bilingual = the menu carries real French names (not just the English copied over)
             val bilingual = cats.any { it.nameFr.isNotBlank() && it.nameFr != it.nameEn } ||
@@ -757,6 +840,7 @@ internal class MenuSnapshot(
                         put("nameEn", i.nameEn); put("nameFr", i.nameFr)
                         if (i.names.isNotEmpty()) putJsonObject("names") { i.names.forEach { (k, n) -> put(k, n) } }
                         if (!i.active) put("active", false)
+                        if (i.hasPhoto) put("photo", true)
                         putJsonArray("variants") {
                             i.variants.forEach { vr -> addJsonObject {
                                 put("id", vr.id); put("labelEn", vr.labelEn); put("priceMinor", vr.priceCents)
@@ -792,5 +876,38 @@ class MenuAiLimiter(private val limit: Int, private val windowMs: Long, private 
         if (full.isNotEmpty()) return full.maxOf { ((it.first() + windowMs - t) / 1000).coerceAtLeast(1) }
         keys.forEach { hits.getOrPut(it) { ArrayDeque() }.addLast(t) }
         return null
+    }
+}
+
+/**
+ * The portal's `generate_photo` op, taken out of the model's reply before the
+ * store's parser ([MenuChangeSetParser], kept identical to the store's) reads
+ * the rest. A reply with no such op is passed on untouched.
+ */
+internal object PhotoAsks {
+    class Split(val reply: String, val asks: List<Pair<String, String>>)
+
+    private val json = Json { isLenient = true }
+
+    /** Words asking to improve an existing photo, in the portal's five languages (matched on the folded text). */
+    private val ENHANCE = Regex(
+        """\b(enhance|improve|better|retouch|touch up|clean up|nicer|fix|ameliore|ameliorer|ameliorez|retouche|retoucher|""" +
+            """embellis|mieux|mejora|mejorar|mejore|retoca|retocar|mejor|verbessere|verbessern|besser|retusche|retuschieren|""" +
+            """aufhubschen|verbeter|beter|opknap|mooier)""")
+
+    fun asksToEnhance(said: String): Boolean = ENHANCE.containsMatchIn(AiGuard.fold(said))
+
+    fun split(reply: String): Split {
+        val text = reply.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        val root = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return Split(reply, emptyList())
+        val ops = root["ops"] as? JsonArray ?: return Split(reply, emptyList())
+        val (photo, rest) = ops.partition { ((it as? JsonObject)?.get("op") as? JsonPrimitive)?.contentOrNull == "generate_photo" }
+        if (photo.isEmpty()) return Split(reply, emptyList())
+        val asks = photo.mapNotNull { el ->
+            val o = el as JsonObject
+            val item = (o["item"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.take(200) ?: return@mapNotNull null
+            item to ((o["mode"] as? JsonPrimitive)?.contentOrNull?.lowercase() ?: AiPhotoService.GENERATE)
+        }
+        return Split(JsonObject(root + ("ops" to JsonArray(rest))).toString(), asks)
     }
 }

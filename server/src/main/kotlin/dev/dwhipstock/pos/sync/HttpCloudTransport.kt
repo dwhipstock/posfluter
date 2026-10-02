@@ -195,6 +195,34 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
     private fun revocationsPath() =
         if (legacyRevocations) "/v1/store/catalog/changes" else "/v1/store/revocations"
 
+    override fun fetchMenuPhoto(itemId: String, maxBytes: Int): PhotoDownload? {
+        val connection = URL("$base/v1/store/menu/photos/${java.net.URLEncoder.encode(itemId, Charsets.UTF_8).replace("+", "%20")}")
+            .openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 30_000
+            connection.setRequestProperty("Authorization", "Bearer $apiKey")
+            val status = connection.responseCode
+            if (status != 200) return PhotoDownload(status, ByteArray(0), null, null, null)
+            // refuse to hold more than a photo can be, whatever the cloud says it is sending
+            if (connection.contentLengthLong > maxBytes) throw IllegalStateException("photo larger than $maxBytes bytes")
+            val out = java.io.ByteArrayOutputStream()
+            connection.inputStream.use { input ->
+                val buf = ByteArray(16 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                    if (out.size() > maxBytes) throw IllegalStateException("photo larger than $maxBytes bytes")
+                }
+            }
+            return PhotoDownload(status, out.toByteArray(), connection.contentType,
+                connection.getHeaderField("X-Photo-Version")?.trim()?.toLongOrNull(), connection.getHeaderField("X-Photo-Source"))
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     override fun pushPhoto(itemId: String, bytes: ByteArray, contentType: String): PushResult {
         val boundary = "----pos-photo-${UUID.randomUUID()}"
         val ext = if (contentType == "image/png") "png" else "jpg"

@@ -378,6 +378,41 @@ Every call but status needs `?venue=<id>` (400 `venue_required` without it,
   counts, time taken; never the text, the audio, the prompt or a key. `menu_ai_applies` holds each
   apply's undo.
 
+#### AI item photos (`/v1/menu-ai/photos`)
+
+The store's AI photos (docs/ai-photos.md) for one item of one store: a picture in the store's house
+style (prompt ported from `server/.../aiphotos/HouseStyle.kt`: no people, logos, brand names or text;
+the item's name is checked by the AI guard first, 422 `menu_ai_photo_name`). Providers: Black Forest
+Labs FLUX `flux-2-pro` (`MENU_AI_BFL_API_KEY`), then Gemini `gemini-3.1-flash-image`
+(`MENU_AI_GEMINI_API_KEY`) when FLUX can't answer (a content-policy refusal is not retried: 422
+`menu_ai_photo_refused`). Off without either key (409 `menu_ai_photos_disabled`; `status.photos`
+false). Same caller rules as the assistant (owner / manager, `?venue=`), same 10-minute and daily
+limits, plus `MENU_AI_PHOTO_DAILY_CAP` (default 30) pictures per store per rolling 24 h (429
+`menu_ai_photo_daily_limit`). A store that never pulled the menu feed: 409 `store_not_upgraded`.
+
+- `POST /v1/menu-ai/photos/generate` `{ itemId, mode: generate | enhance, lang? }` → `{ photoId, itemId,
+  itemName, source: ai_generated | ai_enhanced, provider, model, contentType, dataBase64, elapsedMs,
+  replaces }`. A preview: nothing changes yet. `enhance` retouches the item's current photo (400
+  `menu_ai_photo_none` without one). The picture is checked to be a real JPEG / PNG and kept at most
+  2 MB (a larger one is re-encoded). A new preview of the same item replaces the user's earlier one;
+  previews expire after an hour.
+- `POST /v1/menu-ai/photos/{photoId}/accept` → `{ photoId, itemId, photoVersion, photoSource }`: the item's
+  photo now (item_photos, `photoVersion`, `photoSource`), and a `photo` entry in the store's menu feed
+  (CONTRACT §10). Only the user who made it (404 `menu_ai_photo_expired`); 409
+  `menu_ai_photo_already_accepted` the second time.
+- `POST /v1/menu-ai/photos/{photoId}/discard` → `{ photoId, status }`.
+- `POST /v1/menu-ai/photos/{photoId}/undo` → puts back the photo it replaced (or removes it when the item
+  had none), the same way. 409 `menu_ai_photo_changed` when the item's photo changed since (a store
+  upload, another AI photo); 409 `menu_ai_already_reverted`.
+- The assistant: a picture request ("generate a picture for the iced tea", "photos for every drink", any
+  of the five languages, typed or spoken) comes back in the proposal as `photos: [{ id, itemId, title,
+  category, mode, hasPhoto }]` (at most 10, live items only, `enhance` only when the request asks to
+  improve the existing photo); the portal then generates each one with the call above. A request with
+  only pictures has no `changes` and no `refusal`.
+- Audit: `menu_ai_log` kinds `photo` (outcome `proposed`, a provider error code, `refused_name`,
+  `photo_daily_limit`), `photo_accept`, `photo_undo`; `menu_ai_photos` (034) holds previews and what each
+  accepted photo replaced. Never the prompt or a key.
+
 ## Staff (session-authed; READ-ONLY mirror of each store's staff)
 
 - `GET /v1/staff` →

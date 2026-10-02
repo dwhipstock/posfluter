@@ -697,6 +697,8 @@ export interface AiStatus {
   /** This user may use it (owner / manager). */
   canUse: boolean;
   model?: string | null;
+  /** AI item photos are set up (a FLUX or Gemini image key). */
+  photos?: boolean;
 }
 
 export interface AiChangeDetail {
@@ -735,6 +737,40 @@ export interface AiProposal {
   bulk: boolean;
   bulkReasons: string[];
   transcript?: string | null;
+  /** Items the manager asked a picture for; each is made with /menu-ai/photos/generate. */
+  photos?: AiPhotoAsk[];
+}
+
+/** One picture the assistant was asked for (nothing is drawn until the portal asks). */
+export interface AiPhotoAsk {
+  id: string;
+  itemId: string;
+  title: string;
+  category?: string | null;
+  mode: "generate" | "enhance";
+  hasPhoto: boolean;
+}
+
+/** A generated picture waiting for Use / Try again / Discard. */
+export interface AiPhotoPreview {
+  photoId: string;
+  itemId: string;
+  itemName: string;
+  source: "ai_generated" | "ai_enhanced";
+  provider: string;
+  model: string;
+  contentType: string;
+  dataBase64: string;
+  elapsedMs: number;
+  /** The item has a photo now (using this one replaces it; Undo puts it back). */
+  replaces: boolean;
+}
+
+export interface AiPhotoAcceptResult {
+  photoId: string;
+  itemId: string;
+  photoVersion: number;
+  photoSource: string;
 }
 
 export interface AiApplyResult {

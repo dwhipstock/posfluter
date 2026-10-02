@@ -157,6 +157,8 @@ class CloudSync(
             }
             // also an empty page: the cursor / epoch it carries, and a retry of what failed before
             MenuSync.applyPage(page)
+            // photos from the portal: queued by the page (with its cursor), fetched outside its transaction
+            PhotoSync.drain(transport, photoStore)
             if (page.changes.isEmpty()) return
             log.info("menu sync: applied ${page.changes.size} change(s) from the portal (cursor ${page.cursor})")
             if (page.cursor <= since && !newEpoch) return

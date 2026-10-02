@@ -156,6 +156,7 @@ object MenuSync {
         when (change.entity) {
             MenuFields.ITEM -> applyItem(change.id, change.data)
             MenuFields.CATEGORY -> applyCategory(change.id, change.data)
+            PhotoSync.ENTITY -> PhotoSync.queue(change.id, change.data)
             else -> log.info("ignoring menu change of kind '${change.entity}' (#${change.seq})")
         }
         null

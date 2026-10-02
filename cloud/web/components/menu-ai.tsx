@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { PhotoAsksView } from "@/components/ai-photo";
 
 type T = ReturnType<typeof useT>;
 
@@ -224,7 +225,13 @@ function AiAssistant({ onApplied }: { onApplied: () => void }) {
           </p>
         )}
 
-        {proposal && (phase === "review" || phase === "done") && <ProposalView proposal={proposal} ticked={ticked} setTicked={setTicked} readOnly={phase === "done"} />}
+        {proposal && (phase === "review" || phase === "done") && (
+          <ProposalView proposal={proposal} ticked={ticked} setTicked={setTicked} readOnly={phase === "done"} />
+        )}
+
+        {proposal && venue && !proposal.refusal && (proposal.photos?.length ?? 0) > 0 && (phase === "review" || phase === "done") && (
+          <PhotoAsksView key={proposal.proposalId || proposal.photos![0].itemId} venue={venue} asks={proposal.photos!} onChanged={onApplied} />
+        )}
 
         {phase === "done" && applied && (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900" role="status">
@@ -318,7 +325,8 @@ function AskForm({
   onMic: () => void;
 }) {
   const t = useT();
-  const examples: MsgKey[] = ["ai_example_1", "ai_example_2", "ai_example_3"];
+  const status = useAiStatus();
+  const examples: MsgKey[] = ["ai_example_1", "ai_example_2", "ai_example_3", ...(status?.photos ? (["ai_example_photo"] as MsgKey[]) : [])];
   return (
     <div className="space-y-3">
       <textarea
@@ -408,19 +416,21 @@ function ProposalView({
       ) : (
         <>
           {proposal.summary && <p className="text-sm font-medium text-ink">{proposal.summary}</p>}
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">{t("ai_changes")}</h3>
-            {proposal.changes.map((c) => (
-              <ChangeRow
-                key={c.id}
-                change={c}
-                currency={proposal.currency}
-                checked={ticked.has(c.id)}
-                disabled={readOnly}
-                onToggle={() => setTicked(toggleChange(ticked, proposal.changes, c.id))}
-              />
-            ))}
-          </div>
+          {proposal.changes.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">{t("ai_changes")}</h3>
+              {proposal.changes.map((c) => (
+                <ChangeRow
+                  key={c.id}
+                  change={c}
+                  currency={proposal.currency}
+                  checked={ticked.has(c.id)}
+                  disabled={readOnly}
+                  onToggle={() => setTicked(toggleChange(ticked, proposal.changes, c.id))}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
       {proposal.rejected.length > 0 && <p className="text-xs text-neutral-600">{t("ai_skipped", { n: proposal.rejected.length })}</p>}
