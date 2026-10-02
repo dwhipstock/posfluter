@@ -48,18 +48,25 @@ fun Route.roomRoutes(service: RoomAiService) {
         call.respond(response)
     }
 
-    /** multipart: `image` (a phone photo, ≤ 12 MB; resized here), optional `name` and `lang`. */
+    /**
+     * multipart: `image` repeated 1–[RoomPhoto.MAX_PHOTOS] times (phone photos of one room from different
+     * spots, each ≤ 12 MB, ≤ 32 MB together; each resized here), optional `name` and `lang`.
+     */
     post("/room-ai/photo") {
         roomCaller(call, service, null)
-        var bytes: ByteArray? = null
-        var type: String? = null
+        val raw = mutableListOf<Pair<ByteArray, String?>>()
+        var total = 0L
         var name: String? = null
         var lang: String? = null
         call.receiveMultipart(formFieldLimit = RoomPhoto.MAX_BYTES + 1024L * 1024).forEachPart { part ->
             when {
                 part is PartData.FileItem && part.name == "image" -> {
-                    type = part.contentType?.toString()
-                    bytes = part.provider().readCapped(RoomPhoto.MAX_BYTES, "that picture is too big", "room_ai_image_too_large")
+                    if (raw.size >= RoomPhoto.MAX_PHOTOS)
+                        throw BadRequestException("at most ${RoomPhoto.MAX_PHOTOS} photos at a time", "room_ai_too_many_images")
+                    val bytes = part.provider().readCapped(RoomPhoto.MAX_BYTES, "that picture is too big", "room_ai_image_too_large")
+                    total += bytes.size
+                    if (total > RoomPhoto.MAX_TOTAL_BYTES) throw PayloadTooLargeException("those pictures are too big together", "room_ai_image_too_large")
+                    if (bytes.isNotEmpty()) raw += bytes to part.contentType?.toString()
                 }
                 part is PartData.FormItem && part.name == "name" -> name = part.value.take(200)
                 part is PartData.FormItem && part.name == "lang" -> lang = part.value.take(8)
@@ -67,8 +74,10 @@ fun Route.roomRoutes(service: RoomAiService) {
             part.dispose()
         }
         val who = roomCaller(call, service, lang)
-        val raw = bytes?.takeIf { it.isNotEmpty() } ?: throw BadRequestException("take a photo first", "room_ai_no_image")
-        call.respond(withContext(Dispatchers.IO) { service.photo(who, RoomPhoto.prepare(raw, type), name) })
+        if (raw.isEmpty()) throw BadRequestException("take a photo first", "room_ai_no_image")
+        call.respond(withContext(Dispatchers.IO) {
+            service.photo(who, raw.map { (bytes, type) -> RoomPhoto.prepare(bytes, type) }, name)
+        })
     }
 
     post("/room-ai/photo/apply") {

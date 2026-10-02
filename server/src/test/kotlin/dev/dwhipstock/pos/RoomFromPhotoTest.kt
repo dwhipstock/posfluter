@@ -159,6 +159,43 @@ class RoomFromPhotoTest {
     }
 
     @Test
+    fun severalViewsGoInOneCallAndOneStillWorksWithinTheByteCap() = testApplication {
+        val fake = FakeMenuProvider(goodLayout)
+        store(fake)
+        val manager = loginClient()
+
+        // the single picture an older tablet sends: unchanged, says "picture"
+        assertEquals(HttpStatusCode.OK, manager.propose("lower", pictures = 1).status)
+        assertEquals(1, fake.images.size)
+        assertTrue(fake.prompts.last().endsWith("from the attached picture."), fake.prompts.last())
+
+        // four views: ONE model call with four image parts and the merge rules
+        fake.images.clear()
+        val res = manager.propose("lower", pictures = 4)
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals(2, fake.prompts.size)
+        assertEquals(4, fake.images.size)
+        val prompt = fake.prompts.last()
+        assertTrue("Line the views up by the fixed landmarks they share" in prompt)
+        assertTrue(prompt.endsWith("4 attached pictures: 4 views of the same room, combined into one plan with each table drawn once."), prompt)
+
+        // each under 12 MB, 36 MB together: refused, the model never asked
+        val big = ByteArray(9 * 1024 * 1024).also { it[0] = 0xFF.toByte(); it[1] = 0xD8.toByte() }
+        val heavy = manager.submitFormWithBinaryData("/zones/lower/ai-layout", formData {
+            append("managerPin", "1234")
+            repeat(4) { i ->
+                append("photo", big, Headers.build {
+                    append(HttpHeaders.ContentType, "image/jpeg")
+                    append(HttpHeaders.ContentDisposition, "filename=\"room-$i.jpg\"")
+                })
+            }
+        })
+        assertEquals(HttpStatusCode.BadRequest, heavy.status)
+        assertTrue(heavy.bodyAsText().contains("too large together"), heavy.bodyAsText())
+        assertEquals(2, fake.prompts.size)
+    }
+
+    @Test
     fun `a manager's own session is the approval for set-up-from-picture, no second PIN`() = testApplication {
         val fake = FakeMenuProvider(goodLayout)
         store(fake)

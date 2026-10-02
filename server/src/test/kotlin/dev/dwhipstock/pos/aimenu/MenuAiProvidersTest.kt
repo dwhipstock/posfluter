@@ -45,6 +45,15 @@ class MenuAiProvidersTest {
     }
 
     @Test
+    fun geminiSendsEveryRoomPictureAsItsOwnImagePartInOneRequest() {
+        val http = Recorder(200, geminiOk)
+        GeminiMenuProvider(key, http).complete("sys", "user", List(4) { MenuImage(byteArrayOf(it.toByte()), "image/jpeg") })
+        val body = http.requests.single().bodyText
+        assertEquals(4, Regex("\"type\":\"image\"").findAll(body).count())
+        assertEquals(1, Regex("\"type\":\"text\",\"text\"").findAll(body).count())
+    }
+
+    @Test
     fun geminiSendsVoiceAsAnAudioPartAndTheOthersSayNo() {
         val http = Recorder(200, geminiOk)
         GeminiMenuProvider(key, http).complete("sys", "user", listOf(MenuImage(ByteArray(2000), "audio/wav")))

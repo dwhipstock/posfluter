@@ -154,15 +154,18 @@ fun Route.menuAiRoutes(ai: MenuAiService, auth: AuthService) {
         val zoneId = call.parameters["zoneId"]!!
         var managerPin: String? = null
         val images = mutableListOf<MenuImage>()
+        var total = 0L
         call.receiveMultipart(formFieldLimit = MAX_MENU_PHOTO_BYTES.toLong()).forEachPart { part ->
             when (part) {
                 is PartData.FormItem -> if (part.name == "managerPin") managerPin = part.value
                 is PartData.FileItem -> {
                     val type = part.contentType?.toString()?.lowercase()
+                    require(images.size < MenuAiService.MAX_ROOM_PHOTOS) { "at most ${MenuAiService.MAX_ROOM_PHOTOS} pictures at a time" }
                     val bytes = part.provider().toByteArray()
                     require(type in ALLOWED_TYPES) { "only JPEG or PNG pictures are supported" }
                     require(bytes.size <= MAX_MENU_PHOTO_BYTES) { "picture too large (max 12MB)" }
-                    require(images.size < MenuAiService.MAX_ROOM_PHOTOS) { "at most ${MenuAiService.MAX_ROOM_PHOTOS} pictures at a time" }
+                    total += bytes.size
+                    require(total <= MenuAiService.MAX_ROOM_PHOTO_TOTAL_BYTES) { "pictures too large together (max 32MB)" }
                     val upright = if (type == "image/jpeg") Images.normalizeJpegOrientation(bytes) else bytes
                     // table numbers on a printed plan need the pixels
                     val sent = Images.downscaleToJpeg(upright, 2048)

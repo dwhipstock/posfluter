@@ -319,11 +319,14 @@ class RoomAiService(
     // --- a new room from a photo ---
 
     /**
-     * A phone photo of a room (or a sketch, a printed plan) → a validated new
+     * 1–4 phone photos of one room from different spots (or a sketch, a
+     * printed plan) → ONE model call that merges the views → a validated new
      * room to preview (the store's RoomLayoutRules with the spread, numbers
-     * from 1). Nothing changes; the picture lives only for this call.
+     * from 1). Nothing changes; the pictures live only for this call.
      */
-    fun photo(who: AiCaller, image: AiImage, name: String?): RoomPhotoProposalDto {
+    fun photo(who: AiCaller, images: List<AiImage>, name: String?): RoomPhotoProposalDto {
+        if (images.isEmpty()) throw BadRequestException("take a photo first", "room_ai_no_image")
+        if (images.size > RoomPhoto.MAX_PHOTOS) throw BadRequestException("at most ${RoomPhoto.MAX_PHOTOS} photos at a time", "room_ai_too_many_images")
         val roomName = name?.trim()?.take(100)?.takeIf { it.isNotEmpty() } ?: defaultName(who.lang)
         if (AiGuard.checkText(roomName) != null) throw BadRequestException("pick a plain room name", "room_bad_name")
         transaction { RoomState.requireEditable(who.venue.scope) }
@@ -335,8 +338,8 @@ class RoomAiService(
                 roomName, prefix, emptyList(), emptyList(), rejected = AiText.skips(rejected, who.lang), elapsedMs = now() - started,
                 refusal = r.code, message = RoomReplies.reply(r, who.lang))
             val bilingual = transaction { bilingual(who.venue.scope) }
-            val reply = call(m, RoomLayoutAi.systemPrompt(bilingual),
-                "Set up the floor plan of this room from the attached picture(s).", null, listOf(image))
+            // all the views in ONE call: the model merges them into one room
+            val reply = call(m, RoomLayoutAi.systemPrompt(bilingual), RoomLayoutAi.userPrompt(images.size), null, images)
                 ?: return@tracked refuse(RoomReplies.R.ROOM_OFF_TOPIC)
             val parsed = try { RoomLayoutAi.parse(reply) } catch (e: MenuAiReplyException) {
                 log.info("AI room photo via ${m.id}: unusable reply")

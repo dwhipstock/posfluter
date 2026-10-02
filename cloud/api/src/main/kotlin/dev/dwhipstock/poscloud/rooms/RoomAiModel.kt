@@ -134,6 +134,10 @@ class GeminiRoomModel(
 object RoomPhoto {
     const val MAX_SIDE = 1600
     const val MAX_BYTES = 12 * 1024 * 1024
+    /** "New room from photo": up to this many views of one room in one request, in one model call. */
+    const val MAX_PHOTOS = 4
+    /** All of one request's photos together, as uploaded (before the resize). */
+    const val MAX_TOTAL_BYTES = 32 * 1024 * 1024
     private val PASS_THROUGH = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
 
     fun normalizeType(type: String?): String? = when (val t = type?.lowercase()?.substringBefore(';')?.trim()) {

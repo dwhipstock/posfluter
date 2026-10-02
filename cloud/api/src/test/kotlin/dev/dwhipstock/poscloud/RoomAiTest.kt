@@ -266,6 +266,79 @@ class RoomAiTest {
         }) { header(HttpHeaders.Cookie, "pos_portal_session=$manager") }.body().s("code"))
     }
 
+    private suspend fun ApplicationTestBuilder.photos(vararg pictures: ByteArray, type: String = "image/png") =
+        client.submitFormWithBinaryData("/v1/room-ai/photo?venue=vieux-port", formData {
+            append("name", "Patio")
+            append("lang", "en")
+            pictures.forEachIndexed { i, bytes ->
+                append("image", bytes, Headers.build {
+                    append(HttpHeaders.ContentType, type)
+                    append(HttpHeaders.ContentDisposition, "filename=\"room-$i.png\"")
+                })
+            }
+        }) { header(HttpHeaders.Cookie, "pos_portal_session=$manager") }
+
+    @Test
+    fun severalPhotosOfOneRoomGoInOneModelCallEachResized() = testApplication {
+        app()
+        store()
+        var user = ""
+        fake.reply = { system, u, _, _ ->
+            user = u
+            assertTrue("Line the views up by the fixed landmarks" in system)
+            layoutReply
+        }
+        val r = photos(png(3000, 2000), png(2000, 3000), png(800, 600))
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        assertEquals(1, fake.calls, "one call for all the views")
+        assertEquals(3, fake.lastImages.size)
+        val sizes = fake.lastImages.map { javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(it.bytes)).let { i -> i.width to i.height } }
+        assertEquals(listOf(1600 to 1066, 1066 to 1600, 800 to 600), sizes)
+        assertTrue(fake.lastImages.all { it.contentType == "image/jpeg" })
+        assertTrue("3 attached pictures" in user && "views of the same room" in user, user)
+        assertEquals(listOf("P-1", "P-2"), r.body().tables().map { it.s("label") })
+
+        // the single-photo request of an older portal page still works, and says "picture"
+        assertEquals(HttpStatusCode.OK, photo(png(40, 30)).status)
+        assertEquals(1, fake.lastImages.size)
+        assertEquals("Set up the floor plan of this room from the attached picture.", user)
+    }
+
+    @Test
+    fun atMostFourPhotosAndAByteCapOnAllOfThem() = testApplication {
+        app()
+        store()
+        fake.reply = { _, _, _, _ -> layoutReply }
+        val small = png(20, 20)
+        assertEquals(HttpStatusCode.OK, photos(small, small, small, small).status)
+        assertEquals(4, fake.lastImages.size)
+        val calls = fake.calls
+        val five = photos(small, small, small, small, small)
+        assertEquals(HttpStatusCode.BadRequest, five.status)
+        assertEquals("room_ai_too_many_images", five.body().s("code"))
+        // each under 12 MB, but 36 MB together: refused before any decode or model call
+        val big = ByteArray(9 * 1024 * 1024)
+        val heavy = photos(big, big, big, big)
+        assertEquals(HttpStatusCode.PayloadTooLarge, heavy.status)
+        assertEquals("room_ai_image_too_large", heavy.body().s("code"))
+        assertEquals(calls, fake.calls)
+    }
+
+    @Test
+    fun geminiGetsEveryPhotoAsItsOwnImagePart() {
+        var body = ""
+        val http = dev.dwhipstock.poscloud.menuai.AiHttp { _, _, b, _ ->
+            body = String(b)
+            200 to """{"steps":[{"type":"model_output","content":[{"type":"text","text":"{}"}]}]}"""
+        }
+        val m = dev.dwhipstock.poscloud.rooms.GeminiRoomModel("test-key-0123456789", http = http)
+        m.complete("sys", "user", null, listOf(AiImage(byteArrayOf(1), "image/jpeg"), AiImage(byteArrayOf(2), "image/jpeg"),
+            AiImage(byteArrayOf(3), "image/png")))
+        val input = testJson.parseToJsonElement(body).jsonObject["input"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("image", "image", "image", "text"), input.map { it.s("type") })
+        assertEquals(listOf("image/jpeg", "image/jpeg", "image/png"), input.take(3).map { it.s("mime_type") })
+    }
+
     // --- the floor assistant ---
 
     @Test

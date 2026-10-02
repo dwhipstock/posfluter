@@ -150,6 +150,8 @@ class MenuAiService(
     companion object {
         const val MAX_PHOTOS = 6
         const val MAX_ROOM_PHOTOS = 4
+        /** All of one "set up from picture" request's pictures together, as sent (each is ≤ 12 MB). */
+        const val MAX_ROOM_PHOTO_TOTAL_BYTES = 32 * 1024 * 1024
         /** Removals or price changes above this in one Apply need the manager's extra confirm. */
         const val BULK_CONFIRM = 10
         private const val PROPOSAL_TTL_MS = 60 * 60 * 1000L
@@ -336,8 +338,7 @@ class MenuAiService(
                 p.id, p.model, emptyList(), emptyList(), rejected = AiText.skips(rejected, who?.lang), elapsedMs = now() - started,
                 refusal = r.code, message = AiGuard.reply(r, who?.lang))
             val reply = try {
-                p.complete(RoomLayoutAi.systemPrompt(bilingual),
-                    "Set up the floor plan of this room from the attached picture(s).", images)
+                p.complete(RoomLayoutAi.systemPrompt(bilingual), RoomLayoutAi.userPrompt(images.size), images)
             } catch (e: ImageGenException) {
                 if (e.code == ImageGenException.REFUSED) return@tracked refuse(AiGuard.Refusal.ROOM_OFF_TOPIC)
                 if (e.code == ImageGenException.UNAVAILABLE) probe = false to now()
