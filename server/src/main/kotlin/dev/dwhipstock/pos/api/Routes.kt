@@ -667,12 +667,17 @@ fun Route.posRoutes(
         call.respond(HttpStatusCode.Created, checkService.openCheck(tableId, call.sessionUser().userId))
     }
 
+    // a staff screen loading / polling the check: an unpaid counter or kiosk
+    // order open on it is not abandoned, so it never expires under the cashier
     get("/checks/{id}") {
-        call.respond(checkService.getCheck(checkId(call)))
+        val id = checkId(call)
+        checkService.touch(id)
+        call.respond(checkService.getCheck(id))
     }
 
     post("/checks/{id}/lines") {
         val req = call.receive<AddLineRequest>()
+        checkService.touch(checkId(call))
         call.respond(HttpStatusCode.Created, checkService.addLine(checkId(call), req.itemId, req.variantId, req.qty, req.note,
             req.expectedPriceCents))
     }

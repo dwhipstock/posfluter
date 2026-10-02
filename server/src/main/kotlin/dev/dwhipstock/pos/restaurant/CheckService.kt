@@ -184,6 +184,8 @@ interface CounterHook {
     fun cancelled(checkId: Int)
     /** The order number and dine in / take out for the receipt ("#101 · Take out", "Order #105 · Carry-out"); null = not a numbered order. */
     fun receiptOrder(checkId: Int): dev.dwhipstock.pos.sdk.ReceiptOrder?
+    /** A staff screen has the check open (loaded, polled, edited): an unpaid order there is not abandoned. */
+    fun touched(checkId: Int) {}
 }
 
 class CheckService(private val config: CustomerConfig) {
@@ -983,7 +985,7 @@ class CheckService(private val config: CustomerConfig) {
         when (check[Checks.status]) {
             "OPEN" -> { lockTotals(checkId); check = requireCheck(checkId) }
             "TOTAL_LOCKED" -> {}
-            else -> throw ConflictException("check $checkId is ${check[Checks.status]}")
+            else -> throw ConflictException("check $checkId is ${check[Checks.status]}", "check_not_open")
         }
         if (groupId == null) {
             val outstanding = Money(check[Checks.lockedGrandTotalCents]!!) - tenderedSoFar(checkId)
@@ -2097,6 +2099,11 @@ class CheckService(private val config: CustomerConfig) {
     }
 
     fun getCheck(checkId: Int): CheckView = transaction { loadCheck(checkId) }
+
+    /** A staff screen has [checkId] open (loads, polls or edits it): see [CounterHook.touched]. Never throws. */
+    fun touch(checkId: Int) {
+        try { counter?.touched(checkId) } catch (_: Exception) {}
+    }
 
     fun openCheckForTable(tableId: String): CheckView? = transaction {
         Checks.selectAll()

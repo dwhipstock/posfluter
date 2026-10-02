@@ -18,6 +18,7 @@ import '../widgets/item_photo.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/print_language_picker.dart';
 import '../widgets/resume_refresh.dart';
+import '../widgets/stale_check.dart';
 import 'bill_preview_screen.dart';
 import 'split_screen.dart';
 import 'table_picker_screen.dart';
@@ -107,6 +108,14 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   Timer? _flashTimer;
   static const _allCategories = '*';
 
+  /// Pay (or split) is open on top: the check closing under it is this
+  /// screen's own doing, not another device's.
+  bool _paying = false;
+
+  /// Checks this screen is done with (paid, emptied, cleared, gone): a poll
+  /// answer for one of them that arrives late changes nothing.
+  final Set<int> _settled = {};
+
   @override
   void initState() {
     super.initState();
@@ -170,6 +179,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   /// Paid, emptied or voided: back to where we came from, or (counter) on
   /// to the next order.
   void _leave({bool paid = false}) {
+    if (_checkId != 0) _settled.add(_checkId);
     if (_embedded) {
       widget.onFinished!(paid);
     } else {
@@ -183,9 +193,46 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     try {
       final check = await Api.getCheck(id);
       // the counter may have moved on to another order meanwhile
-      if (mounted && id == _checkId) setState(() => _check = check);
+      if (!mounted || id != _checkId || _settled.contains(id)) return;
+      if (isCheckGone(check.status)) {
+        // expired, paid or cleared on another device: say so and move on
+        // (not while Pay is open, nor under a dialog: the next poll does)
+        if (!_paying && (ModalRoute.of(context)?.isCurrent ?? true)) {
+          await _recoverIfGone(check.status);
+        }
+        return;
+      }
+      setState(() => _check = check);
     } catch (_) {} // transient poll failures are fine
     _refreshKitchen();
+  }
+
+  /// The check went away under the screen (the store expired an unpaid
+  /// order, or another device paid, cleared or merged it): say so, and go
+  /// back to a sane place (the counter: a new order; a table: the floor).
+  /// [status]: already known; else the store is asked. True when it was gone.
+  /// [quiet]: no message for a cancelled one (the bin on an order already
+  /// gone just clears).
+  Future<bool> _recoverIfGone([String? status, bool quiet = false]) async {
+    final id = _checkId;
+    if (id == 0 || _settled.contains(id)) return false;
+    final gone = status ?? await goneStatus(id);
+    if (gone == null || !mounted || id != _checkId || _settled.contains(id)) {
+      return false;
+    }
+    final cancelled = gone == 'CANCELLED' || gone == 'VOID';
+    if (!(quiet && cancelled)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          key: const Key('check-gone'),
+          content: Text(
+            L.of(context).checkGone(gone, order: widget.counterOrder),
+          ),
+        ),
+      );
+    }
+    _leave();
+    return true;
   }
 
   Future<void> _refreshKitchen() async {
@@ -342,6 +389,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     } on AddCancelled {
       return;
     } catch (e) {
+      if (mayBeStaleCheck(e) && await _recoverIfGone()) return;
       if (mounted) showApiError(context, e);
     }
   }
@@ -449,6 +497,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       await widget.onDiscard?.call();
       if (mounted) _leave();
     } catch (e) {
+      // already gone (expired, cleared elsewhere): the bin just clears
+      if (mayBeStaleCheck(e) && await _recoverIfGone(null, true)) return;
       if (mounted) showApiError(context, e);
     }
   }
@@ -698,15 +748,22 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     if (KitchenApi.enabled && !widget.counterOrder) {
       unawaited(KitchenApi.sendQuietly(_checkId));
     }
-    final closed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) =>
-            SplitScreen(check: check, tableLabel: widget.tableLabel),
-      ),
-    );
-    if (closed == true && mounted) {
+    _paying = true;
+    final bool? closed;
+    try {
+      closed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) =>
+              SplitScreen(check: check, tableLabel: widget.tableLabel),
+        ),
+      );
+    } finally {
+      _paying = false;
+    }
+    if (!mounted) return;
+    if (closed == true) {
       _paidAndDone();
-    } else {
+    } else if (!await _recoverIfGone()) {
       _load();
     }
   }
@@ -1452,21 +1509,28 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                   if (!await _idChecked(check) || !mounted) {
                                     return;
                                   }
-                                  final closed = await Navigator.of(context)
-                                      .push<bool>(
-                                        MaterialPageRoute(
-                                          builder: (_) => TenderScreen(
-                                            check: _check ?? check,
-                                            counterOrder: widget.counterOrder,
-                                            headline: widget.carryOut
-                                                ? widget.tableLabel
-                                                : null,
+                                  _paying = true;
+                                  final bool? closed;
+                                  try {
+                                    closed = await Navigator.of(context)
+                                        .push<bool>(
+                                          MaterialPageRoute(
+                                            builder: (_) => TenderScreen(
+                                              check: _check ?? check,
+                                              counterOrder: widget.counterOrder,
+                                              headline: widget.carryOut
+                                                  ? widget.tableLabel
+                                                  : null,
+                                            ),
                                           ),
-                                        ),
-                                      );
-                                  if (closed == true && mounted) {
+                                        );
+                                  } finally {
+                                    _paying = false;
+                                  }
+                                  if (!mounted) return;
+                                  if (closed == true) {
                                     _paidAndDone();
-                                  } else {
+                                  } else if (!await _recoverIfGone()) {
                                     _load();
                                   }
                                 },

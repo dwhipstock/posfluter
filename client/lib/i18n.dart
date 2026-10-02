@@ -1060,6 +1060,59 @@ class L {
     'Leere Rechnung geschlossen',
     'Leë rekening toegemaak',
   );
+
+  /// The check went away under the screen ([status] as the store has it
+  /// now): a counter / kiosk [order] or a table's bill.
+  String checkGone(String status, {required bool order}) => switch (status) {
+    'CLOSED' =>
+      order
+          ? _t(
+              'Cette commande a déjà été payée sur un autre appareil',
+              'This order was already paid on another device',
+              'Este pedido ya se pagó en otro dispositivo',
+              'Diese Bestellung wurde bereits auf einem anderen Gerät bezahlt',
+              'Hierdie bestelling is reeds op ’n ander toestel betaal',
+            )
+          : _t(
+              'Cette addition a déjà été payée sur un autre appareil',
+              'This bill was already paid on another device',
+              'Esta cuenta ya se pagó en otro dispositivo',
+              'Diese Rechnung wurde bereits auf einem anderen Gerät bezahlt',
+              'Hierdie rekening is reeds op ’n ander toestel betaal',
+            ),
+    'CANCELLED' || 'VOID' =>
+      order
+          ? _t(
+              'Cette commande a été annulée — non payée à temps ou effacée sur un autre appareil',
+              'This order was cancelled — it expired unpaid or was cleared on another device',
+              'Este pedido se canceló: venció sin pagar o se borró en otro dispositivo',
+              'Diese Bestellung wurde storniert – unbezahlt abgelaufen oder auf einem anderen Gerät gelöscht',
+              'Hierdie bestelling is gekanselleer — dit het onbetaal verval of is op ’n ander toestel uitgevee',
+            )
+          : _t(
+              'Cette addition a été annulée sur un autre appareil',
+              'This bill was cancelled on another device',
+              'Esta cuenta se canceló en otro dispositivo',
+              'Diese Rechnung wurde auf einem anderen Gerät storniert',
+              'Hierdie rekening is op ’n ander toestel gekanselleer',
+            ),
+    _ =>
+      order
+          ? _t(
+              'Cette commande a été fermée sur un autre appareil',
+              'This order was closed on another device',
+              'Este pedido se cerró en otro dispositivo',
+              'Diese Bestellung wurde auf einem anderen Gerät geschlossen',
+              'Hierdie bestelling is op ’n ander toestel gesluit',
+            )
+          : _t(
+              'Cette addition a été fermée sur un autre appareil',
+              'This bill was closed on another device',
+              'Esta cuenta se cerró en otro dispositivo',
+              'Diese Rechnung wurde auf einem anderen Gerät geschlossen',
+              'Hierdie rekening is op ’n ander toestel gesluit',
+            ),
+  };
   String get total => _t('Total', 'Total', 'Total', 'Gesamt', 'Totaal');
   String get subtotal =>
       _t('Sous-total', 'Subtotal', 'Subtotal', 'Zwischensumme', 'Subtotaal');

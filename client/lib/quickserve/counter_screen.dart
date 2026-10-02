@@ -16,6 +16,7 @@ import '../screens/sales_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/shift_screen.dart';
 import '../widgets/resume_refresh.dart';
+import '../widgets/stale_check.dart';
 import '../widgets/url_qr.dart';
 import 'quick_serve_i18n.dart';
 
@@ -123,11 +124,26 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
     final before = _mode;
     setState(() => _mode = mode);
     if (_checkId == 0) return; // not stored yet: it goes with the first item
+    final id = _checkId;
     try {
-      await QuickServeApi.setMode(_checkId, mode);
+      await QuickServeApi.setMode(id, mode);
     } catch (e) {
       if (!mounted) return;
       setState(() => _mode = before);
+      // the order went away under the panel (expired, paid or cleared on
+      // another device): say so and open a new one
+      final gone = mayBeStaleCheck(e) ? await goneStatus(id) : null;
+      if (!mounted) return;
+      if (gone != null && id == _checkId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            key: const Key('check-gone'),
+            content: Text(L.of(context).checkGone(gone, order: true)),
+          ),
+        );
+        _next(false);
+        return;
+      }
       showApiError(context, e);
     }
   }
@@ -160,8 +176,12 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
       try {
         await QuickServeApi.discard(_checkId);
       } catch (e) {
-        if (mounted) showApiError(context, e);
-        return;
+        // already gone (expired, cleared elsewhere): nothing to clear
+        final gone = mayBeStaleCheck(e) ? await goneStatus(_checkId) : null;
+        if (gone == null) {
+          if (mounted) showApiError(context, e);
+          return;
+        }
       }
     }
     if (!mounted) return;

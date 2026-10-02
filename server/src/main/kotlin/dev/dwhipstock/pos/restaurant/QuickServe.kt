@@ -166,6 +166,8 @@ class QuickServeService(
         val UNPAID = PickupOrders.UNPAID
         /** A numbered kiosk order that was never paid (expired, cleared): its number is not given again. */
         const val CANCELLED = PickupOrders.CANCELLED
+        /** A check that is no longer an order to pay: discarding it again is a no-op. */
+        private val GONE = setOf("CANCELLED", "VOID", "MERGED")
         /** The first counter's statuses (PR #58): an unpaid row in one of these is an old test order. */
         private val LEGACY = listOf("NEW", "PREPARING", "READY", "PICKED_UP")
         private const val CODE_TTL_SECONDS = 600
@@ -336,7 +338,10 @@ class QuickServeService(
         val m = normMode(mode)
         transaction {
             val row = requireOrder(checkId)
-            if (row[CounterOrders.status] !in UNPAID || checks.getCheck(checkId).status !in LIVE)
+            val checkStatus = checks.getCheck(checkId).status
+            if (checkStatus in GONE || row[CounterOrders.status] == CANCELLED)
+                throw ConflictException("check $checkId is $checkStatus", "check_not_open")
+            if (row[CounterOrders.status] !in UNPAID || checkStatus !in LIVE)
                 throw ConflictException("order is already paid", "order_paid")
             CounterOrders.update({ CounterOrders.checkId eq checkId }) { it[serviceMode] = m }
         }
@@ -345,7 +350,11 @@ class QuickServeService(
 
     /** The cashier drops an unpaid order (nothing tendered): its check is cancelled, the order is gone. */
     fun discard(checkId: Int) {
+        // already gone (expired, cleared on another device): nothing to drop,
+        // the counter just clears its screen
+        if (checks.getCheck(checkId).status in GONE) return
         val row = transaction { requireOrder(checkId) }
+        if (row[CounterOrders.status] == CANCELLED) return
         if (row[CounterOrders.status] !in UNPAID) throw ConflictException("order is already paid", "order_paid")
         checks.cancelUnpaid(checkId, "discarded")
     }

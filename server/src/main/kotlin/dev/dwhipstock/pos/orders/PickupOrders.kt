@@ -134,10 +134,24 @@ class PickupOrders(
     /** Test seam: the business day the next number belongs to. */
     val today: () -> LocalDate = { VenueClock.today() },
     val clock: () -> Instant = { VenueClock.now() },
-    /** An unpaid pay-first order older than this is dropped (a guest who never came to pay). */
-    private val expireAfter: Duration = Duration.ofMinutes(30),
+    /**
+     * An unpaid pay-first order idle this long is dropped (a guest who never
+     * came to pay): counted from its last activity on a POS screen, else from
+     * when it was placed (store.properties `orders.unpaidExpireMinutes`).
+     */
+    val expireAfter: Duration = Duration.ofMinutes(30),
 ) : CounterHook {
     private val log = LoggerFactory.getLogger(PickupOrders::class.java)
+
+    /**
+     * When a staff screen last had each check open (loaded, polled, edited).
+     * In memory: the counter's check screen polls every few seconds, so this
+     * is fresh while an order is on a screen. Pruned as orders expire.
+     */
+    private val lastActive = java.util.concurrent.ConcurrentHashMap<Int, Instant>()
+
+    /** After a restart nobody's poll has been seen yet: nothing expires for one [expireAfter]. */
+    private val startedAt: Instant = clock()
 
     /** Kitchen tickets, when on: a pay-first order is sent the moment it is paid. */
     var kitchen: KitchenService? = null
@@ -219,6 +233,7 @@ class PickupOrders(
      * just notes when it was paid.
      */
     override fun paid(checkId: Int) {
+        lastActive.remove(checkId)
         val row = row(checkId) ?: return
         if (!sourceOf(row).payFirst) {
             CounterOrders.update({ CounterOrders.checkId eq checkId }) { it[paidAt] = clock() }
@@ -268,7 +283,12 @@ class PickupOrders(
      * day. A carry-out order the kitchen never saw is simply gone; one it did
      * see stays CANCELLED.
      */
+    override fun touched(checkId: Int) {
+        lastActive[checkId] = clock()
+    }
+
     override fun cancelled(checkId: Int) {
+        lastActive.remove(checkId)
         transaction {
             val row = row(checkId) ?: return@transaction
             if (!sourceOf(row).payFirst) {
@@ -429,9 +449,16 @@ class PickupOrders(
 
     fun joined() = CounterOrders.join(Checks, JoinType.INNER, CounterOrders.checkId, Checks.id)
 
-    /** Unpaid pay-first orders older than [expireAfter], nothing tendered: dropped (their checks cancelled). */
+    /**
+     * Unpaid pay-first orders idle longer than [expireAfter], nothing tendered:
+     * dropped (their checks cancelled). Idle = placed that long ago and not
+     * open on any staff screen since ([touched]): an order a cashier has on
+     * the counter is never pulled from under them. Carry-out never expires.
+     */
     fun expire(): Int {
         val cutoff = clock().minus(expireAfter)
+        lastActive.entries.removeIf { it.value < cutoff }
+        if (startedAt > cutoff) return 0
         val stale = transaction {
             joined().selectAll().where {
                 (CounterOrders.status inList UNPAID) and (Checks.status inList LIVE) and
@@ -441,10 +468,11 @@ class PickupOrders(
         }
         var n = 0
         for (id in stale) {
+            if (lastActive[id]?.let { it >= cutoff } == true) continue // open on a screen
             if (checks.hasTenders(id)) continue
             try { checks.cancelUnpaid(id, "expired"); n++ } catch (e: Exception) { log.warn("expiring order $id failed: ${e.message}") }
         }
-        if (n > 0) log.info("Dropped $n unpaid counter order(s) older than ${expireAfter.toMinutes()} min")
+        if (n > 0) log.info("Dropped $n unpaid counter order(s) idle for ${expireAfter.toMinutes()} min")
         return n
     }
 

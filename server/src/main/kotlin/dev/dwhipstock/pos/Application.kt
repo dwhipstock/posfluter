@@ -169,6 +169,10 @@ fun Application.module(
     // kitchen.printing=on|off (POS_KITCHEN_PRINTING / POS_CONFIG_FILE; the
     // tablet passes its store.properties). Default off; restaurants only.
     kitchenPrinting: dev.dwhipstock.pos.sdk.KitchenPrinting.Resolved = dev.dwhipstock.pos.sdk.KitchenPrinting.fromEnv(),
+    // orders.unpaidExpireMinutes=N (POS_UNPAID_EXPIRE_MINUTES / POS_CONFIG_FILE;
+    // the tablet passes its store.properties). Default 30: an unpaid pay-first
+    // order nobody has touched for that long is dropped.
+    unpaidExpiry: dev.dwhipstock.pos.sdk.UnpaidExpiry.Resolved = dev.dwhipstock.pos.sdk.UnpaidExpiry.fromEnv(),
     // test seam: the station printers' transport
     kitchenTransport: dev.dwhipstock.pos.sdk.EscPosTransport? = null,
     // age.check=always|looks-under:N (POS_AGE_CHECK / POS_CONFIG_FILE). Default
@@ -396,7 +400,9 @@ fun Application.module(
     // their kitchen side (hold until paid, "#101 · Take out" / "#105 · TO GO")
     val caps = config.profile.capabilities
     val pickupOrders = if (caps.none { it in dev.dwhipstock.pos.sdk.Capability.NUMBERED }) null
-        else dev.dwhipstock.pos.orders.PickupOrders(config, checkService).also { o ->
+        else dev.dwhipstock.pos.orders.PickupOrders(config, checkService, expireAfter = unpaidExpiry.duration).also { o ->
+            unpaidExpiry.warning?.let { log.warn("Unpaid order expiry config ignored: $it") }
+            log.info(unpaidExpiry.describe())
             kitchenService?.let { k ->
                 o.kitchen = k
                 k.holdSend = o::holdKitchen

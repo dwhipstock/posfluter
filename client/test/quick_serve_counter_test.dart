@@ -13,6 +13,7 @@ import 'package:pos_client/design/tokens.dart';
 import 'package:pos_client/i18n.dart';
 import 'package:pos_client/quickserve/counter_screen.dart';
 import 'package:pos_client/retail/age_check_dialog.dart';
+import 'package:pos_client/screens/check_screen.dart';
 import 'package:pos_client/screens/tender_screen.dart';
 import 'package:pos_client/widgets/url_qr.dart';
 
@@ -51,6 +52,13 @@ class _Store {
   final statusCalls = <String>[];
   final closed = <int>{};
   String defaultMode = 'TAKE_OUT';
+
+  /// Checks the store dropped or closed behind the screen's back (expired
+  /// unpaid, paid or cleared on another device): their status now.
+  final gone = <int, String>{};
+
+  /// An older store: the bin on a gone order is refused (404) instead of a no-op.
+  bool discardRefuses = false;
 
   /// Checks with a passing ID check (POST /retail/sales/{id}/age-check).
   final idChecked = <int>{};
@@ -189,9 +197,30 @@ class _Store {
     }
   }
 
+  http.Response _notOpen(int id) => _json({
+    'error': 'check $id is ${gone[id]}',
+    'code': 'check_not_open',
+  }, 409);
+
   late final client = MockClient((req) async {
     final p = req.url.path;
     final body = req.body.isEmpty ? null : jsonDecode(req.body);
+    final goneId = RegExp(
+      r'^/(?:checks|counter/orders)/(\d+)',
+    ).firstMatch(p)?.group(1);
+    final gid = goneId == null ? null : int.parse(goneId);
+    if (gid != null && gone.containsKey(gid)) {
+      if (p == '/checks/$gid' && req.method == 'GET') {
+        return _json(check(gid, status: gone[gid]));
+      }
+      if (p.endsWith('/discard')) {
+        discarded.add(gid);
+        return discardRefuses
+            ? _json({'error': 'no order', 'code': 'order_not_found'}, 404)
+            : _json({'discarded': true});
+      }
+      if (req.method != 'GET') return _notOpen(gid);
+    }
     if (p == '/items') return _json(items);
     if (p == '/categories') return _json(categories);
     if (p == '/counter/settings') {
@@ -775,6 +804,175 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     }, () => store.client);
+  });
+
+  group('an order that went away under the screen', () {
+    // the bug on the Express tablet: kiosk #101 was on the counter, the store
+    // expired it unpaid, and Pay / the bin both failed until a restart
+    testWidgets('pay on an expired order: told so, and a new order opens', (
+      tester,
+    ) async {
+      final s = _Store()..kioskOrder(number: 112);
+      await http.runWithClient(() async {
+        await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+        await tester.tap(find.byKey(const Key('kiosk-1')));
+        await settle(tester);
+        await tester.tap(find.text('Pay'));
+        await tester.pumpAndSettle();
+        s.gone[1] = 'CANCELLED'; // the store expires it while Pay is open
+        s.statuses.remove(1);
+        await tester.tap(find.widgetWithText(OutlinedButton, r'$16.51'));
+        await tester.pumpAndSettle();
+        expect(find.byType(TenderScreen), findsNothing, reason: 'back out');
+        expect(
+          find.text(
+            'This order was cancelled — it expired unpaid or was cleared on '
+            'another device',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Cannot do that right now'), findsNothing);
+        expect(find.text('New order'), findsOneWidget);
+        expect(find.text('Kiosk #112 · to pay'), findsNothing);
+        expect(find.byKey(const Key('badge-brownie')), findsNothing);
+        // and the counter works again: the next order rings and pays
+        await tapTile(tester, 'desserts', 'brownie');
+        expect(s.created, hasLength(1));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      }, () => s.client);
+    });
+
+    for (final refuses in [false, true]) {
+      testWidgets('the bin on an order already gone just clears '
+          '(${refuses ? 'an older store refuses it' : 'the store no-ops'})', (
+        tester,
+      ) async {
+        final s = _Store()
+          ..kioskOrder(number: 112)
+          ..discardRefuses = refuses;
+        await http.runWithClient(() async {
+          await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+          await tester.tap(find.byKey(const Key('kiosk-1')));
+          await settle(tester);
+          s.gone[1] = 'CANCELLED';
+          s.statuses.remove(1);
+          await tester.tap(find.byKey(const Key('discard-order')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('discard-confirm')));
+          await tester.pumpAndSettle();
+          expect(s.discarded, [1]);
+          expect(find.text('New order'), findsOneWidget);
+          expect(find.text('Kiosk #112 · to pay'), findsNothing);
+          expect(find.byType(SnackBar), findsNothing, reason: 'no error');
+          await tester.pumpWidget(const SizedBox());
+        }, () => s.client);
+      });
+    }
+
+    testWidgets('the counter notices on its own: paid on another device', (
+      tester,
+    ) async {
+      final s = _Store()..kioskOrder(number: 112);
+      await http.runWithClient(() async {
+        await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+        await tester.tap(find.byKey(const Key('kiosk-1')));
+        await settle(tester);
+        s.gone[1] = 'CLOSED'; // the Surface took the money
+        s.statuses[1] = 'PREPARING';
+        await tester.pump(const Duration(seconds: 6)); // the check's poll
+        await settle(tester);
+        expect(
+          find.text('This order was already paid on another device'),
+          findsOneWidget,
+        );
+        expect(find.text('New order'), findsOneWidget);
+        expect(find.text('Kiosk #112 · to pay'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      }, () => s.client);
+    });
+
+    testWidgets('dine in / take out on an expired draft: a new order', (
+      tester,
+    ) async {
+      final s = _Store();
+      await http.runWithClient(() async {
+        await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+        await tapTile(tester, 'desserts', 'brownie');
+        s.gone[1] = 'CANCELLED';
+        await tester.tap(find.byKey(const Key('mode-DINE_IN')));
+        await settle(tester);
+        expect(find.byKey(const Key('check-gone')), findsOneWidget);
+        expect(find.text('New order'), findsOneWidget);
+        expect(find.byKey(const Key('badge-brownie')), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      }, () => s.client);
+    });
+
+    testWidgets('a paid order is never mistaken for one paid elsewhere', (
+      tester,
+    ) async {
+      // the check's own poll sees CLOSED while the receipt is up: no message
+      final s = _Store()..kioskOrder(number: 112);
+      await http.runWithClient(() async {
+        await pumpApp(tester, counter, const Size(1920, 1200), 1.5);
+        await tester.tap(find.byKey(const Key('kiosk-1')));
+        await settle(tester);
+        await payCash(tester, r'$16.51');
+        await tester.pump(const Duration(seconds: 6));
+        await settle(tester);
+        await tester.tap(find.text('Done'));
+        await settle(tester);
+        await tester.pump(const Duration(seconds: 6));
+        await settle(tester);
+        expect(find.byKey(const Key('check-gone')), findsNothing);
+        expect(find.text('New order'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      }, () => s.client);
+    });
+
+    testWidgets(
+      'full service: a bill closed elsewhere goes back to the floor',
+      (tester) async {
+        StoreProfile.current = StoreProfile.pub;
+        final s = _Store()..kioskOrder(number: 112);
+        await http.runWithClient(() async {
+          await pumpApp(
+            tester,
+            Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const CheckScreen(checkId: 1, tableLabel: 'T4'),
+                      ),
+                    ),
+                    child: const Text('floor'),
+                  ),
+                ),
+              ),
+            ),
+            const Size(1920, 1200),
+            1.5,
+          );
+          await tester.tap(find.text('floor'));
+          await settle(tester);
+          expect(find.byType(CheckScreen), findsOneWidget);
+          s.gone[1] = 'MERGED';
+          await tester.pump(const Duration(seconds: 6));
+          await settle(tester);
+          expect(find.byType(CheckScreen), findsNothing, reason: 'popped');
+          expect(find.text('floor'), findsOneWidget);
+          expect(
+            find.text('This bill was closed on another device'),
+            findsOneWidget,
+          );
+          await tester.pumpWidget(const SizedBox());
+        }, () => s.client);
+      },
+    );
   });
 
   testWidgets('pickup board: the TV link as text and as a QR of the same URL', (
