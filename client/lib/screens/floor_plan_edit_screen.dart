@@ -284,9 +284,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(l.layoutSaved)));
+      ).showSnackBar(_topSnackBar(context, Text(l.layoutSaved), short: true));
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -343,7 +343,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
             .clear(); // snapshots from before the add would resurrect stale state
       });
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
     }
   }
 
@@ -386,10 +386,10 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(l.tableDeleted)));
+      ).showSnackBar(_topSnackBar(context, Text(l.tableDeleted), short: true));
     } catch (e) {
       // table_in_use / has_sub_tables come back as clear localized errors
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
     }
   }
 
@@ -457,7 +457,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         _undo.clear();
       });
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
     }
   }
 
@@ -499,7 +499,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
             .clear(); // snapshots from before the add would resurrect stale state
       });
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
     }
   }
 
@@ -556,8 +556,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     if (picked == null || !mounted) return;
     _closeSnack(); // never queue behind a leftover applied/Revert snackbar
     _snack = ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l.objectFromPhotoWorking),
+      _topSnackBar(
+        context,
+        Text(l.objectFromPhotoWorking),
         duration: const Duration(minutes: 3),
       ),
     );
@@ -570,7 +571,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       );
     } catch (e) {
       _closeSnack();
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
       return;
     }
     _closeSnack();
@@ -599,7 +600,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     } catch (e) {
       if (req.cancelled || !mounted) return;
       setState(() => _asking = null);
-      showApiError(context, e);
+      _showEditorError(context, e);
       return;
     }
     if (req.cancelled || !mounted) return;
@@ -764,7 +765,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     } catch (e) {
       if (req.cancelled || !mounted) return;
       setState(() => _asking = null);
-      showApiError(context, e);
+      _showEditorError(context, e);
       return;
     }
     if (req.cancelled || !mounted) return;
@@ -849,8 +850,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       _closeSnack();
       unawaited(_endProposal(applied: r));
       _snack = ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+        _topSnackBar(
+          context,
+          Text(
             p.isEdit ? l.floorEditApplied(r.added) : l.roomApplied(r.added),
           ),
           // a snackbar with an action can otherwise sit forever (Flutter
@@ -867,7 +869,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      showApiError(context, e);
+      _showEditorError(context, e);
       // expired / already applied / refused: out of preview, the room as saved
       await _endProposal();
     }
@@ -899,7 +901,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       _closeSnack();
       _snack = ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(l.aiMenuRevertDone)));
+      ).showSnackBar(_topSnackBar(context, Text(l.aiMenuRevertDone), short: true));
     } on MenuRevertConflict catch (c) {
       if (!mounted) return;
       final again = await showDialog<bool>(
@@ -920,7 +922,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       );
       if (again == true) await _revertRoom(setId, force: true);
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
     }
   }
 
@@ -935,7 +937,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     try {
       sets = await Api.roomLayoutHistory();
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
       return;
     }
     if (!mounted) return;
@@ -1019,9 +1021,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(l.objectDeleted)));
+      ).showSnackBar(_topSnackBar(context, Text(l.objectDeleted), short: true));
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (mounted) _showEditorError(context, e);
     }
   }
 
@@ -1755,4 +1757,38 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter old) =>
       old.scale != scale || old.step != step;
+}
+
+/// The editor's messages show at the TOP: its tools sit along the bottom, and a
+/// bottom snackbar ("Table deleted") covered them until it faded. Swipe up to
+/// dismiss; quick confirmations ([short]) last 2 s.
+SnackBar _topSnackBar(
+  BuildContext context,
+  Widget content, {
+  bool short = false,
+  Duration? duration,
+  SnackBarAction? action,
+}) {
+  final mq = MediaQuery.of(context);
+  // a floating snackbar sits [margin.bottom] above the bottom edge: push it to just under the top bar
+  final bottom = (mq.size.height - mq.padding.top - kToolbarHeight - 72 - mq.viewInsets.bottom)
+      .clamp(0.0, double.infinity);
+  return SnackBar(
+    content: content,
+    behavior: SnackBarBehavior.floating,
+    dismissDirection: DismissDirection.up,
+    margin: EdgeInsets.only(left: 16, right: 16, bottom: bottom),
+    duration: duration ?? (short ? const Duration(seconds: 2) : const Duration(seconds: 4)),
+    action: action,
+  );
+}
+
+/// [showApiError], but at the top like the editor's other messages (the
+/// bottom one covered the table tools: "Table has sub-tables — remove them first").
+void _showEditorError(BuildContext context, Object error) {
+  if (error is SessionExpiredException) return;
+  final text = error is TimeoutException ? L.of(context).requestTimedOut : '$error';
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(_topSnackBar(context, Text(text)));
 }
