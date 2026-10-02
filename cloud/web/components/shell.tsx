@@ -4,7 +4,7 @@ import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { BarChart3, BookOpen, CircleUser, Download, LayoutGrid, Package, TabletSmartphone, Users } from "lucide-react";
+import { Armchair, BarChart3, BookOpen, CircleUser, Download, LayoutGrid, Package, TabletSmartphone, Users } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { useApi, useMe } from "@/lib/hooks";
 import type { LowCountResponse } from "@/lib/types";
@@ -26,6 +26,8 @@ const NAV: { href: string; labelKey: MsgKey; icon: typeof LayoutGrid }[] = [
   // owners and managers only (see NavLinks); on phones it is a card on Reports
   { href: "/exports", labelKey: "nav_exports", icon: Download },
   { href: "/menu", labelKey: "nav_menu", icon: BookOpen },
+  // restaurants only (see NavLinks); on phones it is a card on Menu
+  { href: "/rooms", labelKey: "nav_rooms", icon: Armchair },
   // retail stores only (see NavLinks): restaurants don't track stock
   { href: "/stock", labelKey: "nav_stock", icon: Package },
   { href: "/staff", labelKey: "nav_staff", icon: Users },
@@ -34,10 +36,10 @@ const NAV: { href: string; labelKey: MsgKey; icon: typeof LayoutGrid }[] = [
 ];
 
 // The bottom bar is a fixed 5-column grid — Devices lives under Account there,
-// Exports under Reports, and Stock stays a desktop page.
-const MOBILE_NAV = NAV.filter(({ href }) => href !== "/devices" && href !== "/stock" && href !== "/exports");
+// Exports under Reports, Rooms under Menu, and Stock stays a desktop page.
+const MOBILE_NAV = NAV.filter(({ href }) => !["/devices", "/stock", "/exports", "/rooms"].includes(href));
 // a group of shops only: Stock matters more on a phone than the (view-only) menu
-const MOBILE_NAV_SHOPS = NAV.filter(({ href }) => href !== "/devices" && href !== "/menu" && href !== "/exports");
+const MOBILE_NAV_SHOPS = NAV.filter(({ href }) => !["/devices", "/menu", "/exports", "/rooms"].includes(href));
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -60,7 +62,8 @@ function NavLinks({ variant }: { variant: "side" | "bottom" | "top" | "bottom-li
   const me = useMe();
   const exporter = !!me.data && canExport(me.data.role);
   const items = (wide ? NAV : allRetail ? MOBILE_NAV_SHOPS : MOBILE_NAV).filter(
-    ({ href }) => (href !== "/stock" || hasRetail) && (href !== "/exports" || exporter)
+    ({ href }) =>
+      (href !== "/stock" || hasRetail) && (href !== "/exports" || exporter) && (href !== "/rooms" || !allRetail)
   );
   // products at or below their reorder level, in the picked scope (retail only)
   const low = useApi<LowCountResponse>(hasRetail && wide ? "/v1/stock/low-count" : null, {

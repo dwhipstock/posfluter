@@ -154,6 +154,7 @@ class CloudSync(
                     "re-reading it from the start and re-sending this store's menu")
                 SyncState.set(MenuSync.MENU_CURSOR, "0")
                 SyncState.deleteWhere { SyncState.key eq CATALOG_SNAPSHOT_SEQ }
+                RoomClock.resendAll()
             }
             // also an empty page: the cursor / epoch it carries, and a retry of what failed before
             MenuSync.applyPage(page)
@@ -248,6 +249,7 @@ class CloudSync(
         ensureCatalogSnapshot()
         ensureStaffSnapshot()
         ensureReportBackfill()
+        syncRooms()
         if (!capable) return // held, not dropped: the HWM stays put
         while (true) {
             val hwm = stateLong(PUSH_HWM) ?: 0L
@@ -388,6 +390,16 @@ class CloudSync(
         if (SyncState.get(STAFF_SNAPSHOT_SEQ) != null) return@transaction
         Outbox.write("staff.snapshot", "staff", "snapshot", StaffSnapshots.fullSnapshot())
         SyncState.set(STAFF_SNAPSHOT_SEQ, lastOutboxSeq().toString())
+    }
+
+    /**
+     * Two-way room sync (CONTRACT §11): the floor's changes since the last
+     * tick, stamped and queued (the first time, the whole floor). Never
+     * blocks the drain.
+     */
+    private fun syncRooms() {
+        runCatching { transaction { RoomClock.reconcile() } }
+            .onFailure { log.warn("room sync: could not compare the floor (${it.message})") }
     }
 
     private fun lastOutboxSeq(): Int =

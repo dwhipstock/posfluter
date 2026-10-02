@@ -870,3 +870,73 @@ Cloud first (migration 027 is additive; a v2 store keeps working one-way),
 then the stores (store migrations 057–059 are additive; 058 baselines the
 existing menu with `""` stamps, so nothing is re-sent and the first portal
 edit wins over the old values).
+
+## 11. Two-way room sync (rooms, tables, floor objects)
+
+The floor — rooms (store zones: names in every language, order, table-label
+prefix), dining tables (label, shape, seats, x / y / width / height on the
+1000 × 1000 plan, rotation, sub-table link, room) and floor objects (type,
+names, icon, shape, geometry, room) — can be changed on the tablet and from
+the manager portal's Rooms page (a new room from a photo, a room edited by
+the AI assistant). It is §10 again, for three more things:
+
+| thing | fields |
+| --- | --- |
+| room | `nameFr nameEn sortOrder labelPrefix deleted` + `names.<lang>` |
+| table | `zoneId label parentTableId x y width height rotation shape seats deleted` |
+| floor_object | `zoneId type x y width height rotation labelFr labelEn icon shape deleted` + `names.<lang>` |
+
+Same registers, stamps, clocks (the store's one menu clock; the cloud's
+`menu_hlc` per tenant, its lock taken before reading), merge (per field, the
+greater stamp wins, tombstones, a later edit revives), restamp, correction,
+epoch and failed-change retry. Off-floor sale locations (the carry-out
+register's zone) are not rooms and never sync. Open bills never leave the store.
+
+### Up: store → cloud
+`floor.snapshot` (aggregate `floor` / `rooms`):
+```json
+{ "rooms": [ { "id": "upper", "nameFr": "Salle", "nameEn": "Dining Room", "sortOrder": 0, "labelPrefix": "U",
+               "deleted": false, "names": { "es": "Comedor" }, "clock": { "nameEn": "<hlc>", "...": "..." } } ],
+  "tables": [ { "id": "t5", "zoneId": "upper", "label": "U-1", "parentTableId": null, "x": 50, "y": 145,
+                "width": 65, "height": 65, "rotation": 0, "shape": "ROUND", "seats": 1, "deleted": false,
+                "clock": { "x": "<hlc>", "...": "..." } } ],
+  "objects": [ ... ],
+  "locked": [ "t5", "t5-5" ] }
+```
+- The store compares its floor with its registers on every sync tick (and
+  around every feed page that carries room entries) and sends exactly the
+  things whose fields changed — whatever code path changed them (floor-plan
+  editor, AI room set-up / floor assistant, a revert, a seed) — at most 250
+  things per event. The first time ever it sends the whole floor with `""`
+  stamps (baseline: the first portal edit wins over them); after a new feed
+  epoch, the whole floor again with its own stamps.
+- A deleted thing is frozen: only `deleted` is stamped (a soft-deleted table, a
+  hard-deleted room or object).
+- `locked`: every table (all rooms) the portal must not move, reshape,
+  renumber, re-room or remove — an open bill on it or on one of its
+  sub-tables. Always the full list; the cloud marks the rest free.
+
+### Down: cloud → store
+Room changes are entries of the menu feed (§10) with `entity` `room`, `table`
+or `floor_object` — one cursor, one epoch. A store that applies them pulls
+with `&rooms=1`; the cloud records `venues.rooms_sync_at`, and the portal
+refuses room changes (409 `store_not_upgraded`) for a store that never did. An
+older store ignores such entries (it logs and skips unknown entities).
+
+The store merges and brings its rows to the merged state, with these refusals
+(the store stays the authority for open bills):
+- a table with an open bill (on it or a sub-table) keeps everything but its
+  seats — never moved, reshaped, renumbered, re-roomed or removed;
+- a table other live tables anchor to (sub-tables) is not removed;
+- a room that still holds live tables or objects is not removed.
+After a refusal the store re-stamps its own values fresh, so they win on the
+cloud too (the portal shows the table where it really is). A payload it can't
+take (an unknown shape or type, a table in a room it doesn't have yet) is kept
+in `menu_failed` and retried every pull. Nothing applied from the cloud goes
+back up (no echo): the rows then equal the registers.
+
+### Deploy order
+Cloud first (migration 035 is additive: `floor_things`, `room_ai_applies`,
+`venues.rooms_sync_at`, the feed's entity check); then the stores (no store
+migration: the registers share `menu_sync_clocks`; the first sync tick
+baselines the floor).

@@ -74,7 +74,7 @@ export function AiSheet({ open, onOpenChange, onApplied }: { open: boolean; onOp
 
 type Phase = "ask" | "busy" | "review" | "done";
 
-function errorText(t: T, e: unknown): string {
+export function errorText(t: T, e: unknown): string {
   if (e instanceof ApiError) {
     const k = aiErrorKey(e.code);
     if (k) return t(k);
@@ -536,7 +536,7 @@ function DetailLine({ d, currency }: { d: AiChangeDetail; currency: string }) {
 }
 
 /** The browser's recording (webm/opus, mp4/aac…) → 16 kHz mono WAV, decoded by the browser itself. */
-async function toWav(blob: Blob): Promise<Uint8Array> {
+export async function toWav(blob: Blob): Promise<Uint8Array> {
   const Ctx: typeof AudioContext | undefined =
     window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctx) throw new Error("no audio context");
@@ -551,7 +551,7 @@ async function toWav(blob: Blob): Promise<Uint8Array> {
 }
 
 /** The mic: asks permission on first use, records up to [MAX_RECORD_SECONDS], hands the clip to [onClip]. */
-function useVoice(onClip: (b: Blob) => void, onError: (k: MsgKey) => void) {
+export function useVoice(onClip: (b: Blob) => void, onError: (k: MsgKey) => void) {
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const recorder = useRef<MediaRecorder | null>(null);

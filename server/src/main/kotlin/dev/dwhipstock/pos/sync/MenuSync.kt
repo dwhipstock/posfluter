@@ -120,6 +120,9 @@ object MenuSync {
         val failed = loadFailed()
         val before = failed.keys.toSet()
         val errorsBefore = failed.mapValues { it.value.error }
+        // the floor's own edits are stamped before the portal's are merged in (CONTRACT §11)
+        val rooms = (page.changes + failed.values.map { it.change }).any { RoomSync.isRoomEntity(it.entity) }
+        if (rooms) RoomClock.reconcile()
         for (change in page.changes.sortedBy { it.seq }) {
             val k = key(change.entity, change.id)
             val error = attempt(change)
@@ -140,6 +143,8 @@ object MenuSync {
             }
         }
         if (failed.keys != before || failed.isNotEmpty()) saveFailed(failed)
+        // what the store refused (an open bill) goes back up as its own, freshly stamped edit
+        if (rooms) RoomClock.reconcile()
         if (SyncState.get(MENU_CURSOR) != page.cursor.toString()) SyncState.set(MENU_CURSOR, page.cursor.toString())
         page.epoch?.let { if (SyncState.get(MENU_EPOCH) != it) SyncState.set(MENU_EPOCH, it) }
     }
@@ -157,6 +162,8 @@ object MenuSync {
             MenuFields.ITEM -> applyItem(change.id, change.data)
             MenuFields.CATEGORY -> applyCategory(change.id, change.data)
             PhotoSync.ENTITY -> PhotoSync.queue(change.id, change.data)
+            // rooms, tables and floor objects share the feed (CONTRACT §11)
+            in RoomFields.ENTITIES -> RoomSync.apply(change.entity, change.id, change.data)
             else -> log.info("ignoring menu change of kind '${change.entity}' (#${change.seq})")
         }
         null

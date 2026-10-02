@@ -1028,3 +1028,155 @@ export interface LowCountResponse {
   lowCount: number;
   retail: boolean;
 }
+
+// ── Rooms (floor plans synced with the store, /v1/rooms, /v1/room-ai) ──────
+
+/** A table on a room's 1000 × 1000 plan: (x, y) top-left, rotation about the centre. */
+export interface FloorTable {
+  id: string;
+  label: string;
+  number: number | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  /** ROUND | SQUARE | RECT | BAR */
+  shape: string;
+  seats: number;
+  parentTableId: string | null;
+  /** An open bill at the store: the store refuses moves, reshapes and removals. */
+  locked: boolean;
+}
+
+export interface FloorObject {
+  id: string;
+  /** POOL | BAR_FRONT | PILLAR | ENTRANCE | HOST_STAND | KITCHEN | RESTROOMS | STAGE | CARRY_OUT | CUSTOM */
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  labelEn: string | null;
+  labelFr: string | null;
+  names?: Record<string, string>;
+  /** CUSTOM: one of the fixed icon keys. */
+  icon: string | null;
+  /** RECT | ROUND (CUSTOM only) */
+  shape: string | null;
+}
+
+export interface RoomDto {
+  id: string;
+  nameEn: string;
+  nameFr: string;
+  names: Record<string, string>;
+  sortOrder: number;
+  labelPrefix: string;
+  tables: FloorTable[];
+  objects: FloorObject[];
+}
+
+export interface RoomsResponse {
+  venueId: string;
+  venueName: string;
+  /** The store syncs rooms: portal changes reach it. */
+  editable: boolean;
+  lastPullAt: string | null;
+  canEdit: boolean;
+  rooms: RoomDto[];
+}
+
+/** A proposed table (photo, or a floor edit's ghost). */
+export interface RoomTable {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  shape: string;
+  seats: number;
+  number: number | null;
+}
+
+export interface RoomObject {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  labelFr: string | null;
+  labelEn: string | null;
+  icon: string | null;
+  shape: string | null;
+}
+
+export interface RoomPhotoProposal {
+  proposalId: string;
+  venueId: string;
+  model: string;
+  roomName: string;
+  labelPrefix: string;
+  tables: RoomTable[];
+  objects: RoomObject[];
+  notes: string;
+  rejected: string[];
+  elapsedMs: number;
+  refusal: string | null;
+  message: string | null;
+}
+
+export interface FloorChangeDetail {
+  /** number | shape | seats | position | size | rotation */
+  field: string;
+  label?: string | null;
+  before?: string | null;
+  after?: string | null;
+}
+
+export interface FloorChange {
+  id: string;
+  /** add_table | update_table | remove_table | add_object | update_object | remove_object */
+  kind: string;
+  title: string;
+  details: FloorChangeDetail[];
+}
+
+export interface FloorEditProposal {
+  proposalId: string;
+  venueId: string;
+  roomId: string;
+  model: string;
+  summary: string;
+  transcript: string | null;
+  changes: FloorChange[];
+  tables: RoomTable[];
+  objects: RoomObject[];
+  removedTables: string[];
+  removedObjects: string[];
+  rejected: string[];
+  existingTables: number;
+  protectedTables: string[];
+  elapsedMs: number;
+  refusal: string | null;
+  message: string | null;
+  bulk: boolean;
+}
+
+export interface RoomAiApplyResult {
+  applyId: string;
+  roomId: string;
+  applied: number;
+  summary: string;
+}
+
+export interface RoomAiRevertResult {
+  applyId: string;
+  reverted: number;
+  skipped: number;
+}

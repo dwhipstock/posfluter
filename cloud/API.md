@@ -413,6 +413,57 @@ limits, plus `MENU_AI_PHOTO_DAILY_CAP` (default 30) pictures per store per rolli
   `photo_daily_limit`), `photo_accept`, `photo_undo`; `menu_ai_photos` (034) holds previews and what each
   accepted photo replaced. Never the prompt or a key.
 
+## Rooms (session-authed; two-way with each store, CONTRACT.md §11)
+
+The Rooms page: each restaurant's floor as the point of sale has it, drawn
+read-only, plus the AI room assistant. No drag-and-drop editor, on purpose.
+ONE store per request (`?venue=<id>`; 400 `venue_required` without it, 404
+`bad_venue` for another tenant's store).
+
+- `GET /v1/rooms?venue=<id>` (any signed-in user) → `{ venueId, venueName, editable, lastPullAt, canEdit,
+  rooms: [{ id, nameEn, nameFr, names, sortOrder, labelPrefix, tables: [{ id, label, number, x, y, width,
+  height, rotation, shape, seats, parentTableId, locked }], objects: [{ id, type, x, y, width, height,
+  rotation, labelEn, labelFr, names, icon, shape }] }] }`. `editable`: the store applies portal room
+  changes (it pulled the feed with `rooms=1`). `locked`: an open bill at the store — the table stays as is.
+
+### Room AI (owners and managers, ONE store; viewers 403 `menu_edit_forbidden`)
+
+The store's "Set up from picture" and floor "Ask AI" (docs/ai-menu.md) for the
+portal — the prompts, rules and parsers PORTED verbatim into
+`cloud/api/.../rooms/RoomAiPort.kt` (`RoomAiDriftTest` fails if they drift
+from `server/.../aimenu/`). The model only proposes; Apply writes through the
+room sync (cloud HLC stamps, menu feed), so the store gets it on its next sync.
+Same key, model (`MENU_AI_MODEL`, medium thinking like the store's floor
+assistant), limits and audit as the Menu AI (`menu_ai_log` kinds `room_photo |
+room_chat | room_voice | room_apply | room_revert`; the daily cap counts menu
+and room calls together). Off without a key (409 `menu_ai_disabled`); 409
+`store_not_upgraded` for a store that doesn't take room changes yet.
+
+- `POST /v1/room-ai/photo?venue=` multipart `image` (a phone photo ≤ 12 MB: JPEG / PNG, resized to
+  1600 px here; WebP / HEIC passed as is; else 415 `room_ai_image_type`; none: 400 `room_ai_no_image`;
+  too big: 413 `room_ai_image_too_large`) + `name` + `lang` → `{ proposalId, venueId, model, roomName,
+  labelPrefix, tables: [{ id, label, x, y, width, height, rotation, shape, seats, number }], objects: [{ id,
+  type, x, y, width, height, rotation, labelFr, labelEn, icon, shape }], notes, rejected, elapsedMs,
+  refusal, message }`. A NEW room: tables numbered from 1 with the name's first letter. The picture is
+  never stored.
+- `POST /v1/room-ai/photo/apply?venue=` `{ proposalId, name? }` → `{ applyId, roomId, applied, summary }`
+  (the room, its tables and objects; renamed at apply = relabelled).
+- `POST /v1/room-ai/chat?venue=&room=<roomId>` `{ text, lang? }` and `POST /v1/room-ai/chat/voice?venue=&room=`
+  multipart `audio` + `lang` → `{ proposalId, venueId, roomId, model, summary, transcript, changes: [{ id,
+  kind, title, details: [{ field, label, before, after }] }], tables, objects (the ghost: changed ones keep
+  their id, added ones `new-t1` / `new-o1`…), removedTables, removedObjects, rejected (in the request's
+  language), existingTables, protectedTables, elapsedMs, refusal, message, bulk }`. `kind`: `add_table |
+  update_table | remove_table | add_object | update_object | remove_object`; `field`: `number | shape | seats
+  | position | size | rotation`. 404 `room_not_found`.
+- `POST /v1/room-ai/apply?venue=` `{ proposalId, confirmed? }` → `{ applyId, roomId, applied, summary }`. The
+  plan is checked again against the room NOW (a bill opened since is respected). More than 2 removals:
+  409 `menu_ai_confirm_required` until `confirmed: true`. 409 `room_no_change` when nothing is left to do.
+- `POST /v1/room-ai/revert/{applyId}?venue=` → `{ applyId, reverted, skipped }` (fresh stamps; a step
+  that no longer applies — a table with an open bill now, a room that still holds tables — is skipped).
+- A table with an open bill is never moved, reshaped, renumbered or removed: left out of every plan
+  (a `rejected` line), refused on write (409 `table_locked`), and refused again at the store if the
+  cloud's view was stale.
+
 ## Staff (session-authed; READ-ONLY mirror of each store's staff)
 
 - `GET /v1/staff` →

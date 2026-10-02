@@ -23,6 +23,7 @@ import { col, type ExportDoc } from "@/lib/export/doc";
 import { Button } from "@/components/ui/button";
 import { CategoriesSheet, ItemSheet, MenuSyncBanner, useMenuEditing } from "@/components/menu-editor";
 import { AiSheet, AiStrip } from "@/components/menu-ai";
+import { RoomsLink } from "@/components/rooms-link";
 
 const PAGE_SIZE = 100;
 
@@ -133,6 +134,8 @@ export default function MenuPage() {
       <MenuSyncBanner status={status} />
 
       {canEdit && data && <AiStrip onOpen={() => setAiOpen(true)} />}
+
+      <RoomsLink />
 
       {canEdit && data && (
         <>

@@ -171,6 +171,8 @@ class HttpCloudTransport(baseUrl: String, private val apiKey: String) : CloudTra
             append("since=").append(since)
             epoch?.let { append("&epoch=").append(java.net.URLEncoder.encode(it, Charsets.UTF_8)) }
             if (failed > 0) append("&failed=").append(failed)
+            // this store applies room changes too (CONTRACT §11): the portal may edit its floor
+            append("&rooms=1")
         }
         val res = request("/v1/store/menu/changes?$query")
         if (res.status == 404) return null // an older cloud: the menu stays one-way

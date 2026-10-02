@@ -315,6 +315,8 @@ fun Route.storeRoutes(config: CloudConfig) {
                 it[menuCursor] = since
                 it[menuFailed] = failed ?: 0
             }
+            // a store that applies room changes too (CONTRACT §11): the portal may edit its floor
+            if (call.request.queryParameters["rooms"] == "1") dev.dwhipstock.poscloud.rooms.RoomState.markRoomsPull(scope)
             val rows = dev.dwhipstock.poscloud.menu.MenuState.feedRows(scope, since, CHANGES_PAGE)
             MenuChangesResponse(
                 cursor = rows.lastOrNull()?.seq ?: since,
