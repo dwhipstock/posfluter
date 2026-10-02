@@ -133,7 +133,7 @@ class MenuPrintService(
                     log.info("print menu AI via ${m.model}: ${code ?: e.cause?.javaClass?.simpleName}")
                     null
                 }
-                aiPlan = reply?.let { PrintAi.parse(it, kind, catalog, candidates, lang) }
+                aiPlan = reply?.let { PrintAi.parse(it, kind, catalog, candidates, lang, listOfNotNull(brand.name, who.venue.name)) }
                 if (reply != null && aiPlan == null) reason = "bad_reply"
                 if (aiPlan != null) aiState = "used"
                 ai.record(who, "print", if (aiPlan != null) "used" else reason ?: "failed",

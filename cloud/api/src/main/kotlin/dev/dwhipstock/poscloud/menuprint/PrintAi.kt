@@ -158,6 +158,12 @@ object PrintAi {
         appendLine("- Use ONLY item ids that appear in <menu_data>. Never invent a dish, drink, size or ingredient.")
         appendLine("- Never write a price, an amount of money, a discount, a percentage or a time of day anywhere: prices and")
         appendLine("  when each special runs are printed from the menu itself. Do not repeat item names in blurbs; they are printed already.")
+        appendLine("- Never write, invent or change the business's name, and never name any other place, person or brand: the")
+        appendLine("  business's own name and logo are printed from its settings. \"title\" is a MENU title only (\"Autumn")
+        appendLine("  Specials\", \"Today's Plates\", \"Freitags im Pub\"), never a name like \"The Something & Something Pub\".")
+        appendLine("- Describe the food and drink only, from their names and descriptions. Never invent facts about the venue")
+        appendLine("  (a fireplace, a patio, a view, a garden, its history, its location): the manager's notes are the ONLY source")
+        appendLine("  of venue facts, and without notes say nothing about the venue.")
         appendLine("- Write every text in $languageName ($lang). Warm, appetising, plain words; no emoji, no hashtags, no URLs.")
         appendLine("- Lengths: title ≤ $TITLE_MAX characters, tagline ≤ $TAGLINE_MAX, section title ≤ $SECTION_TITLE_MAX, section intro")
         appendLine("  ≤ $INTRO_MAX, blurb ≤ $BLURB_MAX (one line per item, true to its name and description), footer ≤ $FOOTER_MAX.")
@@ -218,11 +224,79 @@ object PrintAi {
     }
 
     /** Short safe copy: one line, no HTML, links, code, blocked words, instructions or prices; clamped to [max]. */
-    fun copy(el: JsonElement?, max: Int): String? {
+    fun copy(el: JsonElement?, max: Int, venueNames: Collection<String> = emptyList(), menuWords: Set<String> = emptySet()): String? {
         val raw = (el as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
         val t = raw.replace(Regex("\\s+"), " ").trim()
         if (t.isEmpty() || AiGuard.checkText(t) != null || PRICE.containsMatchIn(t) || TIMES.containsMatchIn(t)) return null
+        if (namesABusiness(t, venueNames, menuWords)) return null
         return clamp(t, max)
+    }
+
+    /** Kinds of place: next to a proper name they make a business name ("The Hearth & Hound Pub"). */
+    private val PLACE_WORDS = setOf(
+        "pub", "pubs", "tavern", "taverne", "bar", "grill", "restaurant", "inn", "brewery", "brewhouse", "brasserie", "café", "cafe",
+        "bistro", "taproom", "saloon", "diner", "kitchen", "alehouse", "gastropub", "lounge", "kneipe", "wirtshaus", "brauerei",
+        "gasthaus", "gasthof", "taberna", "cervecería", "cerveceria", "kroeg", "herberg", "auberge", "estaminet", "cantina", "trattoria",
+    )
+    /** Ordinary menu words that may stand before a place word ("Our Pub Classics", "Friday Bar Bites"). */
+    private val MENU_WORDS = setOf(
+        "the", "our", "your", "a", "an", "this", "classic", "classics", "cosy", "cozy", "autumn", "fall", "summer", "winter", "spring",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "weekend", "weekday", "today", "today's", "todays",
+        "tonight", "tonight's", "happy", "hour", "local", "little", "good", "great", "best", "old", "new", "patio", "terrace", "house",
+        "family", "neighbourhood", "neighborhood", "craft", "sports", "wine", "beer", "cocktail", "cocktails", "salad", "raw", "oyster",
+        "tapas", "breakfast", "brunch", "lunch", "dinner", "late", "night", "snack", "snacks", "sweet", "fresh", "hearty", "warm",
+        "seasonal", "harvest", "specials", "special", "favourites", "favorites", "menu", "drinks", "highlights", "bites", "plates",
+        "food", "kitchen's", "pub's", "chef's", "chef", "taste", "flavours", "flavors", "evening", "afternoon", "morning", "daily", "all",
+        "day", "week", "weekly", "fine", "proper", "real", "true", "traditional", "rustic", "modern", "bright", "sunny", "golden", "on",
+        "tap", "at", "of", "and", "&", "with", "for", "from", "to", "in", "by", "my", "le", "la", "les", "el", "los", "las", "der", "die",
+        "das", "im", "am", "zum", "zur", "unser", "unsere", "die", "het", "ons", "du", "de", "des", "au", "aux", "del",
+    )
+    private val JOINERS = setOf("&", "and", "und", "et", "y", "en", "'n", "’n", "n")
+    private val NAME_AFTER = setOf("at", "chez", "bei", "by", "chez")
+
+    /**
+     * The AI named a business (invented or not the venue's): a place word
+     * with a proper name before it ("The Hearth & Hound Pub", "Hearthside
+     * Tavern") or after it ("Tavern on the Green"), a name after "at" /
+     * "chez" / "bei" ("Autumn at Hearthside"), or a possessive name
+     * ("Murphy's Favourites"). The venue's own name words ([venueNames])
+     * are fine; anything that looks like another name is not printed.
+     */
+    fun namesABusiness(text: String, venueNames: Collection<String> = emptyList(), menuWords: Set<String> = emptySet()): Boolean {
+        val own = venueNames.flatMap { n -> Regex("[\\p{L}'’]+").findAll(n.lowercase()).map { it.value } }.toSet() + menuWords
+        val tokens = Regex("[\\p{L}][\\p{L}'’-]*|&").findAll(text).map { it.value }.toList()
+        fun lower(i: Int) = tokens[i].lowercase()
+        fun capital(i: Int) = tokens[i].first().isUpperCase()
+        fun aName(i: Int): Boolean {
+            val w = lower(i).removeSuffix("'s").removeSuffix("’s")
+            return capital(i) && w !in MENU_WORDS && lower(i) !in MENU_WORDS && w !in own && lower(i) !in own && w !in PLACE_WORDS
+        }
+        for (i in tokens.indices) {
+            val w = lower(i)
+            if (w in PLACE_WORDS && capital(i)) {
+                // "Hearth & Hound Pub": a name right before the place word, maybe joined by "&"
+                var j = i - 1
+                while (j >= 0 && j >= i - 4) {
+                    if (lower(j) in JOINERS) { j--; continue }
+                    if (aName(j)) return true
+                    break
+                }
+                // "Tavern on the Green"
+                var k = i + 1
+                while (k < tokens.size && k <= i + 3 && lower(k) in setOf("on", "of", "the", "am", "an", "de", "du", "la", "le")) k++
+                if (k > i + 1 && k < tokens.size && aName(k)) return true
+                // "Gasthaus Krone", "Bar Luna": a name straight after the place word (not a dish: "Pub Burger")
+                if (i + 1 < tokens.size && aName(i + 1)) return true
+            }
+            if (w in NAME_AFTER) {
+                var k = i + 1
+                if (k < tokens.size && lower(k) == "the") k++
+                if (k < tokens.size && aName(k)) return true
+            }
+            // "Murphy's Favourites"
+            if ((w.endsWith("'s") || w.endsWith("’s")) && aName(i)) return true
+        }
+        return false
     }
 
     fun clamp(t: String, max: Int): String {
@@ -241,7 +315,12 @@ object PrintAi {
      * left out is added back to its category's section; a pick that kept too
      * few items falls back to the plain picks. Null: not a usable reply.
      */
-    fun parse(reply: String, kind: MenuKind, c: PrintCatalog, candidates: List<PrintItem>, lang: String): AiPlan? {
+    fun parse(reply: String, kind: MenuKind, c: PrintCatalog, candidates: List<PrintItem>, lang: String,
+              venueNames: Collection<String> = emptyList()): AiPlan? {
+        // the menu's own words (item and category names) are never taken for a business name
+        val menuWords = (c.items.flatMap { listOf(it.name, it.enName) } + c.categories.flatMap { listOf(it.name, it.enName) })
+            .flatMap { n -> Regex("[\\p{L}'’]+").findAll(n.lowercase()).map { it.value } }.toSet()
+        fun copy(el: JsonElement?, max: Int) = copy(el, max, venueNames, menuWords)
         val text = reply.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
         val root = runCatching { json.parseToJsonElement(text) }.getOrNull() as? JsonObject ?: return null
         val allowed = candidates.associateBy { it.id }

@@ -47,7 +47,8 @@ class MenuPrintLiveTest {
         val images = ImageGen.from(secret("MENU_AI_BFL_API_KEY", "BFL_API_KEY"), key)
         val maker = ArtMaker(images)
         val zone = ZoneId.of("America/New_York")
-        val friday = TodayRules.moment(ZonedDateTime.of(2026, 10, 9, 17, 0, 0, 0, zone).toInstant(), zone)
+        // the real clock in the store's zone, as a real print
+        val friday = TodayRules.moment(java.time.Instant.now(), zone)
         val brand = PrintBrand.of(PrintBrandInput(name = "Test Tavern", primary = "#17456E", accent = "#8C4A1C", text = "#1C2733", muted = "#3E362D", font = "inter"))
         data class Case(val name: String, val kind: MenuKind, val lang: String, val style: String?, val notes: String?, val photos: Boolean)
         val cases = (System.getenv("MENU_PRINT_LIVE_CASES") ?: "full-classic,flyer,today-de,highlights").split(',').map { it.trim() }
@@ -55,6 +56,7 @@ class MenuPrintLiveTest {
             Case("full-classic", MenuKind.FULL, "en", PrintStyles.CLASSIC, "cosy neighbourhood pub, mention the fireplace", false),
             Case("flyer", MenuKind.FLYER, "en", null, "fall theme, mention the patio", false),
             Case("today-de", MenuKind.TODAY, "de", null, null, false),
+            Case("full-autumn", MenuKind.FULL, "en", PrintStyles.AUTUMN, "fall theme", false),
             Case("highlights", MenuKind.HIGHLIGHTS, "en", null, "bright summer patio", true),
         ).filter { it.name in cases }
         for (case in all) {
@@ -67,7 +69,7 @@ class MenuPrintLiveTest {
                 PrintAi.user(PrintAi.menuData(c, cands, case.lang), notes), null)
             val aiMs = System.currentTimeMillis() - t0
             File(out, "${case.name}-reply.json").writeText(reply)
-            val ai = PrintAi.parse(reply, case.kind, c, cands, case.lang)
+            val ai = PrintAi.parse(reply, case.kind, c, cands, case.lang, listOf("Test Tavern", "Test Tavern — Riverside"))
             assertNotNull(ai, reply)
             val (styleKey, by) = PrintStyles.choose(case.style, ai.style, case.notes, case.kind)
             val style = PrintStyles.of(styleKey, brand)

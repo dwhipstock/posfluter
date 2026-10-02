@@ -63,3 +63,9 @@ dependencies {
 kotlin {
     jvmToolchain(17)
 }
+
+// The API runs with -Xmx512m (cloud/infra/Dockerfile.api): the tests get the same heap, so a print
+// that would not fit in the container fails here first (MenuPrintSizeTest).
+tasks.test {
+    maxHeapSize = "512m"
+}

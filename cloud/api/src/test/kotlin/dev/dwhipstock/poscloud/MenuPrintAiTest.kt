@@ -79,6 +79,31 @@ class MenuPrintAiTest {
     }
 
     @Test
+    fun theAiNeverNamesOrRenamesTheBusiness() {
+        val own = listOf("Test Tavern", "Test Tavern — Riverside")
+        for (bad in listOf("The Hearth & Hound Pub", "The Hearthside Tavern", "Murphy's Favourites", "Autumn at Hearthside",
+                "Tavern on the Green", "Fox and Fiddle Bar Menu", "Chez Marcel", "Gasthaus Krone")) {
+            assertTrue(PrintAi.namesABusiness(bad, own), bad)
+        }
+        for (ok in listOf("Autumn Patio Specials", "Freitags im Pub", "Klassisches Wirtshaus-Menü", "Our Pub Classics", "Test Tavern Classics",
+                "Friday at Test Tavern", "Harvest at the Tavern", "Today's Plates", "Menu du jour", "Happy Hour Specials", "Wine Bar Favourites")) {
+            assertFalse(PrintAi.namesABusiness(ok, own), ok)
+        }
+        // an invented name falls back to the kind's own title, in the menu's language
+        val reply = """{"title":"The Hearth & Hound Pub","tagline":"Welcome to Murphy's","sections":[],
+            "footer":"See you at the Fox and Fiddle Bar","blurbs":{"burger":"Our Pub Burger, stacked high."}}"""
+        val r = PrintAi.parse(reply, MenuKind.FULL, c, c.items, "de", own)!!
+        assertEquals("Speisekarte", r.plan.title)
+        assertNull(r.plan.tagline); assertNull(r.plan.footer)
+        assertEquals("Our Pub Burger, stacked high.", r.plan.blurbs["burger"])
+        assertEquals("Drinks", PrintAi.parse(reply, MenuKind.DRINKS, c, c.items, "en", own)!!.plan.title)
+        // the prompt says so too: the name is never the AI's, venue facts only from the notes
+        val system = PrintAi.system(MenuKind.FULL, "en", "English", null, true)
+        assertTrue("Never write, invent or change the business's name" in system)
+        assertTrue("the manager's notes are the ONLY source" in system)
+    }
+
+    @Test
     fun missingCopyFallsBackToTheItemsOwnDescription() {
         val r = PrintAi.parse("""{"sections":[{"category":"burgers","items":["burger"]}]}""", MenuKind.FULL, c, c.items, "en")!!
         assertEquals(PrintWords.title(MenuKind.FULL, "en"), r.plan.title)
@@ -201,6 +226,9 @@ class MenuPrintAiTest {
         assertEquals("Freitag, 9. Oktober", PrintWords.date(java.time.LocalDate.of(2026, 10, 9), "de"))
         assertEquals("vendredi 9 octobre", PrintWords.date(java.time.LocalDate.of(2026, 10, 9), "fr"))
         assertEquals("Vrydag 9 Oktober", PrintWords.date(java.time.LocalDate.of(2026, 10, 9), "af"))
+        assertEquals("Friday, October 2", PrintWords.date(java.time.LocalDate.of(2026, 10, 2), "en"))
+        assertEquals("viernes 2 de octubre", PrintWords.date(java.time.LocalDate.of(2026, 10, 2), "es"))
+        assertEquals("Freitag, 2. Oktober", PrintWords.date(java.time.LocalDate.of(2026, 10, 2), "de"))
         assertEquals("Dienstagsangebot", PrintWords.specialName(null, listOf("tue"), null, "de"))
         assertEquals("Happy hour", PrintWords.specialName(null, listOf("mon"), "16:00", "en"))
     }

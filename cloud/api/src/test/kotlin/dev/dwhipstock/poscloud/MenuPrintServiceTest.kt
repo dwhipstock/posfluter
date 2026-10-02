@@ -11,6 +11,10 @@ import dev.dwhipstock.poscloud.menuai.MenuAiException
 import dev.dwhipstock.poscloud.menuai.MenuAiModel
 import dev.dwhipstock.poscloud.menuai.MenuAiService
 import dev.dwhipstock.poscloud.menuprint.MenuPrintService
+import dev.dwhipstock.poscloud.menuprint.PrintWords
+import dev.dwhipstock.poscloud.menuprint.TodayRules
+import dev.dwhipstock.poscloud.db.Venues
+import kotlinx.coroutines.async
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -296,6 +300,28 @@ class MenuPrintServiceTest {
         val (_, kept, _) = print("""{"type":"highlights","lang":"en","photos":true,"fillPhotos":true,"savePhotos":true}""")
         assertEquals(drawn, kept.s("photosSaved")!!.toInt())
         assertEquals(drawn, transaction { ItemPhotos.selectAll().count() }.toInt())
+    }
+
+    @Test
+    fun aRealRunUsesTheStoresOwnDateAndZone() = testApplication {
+        // no test clock: the service's own (Instant.now), in the store's zone — far from the test machine's
+        transaction { Venues.update({ Venues.id eq "vieux-port" }) { it[timezone] = "Pacific/Kiritimati" } }
+        app { MenuPrintService(TestSupport.config, it, model, ImageGen(emptyList())) }; bootstrap()
+        val (_, _, r) = print("""{"type":"today","lang":"en"}""")
+        val zone = java.time.ZoneId.of("Pacific/Kiritimati")
+        val day = TodayRules.moment(Instant.now(), zone).date
+        assertTrue(PrintWords.date(day, "en").replace(" ", "").lowercase() in pdfText(r).replace(" ", "").lowercase(), pdfText(r).take(300))
+        assertTrue(r.s("fileName")!!.endsWith("-today-$day.pdf"))
+    }
+
+    @Test
+    fun aSecondPdfWaitsForTheFirstInsteadOfFailing() = testApplication {
+        app(); bootstrap()
+        val jobs = (1..3).map { post("/v1/menu-print/plan?venue=vieux-port", """{"type":"full","lang":"en","photos":true}""").json().s("jobId")!! }
+        val results = kotlinx.coroutines.coroutineScope {
+            jobs.map { id -> async { post("/v1/menu-print/$id/render?venue=vieux-port", "{}").status } }.map { it.await() }
+        }
+        assertEquals(listOf(HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK), results)
     }
 
     @Test

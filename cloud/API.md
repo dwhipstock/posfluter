@@ -424,6 +424,47 @@ limits, plus `MENU_AI_PHOTO_DAILY_CAP` (default 30) pictures per store per rolli
   `photo_daily_limit`), `photo_accept`, `photo_undo`; `menu_ai_photos` (034) holds previews and what each
   accepted photo replaced. Never the prompt or a key.
 
+### Printable menus (`/v1/menu-print`; owners and managers, ONE store)
+
+The Menu page's "Print menus": a print-ready PDF of one store's menu, built here (openhtmltopdf +
+PDFBox, embedded OFL fonts) so phone and computer get the same file. The AI (Gemini
+`MENU_PRINT_MODEL`, default `gemini-3.5-flash`, on `MENU_AI_GEMINI_API_KEY`) only picks and orders item
+ids, groups sections, writes short copy and picks one of the curated styles; every name, size and price
+is printed from the menu. Its reply is checked (unknown ids dropped, copy clamped; copy naming a business,
+or holding a price, a time, a link or unsafe text is dropped; missing copy = the item's own description).
+No key, a 20 s timeout, an error or bad JSON: the plain menu. Artwork comes from the AI photo makers
+(FLUX `MENU_AI_BFL_API_KEY`, then Gemini); without them, or past the 75 s deadline, each style's own
+drawn art. Works with no AI at all.
+
+Every call but status needs `?venue=<id>` (400 `venue_required`, 404 `bad_venue`) and an owner or manager
+(403 `menu_edit_forbidden`). Three steps, so the portal can show progress; a job lives 30 minutes, for the
+user and store that made it (404 `menu_print_expired` otherwise).
+
+- `GET /v1/menu-print/status` → `{ canUse, ai, art, styles }` (any signed-in user).
+- `POST /v1/menu-print/plan` `{ type: full | today | drinks | highlights | flyer, lang: en|fr|es|de|af,
+  paper: letter | a4, photos, fillPhotos, savePhotos, notes?, style: auto | classic | modern | chalkboard |
+  autumn | summer, brand: { name, primary, accent, text, muted, font, logo? } }` → `{ jobId, style, styleBy:
+  manager | ai | notes | default, ai: used | off | fallback, aiReason: not_setup | timeout | unavailable |
+  bad_reply | daily_limit | too_big | null, notesIgnored, items, artToMake, artAvailable, elapsedMs }`.
+  `brand` is the portal's brand pack (colours `#rrggbb`, font `inter | jakarta | barlow`, logo a PNG / JPEG
+  data URL ≤ 2 MB); the cloud checks it and darkens any colour that would read too light. `notes` (≤ 300
+  characters) go to the model as delimited data; notes that read like instructions are left out
+  (`notesIgnored`). `today` = what the store sells on its current business day (its own zone, the day
+  starting at 4 a.m.) with that day's special prices. 409 `menu_print_empty`: nothing to print. 429
+  `menu_print_too_many`: more than 12 plans in 10 minutes for this user.
+- `POST /v1/menu-print/{jobId}/art` `{ fresh? }` → `{ jobId, made, reused, builtIn, photos, photosSaved,
+  elapsedMs }`. The header (or the flyer's page background), one picture per section and, with
+  `fillPhotos`, stand-in photos for printed items without one (at most 24), made in parallel. Pictures are
+  cached per client, style, menu kind and notes (`menu_print_art`, 037): new wording reuses them,
+  `fresh: true` ("New artwork") makes them again. With `savePhotos` the stand-in photos also become the
+  items' photos through the AI photo accept path (feed entry, undoable). 429 `menu_print_art_too_many`
+  for more than 8 runs that make new pictures in 10 minutes.
+- `POST /v1/menu-print/{jobId}/render` → `{ pdf (base64), fileName, pages, previews: [JPEG data URLs, first
+  6 pages], ai, aiReason, notesIgnored, items, elapsedMs }`. One PDF is built at a time per server; others
+  wait (up to 90 s, then 503 `menu_print_busy`). The flyer is always one page.
+- Audit: `menu_ai_log` kinds `print` (the AI call; counts toward `MENU_AI_DAILY_CAP`) and `print_art`.
+  Never the notes, the copy, the pictures or a key.
+
 ## Rooms (session-authed; two-way with each store, CONTRACT.md §11)
 
 The Rooms page: each restaurant's floor as the point of sale has it, drawn

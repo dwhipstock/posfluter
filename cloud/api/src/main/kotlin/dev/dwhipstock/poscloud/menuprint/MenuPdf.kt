@@ -63,7 +63,13 @@ object MenuPdf {
             for (scale in listOf(0.9, 0.8)) stamp(pdfOf(html(doc, assets, scale), doc), doc, assets).let { if (it.pages <= 1) return it }
             return first
         }
-        if (doc.kind != MenuKind.FLYER) return stamp(pdfOf(html(doc, assets, 1.0), doc), doc, assets)
+        if (doc.kind != MenuKind.FLYER) {
+            // a menu that just spills onto one more page (the specials box, a last section) is tightened a little
+            val first = stamp(pdfOf(html(doc, assets, 1.0), doc), doc, assets)
+            if (first.pages <= 1) return first
+            for (scale in listOf(0.93, 0.87)) stamp(pdfOf(html(doc, assets, scale), doc), doc, assets).let { if (it.pages < first.pages) return it }
+            return first
+        }
         // one page, whatever it takes: smaller type first, then fewer items
         var scale = 1.0
         var d = doc
@@ -131,7 +137,8 @@ object MenuPdf {
         companion object {
             fun of(doc: PrintDoc): Assets {
                 val st = doc.style
-                val heroAspect = when (doc.kind) { MenuKind.HIGHLIGHTS -> 4.2; MenuKind.TODAY -> 3.6; else -> 3.2 }
+                // a wide, low header: the menu starts on the first page, not under a picture
+                val heroAspect = when (doc.kind) { MenuKind.HIGHLIGHTS -> 4.4; else -> 4.4 }
                 val heroPic = doc.art["hero"]?.let { PrintImages.decode(it.bytes) }
                 val hero = when {
                     doc.kind == MenuKind.FLYER -> null
@@ -183,29 +190,32 @@ object MenuPdf {
             .logo { max-height: ${if (flyer) "0.9in" else "0.78in"}; max-width: 2.6in; }
             .wordmark { font-family: $head; font-weight: 700; font-size: ${pt(15.0 * headBoost)}; color: ${s.heading}; $upper }
             .venue { font-size: ${pt(8.0)}; letter-spacing: 0.16em; text-transform: uppercase; color: ${s.muted}; font-weight: 600; margin-top: 3pt; }
-            h1 { font-family: $head; font-weight: 700; font-size: ${pt((if (flyer) 40.0 else 28.0) * headBoost)}; line-height: 1.08; color: ${s.heading};
-                 margin: ${if (flyer) "10pt" else "6pt"} 0 3pt 0; $upper }
+            h1 { font-family: $head; font-weight: 700; font-size: ${pt((if (flyer) 40.0 else 26.0) * headBoost)}; line-height: 1.08; color: ${s.heading};
+                 margin: ${if (flyer) "10pt" else "4pt"} 0 2pt 0; $upper }
             .dateline { font-size: ${pt(9.0)}; color: ${s.accent}; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2pt; }
             .tagline { font-size: ${pt(if (flyer) 13.5 else 11.0)}; color: ${s.muted}; margin: 4pt 0.5in 0 0.5in; }
-            .hero { margin: 10pt ${"%.1f".format(java.util.Locale.US, (1 - scale) * 50)}% 0 ${"%.1f".format(java.util.Locale.US, (1 - scale) * 50)}%; }
+            .hero { margin: 6pt ${"%.1f".format(java.util.Locale.US, (1 - scale) * 50)}% 0 ${"%.1f".format(java.util.Locale.US, (1 - scale) * 50)}%; }
             .hero img { width: 100%; }
             .band { margin-top: 6pt; }
             .band img { width: 100%; }
-            .section { margin-top: ${pt(16.0)}; }
+            .section { margin-top: ${pt(10.0)}; }
             .keep { page-break-inside: avoid; }
-            .sec-head { text-align: center; margin-bottom: 6pt; }
-            .deco { height: 0.6in; width: 0.6in; }
-            .orn { height: 0.26in; width: 0.26in; }
-            h2 { font-family: $head; font-weight: 700; font-size: ${pt((if (flyer) 21.0 else 15.5) * headBoost)}; color: ${s.heading}; margin: 2pt 0 0 0; $upper }
-            .rule { border-bottom: 1pt solid ${s.rule}; width: 1.4in; margin: 4pt auto 0 auto; }
-            .intro { color: ${s.muted}; font-size: ${pt(if (flyer) 12.5 else 9.3)}; margin: 4pt 0.6in 0 0.6in; }
+            .sec-head { text-align: center; margin-bottom: 3pt; }
+            table.sh { margin: 0 auto; border-collapse: collapse; }
+            td.shp { width: 0.5in; vertical-align: middle; text-align: center; padding: 0; }
+            td.sht { vertical-align: middle; padding: 0 6pt; }
+            .deco { height: 0.44in; width: 0.44in; }
+            .orn { height: 0.2in; width: 0.2in; }
+            h2 { font-family: $head; font-weight: 700; font-size: ${pt((if (flyer) 21.0 else 15.0) * headBoost)}; color: ${s.heading}; margin: 0; line-height: 1.15; $upper }
+            .rule { border-bottom: 1pt solid ${s.rule}; width: 1.4in; margin: 2pt auto 0 auto; }
+            .intro { color: ${s.muted}; font-size: ${pt(if (flyer) 12.5 else 9.0)}; margin: 2pt 0.6in 0 0.6in; }
             .when { color: ${s.accent}; font-weight: 700; font-size: ${pt(12.5)}; margin-top: 3pt; }
-            .item { page-break-inside: avoid; padding: ${pt(4.5)} 0 ${pt(4.5)} 0; }
+            .item { page-break-inside: avoid; padding: ${pt(3.0)} 0 ${pt(3.0)} 0; }
             table.row { width: 100%; border-collapse: collapse; }
             td { padding: 0; vertical-align: top; }
             td.thumb { width: 0.68in; padding-right: 8pt; }
             img.thumb { width: 0.64in; height: 0.64in; }
-            td.price { text-align: right; white-space: nowrap; font-weight: 700; padding-left: 12pt; width: 1.25in; font-size: ${pt(if (flyer) 16.0 else 10.5)}; }
+            td.price { text-align: right; white-space: nowrap; font-weight: 700; padding-left: 10pt; width: ${if (flyer) "1.25in" else "0.95in"}; font-size: ${pt(if (flyer) 16.0 else 10.5)}; }
             .name { font-weight: 600; font-size: ${pt(if (flyer) 16.0 else 10.8)}; }
             .tag { font-size: ${pt(7.4)}; font-weight: 700; color: ${s.accent}; text-transform: uppercase; letter-spacing: 0.06em; }
             .desc { color: ${s.muted}; font-size: ${pt(if (flyer) 11.5 else 9.0)}; margin-top: 1pt; }
@@ -213,11 +223,11 @@ object MenuPdf {
             .sizes b { font-weight: 700; }
             .note { font-size: ${pt(if (flyer) 12.0 else 8.8)}; color: ${s.accent}; font-weight: 700; margin-top: 1.5pt; }
             .was { text-decoration: line-through; color: ${s.muted}; font-weight: 400; }
-            .box { border: 1.2pt solid ${s.rule}; padding: 9pt 12pt; margin-top: 18pt; page-break-inside: avoid; }
+            .box { border: 1.2pt solid ${s.rule}; padding: 8pt 12pt; margin-top: 12pt; page-break-inside: avoid; }
             .box h3 { font-family: $head; font-weight: 700; font-size: ${pt(13.0 * headBoost)}; color: ${s.heading}; margin: 0 0 4pt 0; text-align: center; $upper }
             .box .grp { font-weight: 700; color: ${s.accent}; font-size: ${pt(8.8)}; margin-top: 5pt; text-transform: uppercase; letter-spacing: 0.05em; }
             .box .line { font-size: ${pt(9.3)}; }
-            .footer { text-align: center; margin-top: 18pt; color: ${s.muted}; font-size: ${pt(9.0)}; page-break-inside: avoid; }
+            .footer { text-align: center; margin-top: 12pt; color: ${s.muted}; font-size: ${pt(9.0)}; page-break-inside: avoid; }
             table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: ${pt(8.0)}; }
             td.cell { width: 33.3%; padding: 0 5pt ${pt(12.0)} 5pt; page-break-inside: avoid; }
             td.cell2 { width: 50%; padding: 0 8pt ${pt(14.0)} 8pt; page-break-inside: avoid; }
@@ -274,13 +284,17 @@ object MenuPdf {
         append("<div class=\"section\"><div class=\"keep\">")
         if (s.title.isNotBlank() || s.intro != null) {
             append("<div class=\"sec-head\">")
-            val deco = a.decos[ArtPrompts.decoId(s)]
-            when {
-                deco != null -> append("<img class=\"deco\" alt=\"\" src=\"").append(deco).append("\"/>")
-                doc.kind != MenuKind.FLYER -> append("<img class=\"orn\" alt=\"\" src=\"").append(a.ornament).append("\"/>")
+            if (doc.kind == MenuKind.FLYER) {
+                if (s.title.isNotBlank()) append("<h2>").append(esc(s.title)).append("</h2>")
+            } else {
+                // the section's picture sits beside its title (one line, not a stack): picture · title · picture's twin space
+                val deco = a.decos[ArtPrompts.decoId(s)]
+                val pic = if (deco != null) "<img class=\"deco\" alt=\"\" src=\"$deco\"/>" else "<img class=\"orn\" alt=\"\" src=\"${a.ornament}\"/>"
+                append("<table class=\"sh\"><tr><td class=\"shp\">").append(pic).append("</td><td class=\"sht\">")
+                if (s.title.isNotBlank()) append("<h2>").append(esc(s.title)).append("</h2>")
+                append("</td><td class=\"shp\"></td></tr></table>")
+                append("<div class=\"rule\"></div>")
             }
-            if (s.title.isNotBlank()) append("<h2>").append(esc(s.title)).append("</h2>")
-            if (doc.kind != MenuKind.FLYER) append("<div class=\"rule\"></div>")
             s.intro?.let { append(if (doc.kind == MenuKind.FLYER) "<div class=\"when\">" else "<div class=\"intro\">").append(esc(it)).append("</div>") }
             append("</div>")
         }

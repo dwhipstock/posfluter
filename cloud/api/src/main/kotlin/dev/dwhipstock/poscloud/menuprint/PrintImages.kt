@@ -130,7 +130,10 @@ object PrintImages {
             val edge = if (round) {
                 // a spot illustration fades out in a circle: no square corners left on the page
                 val rad = minOf(w, h) / 2.0; val d = kotlin.math.hypot(x - w / 2.0, y - h / 2.0)
-                ((rad - d) / (rad * feather * 2)).coerceIn(0.0, 1.0)
+                val ring = ((rad - d) / (rad * feather * 2)).coerceIn(0.0, 1.0)
+                // and its own paper is keyed out: whatever is close to the ground colour IS the page (no pale fringe)
+                val diff = maxOf(kotlin.math.abs(r - gr), kotlin.math.abs(g - gg), kotlin.math.abs(b - gb))
+                minOf(ring, ((diff - KEY_FROM) / KEY_SPAN).coerceIn(0.0, 1.0))
             } else minOf(minOf(x, w - 1 - x) / f, y / f, (h - 1 - y) / fb).coerceIn(0.0, 1.0)
             val a = edge * edge * (3 - 2 * edge) // smoothstep
             nr = (br + (nr - br) * a).toInt(); ng = (bgc + (ng - bgc) * a).toInt(); nb = (bb + (nb - bb) * a).toInt()
@@ -138,6 +141,10 @@ object PrintImages {
         }
         return out
     }
+
+    /** Keying a spot illustration's paper: closer than this to the ground colour is page, then a soft ramp. */
+    private const val KEY_FROM = 14.0
+    private const val KEY_SPAN = 34.0
 
     /** The median colour of the picture's outer 4% (its background, for art drawn on a plain ground). */
     fun ground(img: BufferedImage): Triple<Int, Int, Int> {
