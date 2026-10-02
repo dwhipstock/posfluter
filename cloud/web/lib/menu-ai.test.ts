@@ -1,0 +1,68 @@
+// The AI assistant's pure helpers: the voice clip's WAV, the checklist's ticking rules, error messages.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { aiErrorKey, allTicked, clock, encodeWav, tickedIds, toggleChange, toMono, VOICE_RATE } from "./menu-ai";
+import { messages } from "./i18n/messages";
+import type { AiChange } from "./types";
+
+test("a stereo 48 kHz recording becomes 16 kHz mono", () => {
+  const left = new Float32Array(48_000).fill(0.5);
+  const right = new Float32Array(48_000).fill(-0.5);
+  const mono = toMono([left, right], 48_000);
+  assert.equal(mono.length, VOICE_RATE);
+  assert.ok(mono.every((s) => Math.abs(s) < 1e-6));
+  assert.equal(toMono([new Float32Array(16_000).fill(0.25)], 16_000).length, 16_000);
+  assert.equal(toMono([], 44_100).length, 0);
+});
+
+test("the WAV header says 16 kHz mono 16-bit PCM", () => {
+  const wav = encodeWav(new Float32Array([0, 1, -1, 2]));
+  const v = new DataView(wav.buffer);
+  const ascii = (at: number) => String.fromCharCode(...wav.slice(at, at + 4));
+  assert.equal(ascii(0), "RIFF");
+  assert.equal(ascii(8), "WAVE");
+  assert.equal(ascii(36), "data");
+  assert.equal(v.getUint16(20, true), 1);
+  assert.equal(v.getUint16(22, true), 1);
+  assert.equal(v.getUint32(24, true), 16_000);
+  assert.equal(v.getUint16(34, true), 16);
+  assert.equal(v.getUint32(40, true), 8);
+  assert.equal(wav.length, 44 + 8);
+  assert.equal(v.getInt16(46, true), 0x7fff);
+  assert.equal(v.getInt16(48, true), -0x8000);
+  assert.equal(v.getInt16(50, true), 0x7fff); // clipped
+  // 30 s of speech stays well under the cloud's 5 MB cap
+  assert.ok(encodeWav(new Float32Array(30 * VOICE_RATE)).length < 1_000_000);
+});
+
+const changes: AiChange[] = [
+  { id: "c1", kind: "add_category", title: "Desserts", details: [] },
+  { id: "c2", kind: "add_item", title: "Brownie", details: [], needs: "c1" },
+  { id: "c3", kind: "update_item", title: "Poutine", details: [] },
+];
+
+test("ticking an item ticks the new category it needs; unticking the category unticks the item", () => {
+  let t = allTicked(changes);
+  assert.deepEqual(tickedIds(t, changes), ["c1", "c2", "c3"]);
+  t = toggleChange(t, changes, "c1");
+  assert.deepEqual(tickedIds(t, changes), ["c3"]);
+  t = toggleChange(t, changes, "c2");
+  assert.deepEqual(tickedIds(t, changes), ["c1", "c2", "c3"]);
+  t = toggleChange(t, changes, "c3");
+  assert.deepEqual(tickedIds(t, changes), ["c1", "c2"]);
+});
+
+test("every AI error code maps to a real message", () => {
+  for (const code of ["menu_ai_too_many", "menu_ai_daily_limit", "menu_ai_disabled", "menu_ai_expired", "menu_ai_timeout",
+    "menu_ai_audio_type", "network", "menu_ai_already_reverted"]) {
+    const k = aiErrorKey(code);
+    assert.ok(k && messages[k], code);
+  }
+  assert.equal(aiErrorKey("store_not_upgraded"), null);
+});
+
+test("the recording clock", () => {
+  assert.equal(clock(0), "0:00");
+  assert.equal(clock(7.9), "0:07");
+  assert.equal(clock(30), "0:30");
+});

@@ -187,17 +187,7 @@ private suspend fun RoutingContext.menuEdit(
         }
         val stamp = CloudHlc.now(principal.tenantId)
         val r = block(principal, venues, stamp)
-        if (r.applied.isEmpty()) {
-            val reason = r.skipped.firstOrNull()?.reason ?: "not_found"
-            when (reason) {
-                "not_found" -> throw NotFoundException("not on this store's menu", "not_found")
-                "category_not_found" -> throw BadRequestException("no such category at this store", "category_not_found")
-                "store_not_upgraded" -> throw ConflictException(
-                    "this store's app is too old to take menu changes from the portal; edit on the tablet or update it",
-                    "store_not_upgraded")
-                else -> throw ConflictException("can't do that: $reason", reason)
-            }
-        }
+        if (r.applied.isEmpty()) throw PortalMenuOps.refusal(r)
         if (key != null) MenuEdits.insert {
             it[tenantId] = principal.tenantId
             it[editId] = key
@@ -232,6 +222,273 @@ private fun result(outcomes: List<Pair<String, String?>>, id: String? = null) = 
     id = id,
 )
 
+/**
+ * The portal's menu edits as plain functions: the routes below call them, and
+ * so does the AI menu assistant's apply (menuai/), so an AI change takes
+ * exactly the path of a hand edit — same validation, same cloud HLC stamp,
+ * same merge, same menu_feed entry for each store. Each runs inside the
+ * caller's transaction with the caller's [stamp] (one [CloudHlc.now] per edit)
+ * and answers the per-store outcome; it never throws for a store it could not
+ * change (that is a skip reason), only for a bad request.
+ */
+object PortalMenuOps {
+
+    fun createItem(principal: Principal, venues: List<VenueScope>, stamp: String, req: MenuItemCreate): MenuEditResult {
+        val nameEn = cleanText(req.nameEn, "nameEn", 200, required = true)!!
+        val nameFr = cleanText(req.nameFr, "nameFr", 200)?.takeIf { it.isNotEmpty() } ?: nameEn
+        val names = cleanNames(req.names)
+        val abbrev = cleanAbbrev(req.abbrev) ?: defaultAbbrev(nameEn)
+        val descEn = cleanText(req.descriptionEn, "descriptionEn", 500) ?: ""
+        val descFr = cleanText(req.descriptionFr, "descriptionFr", 500) ?: ""
+        if (req.variants.isEmpty()) throw BadRequestException("at least one size (with a price) is required", "no_variants")
+        val variants = req.variants.map { v ->
+            val en = cleanText(v.labelEn, "labelEn", 100, required = true)!!
+            Triple(en, cleanText(v.labelFr, "labelFr", 100)?.takeIf { it.isNotEmpty() } ?: en, v) to cleanNames(v.names)
+        }
+        variants.forEach { cleanPrice(it.first.third.priceCents) }
+        // one id at every store: the same new dish is the same thing everywhere
+        val itemId = generateSequence { "${slug(nameEn)}-${suffix()}" }.first { candidate ->
+            CatalogItems.selectAll().where { (CatalogItems.tenantId eq principal.tenantId) and (CatalogItems.id eq candidate) }.empty()
+        }
+        val outcomes = venues.map { v ->
+            val scope = v.scope
+            v.venueId to when {
+                !editable(v.venueId, principal.tenantId) -> "store_not_upgraded"
+                !liveCategory(scope, req.categoryId) -> "category_not_found"
+                else -> {
+                    val item = Regs(itemId)
+                    item.write("nameEn", JsonPrimitive(nameEn), stamp)
+                    item.write("nameFr", JsonPrimitive(nameFr), stamp)
+                    item.write("descriptionEn", JsonPrimitive(descEn), stamp)
+                    item.write("descriptionFr", JsonPrimitive(descFr), stamp)
+                    item.write("categoryId", JsonPrimitive(req.categoryId), stamp)
+                    item.write("abbrev", JsonPrimitive(abbrev), stamp)
+                    item.write("isAlcohol", JsonPrimitive(req.isAlcohol ?: false), stamp)
+                    item.write("active", JsonPrimitive(req.active ?: true), stamp)
+                    item.write("deleted", JsonPrimitive(false), stamp)
+                    item.writeNames(names?.filterValues { it.isNotEmpty() }, stamp)
+                    val state = ItemState(item)
+                    val used = mutableSetOf<String>()
+                    variants.forEachIndexed { i, (labels, vNames) ->
+                        val (en, fr, input) = labels
+                        var vid = "$itemId:${slug(en)}"
+                        var n = 2
+                        while (vid in used) vid = "$itemId:${slug(en)}-${n++}"
+                        used += vid
+                        val r = Regs(vid)
+                        r.write("labelEn", JsonPrimitive(en), stamp)
+                        r.write("labelFr", JsonPrimitive(fr), stamp)
+                        r.write("priceCents", JsonPrimitive(input.priceCents), stamp)
+                        r.write("sortOrder", JsonPrimitive(i), stamp)
+                        r.write("deleted", JsonPrimitive(false), stamp)
+                        r.writeNames(vNames?.filterValues { it.isNotEmpty() }, stamp)
+                        state.variants[vid] = r
+                    }
+                    MenuState.saveItems(scope, listOf(state))
+                    MenuState.appendFeed(scope, MenuFields.ITEM, itemId, state.wire(), "portal")
+                    null
+                }
+            }
+        }
+        return result(outcomes, itemId)
+    }
+
+    fun patchItem(venues: List<VenueScope>, stamp: String, itemId: String, req: MenuItemPatch): MenuEditResult {
+        val nameEn = cleanText(req.nameEn, "nameEn", 200, required = true)
+        val nameFr = cleanText(req.nameFr, "nameFr", 200, required = true)
+        val descEn = cleanText(req.descriptionEn, "descriptionEn", 500)
+        val descFr = cleanText(req.descriptionFr, "descriptionFr", 500)
+        val abbrev = cleanAbbrev(req.abbrev)
+        val names = cleanNames(req.names)
+        return result(venues.map { v ->
+            v.venueId to editItem(v.scope, itemId, stamp) { s ->
+                if (req.categoryId != null && !liveCategory(v.scope, req.categoryId)) return@editItem "category_not_found"
+                val r = s.item
+                nameEn?.let { r.write("nameEn", JsonPrimitive(it), stamp) }
+                nameFr?.let { r.write("nameFr", JsonPrimitive(it), stamp) }
+                descEn?.let { r.write("descriptionEn", JsonPrimitive(it), stamp) }
+                descFr?.let { r.write("descriptionFr", JsonPrimitive(it), stamp) }
+                req.categoryId?.let { r.write("categoryId", JsonPrimitive(it), stamp) }
+                abbrev?.let { r.write("abbrev", JsonPrimitive(it), stamp) }
+                req.isAlcohol?.let { r.write("isAlcohol", JsonPrimitive(it), stamp) }
+                req.active?.let { r.write("active", JsonPrimitive(it), stamp) }
+                r.writeNames(names, stamp)
+                null
+            }
+        }, itemId)
+    }
+
+    /** Soft delete: the item leaves the store's menu; sales history keeps it. */
+    fun deleteItem(venues: List<VenueScope>, stamp: String, itemId: String): MenuEditResult =
+        result(venues.map { v ->
+            v.venueId to editItem(v.scope, itemId, stamp) { s -> s.item.write("deleted", JsonPrimitive(true), stamp); null }
+        }, itemId)
+
+    /**
+     * Undo a soft delete (the AI assistant's revert): the same register write
+     * as a delete, the other way, with a fresh stamp — so it syncs like an edit.
+     */
+    fun restoreItem(venues: List<VenueScope>, stamp: String, itemId: String): MenuEditResult =
+        result(venues.map { v ->
+            v.venueId to run {
+                if (!editable(v.venueId, v.scope.tenantId)) return@run "store_not_upgraded"
+                val state = MenuState.loadItems(v.scope, listOf(itemId))[itemId] ?: return@run "not_found"
+                if (!state.item.deleted) return@run null
+                state.item.write("deleted", JsonPrimitive(false), stamp)
+                MenuState.saveItems(v.scope, listOf(state))
+                MenuState.appendFeed(v.scope, MenuFields.ITEM, itemId, state.wire(), "portal")
+                null
+            }
+        }, itemId)
+
+    fun addVariant(venues: List<VenueScope>, stamp: String, itemId: String, req: MenuVariantInput): MenuEditResult {
+        val en = cleanText(req.labelEn, "labelEn", 100, required = true)!!
+        val fr = cleanText(req.labelFr, "labelFr", 100)?.takeIf { it.isNotEmpty() } ?: en
+        cleanPrice(req.priceCents)
+        val names = cleanNames(req.names)
+        var vid: String? = null
+        val outcomes = venues.map { v ->
+            v.venueId to editItem(v.scope, itemId, stamp) { s ->
+                val id = vid ?: generateSequence { "$itemId:${slug(en)}-${suffix()}" }.first { it !in s.variants }.also { vid = it }
+                val r = Regs(id)
+                r.write("labelEn", JsonPrimitive(en), stamp)
+                r.write("labelFr", JsonPrimitive(fr), stamp)
+                r.write("priceCents", JsonPrimitive(req.priceCents), stamp)
+                r.write("sortOrder", JsonPrimitive((s.variants.values.mapNotNull { it.int("sortOrder") }.maxOrNull() ?: -1) + 1), stamp)
+                r.write("deleted", JsonPrimitive(false), stamp)
+                r.writeNames(names?.filterValues { it.isNotEmpty() }, stamp)
+                s.variants[id] = r
+                null
+            }
+        }
+        return result(outcomes, vid)
+    }
+
+    fun patchVariant(venues: List<VenueScope>, stamp: String, itemId: String, variantId: String, req: MenuVariantPatch): MenuEditResult {
+        val en = cleanText(req.labelEn, "labelEn", 100, required = true)
+        val fr = cleanText(req.labelFr, "labelFr", 100, required = true)
+        val price = cleanPrice(req.priceCents)
+        val names = cleanNames(req.names)
+        return result(venues.map { v ->
+            v.venueId to editItem(v.scope, itemId, stamp) { s ->
+                val r = s.variants[variantId]?.takeIf { !it.deleted } ?: return@editItem "not_found"
+                en?.let { r.write("labelEn", JsonPrimitive(it), stamp) }
+                fr?.let { r.write("labelFr", JsonPrimitive(it), stamp) }
+                price?.let { r.write("priceCents", JsonPrimitive(it), stamp) }
+                req.sortOrder?.let { r.write("sortOrder", JsonPrimitive(it), stamp) }
+                r.writeNames(names, stamp)
+                null
+            }
+        }, variantId)
+    }
+
+    fun deleteVariant(venues: List<VenueScope>, stamp: String, itemId: String, variantId: String): MenuEditResult =
+        result(venues.map { v ->
+            v.venueId to editItem(v.scope, itemId, stamp) { s ->
+                val r = s.variants[variantId]?.takeIf { !it.deleted } ?: return@editItem "not_found"
+                if (s.variants.values.count { !it.deleted } <= 1) return@editItem "last_variant"
+                r.write("deleted", JsonPrimitive(true), stamp)
+                null
+            }
+        }, variantId)
+
+    fun createCategory(principal: Principal, venues: List<VenueScope>, stamp: String, req: MenuCategoryCreate): MenuEditResult {
+        val en = cleanText(req.nameEn, "nameEn", 100, required = true)!!
+        val fr = cleanText(req.nameFr, "nameFr", 100)?.takeIf { it.isNotEmpty() } ?: en
+        val names = cleanNames(req.names)
+        val id = generateSequence { "${slug(en)}-${suffix()}" }.first { candidate ->
+            CatalogCategories.selectAll().where {
+                (CatalogCategories.tenantId eq principal.tenantId) and (CatalogCategories.id eq candidate)
+            }.empty()
+        }
+        return result(venues.map { v ->
+            v.venueId to if (!editable(v.venueId, principal.tenantId)) "store_not_upgraded" else {
+                val sort = (MenuState.loadCategories(v.scope).values.filter { !it.deleted }
+                    .mapNotNull { it.int("sortOrder") }.maxOrNull() ?: -1) + 1
+                val r = Regs(id)
+                r.write("nameEn", JsonPrimitive(en), stamp)
+                r.write("nameFr", JsonPrimitive(fr), stamp)
+                r.write("sortOrder", JsonPrimitive(sort), stamp)
+                r.write("deleted", JsonPrimitive(false), stamp)
+                r.writeNames(names?.filterValues { it.isNotEmpty() }, stamp)
+                MenuState.saveCategories(v.scope, listOf(r))
+                MenuState.appendFeed(v.scope, MenuFields.CATEGORY, id, kotlinx.serialization.json.JsonObject(r.wire(MenuFields.CATEGORY)), "portal")
+                null
+            }
+        }, id)
+    }
+
+    fun patchCategory(venues: List<VenueScope>, stamp: String, categoryId: String, req: MenuCategoryPatch): MenuEditResult {
+        val en = cleanText(req.nameEn, "nameEn", 100, required = true)
+        val fr = cleanText(req.nameFr, "nameFr", 100, required = true)
+        val names = cleanNames(req.names)
+        return result(venues.map { v ->
+            v.venueId to editCategory(v.scope, categoryId) { r ->
+                en?.let { r.write("nameEn", JsonPrimitive(it), stamp) }
+                fr?.let { r.write("nameFr", JsonPrimitive(it), stamp) }
+                req.sortOrder?.let { r.write("sortOrder", JsonPrimitive(it), stamp) }
+                r.writeNames(names, stamp)
+                null
+            }
+        }, categoryId)
+    }
+
+    /**
+     * A category goes only when it is empty (move or delete its items first).
+     * If a store put an item in it meanwhile, that store keeps the category
+     * and it comes back in the portal (the store's state wins there).
+     */
+    fun deleteCategory(venues: List<VenueScope>, stamp: String, categoryId: String): MenuEditResult =
+        result(venues.map { v ->
+            v.venueId to editCategory(v.scope, categoryId) { r ->
+                val liveItems = CatalogItems.selectAll().where {
+                    (CatalogItems.tenantId eq v.scope.tenantId) and (CatalogItems.venueId eq v.venueId) and
+                        (CatalogItems.categoryId eq categoryId) and (CatalogItems.deleted eq false)
+                }.count()
+                if (liveItems > 0) return@editCategory "category_not_empty"
+                r.write("deleted", JsonPrimitive(true), stamp)
+                null
+            }
+        }, categoryId)
+
+    /**
+     * The categories' order: index in [orderedIds] becomes the sort order
+     * (unlisted ones follow). The order is ONE last-write-wins value: every
+     * live category's position is written with this edit's stamp, changed or
+     * not, so a concurrent drag on a tablet either wins whole or loses whole
+     * (never a mix of both orders).
+     */
+    fun reorderCategories(principal: Principal, venues: List<VenueScope>, stamp: String, orderedIds: List<String>): MenuEditResult {
+        if (orderedIds.isEmpty()) throw BadRequestException("orderedIds must not be empty", "bad_request")
+        return result(venues.map { v ->
+            v.venueId to if (!editable(v.venueId, principal.tenantId)) "store_not_upgraded" else {
+                val all = MenuState.loadCategories(v.scope).values.filter { !it.deleted }
+                val listed = orderedIds.filter { id -> all.any { it.id == id } }
+                if (listed.isEmpty()) "not_found" else {
+                    val order = listed + all.sortedBy { it.int("sortOrder") ?: 0 }.map { it.id }.filter { it !in listed }
+                    val changed = order.mapIndexed { i, id ->
+                        all.first { it.id == id }.also { it.write("sortOrder", JsonPrimitive(i), stamp) }
+                    }
+                    MenuState.saveCategories(v.scope, changed)
+                    changed.forEach { MenuState.appendFeed(v.scope, MenuFields.CATEGORY, it.id,
+                        kotlinx.serialization.json.JsonObject(it.wire(MenuFields.CATEGORY)), "portal") }
+                    null
+                }
+            }
+        })
+    }
+
+    /** The refusal for a result no store took (the routes answer it; the AI apply rolls its batch back with it). */
+    fun refusal(r: MenuEditResult): RuntimeException = when (val reason = r.skipped.firstOrNull()?.reason ?: "not_found") {
+        "not_found" -> NotFoundException("not on this store's menu", "not_found")
+        "category_not_found" -> BadRequestException("no such category at this store", "category_not_found")
+        "store_not_upgraded" -> ConflictException(
+            "this store's app is too old to take menu changes from the portal; edit on the tablet or update it",
+            "store_not_upgraded")
+        else -> ConflictException("can't do that: $reason", reason)
+    }
+}
+
 fun Route.menuEditRoutes() {
 
     /** Who may edit, and each in-scope store's sync state (for the portal's banner). */
@@ -258,104 +515,19 @@ fun Route.menuEditRoutes() {
 
     post("/menu/items") {
         val req = call.receive<MenuItemCreate>()
-        val nameEn = cleanText(req.nameEn, "nameEn", 200, required = true)!!
-        val nameFr = cleanText(req.nameFr, "nameFr", 200)?.takeIf { it.isNotEmpty() } ?: nameEn
-        val names = cleanNames(req.names)
-        val abbrev = cleanAbbrev(req.abbrev) ?: defaultAbbrev(nameEn)
-        val descEn = cleanText(req.descriptionEn, "descriptionEn", 500) ?: ""
-        val descFr = cleanText(req.descriptionFr, "descriptionFr", 500) ?: ""
-        if (req.variants.isEmpty()) throw BadRequestException("at least one size (with a price) is required", "no_variants")
-        val variants = req.variants.map { v ->
-            val en = cleanText(v.labelEn, "labelEn", 100, required = true)!!
-            Triple(en, cleanText(v.labelFr, "labelFr", 100)?.takeIf { it.isNotEmpty() } ?: en, v) to cleanNames(v.names)
-        }
-        variants.forEach { cleanPrice(it.first.third.priceCents) }
-        menuEdit(HttpStatusCode.Created) { principal, venues, stamp ->
-            // one id at every store: the same new dish is the same thing everywhere
-            val itemId = generateSequence { "${slug(nameEn)}-${suffix()}" }.first { candidate ->
-                CatalogItems.selectAll().where { (CatalogItems.tenantId eq principal.tenantId) and (CatalogItems.id eq candidate) }.empty()
-            }
-            val outcomes = venues.map { v ->
-                val scope = v.scope
-                v.venueId to when {
-                    !editable(v.venueId, principal.tenantId) -> "store_not_upgraded"
-                    !liveCategory(scope, req.categoryId) -> "category_not_found"
-                    else -> {
-                        val item = Regs(itemId)
-                        item.write("nameEn", JsonPrimitive(nameEn), stamp)
-                        item.write("nameFr", JsonPrimitive(nameFr), stamp)
-                        item.write("descriptionEn", JsonPrimitive(descEn), stamp)
-                        item.write("descriptionFr", JsonPrimitive(descFr), stamp)
-                        item.write("categoryId", JsonPrimitive(req.categoryId), stamp)
-                        item.write("abbrev", JsonPrimitive(abbrev), stamp)
-                        item.write("isAlcohol", JsonPrimitive(req.isAlcohol ?: false), stamp)
-                        item.write("active", JsonPrimitive(req.active ?: true), stamp)
-                        item.write("deleted", JsonPrimitive(false), stamp)
-                        item.writeNames(names?.filterValues { it.isNotEmpty() }, stamp)
-                        val state = ItemState(item)
-                        val used = mutableSetOf<String>()
-                        variants.forEachIndexed { i, (labels, vNames) ->
-                            val (en, fr, input) = labels
-                            var vid = "$itemId:${slug(en)}"
-                            var n = 2
-                            while (vid in used) vid = "$itemId:${slug(en)}-${n++}"
-                            used += vid
-                            val r = Regs(vid)
-                            r.write("labelEn", JsonPrimitive(en), stamp)
-                            r.write("labelFr", JsonPrimitive(fr), stamp)
-                            r.write("priceCents", JsonPrimitive(input.priceCents), stamp)
-                            r.write("sortOrder", JsonPrimitive(i), stamp)
-                            r.write("deleted", JsonPrimitive(false), stamp)
-                            r.writeNames(vNames?.filterValues { it.isNotEmpty() }, stamp)
-                            state.variants[vid] = r
-                        }
-                        MenuState.saveItems(scope, listOf(state))
-                        MenuState.appendFeed(scope, MenuFields.ITEM, itemId, state.wire(), "portal")
-                        null
-                    }
-                }
-            }
-            result(outcomes, itemId)
-        }
+        menuEdit(HttpStatusCode.Created) { principal, venues, stamp -> PortalMenuOps.createItem(principal, venues, stamp, req) }
     }
 
     patch("/menu/items/{itemId}") {
         val itemId = call.parameters["itemId"]!!
         val req = call.receive<MenuItemPatch>()
-        val nameEn = cleanText(req.nameEn, "nameEn", 200, required = true)
-        val nameFr = cleanText(req.nameFr, "nameFr", 200, required = true)
-        val descEn = cleanText(req.descriptionEn, "descriptionEn", 500)
-        val descFr = cleanText(req.descriptionFr, "descriptionFr", 500)
-        val abbrev = cleanAbbrev(req.abbrev)
-        val names = cleanNames(req.names)
-        menuEdit { principal, venues, stamp ->
-            result(venues.map { v ->
-                v.venueId to editItem(v.scope, itemId, stamp) { s ->
-                    if (req.categoryId != null && !liveCategory(v.scope, req.categoryId)) return@editItem "category_not_found"
-                    val r = s.item
-                    nameEn?.let { r.write("nameEn", JsonPrimitive(it), stamp) }
-                    nameFr?.let { r.write("nameFr", JsonPrimitive(it), stamp) }
-                    descEn?.let { r.write("descriptionEn", JsonPrimitive(it), stamp) }
-                    descFr?.let { r.write("descriptionFr", JsonPrimitive(it), stamp) }
-                    req.categoryId?.let { r.write("categoryId", JsonPrimitive(it), stamp) }
-                    abbrev?.let { r.write("abbrev", JsonPrimitive(it), stamp) }
-                    req.isAlcohol?.let { r.write("isAlcohol", JsonPrimitive(it), stamp) }
-                    req.active?.let { r.write("active", JsonPrimitive(it), stamp) }
-                    r.writeNames(names, stamp)
-                    null
-                }
-            }, itemId)
-        }
+        menuEdit { _, venues, stamp -> PortalMenuOps.patchItem(venues, stamp, itemId, req) }
     }
 
     /** Soft delete: the item leaves every store's menu; sales history keeps it. */
     delete("/menu/items/{itemId}") {
         val itemId = call.parameters["itemId"]!!
-        menuEdit { _, venues, stamp ->
-            result(venues.map { v ->
-                v.venueId to editItem(v.scope, itemId, stamp) { s -> s.item.write("deleted", JsonPrimitive(true), stamp); null }
-            }, itemId)
-        }
+        menuEdit { _, venues, stamp -> PortalMenuOps.deleteItem(venues, stamp, itemId) }
     }
 
     // --- sizes ---
@@ -363,168 +535,43 @@ fun Route.menuEditRoutes() {
     post("/menu/items/{itemId}/variants") {
         val itemId = call.parameters["itemId"]!!
         val req = call.receive<MenuVariantInput>()
-        val en = cleanText(req.labelEn, "labelEn", 100, required = true)!!
-        val fr = cleanText(req.labelFr, "labelFr", 100)?.takeIf { it.isNotEmpty() } ?: en
-        cleanPrice(req.priceCents)
-        val names = cleanNames(req.names)
-        menuEdit(HttpStatusCode.Created) { _, venues, stamp ->
-            var vid: String? = null
-            val outcomes = venues.map { v ->
-                v.venueId to editItem(v.scope, itemId, stamp) { s ->
-                    val id = vid ?: generateSequence { "$itemId:${slug(en)}-${suffix()}" }.first { it !in s.variants }.also { vid = it }
-                    val r = Regs(id)
-                    r.write("labelEn", JsonPrimitive(en), stamp)
-                    r.write("labelFr", JsonPrimitive(fr), stamp)
-                    r.write("priceCents", JsonPrimitive(req.priceCents), stamp)
-                    r.write("sortOrder", JsonPrimitive((s.variants.values.mapNotNull { it.int("sortOrder") }.maxOrNull() ?: -1) + 1), stamp)
-                    r.write("deleted", JsonPrimitive(false), stamp)
-                    r.writeNames(names?.filterValues { it.isNotEmpty() }, stamp)
-                    s.variants[id] = r
-                    null
-                }
-            }
-            result(outcomes, vid)
-        }
+        menuEdit(HttpStatusCode.Created) { _, venues, stamp -> PortalMenuOps.addVariant(venues, stamp, itemId, req) }
     }
 
     patch("/menu/items/{itemId}/variants/{variantId}") {
         val itemId = call.parameters["itemId"]!!
         val variantId = call.parameters["variantId"]!!
         val req = call.receive<MenuVariantPatch>()
-        val en = cleanText(req.labelEn, "labelEn", 100, required = true)
-        val fr = cleanText(req.labelFr, "labelFr", 100, required = true)
-        val price = cleanPrice(req.priceCents)
-        val names = cleanNames(req.names)
-        menuEdit { _, venues, stamp ->
-            result(venues.map { v ->
-                v.venueId to editItem(v.scope, itemId, stamp) { s ->
-                    val r = s.variants[variantId]?.takeIf { !it.deleted } ?: return@editItem "not_found"
-                    en?.let { r.write("labelEn", JsonPrimitive(it), stamp) }
-                    fr?.let { r.write("labelFr", JsonPrimitive(it), stamp) }
-                    price?.let { r.write("priceCents", JsonPrimitive(it), stamp) }
-                    req.sortOrder?.let { r.write("sortOrder", JsonPrimitive(it), stamp) }
-                    r.writeNames(names, stamp)
-                    null
-                }
-            }, variantId)
-        }
+        menuEdit { _, venues, stamp -> PortalMenuOps.patchVariant(venues, stamp, itemId, variantId, req) }
     }
 
     delete("/menu/items/{itemId}/variants/{variantId}") {
         val itemId = call.parameters["itemId"]!!
         val variantId = call.parameters["variantId"]!!
-        menuEdit { _, venues, stamp ->
-            result(venues.map { v ->
-                v.venueId to editItem(v.scope, itemId, stamp) { s ->
-                    val r = s.variants[variantId]?.takeIf { !it.deleted } ?: return@editItem "not_found"
-                    if (s.variants.values.count { !it.deleted } <= 1) return@editItem "last_variant"
-                    r.write("deleted", JsonPrimitive(true), stamp)
-                    null
-                }
-            }, variantId)
-        }
+        menuEdit { _, venues, stamp -> PortalMenuOps.deleteVariant(venues, stamp, itemId, variantId) }
     }
 
     // --- categories ---
 
     post("/menu/categories") {
         val req = call.receive<MenuCategoryCreate>()
-        val en = cleanText(req.nameEn, "nameEn", 100, required = true)!!
-        val fr = cleanText(req.nameFr, "nameFr", 100)?.takeIf { it.isNotEmpty() } ?: en
-        val names = cleanNames(req.names)
-        menuEdit(HttpStatusCode.Created) { principal, venues, stamp ->
-            val id = generateSequence { "${slug(en)}-${suffix()}" }.first { candidate ->
-                CatalogCategories.selectAll().where {
-                    (CatalogCategories.tenantId eq principal.tenantId) and (CatalogCategories.id eq candidate)
-                }.empty()
-            }
-            result(venues.map { v ->
-                v.venueId to if (!editable(v.venueId, principal.tenantId)) "store_not_upgraded" else {
-                    val sort = (MenuState.loadCategories(v.scope).values.filter { !it.deleted }
-                        .mapNotNull { it.int("sortOrder") }.maxOrNull() ?: -1) + 1
-                    val r = Regs(id)
-                    r.write("nameEn", JsonPrimitive(en), stamp)
-                    r.write("nameFr", JsonPrimitive(fr), stamp)
-                    r.write("sortOrder", JsonPrimitive(sort), stamp)
-                    r.write("deleted", JsonPrimitive(false), stamp)
-                    r.writeNames(names?.filterValues { it.isNotEmpty() }, stamp)
-                    MenuState.saveCategories(v.scope, listOf(r))
-                    MenuState.appendFeed(v.scope, MenuFields.CATEGORY, id, kotlinx.serialization.json.JsonObject(r.wire(MenuFields.CATEGORY)), "portal")
-                    null
-                }
-            }, id)
-        }
+        menuEdit(HttpStatusCode.Created) { principal, venues, stamp -> PortalMenuOps.createCategory(principal, venues, stamp, req) }
     }
 
     patch("/menu/categories/{categoryId}") {
         val categoryId = call.parameters["categoryId"]!!
         val req = call.receive<MenuCategoryPatch>()
-        val en = cleanText(req.nameEn, "nameEn", 100, required = true)
-        val fr = cleanText(req.nameFr, "nameFr", 100, required = true)
-        val names = cleanNames(req.names)
-        menuEdit { _, venues, stamp ->
-            result(venues.map { v ->
-                v.venueId to editCategory(v.scope, categoryId) { r ->
-                    en?.let { r.write("nameEn", JsonPrimitive(it), stamp) }
-                    fr?.let { r.write("nameFr", JsonPrimitive(it), stamp) }
-                    req.sortOrder?.let { r.write("sortOrder", JsonPrimitive(it), stamp) }
-                    r.writeNames(names, stamp)
-                    null
-                }
-            }, categoryId)
-        }
+        menuEdit { _, venues, stamp -> PortalMenuOps.patchCategory(venues, stamp, categoryId, req) }
     }
 
-    /**
-     * A category goes only when it is empty (move or delete its items first).
-     * If a store put an item in it meanwhile, that store keeps the category
-     * and it comes back in the portal (the store's state wins there).
-     */
     delete("/menu/categories/{categoryId}") {
         val categoryId = call.parameters["categoryId"]!!
-        menuEdit { _, venues, stamp ->
-            result(venues.map { v ->
-                v.venueId to editCategory(v.scope, categoryId) { r ->
-                    val liveItems = CatalogItems.selectAll().where {
-                        (CatalogItems.tenantId eq v.scope.tenantId) and (CatalogItems.venueId eq v.venueId) and
-                            (CatalogItems.categoryId eq categoryId) and (CatalogItems.deleted eq false)
-                    }.count()
-                    if (liveItems > 0) return@editCategory "category_not_empty"
-                    r.write("deleted", JsonPrimitive(true), stamp)
-                    null
-                }
-            }, categoryId)
-        }
+        menuEdit { _, venues, stamp -> PortalMenuOps.deleteCategory(venues, stamp, categoryId) }
     }
 
-    /**
-     * The categories' order: index in [MenuCategoryOrder.orderedIds] becomes
-     * the sort order (unlisted ones follow). The order is ONE last-write-wins
-     * value: every live category's position is written with this edit's
-     * stamp, changed or not, so a concurrent drag on a tablet either wins
-     * whole or loses whole (never a mix of both orders).
-     */
     put("/menu/categories/order") {
         val req = call.receive<MenuCategoryOrder>()
-        if (req.orderedIds.isEmpty()) throw BadRequestException("orderedIds must not be empty", "bad_request")
-        menuEdit { principal, venues, stamp ->
-            result(venues.map { v ->
-                v.venueId to if (!editable(v.venueId, principal.tenantId)) "store_not_upgraded" else {
-                    val all = MenuState.loadCategories(v.scope).values.filter { !it.deleted }
-                    val listed = req.orderedIds.filter { id -> all.any { it.id == id } }
-                    if (listed.isEmpty()) "not_found" else {
-                        val order = listed + all.sortedBy { it.int("sortOrder") ?: 0 }.map { it.id }.filter { it !in listed }
-                        val changed = order.mapIndexed { i, id ->
-                            all.first { it.id == id }.also { it.write("sortOrder", JsonPrimitive(i), stamp) }
-                        }
-                        MenuState.saveCategories(v.scope, changed)
-                        changed.forEach { MenuState.appendFeed(v.scope, MenuFields.CATEGORY, it.id,
-                            kotlinx.serialization.json.JsonObject(it.wire(MenuFields.CATEGORY)), "portal") }
-                        null
-                    }
-                }
-            })
-        }
+        menuEdit { principal, venues, stamp -> PortalMenuOps.reorderCategories(principal, venues, stamp, req.orderedIds) }
     }
 }
 

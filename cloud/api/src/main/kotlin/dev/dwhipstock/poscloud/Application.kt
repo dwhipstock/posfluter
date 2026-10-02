@@ -7,6 +7,9 @@ import dev.dwhipstock.poscloud.db.Migrations
 import dev.dwhipstock.poscloud.exports.exportRoutes
 import dev.dwhipstock.poscloud.menu.menuEditRoutes
 import dev.dwhipstock.poscloud.menu.menuRoutes
+import dev.dwhipstock.poscloud.menuai.MenuAiException
+import dev.dwhipstock.poscloud.menuai.MenuAiService
+import dev.dwhipstock.poscloud.menuai.menuAiRoutes
 import dev.dwhipstock.poscloud.reports.reportRoutes
 import dev.dwhipstock.poscloud.staff.staffRoutes
 import dev.dwhipstock.poscloud.stock.stockRoutes
@@ -33,7 +36,11 @@ fun main() {
         .start(wait = true)
 }
 
-fun Application.module(config: CloudConfig = CloudConfig()) {
+/**
+ * [menuAi]: the Menu page's AI assistant; tests pass one with a fake model.
+ * Default: Gemini when MENU_AI_GEMINI_API_KEY is set, else off.
+ */
+fun Application.module(config: CloudConfig = CloudConfig(), menuAi: MenuAiService? = null) {
     val db = Db.connect(config)
     Migrations.run(db, File(config.migrationsDir))
     Bootstrap.run(config)
@@ -79,6 +86,11 @@ fun Application.module(config: CloudConfig = CloudConfig()) {
             call.respond(HttpStatusCode.TooManyRequests,
                 mapOf("error" to (cause.message ?: "rate limited"), "code" to "rate_limited"))
         }
+        exception<MenuAiException> { call, cause ->
+            cause.retryAfterSeconds?.let { call.response.header(HttpHeaders.RetryAfter, it.toString()) }
+            call.respond(HttpStatusCode.fromValue(cause.status),
+                mapOf("error" to (cause.message ?: "AI request failed"), "code" to cause.code))
+        }
         exception<IllegalArgumentException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest,
                 mapOf("error" to (cause.message ?: "bad request"), "code" to "bad_request"))
@@ -104,6 +116,7 @@ fun Application.module(config: CloudConfig = CloudConfig()) {
             stockRoutes()
             menuRoutes()
             menuEditRoutes()
+            menuAiRoutes(menuAi ?: MenuAiService(config))
             staffRoutes()
             venueRoutes(config)
         }

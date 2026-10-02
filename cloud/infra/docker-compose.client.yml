@@ -71,6 +71,11 @@ services:
       PORTAL_SESSION_IDLE_MINUTES: "${PORTAL_SESSION_IDLE_MINUTES:-60}"
       PORTAL_SESSION_MAX_HOURS: "${PORTAL_SESSION_MAX_HOURS:-12}"
       PUBLIC_BASE_DOMAIN: "${PUBLIC_BASE_DOMAIN:-}"
+      # the Menu page's AI assistant: off unless a Gemini key is set (never logged or returned)
+      MENU_AI_GEMINI_API_KEY: "${MENU_AI_GEMINI_API_KEY:-}"
+      MENU_AI_MODEL: "${MENU_AI_MODEL:-gemini-3.5-flash-lite}"
+      MENU_AI_VOICE_MODEL: "${MENU_AI_VOICE_MODEL:-}"
+      MENU_AI_DAILY_CAP: "${MENU_AI_DAILY_CAP:-150}"
     depends_on:
       db:
         condition: service_healthy

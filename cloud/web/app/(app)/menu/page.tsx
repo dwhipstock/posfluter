@@ -22,6 +22,7 @@ import { useExportMeta, useStoreExport } from "@/lib/export/report";
 import { col, type ExportDoc } from "@/lib/export/doc";
 import { Button } from "@/components/ui/button";
 import { CategoriesSheet, ItemSheet, MenuSyncBanner, useMenuEditing } from "@/components/menu-editor";
+import { AiSheet, AiStrip } from "@/components/menu-ai";
 
 const PAGE_SIZE = 100;
 
@@ -45,6 +46,7 @@ export default function MenuPage() {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [creating, setCreating] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const refresh = () => {
     mutate();
     refreshStatus();
@@ -130,8 +132,11 @@ export default function MenuPage() {
 
       <MenuSyncBanner status={status} />
 
+      {canEdit && data && <AiStrip onOpen={() => setAiOpen(true)} />}
+
       {canEdit && data && (
         <>
+          <AiSheet open={aiOpen} onOpenChange={setAiOpen} onApplied={refresh} />
           <ItemSheet
             open={creating || editing !== null}
             onOpenChange={(o) => {

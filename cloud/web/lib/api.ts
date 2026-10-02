@@ -100,4 +100,7 @@ export const putFile = <T>(path: string, field: string, file: File) => {
   return request<T>(path, { method: "PUT", body: fd });
 };
 
-export const fetcher = <T>(path: string) => get<T>(path);
+/** POST a multipart form (a voice clip): the browser sets the boundary. */
+export const postForm = <T>(path: string, form: FormData) => request<T>(path, { method: "POST", body: form });
+
+export const fetcher =<T>(path: string) => get<T>(path);
