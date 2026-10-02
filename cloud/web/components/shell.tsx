@@ -300,7 +300,7 @@ function SidebarShell({ groupName, demoMode, children }: ShellProps) {
           page laid out wider than the screen and sheets (the AI assistant) ran off the right edge */}
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 overflow-hidden bg-navy px-3 text-white md:hidden">
         <span className="min-w-0 shrink overflow-hidden">
-          <BrandMark compact />
+          <BrandMark compact logoOnly={demoMode} />
         </span>
         <div className="flex min-w-0 shrink-0 items-center gap-1.5">
           {demoMode && <DemoBadge />}
