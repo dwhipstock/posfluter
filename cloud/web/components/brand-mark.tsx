@@ -12,10 +12,13 @@ import { brandAssetUrl } from "@/lib/brand/brand";
 export function BrandMark({
   compact = false,
   large = false,
+  logoOnly = false,
   tone = "dark",
 }: {
   compact?: boolean;
   large?: boolean;
+  /** just the round mark (phone top bar with the demo badge: the name was cut to "COPPE LANTE") */
+  logoOnly?: boolean;
   tone?: "dark" | "light";
 }) {
   const brand = useBrand();
@@ -58,7 +61,7 @@ export function BrandMark({
         unoptimized
         className="shrink-0 rounded-full ring-2 ring-white/15"
       />
-      <span className="flex flex-col leading-none">
+      <span className={logoOnly ? "sr-only" : "flex flex-col leading-none"}>
         <span className="text-[13px] font-bold uppercase tracking-[0.16em]">{brand.name}</span>
         {!compact && (
           <span className="mt-1 text-[9px] font-semibold uppercase tracking-[0.32em] text-copper-soft">
