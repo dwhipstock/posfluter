@@ -64,6 +64,17 @@ data class MenuItemPatch(
     val descriptionEn: String? = null, val descriptionFr: String? = null,
     val categoryId: String? = null, val isAlcohol: Boolean? = null, val active: Boolean? = null,
     val abbrev: String? = null,
+    /** Menu specials (CONTRACT §10 "Specials"): replace the selling days; `[]` = every day. Null = unchanged. */
+    val availableDays: List<String>? = null,
+    /** Replace the item's specials; `[]` = none. Null = unchanged. */
+    val specials: List<MenuSpecialInput>? = null,
+)
+
+/** One menu special (CONTRACT §10 "Specials"): days, optional "HH:mm" window, optional own name, size id → cents. */
+@Serializable
+data class MenuSpecialInput(
+    val days: List<String>, val from: String? = null, val to: String? = null,
+    val label: String? = null, val prices: Map<String, Long>,
 )
 
 @Serializable
