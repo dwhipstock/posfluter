@@ -354,6 +354,19 @@ class RoomAiTest {
         assertEquals(listOf("image/jpeg", "image/jpeg", "image/png"), input.take(3).map { it.s("mime_type") })
     }
 
+    @Test
+    fun aDroppedConnectionGoesStraightToTheFallbackModel() {
+        val models = mutableListOf<String>()
+        val http = dev.dwhipstock.poscloud.menuai.AiHttp { _, _, b, _ ->
+            models += Regex("\"model\":\"([^\"]+)\"").find(String(b))!!.groupValues[1]
+            if (models.size == 1) throw java.io.IOException("EOF reached while reading")
+            200 to """{"steps":[{"type":"model_output","content":[{"type":"text","text":"{}"}]}]}"""
+        }
+        val m = dev.dwhipstock.poscloud.rooms.GeminiRoomModel("test-key-0123456789", "gemini-3.5-flash", http = http, pause = {})
+        assertEquals("{}", m.complete("s", "u", null, emptyList()))
+        assertEquals(listOf("gemini-3.5-flash", "gemini-3.5-flash-lite"), models)
+    }
+
     // --- the floor assistant ---
 
     @Test

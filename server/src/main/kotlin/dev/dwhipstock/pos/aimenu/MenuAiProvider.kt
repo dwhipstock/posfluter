@@ -136,8 +136,15 @@ class GeminiMenuProvider(
                 mapOf("x-goog-api-key" to apiKey), body(m), "application/json")
             withDeadline(left()) { send("Gemini", http, request) }
         }
-        var res = post(model)
-        if (res.status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); res = post(model) }
+        // a dropped connection (live: Gemini cut busy calls at ~60 s with an EOF) counts as busy:
+        // straight to the fallback model, no second wait on the same one
+        var dropped = false
+        var res = try { post(model) } catch (e: ImageGenException) {
+            if (e.code != ImageGenException.UNAVAILABLE || !timeLeft()) throw e
+            dropped = true
+            ImageHttpResponse(503, ByteArray(0))
+        }
+        if (!dropped && res.status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); res = post(model) }
         // busy, or this model's daily free quota used up: the fallback model has its own quota
         // (flash itself — the voice model — falls back to lite: a weaker answer beats none at the till)
         val fallback = if (model == FALLBACK_MODEL) DEFAULT_MODEL else FALLBACK_MODEL

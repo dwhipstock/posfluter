@@ -98,8 +98,15 @@ class GeminiRoomModel(
                 throw MenuAiException(503, "menu_ai_unavailable", "interrupted", cause = e)
             }
         }
-        var (status, text) = post(model)
-        if (status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); post(model).let { status = it.first; text = it.second } }
+        // a dropped connection (live: Gemini cut busy calls at ~60 s with an EOF) counts as busy:
+        // straight to the fallback model, no second wait on the same one
+        var dropped = false
+        var (status, text) = try { post(model) } catch (e: MenuAiException) {
+            if (e.code != "menu_ai_unavailable" || left() <= 0) throw e
+            dropped = true
+            503 to ""
+        }
+        if (!dropped && status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); post(model).let { status = it.first; text = it.second } }
         if ((status == 503 || status == 429) && left() > 0) {
             val fallback = if (model == FALLBACK_MODEL) DEFAULT_MODEL else FALLBACK_MODEL
             post(fallback).let { status = it.first; text = it.second }

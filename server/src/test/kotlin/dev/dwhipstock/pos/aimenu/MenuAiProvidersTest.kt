@@ -54,6 +54,23 @@ class MenuAiProvidersTest {
     }
 
     @Test
+    fun geminiDroppedConnectionGoesStraightToTheFallbackModel() {
+        val bodies = mutableListOf<String>()
+        val http = object : ImageHttp {
+            override fun send(request: ImageHttpRequest): ImageHttpResponse {
+                bodies += request.bodyText
+                if (bodies.size == 1) throw java.io.IOException("EOF reached while reading")
+                return ImageHttpResponse(200, geminiOk.toByteArray())
+            }
+        }
+        val out = GeminiMenuProvider(key, http, GeminiMenuProvider.MULTI_VIEW_MODEL, pause = { error("no pause") }).complete("s", "u", photo)
+        assertEquals("""{"ops":[]}""", out)
+        assertEquals(2, bodies.size)
+        assertTrue(bodies[0].contains("\"model\":\"gemini-3.5-flash\""))
+        assertTrue(bodies[1].contains("\"model\":\"${GeminiMenuProvider.DEFAULT_MODEL}\""))
+    }
+
+    @Test
     fun geminiSendsVoiceAsAnAudioPartAndTheOthersSayNo() {
         val http = Recorder(200, geminiOk)
         GeminiMenuProvider(key, http).complete("sys", "user", listOf(MenuImage(ByteArray(2000), "audio/wav")))
