@@ -38,8 +38,10 @@ export function PageHeader({
   }, [title, scopeName, scoped, brandName]);
 
   return (
-    <div className="mb-4 flex items-start justify-between gap-3 md:mb-6">
-      <div className="min-w-0">
+    // phones: the actions drop below the title (side by side they squeezed the title to one
+    // letter per line on the Menu page); from sm up they sit on the right
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between md:mb-6">
+      <div className="min-w-0 sm:flex-1">
         {back && (
           <Link
             href={storeHref(back.href)}
@@ -58,7 +60,7 @@ export function PageHeader({
         </div>
         {sub && <p className="mt-1 text-sm text-neutral-500">{sub}</p>}
       </div>
-      {action && <div className="shrink-0 pt-1">{action}</div>}
+      {action && <div className="min-w-0 sm:shrink-0 sm:pt-1">{action}</div>}
     </div>
   );
 }

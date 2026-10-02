@@ -137,7 +137,7 @@ function ItemsPage() {
         sub={fmt.rangeLabel(range)}
         back={{ href: "/reports", label: t("reports_title") }}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Tabs value={metric} onValueChange={(v) => setMetric(v as "revenue" | "qty")}>
               <TabsList>
                 <TabsTrigger value="revenue">{t("items_tab_revenue")}</TabsTrigger>

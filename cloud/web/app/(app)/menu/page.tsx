@@ -112,7 +112,7 @@ export default function MenuPage() {
         title={t("menu_title")}
         sub={t("menu_sub")}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {canEdit && data && (
               <>
                 <Button variant="secondary" size="sm" onClick={() => setCategoriesOpen(true)}>
