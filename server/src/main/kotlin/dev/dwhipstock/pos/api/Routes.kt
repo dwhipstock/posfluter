@@ -350,7 +350,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
         val slips = transaction {
             DiningTables.join(Zones, org.jetbrains.exposed.sql.JoinType.INNER,
                     DiningTables.zoneId, Zones.id)
-                .selectAll().where { DiningTables.deletedAt.isNull() }
+                .selectAll().where { DiningTables.deletedAt.isNull() and (Zones.id notInList dev.dwhipstock.pos.orders.SaleLocations.OFF_FLOOR) }
                 .orderBy(Zones.sortOrder).orderBy(DiningTables.sortOrder)
                 .map { SlipData(it, config.publicBaseUrl) }
         }
@@ -627,7 +627,7 @@ fun Route.posRoutes(
                         objectNames[o[FloorObjects.id]].orEmpty(),
                     )
                 }
-            Zones.selectAll().orderBy(Zones.sortOrder).map {
+            Zones.selectAll().where { Zones.id notInList dev.dwhipstock.pos.orders.SaleLocations.OFF_FLOOR }.orderBy(Zones.sortOrder).map {
                 ZoneDto(it[Zones.id], it[Zones.nameFr], it[Zones.nameEn], it[Zones.status],
                     tablesByZone[it[Zones.id]] ?: emptyList(),
                     objectsByZone[it[Zones.id]] ?: emptyList(),

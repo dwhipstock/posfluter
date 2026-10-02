@@ -1,6 +1,8 @@
 package dev.dwhipstock.pos.restaurant
 
 import dev.dwhipstock.pos.base.NotFoundException
+import dev.dwhipstock.pos.orders.CounterOrders
+import dev.dwhipstock.pos.orders.SaleLocations
 import dev.dwhipstock.pos.base.ConflictException
 import dev.dwhipstock.pos.base.BadRequestException
 import dev.dwhipstock.pos.sdk.VenueClock
@@ -168,9 +170,10 @@ internal fun receiptCardOf(json: String?): dev.dwhipstock.pos.sdk.ReceiptCard? =
 }
 
 /**
- * The quick-serve counter's side of a check (Copper Lantern Express). [paid]
- * runs inside the closing transaction (the order gets its number there,
- * before the receipt prints); the others after, and never block a sale.
+ * The numbered-order side of a check ([dev.dwhipstock.pos.orders.PickupOrders]:
+ * the quick-serve counter, a restaurant's carry-out). [paid] runs inside the
+ * closing transaction (the order gets its number there, before the receipt
+ * prints); the others after, and never block a sale.
  */
 interface CounterHook {
     /** The check is paid in full and closing: commit the counter order. Inside the transaction. */
@@ -179,7 +182,7 @@ interface CounterHook {
     fun afterPaid(checkId: Int)
     /** The check was cancelled (emptied, discarded, expired): the unpaid order is gone. */
     fun cancelled(checkId: Int)
-    /** The order number and dine in / take out for the receipt ("#101 · Take out"); null = not a counter order. */
+    /** The order number and dine in / take out for the receipt ("#101 · Take out", "Order #105 · Carry-out"); null = not a numbered order. */
     fun receiptOrder(checkId: Int): dev.dwhipstock.pos.sdk.ReceiptOrder?
 }
 
@@ -200,7 +203,7 @@ class CheckService(private val config: CustomerConfig) {
      */
     var forecourt: dev.dwhipstock.pos.forecourt.ForecourtHook? = null
 
-    /** The quick-serve counter (Copper Lantern Express), else null. See [CounterHook]. */
+    /** Numbered orders (the quick-serve counter, carry-out), else null. See [CounterHook]. */
     var counter: CounterHook? = null
 
     private fun afterForecourt(view: CheckView): CheckView {
@@ -245,9 +248,12 @@ class CheckService(private val config: CustomerConfig) {
 
     fun openCheck(tableId: String, userId: String): CheckView = transaction {
         // deleted tables refuse new checks — an old QR slip must not revive one
-        DiningTables.selectAll()
+        val table = DiningTables.selectAll()
             .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
             .firstOrNull() ?: throw NotFoundException("table $tableId not found")
+        // the carry-out "table" holds many orders, each opened by number (CarryOutService)
+        if (SaleLocations.isOffFloor(table[DiningTables.zoneId]))
+            throw ConflictException("$tableId is not a table", "not_a_table")
 
         // idempotent: reopening a table with a live check returns that check
         val existing = Checks.selectAll()
@@ -1972,6 +1978,8 @@ class CheckService(private val config: CustomerConfig) {
         val fromTableId = check[Checks.tableId]
         if (fromTableId == toTableId)
             throw ConflictException("check $checkId is already on table $toTableId", "same_table")
+        if (SaleLocations.isOffFloorTable(toTableId))
+            throw ConflictException("$toTableId is not a table", "not_a_table")
         DiningTables.selectAll()
             .where { (DiningTables.id eq toTableId) and DiningTables.deletedAt.isNull() }
             .firstOrNull() ?: throw NotFoundException("table $toTableId not found")
@@ -2076,6 +2084,9 @@ class CheckService(private val config: CustomerConfig) {
         val check = requireCheck(checkId)
         if (check[Checks.status] != "OPEN")
             throw ConflictException("check $checkId is ${check[Checks.status]}", "check_not_open")
+        // a carry-out order has its number, not a table: never moved onto one or merged
+        if (SaleLocations.isOffFloorTable(check[Checks.tableId]))
+            throw ConflictException("check $checkId is a carry-out order, not at a table", "not_a_table")
         if (splitGroups(checkId).isNotEmpty())
             throw ConflictException("check $checkId is split; clear the split first", "clear_split_first")
         val pending = CheckLines.selectAll()

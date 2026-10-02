@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
+import '../carryout/carry_out_screen.dart';
 import '../quickserve/counter_screen.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
@@ -730,6 +731,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 16),
                     // quick-serve: a new counter order starts as take out or dine in
                     if (QuickServeApi.enabled) const CounterModeSetting(),
+                    // a table-service store: carry-out's header button
+                    if (!QuickServeApi.enabled && !StoreProfile.current.isRetail)
+                      const CarryOutHeaderSetting(),
                     // the card terminal (simulator / J.P. Morgan): pair a LAN one
                     const CardTerminalSettings(),
                     ..._guestWifiSection(l),

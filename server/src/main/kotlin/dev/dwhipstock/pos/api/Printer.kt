@@ -106,7 +106,7 @@ fun Route.printerRoutes(printer: NetworkThermalPrinter, config: CustomerConfig, 
         val slips = transaction {
             DiningTables.join(Zones, JoinType.INNER, DiningTables.zoneId, Zones.id)
                 .selectAll()
-                .where { DiningTables.deletedAt.isNull() }
+                .where { DiningTables.deletedAt.isNull() and (Zones.id notInList dev.dwhipstock.pos.orders.SaleLocations.OFF_FLOOR) }
                 .orderBy(Zones.sortOrder to SortOrder.ASC, DiningTables.sortOrder to SortOrder.ASC)
                 .map { slipLines(it, config, wifi) }
         }

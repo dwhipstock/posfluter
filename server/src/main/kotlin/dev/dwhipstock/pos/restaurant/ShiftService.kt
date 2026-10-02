@@ -1,6 +1,8 @@
 package dev.dwhipstock.pos.restaurant
 
 import dev.dwhipstock.pos.base.ConflictException
+import dev.dwhipstock.pos.orders.CounterOrders
+import dev.dwhipstock.pos.orders.OrderSource
 import dev.dwhipstock.pos.base.BadRequestException
 import dev.dwhipstock.pos.sdk.VenueClock
 
@@ -335,6 +337,7 @@ class ShiftService(private val config: CustomerConfig) {
             cashRoundingCents = agg.cashRounding,
             dineInCount = agg.modes["DINE_IN"] ?: 0,
             takeOutCount = agg.modes["TAKE_OUT"] ?: 0,
+            carryOutCount = agg.modes["CARRY_OUT"] ?: 0,
             tipsCents = agg.tips,
             tipsByServer = agg.tipsByServer,
             taxes = taxes,
@@ -448,10 +451,16 @@ class ShiftService(private val config: CustomerConfig) {
 
         // quick-serve: how many were eaten in and taken out (no counter orders elsewhere)
         val modeCount = CounterOrders.checkId.count()
-        val modes = CounterOrders.select(CounterOrders.serviceMode, modeCount)
+        // a restaurant's carry-out orders count on their own ("CARRY_OUT"), not as take out
+        val modes = CounterOrders.select(CounterOrders.orderSource, CounterOrders.serviceMode, modeCount)
             .where { CounterOrders.checkId inSubQuery ids }
-            .groupBy(CounterOrders.serviceMode)
-            .associate { it[CounterOrders.serviceMode] to it[modeCount].toInt() }
+            .groupBy(CounterOrders.orderSource, CounterOrders.serviceMode)
+            .toList()
+            .groupBy({
+                if (it[CounterOrders.orderSource] == OrderSource.CARRY_OUT.wire) OrderSource.CARRY_OUT.wire
+                else it[CounterOrders.serviceMode]
+            }) { it[modeCount].toInt() }
+            .mapValues { it.value.sum() }
 
         val cashRows = tenderRows.filter { it[Tenders.type] == "CASH" }
         return Aggregates(
@@ -520,6 +529,7 @@ class ShiftService(private val config: CustomerConfig) {
             overShortCents = closingCountCents?.let { it - expected },
             dineInCount = agg.modes["DINE_IN"] ?: 0,
             takeOutCount = agg.modes["TAKE_OUT"] ?: 0,
+            carryOutCount = agg.modes["CARRY_OUT"] ?: 0,
             tipsCents = agg.tips,
             tipsByServer = agg.tipsByServer,
             taxes = taxBreakdown({ Checks.shiftId eq shiftId },
@@ -645,6 +655,8 @@ data class ShiftReport(
     /** Quick-serve: paid counter orders eaten in / taken out (both 0 elsewhere). */
     val dineInCount: Int = 0,
     val takeOutCount: Int = 0,
+    /** A restaurant's paid carry-out orders (0 elsewhere). */
+    val carryOutCount: Int = 0,
     /** Card tips on top of the bills (reader / Stripe): not revenue, owed to staff. */
     val tipsCents: Long = 0,
     val tipsByServer: List<ServerTips> = emptyList(),

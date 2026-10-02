@@ -222,6 +222,15 @@ additive.
   (`venues.currency`, which is `CAD` for every store that predates this).
   Reports never add two currencies together (§6).
 
+### Carry-out sales (a table-service restaurant)
+A carry-out (to-go) order is an ordinary `check.closed` on the store's
+off-floor carry-out location: `tableId` `carry-out-1`, `tableLabel`
+`Carry-out`, zone `carry-out` (`zoneNameEn` `Carry-out`, `zoneNameFr`
+`À emporter`). Nothing new in the payload: its order number and the
+call-in customer's name / phone stay in the store. The carry-out zone is
+never in the floor's zone list (nor in `catalog.snapshot` zone names), so the
+portal sees it only through its sales.
+
 ### Retail sales (a store whose kind is retail)
 A retail counter sale is an ordinary `check.closed` on the store's one
 register (`tableId` `register-1`, zone `counter`), in the store's currency.

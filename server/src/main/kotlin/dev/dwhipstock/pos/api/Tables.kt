@@ -283,7 +283,7 @@ private fun validateGeometry(x: Int, y: Int, width: Int, height: Int,
 }
 
 private fun requireZone(zoneId: String): ResultRow =
-    Zones.selectAll().where { Zones.id eq zoneId }.firstOrNull()
+    Zones.selectAll().where { Zones.id eq zoneId }.firstOrNull()?.takeUnless { dev.dwhipstock.pos.orders.SaleLocations.isOffFloor(zoneId) }
         ?: throw NotFoundException("zone $zoneId not found")
 
 fun requireLiveTable(tableId: String): ResultRow =

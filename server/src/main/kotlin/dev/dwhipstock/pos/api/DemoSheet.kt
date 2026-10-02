@@ -67,7 +67,7 @@ fun Route.demoSheetRoutes(
         val firstTable = if (quickServe) null else transaction {
             DiningTables.join(Zones, JoinType.INNER, DiningTables.zoneId, Zones.id)
                 .selectAll()
-                .where { DiningTables.deletedAt.isNull() and DiningTables.publicToken.isNotNull() }
+                .where { DiningTables.deletedAt.isNull() and DiningTables.publicToken.isNotNull() and (Zones.id notInList dev.dwhipstock.pos.orders.SaleLocations.OFF_FLOOR) }
                 .orderBy(Zones.sortOrder to SortOrder.ASC, DiningTables.sortOrder to SortOrder.ASC)
                 .firstOrNull()
                 ?.let {

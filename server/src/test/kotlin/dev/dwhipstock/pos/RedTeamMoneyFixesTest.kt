@@ -8,7 +8,7 @@ import dev.dwhipstock.pos.db.SyncOutbox
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.payments.simulator.SimulatedTerminalDevice
 import dev.dwhipstock.pos.restaurant.CheckService
-import dev.dwhipstock.pos.restaurant.CounterOrders
+import dev.dwhipstock.pos.orders.CounterOrders
 import dev.dwhipstock.pos.restaurant.KioskOrderLine
 import dev.dwhipstock.pos.restaurant.KioskOrderRequest
 import dev.dwhipstock.pos.restaurant.QuickServeService

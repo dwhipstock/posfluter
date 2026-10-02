@@ -468,6 +468,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     'HOST_STAND' => (80, 60),
     'RESTROOMS' => (120, 80),
     'STAGE' => (240, 140),
+    'CARRY_OUT' => (140, 80),
     _ => (80, 80), // PILLAR — a small block
   };
 
@@ -1144,6 +1145,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                         'KITCHEN',
                         'RESTROOMS',
                         'STAGE',
+                        'CARRY_OUT',
                       ])
                         _objectMenuItem(
                           type,

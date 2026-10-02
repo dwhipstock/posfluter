@@ -43,7 +43,10 @@ class SlipTest {
         // print-all page: one slip per seeded table, VIP name override shown.
         // Count is derived from the DB (seed + migrations) so table-layout migrations
         // don't require touching this assertion.
-        val tableCount = transaction { DiningTables.selectAll().count().toInt() }
+        // the off-floor carry-out "table" never gets a slip
+        val tableCount = transaction {
+            DiningTables.selectAll().where { DiningTables.zoneId neq dev.dwhipstock.pos.orders.SaleLocations.CARRY_OUT_ZONE }.count().toInt()
+        }
         val all = client.get("/slips?ticket=$ticket").bodyAsText()
         assertEquals(tableCount, Regex("class=\"slip\"").findAll(all).count())
         assertTrue("Alex Morgan" in all)

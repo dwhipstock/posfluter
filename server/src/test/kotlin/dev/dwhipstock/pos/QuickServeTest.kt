@@ -7,7 +7,7 @@ import dev.dwhipstock.pos.customers.copperlantern.CopperLanternVenue
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.base.ConflictException
-import dev.dwhipstock.pos.restaurant.CounterOrders
+import dev.dwhipstock.pos.orders.CounterOrders
 import dev.dwhipstock.pos.restaurant.CounterSettingsUpdate
 import dev.dwhipstock.pos.restaurant.KioskOrderLine
 import dev.dwhipstock.pos.restaurant.KioskOrderRequest
@@ -516,7 +516,8 @@ class QuickServeTest {
     fun `the full-service pubs have no counter routes`() = testApplication {
         application { module(dbPath = File(tempDir(), "pos.db").path, venueId = "plateau", physicalPrinterEnabled = false) }
         assertEquals("restaurant", obj(client.get("/health").bodyAsText())["kind"]!!.jsonPrimitive.content)
-        assertEquals(HttpStatusCode.NotFound, client.get("/pickup/board").status)
+        // the pickup board is shared now: a pub has it for its carry-out orders
+        assertEquals(HttpStatusCode.OK, client.get("/pickup/board").status)
         assertEquals(HttpStatusCode.NotFound, client.postJson("/kiosk/orders", "{}").status)
         assertNull(obj(client.get("/health").bodyAsText())["forecourt"])
         assertFalse(loginClient().get("/counter/orders").status == HttpStatusCode.OK)

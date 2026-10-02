@@ -622,6 +622,13 @@ class L {
       'Toilette',
     ),
     'STAGE' => _t('Scène', 'Stage', 'Escenario', 'Bühne', 'Verhoog'),
+    'CARRY_OUT' => _t(
+      'À emporter',
+      'Carry-out',
+      'Para llevar',
+      'Zum Mitnehmen',
+      'Wegneem',
+    ),
     _ => null,
   };
   // a manager-made object: by hand, or suggested by the AI from a photo

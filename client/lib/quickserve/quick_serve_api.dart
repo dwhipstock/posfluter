@@ -14,15 +14,23 @@ class CounterOrder {
   /// DINE_IN | TAKE_OUT
   final String serviceMode;
 
-  /// POS | KIOSK
+  /// POS | KIOSK | CARRY_OUT
   final String source;
 
-  /// DRAFT | WAITING (unpaid) | PREPARING | READY | PICKED_UP (paid)
+  /// DRAFT | WAITING (unpaid) | PREPARING | READY | PICKED_UP (paid);
+  /// carry-out: OPEN (not at the kitchen yet) | PREPARING | READY |
+  /// PICKED_UP, paid or not until it is picked up.
   final String status;
 
   /// The check's own status: OPEN (unpaid) | TOTAL_LOCKED | CLOSED (paid).
   final String checkStatus;
   final bool hasAlcohol;
+
+  /// Carry-out: the call-in customer (both optional).
+  final String? customerName, customerPhone;
+
+  /// When the order was taken (ISO).
+  final String? createdAt;
 
   const CounterOrder({
     required this.checkId,
@@ -36,6 +44,9 @@ class CounterOrder {
     this.outstandingCents = 0,
     this.itemCount = 0,
     this.hasAlcohol = false,
+    this.customerName,
+    this.customerPhone,
+    this.createdAt,
   });
 
   factory CounterOrder.fromJson(Map<String, dynamic> j) => CounterOrder(
@@ -50,11 +61,15 @@ class CounterOrder {
     outstandingCents: (j['outstandingCents'] as num? ?? 0).toInt(),
     itemCount: (j['itemCount'] as num? ?? 0).toInt(),
     hasAlcohol: j['hasAlcohol'] == true,
+    customerName: j['customerName'] as String?,
+    customerPhone: j['customerPhone'] as String?,
+    createdAt: j['createdAt'] as String?,
   );
 
   bool get paid => checkStatus == 'CLOSED';
   bool get takeOut => serviceMode == 'TAKE_OUT';
   bool get fromKiosk => source == 'KIOSK';
+  bool get carryOut => source == 'CARRY_OUT';
 
   /// "#101" (a kiosk order from the start, a counter order once paid).
   String get label => orderNumber != null

@@ -155,7 +155,7 @@ fun Route.zoneManagementRoutes(auth: AuthService) {
 // --- helpers (call inside a transaction) ---
 
 private fun requireZone(zoneId: String): ResultRow =
-    Zones.selectAll().where { Zones.id eq zoneId }.firstOrNull()
+    Zones.selectAll().where { Zones.id eq zoneId }.firstOrNull()?.takeUnless { dev.dwhipstock.pos.orders.SaleLocations.isOffFloor(zoneId) }
         ?: throw NotFoundException("zone $zoneId not found")
 
 /**

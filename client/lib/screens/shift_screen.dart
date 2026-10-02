@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api.dart';
+import '../carryout/carry_out_i18n.dart';
 import '../quickserve/quick_serve_i18n.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
@@ -659,6 +660,13 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
                       '${Q.of(context).dineInCount(r.dineInCount)}  ·  '
                       '${Q.of(context).takeOutCount(r.takeOutCount)}',
                       key: const Key('service-mode-counts'),
+                      style: T.small(),
+                    ),
+                  // a restaurant's carry-out orders
+                  if (r.carryOutCount > 0)
+                    Text(
+                      C.of(context).orderCount(r.carryOutCount),
+                      key: const Key('carry-out-count'),
                       style: T.small(),
                     ),
                 ],

@@ -38,6 +38,7 @@ const _tables = [
     'af',
   ]),
   _Table('lib/kiosk/kiosk_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
+  _Table('lib/carryout/carry_out_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
   _Table('lib/retail/retail_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/stock/stock_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/forecourt/forecourt_i18n.dart', ['en', 'es', 'fr']),
