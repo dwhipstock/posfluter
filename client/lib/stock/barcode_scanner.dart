@@ -118,7 +118,9 @@ class _CameraScanPageState extends State<CameraScanPage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(s.scanWithCamera),
+        // the app themes give titles a dark colour: white on the black bar
+        titleTextStyle: T.headline(color: Colors.white),
+        title: Text(s.scanWithCamera, key: const Key('scanner-title')),
         actions: [
           IconButton(
             tooltip: s.torch,

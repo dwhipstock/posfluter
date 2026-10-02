@@ -442,6 +442,15 @@ void main() {
       await http.runWithClient(() async {
         await pumpApp(tester, counter, size, dpr);
         expect(tester.takeException(), isNull, reason: 'no overflow');
+        // the title on the navy bar is white, never navy on navy
+        final title = tester.renderObject<RenderParagraph>(
+          find.descendant(
+            of: find.byKey(const Key('counter-title')),
+            matching: find.byType(RichText),
+          ),
+        );
+        expect(title.text.toPlainText(), isNotEmpty);
+        expect(title.text.style?.color, T.onPrimary);
         if (_shotsDir.isNotEmpty) {
           await tester.runAsync(() async {
             final b =
