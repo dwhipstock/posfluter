@@ -1,0 +1,3779 @@
+{
+ "_comment": "Copper Lantern demo catalog as the stores seed it (CopperLanternSeed, CopperLanternExpressSeed, CopperLanternSpecials). Test fixture for scripts/demo-reseed.py --menu-json; a real run reads the cloud's catalog instead.",
+ "tenant": "copperlantern",
+ "venues": [
+  {
+   "id": "vieux-port",
+   "name": "Copper Lantern — Glenwood South",
+   "timezone": "America/New_York",
+   "currency": "USD",
+   "menu": {
+    "categories": [
+     {
+      "id": "beer-cider",
+      "nameFr": "Bières et cidres",
+      "nameEn": "Beer & Cider",
+      "sortOrder": 0
+     },
+     {
+      "id": "wine",
+      "nameFr": "Vins",
+      "nameEn": "Wine",
+      "sortOrder": 1
+     },
+     {
+      "id": "cocktails",
+      "nameFr": "Cocktails",
+      "nameEn": "Cocktails",
+      "sortOrder": 2
+     },
+     {
+      "id": "starters",
+      "nameFr": "Entrées",
+      "nameEn": "Starters",
+      "sortOrder": 3
+     },
+     {
+      "id": "burgers-sandwiches",
+      "nameFr": "Burgers et sandwichs",
+      "nameEn": "Burgers & Sandwiches",
+      "sortOrder": 4
+     },
+     {
+      "id": "mains-salads",
+      "nameFr": "Plats et salades",
+      "nameEn": "Mains & Salads",
+      "sortOrder": 5
+     },
+     {
+      "id": "desserts",
+      "nameFr": "Desserts",
+      "nameEn": "Desserts",
+      "sortOrder": 6
+     }
+    ],
+    "items": [
+     {
+      "id": "lantern-lager",
+      "nameFr": "Lager de la Lanterne",
+      "nameEn": "Lantern House Lager",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "lantern-lager:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 750,
+        "sortOrder": 0
+       },
+       {
+        "id": "lantern-lager:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2025,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "mon",
+         "tue",
+         "wed",
+         "thu",
+         "fri"
+        ],
+        "from": "16:00",
+        "to": "18:00",
+        "prices": {
+         "lantern-lager:pint": 500
+        }
+       }
+      ]
+     },
+     {
+      "id": "amber-ale",
+      "nameFr": "Ambrée cuivrée",
+      "nameEn": "Copper Amber Ale",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "amber-ale:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 795,
+        "sortOrder": 0
+       },
+       {
+        "id": "amber-ale:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2150,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "north-ipa",
+      "nameFr": "IPA du Nord",
+      "nameEn": "North Trail IPA",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "north-ipa:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 825,
+        "sortOrder": 0
+       },
+       {
+        "id": "north-ipa:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2295,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "maple-stout",
+      "nameFr": "Stout à l'érable",
+      "nameEn": "Maple Oat Stout",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "maple-stout:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 850,
+        "sortOrder": 0
+       },
+       {
+        "id": "maple-stout:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2375,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "wheat-beer",
+      "nameFr": "Blanche aux agrumes",
+      "nameEn": "Citrus Wheat",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "wheat-beer:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 775,
+        "sortOrder": 0
+       },
+       {
+        "id": "wheat-beer:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2125,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "canadian-lager",
+      "nameFr": "Lager américaine",
+      "nameEn": "American Lager",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "canadian-lager:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 650,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "pilsner-can",
+      "nameFr": "Pilsner en canette",
+      "nameEn": "Pilsner Can",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "pilsner-can:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 695,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "porter-can",
+      "nameFr": "Porter robuste",
+      "nameEn": "Robust Porter",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "porter-can:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 795,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "hazy-ipa",
+      "nameFr": "IPA voilée locale",
+      "nameEn": "Local Hazy IPA",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "hazy-ipa:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 825,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "saison",
+      "nameFr": "Saison fermière",
+      "nameEn": "Farmhouse Saison",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "saison:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 800,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "belgian-blonde",
+      "nameFr": "Blonde belge",
+      "nameEn": "Belgian Blonde",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "belgian-blonde:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 875,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "irish-stout",
+      "nameFr": "Stout irlandais",
+      "nameEn": "Irish Stout",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "irish-stout:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "mexican-lager",
+      "nameFr": "Lager mexicaine",
+      "nameEn": "Mexican Lager",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "mexican-lager:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 795,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "dry-cider",
+      "nameFr": "Cidre sec du verger",
+      "nameEn": "Orchard Dry Cider",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "dry-cider:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 795,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "berry-cider",
+      "nameFr": "Cidre aux petits fruits",
+      "nameEn": "Berry Cider",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "berry-cider:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 800,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "na-lager",
+      "nameFr": "Lager sans alcool",
+      "nameEn": "Non-Alcoholic Lager",
+      "categoryId": "beer-cider",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "na-lager:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 575,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "hop-water",
+      "nameFr": "Eau houblonnée",
+      "nameEn": "Sparkling Hop Water",
+      "categoryId": "beer-cider",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "hop-water:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 495,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "pinot-noir",
+      "nameFr": "Pinot noir de l'Oregon",
+      "nameEn": "Oregon Pinot Noir",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "pinot-noir:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1125,
+        "sortOrder": 0
+       },
+       {
+        "id": "pinot-noir:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4325,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "cab-merlot",
+      "nameFr": "Cabernet-merlot",
+      "nameEn": "Cabernet Merlot",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "cab-merlot:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1025,
+        "sortOrder": 0
+       },
+       {
+        "id": "cab-merlot:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 3950,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "mon",
+         "tue",
+         "wed",
+         "thu",
+         "fri"
+        ],
+        "from": "16:00",
+        "to": "18:00",
+        "prices": {
+         "cab-merlot:glass": 700
+        }
+       }
+      ]
+     },
+     {
+      "id": "malbec",
+      "nameFr": "Malbec argentin",
+      "nameEn": "Argentinian Malbec",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "malbec:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1175,
+        "sortOrder": 0
+       },
+       {
+        "id": "malbec:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4500,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "riesling",
+      "nameFr": "Riesling des Finger Lakes",
+      "nameEn": "Finger Lakes Riesling",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "riesling:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 995,
+        "sortOrder": 0
+       },
+       {
+        "id": "riesling:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 3775,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "chardonnay",
+      "nameFr": "Chardonnay boisé",
+      "nameEn": "Oaked Chardonnay",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "chardonnay:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1075,
+        "sortOrder": 0
+       },
+       {
+        "id": "chardonnay:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4150,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "sauvignon-blanc",
+      "nameFr": "Sauvignon blanc",
+      "nameEn": "Sauvignon Blanc",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "sauvignon-blanc:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1125,
+        "sortOrder": 0
+       },
+       {
+        "id": "sauvignon-blanc:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4325,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "rose",
+      "nameFr": "Rosé de la vallée de la Yadkin",
+      "nameEn": "Yadkin Valley Rosé",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "rose:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1025,
+        "sortOrder": 0
+       },
+       {
+        "id": "rose:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 3950,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "sparkling",
+      "nameFr": "Mousseux brut",
+      "nameEn": "Sparkling Brut",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "sparkling:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1250,
+        "sortOrder": 0
+       },
+       {
+        "id": "sparkling:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4850,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "icewine",
+      "nameFr": "Cidre de glace",
+      "nameEn": "Ice Cider",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "icewine:2oz",
+        "labelFr": "Verre 2 oz",
+        "labelEn": "2 oz glass",
+        "priceCents": 1475,
+        "sortOrder": 0
+       },
+       {
+        "id": "icewine:375ml",
+        "labelFr": "Bouteille 375 ml",
+        "labelEn": "375 ml bottle",
+        "priceCents": 6475,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "copper-old-fashioned",
+      "nameFr": "Old Fashioned cuivré",
+      "nameEn": "Copper Old Fashioned",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "copper-old-fashioned:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1395,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "lantern-mule",
+      "nameFr": "Mule de la Lanterne",
+      "nameEn": "Lantern Mule",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "lantern-mule:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "smoked-caesar",
+      "nameFr": "Bloody Mary fumé",
+      "nameEn": "Smoked Bloody Mary",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "smoked-caesar:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "maple-sour",
+      "nameFr": "Whisky sour à l'érable",
+      "nameEn": "Maple Whisky Sour",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "maple-sour:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1350,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "elderflower-gin",
+      "nameFr": "Gin fizz au sureau",
+      "nameEn": "Elderflower Gin Fizz",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "elderflower-gin:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1350,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "espresso-martini",
+      "nameFr": "Martini espresso",
+      "nameEn": "Espresso Martini",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "espresso-martini:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1395,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "dark-stormy",
+      "nameFr": "Dark and Stormy",
+      "nameEn": "Dark and Stormy",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "dark-stormy:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "zero-gimlet",
+      "nameFr": "Gimlet sans alcool",
+      "nameEn": "Zero-Proof Gimlet",
+      "categoryId": "cocktails",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "zero-gimlet:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "pretzel",
+      "nameFr": "Bretzel géant",
+      "nameEn": "Giant Pub Pretzel",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "pretzel:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1225,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "wings",
+      "nameFr": "Ailes de poulet",
+      "nameEn": "Chicken Wings",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "wings:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1675,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "nachos",
+      "nameFr": "Nachos de la maison",
+      "nameEn": "Loaded Pub Nachos",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "nachos:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1750,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "calamari",
+      "nameFr": "Calmars croustillants",
+      "nameEn": "Crispy Calamari",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "calamari:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1675,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "spinach-dip",
+      "nameFr": "Trempette épinards-artichauts",
+      "nameEn": "Spinach Artichoke Dip",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "spinach-dip:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1475,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "poutine",
+      "nameFr": "Poutine classique",
+      "nameEn": "Classic Poutine",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "poutine:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "lantern-burger",
+      "nameFr": "Burger de la Lanterne",
+      "nameEn": "Copper Lantern Burger",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "lantern-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1925,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "tue"
+        ],
+        "prices": {
+         "lantern-burger:regular": 1495
+        }
+       }
+      ]
+     },
+     {
+      "id": "mushroom-burger",
+      "nameFr": "Burger aux champignons",
+      "nameEn": "Mushroom Swiss Burger",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "mushroom-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1975,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "veggie-burger",
+      "nameFr": "Burger végétarien",
+      "nameEn": "Garden Veggie Burger",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "veggie-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1750,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "club",
+      "nameFr": "Club au poulet",
+      "nameEn": "Grilled Chicken Club",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "club:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "reuben",
+      "nameFr": "Reuben classique",
+      "nameEn": "Classic Reuben",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "reuben:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1925,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "fish-sandwich",
+      "nameFr": "Sandwich au poisson",
+      "nameEn": "Crispy Fish Sandwich",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "fish-sandwich:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1750,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "fish-chips",
+      "nameFr": "Poisson-frites",
+      "nameEn": "Beer-Battered Fish and Chips",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "fish-chips:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 2025,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "steak-frites",
+      "nameFr": "Steak-frites",
+      "nameEn": "Steak Frites",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "steak-frites:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 2650,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "shepherd-pie",
+      "nameFr": "Pâté chinois",
+      "nameEn": "Shepherd's Pie",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "shepherd-pie:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1925,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "mac-cheese",
+      "nameFr": "Macaroni aux trois fromages",
+      "nameEn": "Three-Cheese Mac",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "mac-cheese:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1675,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "salmon",
+      "nameFr": "Saumon à l'érable",
+      "nameEn": "Maple-Glazed Salmon",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "salmon:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 2475,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "chicken-pot-pie",
+      "nameFr": "Pâté au poulet",
+      "nameEn": "Chicken Pot Pie",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "chicken-pot-pie:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "caesar-salad",
+      "nameFr": "Salade César",
+      "nameEn": "Caesar Salad",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "caesar-salad:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "harvest-salad",
+      "nameFr": "Salade de la récolte",
+      "nameEn": "Harvest Salad",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "harvest-salad:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1475,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "falafel-bowl",
+      "nameFr": "Bol de falafels",
+      "nameEn": "Falafel Grain Bowl",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "falafel-bowl:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1675,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "cauliflower",
+      "nameFr": "Steak de chou-fleur rôti",
+      "nameEn": "Roasted Cauliflower Steak",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "cauliflower:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1750,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "sticky-pudding",
+      "nameFr": "Pouding au caramel",
+      "nameEn": "Sticky Toffee Pudding",
+      "categoryId": "desserts",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "sticky-pudding:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "cheesecake",
+      "nameFr": "Gâteau au fromage à l'érable",
+      "nameEn": "Maple Cheesecake",
+      "categoryId": "desserts",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "cheesecake:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "brownie",
+      "nameFr": "Brownie au stout",
+      "nameEn": "Stout Brownie",
+      "categoryId": "desserts",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "brownie:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 800,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "late-fries",
+      "nameFr": "Frites de fin de soirée",
+      "nameEn": "Late-Night Fries",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "late-fries:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 775,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "mini-burgers",
+      "nameFr": "Mini-burgers",
+      "nameEn": "Midnight Sliders",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "mini-burgers:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "grilled-cheese",
+      "nameFr": "Fromage grillé",
+      "nameEn": "Grilled Cheese",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "grilled-cheese:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1025,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "onion-rings",
+      "nameFr": "Rondelles d'oignon",
+      "nameEn": "Onion Rings",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "onion-rings:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 950,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "prime-rib",
+      "nameFr": "Côte de bœuf rôtie",
+      "nameEn": "Prime Rib",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "prime-rib:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 3495,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": [
+       "fri",
+       "sat"
+      ],
+      "specials": null
+     },
+     {
+      "id": "sunday-roast",
+      "nameFr": "Rôti du dimanche",
+      "nameEn": "Sunday Roast",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "sunday-roast:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 2495,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": [
+       "sun"
+      ],
+      "specials": null
+     }
+    ]
+   },
+   "floor": {
+    "rooms": [
+     {
+      "id": "upper",
+      "nameFr": "Salle à manger et bar",
+      "nameEn": "Dining Room & Bar",
+      "labelPrefix": "U"
+     },
+     {
+      "id": "outside",
+      "nameFr": "Terrasse",
+      "nameEn": "Patio",
+      "labelPrefix": "O"
+     },
+     {
+      "id": "lower",
+      "nameFr": "Salle de jeux",
+      "nameEn": "Games Room",
+      "labelPrefix": "L"
+     }
+    ],
+    "tables": [
+     {
+      "id": "t5",
+      "zoneId": "upper",
+      "label": "U-1",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "t5-5",
+      "zoneId": "upper",
+      "label": "U-2",
+      "seats": 1,
+      "parentTableId": "t5"
+     },
+     {
+      "id": "t6",
+      "zoneId": "upper",
+      "label": "U-3",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "b1",
+      "zoneId": "upper",
+      "label": "U-4",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "b2",
+      "zoneId": "upper",
+      "label": "U-5",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "b3",
+      "zoneId": "upper",
+      "label": "U-6",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "b4",
+      "zoneId": "upper",
+      "label": "U-7",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "t1",
+      "zoneId": "upper",
+      "label": "U-8",
+      "seats": 6,
+      "parentTableId": null
+     },
+     {
+      "id": "t1-1",
+      "zoneId": "upper",
+      "label": "U-9",
+      "seats": 4,
+      "parentTableId": "t1"
+     },
+     {
+      "id": "t2",
+      "zoneId": "upper",
+      "label": "U-10",
+      "seats": 6,
+      "parentTableId": null
+     },
+     {
+      "id": "u2-2",
+      "zoneId": "upper",
+      "label": "U-11",
+      "seats": 4,
+      "parentTableId": "t2"
+     },
+     {
+      "id": "u3",
+      "zoneId": "upper",
+      "label": "U-12",
+      "seats": 8,
+      "parentTableId": null
+     },
+     {
+      "id": "u3-3",
+      "zoneId": "upper",
+      "label": "U-13",
+      "seats": 4,
+      "parentTableId": "u3"
+     },
+     {
+      "id": "u4",
+      "zoneId": "upper",
+      "label": "U-14",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "u4-4",
+      "zoneId": "upper",
+      "label": "U-15",
+      "seats": 4,
+      "parentTableId": "u4"
+     },
+     {
+      "id": "u5",
+      "zoneId": "upper",
+      "label": "U-16",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "u5-5",
+      "zoneId": "upper",
+      "label": "U-17",
+      "seats": 4,
+      "parentTableId": "u5"
+     },
+     {
+      "id": "t3",
+      "zoneId": "outside",
+      "label": "O-1",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "t4",
+      "zoneId": "outside",
+      "label": "O-2",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "o3",
+      "zoneId": "outside",
+      "label": "O-3",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "o4",
+      "zoneId": "outside",
+      "label": "O-4",
+      "seats": 6,
+      "parentTableId": null
+     },
+     {
+      "id": "t7",
+      "zoneId": "lower",
+      "label": "L-1",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "t8",
+      "zoneId": "lower",
+      "label": "L-2",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "t101",
+      "zoneId": "lower",
+      "label": "L-3",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l9",
+      "zoneId": "lower",
+      "label": "L-4",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l10",
+      "zoneId": "lower",
+      "label": "L-5",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l11",
+      "zoneId": "lower",
+      "label": "L-6",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l12",
+      "zoneId": "lower",
+      "label": "L-7",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l13",
+      "zoneId": "lower",
+      "label": "L-8",
+      "seats": 4,
+      "parentTableId": null
+     }
+    ]
+   },
+   "staff": [
+    {
+     "id": "manager",
+     "name": "Demo Manager",
+     "role": "MANAGER"
+    },
+    {
+     "id": "server1",
+     "name": "Demo Server",
+     "role": "SERVER"
+    }
+   ]
+  },
+  {
+   "id": "express",
+   "name": "Copper Lantern — Express",
+   "timezone": "America/New_York",
+   "currency": "USD",
+   "menu": {
+    "categories": [
+     {
+      "id": "burgers",
+      "nameFr": "Burgers",
+      "nameEn": "Burgers",
+      "sortOrder": 0
+     },
+     {
+      "id": "chicken",
+      "nameFr": "Poulet",
+      "nameEn": "Chicken",
+      "sortOrder": 1
+     },
+     {
+      "id": "fries-sides",
+      "nameFr": "Frites et accompagnements",
+      "nameEn": "Fries & Sides",
+      "sortOrder": 2
+     },
+     {
+      "id": "salads",
+      "nameFr": "Salades",
+      "nameEn": "Salads",
+      "sortOrder": 3
+     },
+     {
+      "id": "desserts",
+      "nameFr": "Desserts",
+      "nameEn": "Desserts",
+      "sortOrder": 4
+     },
+     {
+      "id": "soft-drinks",
+      "nameFr": "Boissons",
+      "nameEn": "Soft Drinks",
+      "sortOrder": 5
+     },
+     {
+      "id": "beer-wine",
+      "nameFr": "Bières et vins",
+      "nameEn": "Beer & Wine",
+      "sortOrder": 6
+     }
+    ],
+    "items": [
+     {
+      "id": "lantern-burger",
+      "nameFr": "Burger de la Lanterne",
+      "nameEn": "Copper Lantern Burger",
+      "categoryId": "burgers",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "lantern-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1195,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "mushroom-burger",
+      "nameFr": "Burger aux champignons",
+      "nameEn": "Mushroom Swiss Burger",
+      "categoryId": "burgers",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "mushroom-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1245,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "veggie-burger",
+      "nameFr": "Burger végétarien",
+      "nameEn": "Garden Veggie Burger",
+      "categoryId": "burgers",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "veggie-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1145,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "double-cheeseburger",
+      "nameFr": "Double cheeseburger",
+      "nameEn": "Double Cheeseburger",
+      "categoryId": "burgers",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "double-cheeseburger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1295,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "tue"
+        ],
+        "prices": {
+         "double-cheeseburger:regular": 995
+        }
+       }
+      ]
+     },
+     {
+      "id": "wings",
+      "nameFr": "Ailes de poulet",
+      "nameEn": "Chicken Wings",
+      "categoryId": "chicken",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "wings:6pc",
+        "labelFr": "6 morceaux",
+        "labelEn": "6 pieces",
+        "priceCents": 995,
+        "sortOrder": 0
+       },
+       {
+        "id": "wings:12pc",
+        "labelFr": "12 morceaux",
+        "labelEn": "12 pieces",
+        "priceCents": 1795,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "club",
+      "nameFr": "Sandwich au poulet grillé",
+      "nameEn": "Grilled Chicken Sandwich",
+      "categoryId": "chicken",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "club:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1195,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "chicken-tenders",
+      "nameFr": "Lanières de poulet",
+      "nameEn": "Chicken Tenders",
+      "categoryId": "chicken",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "chicken-tenders:3pc",
+        "labelFr": "3 morceaux",
+        "labelEn": "3 pieces",
+        "priceCents": 895,
+        "sortOrder": 0
+       },
+       {
+        "id": "chicken-tenders:5pc",
+        "labelFr": "5 morceaux",
+        "labelEn": "5 pieces",
+        "priceCents": 1295,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "late-fries",
+      "nameFr": "Frites",
+      "nameEn": "Fries",
+      "categoryId": "fries-sides",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "late-fries:small",
+        "labelFr": "Petit",
+        "labelEn": "Small",
+        "priceCents": 395,
+        "sortOrder": 0
+       },
+       {
+        "id": "late-fries:medium",
+        "labelFr": "Moyen",
+        "labelEn": "Medium",
+        "priceCents": 495,
+        "sortOrder": 1
+       },
+       {
+        "id": "late-fries:large",
+        "labelFr": "Grand",
+        "labelEn": "Large",
+        "priceCents": 595,
+        "sortOrder": 2
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "poutine",
+      "nameFr": "Poutine classique",
+      "nameEn": "Classic Poutine",
+      "categoryId": "fries-sides",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "poutine:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 895,
+        "sortOrder": 0
+       },
+       {
+        "id": "poutine:large",
+        "labelFr": "Grande",
+        "labelEn": "Large",
+        "priceCents": 1195,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "onion-rings",
+      "nameFr": "Rondelles d'oignon",
+      "nameEn": "Onion Rings",
+      "categoryId": "fries-sides",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "onion-rings:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 595,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "caesar-salad",
+      "nameFr": "Salade César",
+      "nameEn": "Caesar Salad",
+      "categoryId": "salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "caesar-salad:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1095,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "harvest-salad",
+      "nameFr": "Salade des récoltes",
+      "nameEn": "Harvest Salad",
+      "categoryId": "salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "harvest-salad:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1195,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "brownie",
+      "nameFr": "Brownie au chocolat",
+      "nameEn": "Chocolate Brownie",
+      "categoryId": "desserts",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "brownie:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 495,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "maple-sundae",
+      "nameFr": "Coupe glacée à l'érable",
+      "nameEn": "Maple Sundae",
+      "categoryId": "desserts",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "maple-sundae:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 545,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "fountain-soda",
+      "nameFr": "Boisson gazeuse",
+      "nameEn": "Fountain Soda",
+      "categoryId": "soft-drinks",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "fountain-soda:small",
+        "labelFr": "Petit",
+        "labelEn": "Small",
+        "priceCents": 245,
+        "sortOrder": 0
+       },
+       {
+        "id": "fountain-soda:medium",
+        "labelFr": "Moyen",
+        "labelEn": "Medium",
+        "priceCents": 295,
+        "sortOrder": 1
+       },
+       {
+        "id": "fountain-soda:large",
+        "labelFr": "Grand",
+        "labelEn": "Large",
+        "priceCents": 345,
+        "sortOrder": 2
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "lemonade",
+      "nameFr": "Limonade maison",
+      "nameEn": "House Lemonade",
+      "categoryId": "soft-drinks",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "lemonade:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 395,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "iced-tea",
+      "nameFr": "Thé glacé",
+      "nameEn": "Iced Tea",
+      "categoryId": "soft-drinks",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "iced-tea:small",
+        "labelFr": "Petit",
+        "labelEn": "Small",
+        "priceCents": 245,
+        "sortOrder": 0
+       },
+       {
+        "id": "iced-tea:medium",
+        "labelFr": "Moyen",
+        "labelEn": "Medium",
+        "priceCents": 295,
+        "sortOrder": 1
+       },
+       {
+        "id": "iced-tea:large",
+        "labelFr": "Grand",
+        "labelEn": "Large",
+        "priceCents": 345,
+        "sortOrder": 2
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "sparkling-water",
+      "nameFr": "Eau pétillante",
+      "nameEn": "Sparkling Water",
+      "categoryId": "soft-drinks",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "sparkling-water:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 275,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "lantern-lager",
+      "nameFr": "Lager de la Lanterne",
+      "nameEn": "Lantern House Lager",
+      "categoryId": "beer-wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "lantern-lager:16oz",
+        "labelFr": "Verre 16 oz",
+        "labelEn": "16 oz glass",
+        "priceCents": 725,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "mon",
+         "tue",
+         "wed",
+         "thu",
+         "fri"
+        ],
+        "from": "16:00",
+        "to": "18:00",
+        "prices": {
+         "lantern-lager:16oz": 500
+        }
+       }
+      ]
+     },
+     {
+      "id": "north-ipa",
+      "nameFr": "IPA du Nord",
+      "nameEn": "North Trail IPA",
+      "categoryId": "beer-wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "north-ipa:16oz",
+        "labelFr": "Verre 16 oz",
+        "labelEn": "16 oz glass",
+        "priceCents": 775,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "pinot-noir",
+      "nameFr": "Pinot noir de l'Oregon",
+      "nameEn": "Oregon Pinot Noir",
+      "categoryId": "beer-wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "pinot-noir:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1050,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "mon",
+         "tue",
+         "wed",
+         "thu",
+         "fri"
+        ],
+        "from": "16:00",
+        "to": "18:00",
+        "prices": {
+         "pinot-noir:glass": 750
+        }
+       }
+      ]
+     },
+     {
+      "id": "riesling",
+      "nameFr": "Riesling des Finger Lakes",
+      "nameEn": "Finger Lakes Riesling",
+      "categoryId": "beer-wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "riesling:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 950,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     }
+    ]
+   },
+   "floor": {
+    "rooms": [],
+    "tables": []
+   },
+   "staff": [
+    {
+     "id": "manager",
+     "name": "Demo Manager",
+     "role": "MANAGER"
+    },
+    {
+     "id": "server1",
+     "name": "Demo Cashier",
+     "role": "SERVER"
+    }
+   ]
+  },
+  {
+   "id": "plateau",
+   "name": "Copper Lantern — Plateau",
+   "timezone": "America/New_York",
+   "currency": "USD",
+   "menu": {
+    "categories": [
+     {
+      "id": "beer-cider",
+      "nameFr": "Bières et cidres",
+      "nameEn": "Beer & Cider",
+      "sortOrder": 0
+     },
+     {
+      "id": "wine",
+      "nameFr": "Vins",
+      "nameEn": "Wine",
+      "sortOrder": 1
+     },
+     {
+      "id": "cocktails",
+      "nameFr": "Cocktails",
+      "nameEn": "Cocktails",
+      "sortOrder": 2
+     },
+     {
+      "id": "starters",
+      "nameFr": "Entrées",
+      "nameEn": "Starters",
+      "sortOrder": 3
+     },
+     {
+      "id": "burgers-sandwiches",
+      "nameFr": "Burgers et sandwichs",
+      "nameEn": "Burgers & Sandwiches",
+      "sortOrder": 4
+     },
+     {
+      "id": "mains-salads",
+      "nameFr": "Plats et salades",
+      "nameEn": "Mains & Salads",
+      "sortOrder": 5
+     },
+     {
+      "id": "desserts",
+      "nameFr": "Desserts",
+      "nameEn": "Desserts",
+      "sortOrder": 6
+     }
+    ],
+    "items": [
+     {
+      "id": "lantern-lager",
+      "nameFr": "Lager de la Lanterne",
+      "nameEn": "Lantern House Lager",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "lantern-lager:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 750,
+        "sortOrder": 0
+       },
+       {
+        "id": "lantern-lager:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2025,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "mon",
+         "tue",
+         "wed",
+         "thu",
+         "fri"
+        ],
+        "from": "16:00",
+        "to": "18:00",
+        "prices": {
+         "lantern-lager:pint": 500
+        }
+       }
+      ]
+     },
+     {
+      "id": "amber-ale",
+      "nameFr": "Ambrée cuivrée",
+      "nameEn": "Copper Amber Ale",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "amber-ale:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 795,
+        "sortOrder": 0
+       },
+       {
+        "id": "amber-ale:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2150,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "north-ipa",
+      "nameFr": "IPA du Nord",
+      "nameEn": "North Trail IPA",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "north-ipa:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 825,
+        "sortOrder": 0
+       },
+       {
+        "id": "north-ipa:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2295,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "maple-stout",
+      "nameFr": "Stout à l'érable",
+      "nameEn": "Maple Oat Stout",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "maple-stout:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 850,
+        "sortOrder": 0
+       },
+       {
+        "id": "maple-stout:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2375,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "wheat-beer",
+      "nameFr": "Blanche aux agrumes",
+      "nameEn": "Citrus Wheat",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "wheat-beer:pint",
+        "labelFr": "Pinte 20 oz",
+        "labelEn": "20 oz pint",
+        "priceCents": 775,
+        "sortOrder": 0
+       },
+       {
+        "id": "wheat-beer:pitcher",
+        "labelFr": "Pichet 60 oz",
+        "labelEn": "60 oz pitcher",
+        "priceCents": 2125,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "canadian-lager",
+      "nameFr": "Lager américaine",
+      "nameEn": "American Lager",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "canadian-lager:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 650,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "pilsner-can",
+      "nameFr": "Pilsner en canette",
+      "nameEn": "Pilsner Can",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "pilsner-can:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 695,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "porter-can",
+      "nameFr": "Porter robuste",
+      "nameEn": "Robust Porter",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "porter-can:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 795,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "hazy-ipa",
+      "nameFr": "IPA voilée locale",
+      "nameEn": "Local Hazy IPA",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "hazy-ipa:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 825,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "saison",
+      "nameFr": "Saison fermière",
+      "nameEn": "Farmhouse Saison",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "saison:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 800,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "belgian-blonde",
+      "nameFr": "Blonde belge",
+      "nameEn": "Belgian Blonde",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "belgian-blonde:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 875,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "irish-stout",
+      "nameFr": "Stout irlandais",
+      "nameEn": "Irish Stout",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "irish-stout:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "mexican-lager",
+      "nameFr": "Lager mexicaine",
+      "nameEn": "Mexican Lager",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "mexican-lager:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 795,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "dry-cider",
+      "nameFr": "Cidre sec du verger",
+      "nameEn": "Orchard Dry Cider",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "dry-cider:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 795,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "berry-cider",
+      "nameFr": "Cidre aux petits fruits",
+      "nameEn": "Berry Cider",
+      "categoryId": "beer-cider",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "berry-cider:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 800,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "na-lager",
+      "nameFr": "Lager sans alcool",
+      "nameEn": "Non-Alcoholic Lager",
+      "categoryId": "beer-cider",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "na-lager:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 575,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "hop-water",
+      "nameFr": "Eau houblonnée",
+      "nameEn": "Sparkling Hop Water",
+      "categoryId": "beer-cider",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "hop-water:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 495,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "pinot-noir",
+      "nameFr": "Pinot noir de l'Oregon",
+      "nameEn": "Oregon Pinot Noir",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "pinot-noir:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1125,
+        "sortOrder": 0
+       },
+       {
+        "id": "pinot-noir:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4325,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "cab-merlot",
+      "nameFr": "Cabernet-merlot",
+      "nameEn": "Cabernet Merlot",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "cab-merlot:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1025,
+        "sortOrder": 0
+       },
+       {
+        "id": "cab-merlot:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 3950,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "mon",
+         "tue",
+         "wed",
+         "thu",
+         "fri"
+        ],
+        "from": "16:00",
+        "to": "18:00",
+        "prices": {
+         "cab-merlot:glass": 700
+        }
+       }
+      ]
+     },
+     {
+      "id": "malbec",
+      "nameFr": "Malbec argentin",
+      "nameEn": "Argentinian Malbec",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "malbec:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1175,
+        "sortOrder": 0
+       },
+       {
+        "id": "malbec:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4500,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "riesling",
+      "nameFr": "Riesling des Finger Lakes",
+      "nameEn": "Finger Lakes Riesling",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "riesling:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 995,
+        "sortOrder": 0
+       },
+       {
+        "id": "riesling:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 3775,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "chardonnay",
+      "nameFr": "Chardonnay boisé",
+      "nameEn": "Oaked Chardonnay",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "chardonnay:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1075,
+        "sortOrder": 0
+       },
+       {
+        "id": "chardonnay:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4150,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "sauvignon-blanc",
+      "nameFr": "Sauvignon blanc",
+      "nameEn": "Sauvignon Blanc",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "sauvignon-blanc:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1125,
+        "sortOrder": 0
+       },
+       {
+        "id": "sauvignon-blanc:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4325,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "rose",
+      "nameFr": "Rosé de la vallée de la Yadkin",
+      "nameEn": "Yadkin Valley Rosé",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "rose:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1025,
+        "sortOrder": 0
+       },
+       {
+        "id": "rose:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 3950,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "sparkling",
+      "nameFr": "Mousseux brut",
+      "nameEn": "Sparkling Brut",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "sparkling:glass",
+        "labelFr": "Verre",
+        "labelEn": "Glass",
+        "priceCents": 1250,
+        "sortOrder": 0
+       },
+       {
+        "id": "sparkling:bottle",
+        "labelFr": "Bouteille",
+        "labelEn": "Bottle",
+        "priceCents": 4850,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "icewine",
+      "nameFr": "Cidre de glace",
+      "nameEn": "Ice Cider",
+      "categoryId": "wine",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "icewine:2oz",
+        "labelFr": "Verre 2 oz",
+        "labelEn": "2 oz glass",
+        "priceCents": 1475,
+        "sortOrder": 0
+       },
+       {
+        "id": "icewine:375ml",
+        "labelFr": "Bouteille 375 ml",
+        "labelEn": "375 ml bottle",
+        "priceCents": 6475,
+        "sortOrder": 1
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "copper-old-fashioned",
+      "nameFr": "Old Fashioned cuivré",
+      "nameEn": "Copper Old Fashioned",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "copper-old-fashioned:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1395,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "lantern-mule",
+      "nameFr": "Mule de la Lanterne",
+      "nameEn": "Lantern Mule",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "lantern-mule:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "smoked-caesar",
+      "nameFr": "Bloody Mary fumé",
+      "nameEn": "Smoked Bloody Mary",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "smoked-caesar:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "maple-sour",
+      "nameFr": "Whisky sour à l'érable",
+      "nameEn": "Maple Whisky Sour",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "maple-sour:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1350,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "elderflower-gin",
+      "nameFr": "Gin fizz au sureau",
+      "nameEn": "Elderflower Gin Fizz",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "elderflower-gin:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1350,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "espresso-martini",
+      "nameFr": "Martini espresso",
+      "nameEn": "Espresso Martini",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "espresso-martini:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1395,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "dark-stormy",
+      "nameFr": "Dark and Stormy",
+      "nameEn": "Dark and Stormy",
+      "categoryId": "cocktails",
+      "isAlcohol": true,
+      "variants": [
+       {
+        "id": "dark-stormy:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "zero-gimlet",
+      "nameFr": "Gimlet sans alcool",
+      "nameEn": "Zero-Proof Gimlet",
+      "categoryId": "cocktails",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "zero-gimlet:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "pretzel",
+      "nameFr": "Bretzel géant",
+      "nameEn": "Giant Pub Pretzel",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "pretzel:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1225,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "wings",
+      "nameFr": "Ailes de poulet",
+      "nameEn": "Chicken Wings",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "wings:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1675,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "nachos",
+      "nameFr": "Nachos de la maison",
+      "nameEn": "Loaded Pub Nachos",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "nachos:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1750,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "calamari",
+      "nameFr": "Calmars croustillants",
+      "nameEn": "Crispy Calamari",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "calamari:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1675,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "spinach-dip",
+      "nameFr": "Trempette épinards-artichauts",
+      "nameEn": "Spinach Artichoke Dip",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "spinach-dip:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1475,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "poutine",
+      "nameFr": "Poutine classique",
+      "nameEn": "Classic Poutine",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "poutine:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "lantern-burger",
+      "nameFr": "Burger de la Lanterne",
+      "nameEn": "Copper Lantern Burger",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "lantern-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1925,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": [
+       {
+        "days": [
+         "tue"
+        ],
+        "prices": {
+         "lantern-burger:regular": 1495
+        }
+       }
+      ]
+     },
+     {
+      "id": "mushroom-burger",
+      "nameFr": "Burger aux champignons",
+      "nameEn": "Mushroom Swiss Burger",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "mushroom-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1975,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "veggie-burger",
+      "nameFr": "Burger végétarien",
+      "nameEn": "Garden Veggie Burger",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "veggie-burger:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1750,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "club",
+      "nameFr": "Club au poulet",
+      "nameEn": "Grilled Chicken Club",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "club:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "reuben",
+      "nameFr": "Reuben classique",
+      "nameEn": "Classic Reuben",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "reuben:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1925,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "fish-sandwich",
+      "nameFr": "Sandwich au poisson",
+      "nameEn": "Crispy Fish Sandwich",
+      "categoryId": "burgers-sandwiches",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "fish-sandwich:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1750,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "fish-chips",
+      "nameFr": "Poisson-frites",
+      "nameEn": "Beer-Battered Fish and Chips",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "fish-chips:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 2025,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "steak-frites",
+      "nameFr": "Steak-frites",
+      "nameEn": "Steak Frites",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "steak-frites:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 2650,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "shepherd-pie",
+      "nameFr": "Pâté chinois",
+      "nameEn": "Shepherd's Pie",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "shepherd-pie:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1925,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "mac-cheese",
+      "nameFr": "Macaroni aux trois fromages",
+      "nameEn": "Three-Cheese Mac",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "mac-cheese:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1675,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "salmon",
+      "nameFr": "Saumon à l'érable",
+      "nameEn": "Maple-Glazed Salmon",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "salmon:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 2475,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "chicken-pot-pie",
+      "nameFr": "Pâté au poulet",
+      "nameEn": "Chicken Pot Pie",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "chicken-pot-pie:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "caesar-salad",
+      "nameFr": "Salade César",
+      "nameEn": "Caesar Salad",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "caesar-salad:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "harvest-salad",
+      "nameFr": "Salade de la récolte",
+      "nameEn": "Harvest Salad",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "harvest-salad:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1475,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "falafel-bowl",
+      "nameFr": "Bol de falafels",
+      "nameEn": "Falafel Grain Bowl",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "falafel-bowl:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1675,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "cauliflower",
+      "nameFr": "Steak de chou-fleur rôti",
+      "nameEn": "Roasted Cauliflower Steak",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "cauliflower:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1750,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "sticky-pudding",
+      "nameFr": "Pouding au caramel",
+      "nameEn": "Sticky Toffee Pudding",
+      "categoryId": "desserts",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "sticky-pudding:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "cheesecake",
+      "nameFr": "Gâteau au fromage à l'érable",
+      "nameEn": "Maple Cheesecake",
+      "categoryId": "desserts",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "cheesecake:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 850,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "brownie",
+      "nameFr": "Brownie au stout",
+      "nameEn": "Stout Brownie",
+      "categoryId": "desserts",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "brownie:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 800,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "late-fries",
+      "nameFr": "Frites de fin de soirée",
+      "nameEn": "Late-Night Fries",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "late-fries:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 775,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "mini-burgers",
+      "nameFr": "Mini-burgers",
+      "nameEn": "Midnight Sliders",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "mini-burgers:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1300,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "grilled-cheese",
+      "nameFr": "Fromage grillé",
+      "nameEn": "Grilled Cheese",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "grilled-cheese:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 1025,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "onion-rings",
+      "nameFr": "Rondelles d'oignon",
+      "nameEn": "Onion Rings",
+      "categoryId": "starters",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "onion-rings:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 950,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": null,
+      "specials": null
+     },
+     {
+      "id": "prime-rib",
+      "nameFr": "Côte de bœuf rôtie",
+      "nameEn": "Prime Rib",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "prime-rib:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 3495,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": [
+       "fri",
+       "sat"
+      ],
+      "specials": null
+     },
+     {
+      "id": "sunday-roast",
+      "nameFr": "Rôti du dimanche",
+      "nameEn": "Sunday Roast",
+      "categoryId": "mains-salads",
+      "isAlcohol": false,
+      "variants": [
+       {
+        "id": "sunday-roast:regular",
+        "labelFr": "Standard",
+        "labelEn": "Regular",
+        "priceCents": 2495,
+        "sortOrder": 0
+       }
+      ],
+      "availableDays": [
+       "sun"
+      ],
+      "specials": null
+     }
+    ]
+   },
+   "floor": {
+    "rooms": [
+     {
+      "id": "upper",
+      "nameFr": "Salle à manger et bar",
+      "nameEn": "Dining Room & Bar",
+      "labelPrefix": "U"
+     },
+     {
+      "id": "outside",
+      "nameFr": "Terrasse",
+      "nameEn": "Patio",
+      "labelPrefix": "O"
+     },
+     {
+      "id": "lower",
+      "nameFr": "Salle de jeux",
+      "nameEn": "Games Room",
+      "labelPrefix": "L"
+     }
+    ],
+    "tables": [
+     {
+      "id": "t5",
+      "zoneId": "upper",
+      "label": "U-1",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "t5-5",
+      "zoneId": "upper",
+      "label": "U-2",
+      "seats": 1,
+      "parentTableId": "t5"
+     },
+     {
+      "id": "t6",
+      "zoneId": "upper",
+      "label": "U-3",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "b1",
+      "zoneId": "upper",
+      "label": "U-4",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "b2",
+      "zoneId": "upper",
+      "label": "U-5",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "b3",
+      "zoneId": "upper",
+      "label": "U-6",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "b4",
+      "zoneId": "upper",
+      "label": "U-7",
+      "seats": 1,
+      "parentTableId": null
+     },
+     {
+      "id": "t1",
+      "zoneId": "upper",
+      "label": "U-8",
+      "seats": 6,
+      "parentTableId": null
+     },
+     {
+      "id": "t1-1",
+      "zoneId": "upper",
+      "label": "U-9",
+      "seats": 4,
+      "parentTableId": "t1"
+     },
+     {
+      "id": "t2",
+      "zoneId": "upper",
+      "label": "U-10",
+      "seats": 6,
+      "parentTableId": null
+     },
+     {
+      "id": "u2-2",
+      "zoneId": "upper",
+      "label": "U-11",
+      "seats": 4,
+      "parentTableId": "t2"
+     },
+     {
+      "id": "u3",
+      "zoneId": "upper",
+      "label": "U-12",
+      "seats": 8,
+      "parentTableId": null
+     },
+     {
+      "id": "u3-3",
+      "zoneId": "upper",
+      "label": "U-13",
+      "seats": 4,
+      "parentTableId": "u3"
+     },
+     {
+      "id": "u4",
+      "zoneId": "upper",
+      "label": "U-14",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "u4-4",
+      "zoneId": "upper",
+      "label": "U-15",
+      "seats": 4,
+      "parentTableId": "u4"
+     },
+     {
+      "id": "u5",
+      "zoneId": "upper",
+      "label": "U-16",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "u5-5",
+      "zoneId": "upper",
+      "label": "U-17",
+      "seats": 4,
+      "parentTableId": "u5"
+     },
+     {
+      "id": "t3",
+      "zoneId": "outside",
+      "label": "O-1",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "t4",
+      "zoneId": "outside",
+      "label": "O-2",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "o3",
+      "zoneId": "outside",
+      "label": "O-3",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "o4",
+      "zoneId": "outside",
+      "label": "O-4",
+      "seats": 6,
+      "parentTableId": null
+     },
+     {
+      "id": "t7",
+      "zoneId": "lower",
+      "label": "L-1",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "t8",
+      "zoneId": "lower",
+      "label": "L-2",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "t101",
+      "zoneId": "lower",
+      "label": "L-3",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l9",
+      "zoneId": "lower",
+      "label": "L-4",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l10",
+      "zoneId": "lower",
+      "label": "L-5",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l11",
+      "zoneId": "lower",
+      "label": "L-6",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l12",
+      "zoneId": "lower",
+      "label": "L-7",
+      "seats": 4,
+      "parentTableId": null
+     },
+     {
+      "id": "l13",
+      "zoneId": "lower",
+      "label": "L-8",
+      "seats": 4,
+      "parentTableId": null
+     }
+    ]
+   },
+   "staff": [
+    {
+     "id": "manager",
+     "name": "Demo Manager",
+     "role": "MANAGER"
+    }
+   ]
+  }
+ ]
+}

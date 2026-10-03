@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Emit deterministic PostgreSQL seed SQL for a two-month manager demo.
 
+Superseded by scripts/demo-reseed.py (current cloud menus, both stores, wipe +
+backup + verify); kept for reference. Its menu is the pre-Raleigh one.
+
 The generated rows use a reserved numeric range (>= 900000), so rerunning this
 script replaces only its own synthetic history and never touches real store data.
 
