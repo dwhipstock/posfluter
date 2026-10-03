@@ -200,6 +200,98 @@ class FloorAssistantTest {
         assertTrue("t8" in live("lower"))
     }
 
+    private fun JsonObject.rejected() = this["rejected"]!!.jsonArray.map { it.jsonPrimitive.content }
+    private fun JsonObject.protectedTables() = this["protectedTables"]!!.jsonArray.map { it.jsonPrimitive.content }
+    private fun JsonObject.kinds() = this["changes"]!!.jsonArray.map { it.jsonObject.s("kind") }
+
+    /** Live bug (portal, same code): "Remove table O-1" with an open bill answered no_change. */
+    @Test
+    fun onlyALockedTableAskedForIsATableLockedRefusalThatSaysWhy() = testApplication {
+        val fake = FakeMenuProvider("""{"ops":[{"op":"remove_table","table":"L-1"}]}""")
+        store(fake)
+        val manager = loginClient()
+        assertEquals(HttpStatusCode.Created, manager.post("/tables/t7/checks").status)
+
+        val p = obj(manager.ask("lower", "Remove table L-1").bodyAsText())
+        assertEquals("table_locked", p.s("refusal"), p.toString())
+        assertEquals("Table L-1 has an open bill, so it stays as it is. Close the bill first, then ask again.", p.s("message"))
+        assertEquals(listOf("t7"), p.protectedTables())
+        assertEquals(listOf("table L-1 has an open bill: not removed"), p.rejected())
+        assertTrue(fake.prompts.last().contains("never return \"ops\": [] because of it"))
+
+        // the model leaves it out: the request named L-1, so the same answer, not no_change
+        fake.reply = """{"ops":[]}"""
+        val dropped = obj(manager.ask("lower", "Remove table L-1").bodyAsText())
+        assertEquals("table_locked", dropped.s("refusal"), dropped.toString())
+        assertEquals(listOf("table L-1 has an open bill, so it stays as it is"), dropped.rejected())
+        assertEquals(listOf("t7"), dropped.protectedTables())
+
+        // renumbering, moving or reshaping it: the same, in the request's language
+        for ((op, lang) in listOf(""""number":9""" to "fr", """"x":800,"y":600""" to "es", """"shape":"round"""" to "de")) {
+            fake.reply = """{"language":"$lang","ops":[{"op":"update_table","table":"L-1",$op}]}"""
+            val r = obj(manager.ask("lower", "table L-1").bodyAsText())
+            assertEquals("table_locked", r.s("refusal"), r.toString())
+            val expected = mapOf(
+                "fr" to "La table L-1 a une addition ouverte, elle reste donc telle quelle.",
+                "es" to "La mesa L-1 tiene una cuenta abierta, así que se queda como está.",
+                "de" to "Tisch L-1 hat eine offene Rechnung und bleibt deshalb, wie er ist.",
+            ).getValue(lang)
+            assertTrue(r.s("message").startsWith(expected), r.s("message"))
+            assertEquals(listOf("t7"), r.protectedTables())
+            assertEquals(1, r.rejected().size, r.rejected().toString())
+            assertFalse(r.rejected().single().startsWith("table L-1 has"), "translated: ${r.rejected()}")
+        }
+        fake.reply = """{"language":"af","ops":[{"op":"remove_table","table":"L-1"}]}"""
+        val af = obj(manager.ask("lower", "Verwyder tafel L-1").bodyAsText())
+        assertEquals("Tafel L-1 het ’n oop rekening, so dit bly soos dit is. Sluit eers die rekening en vra dan weer.", af.s("message"))
+
+        // nothing asked of a locked table: still no_change
+        fake.reply = """{"ops":[]}"""
+        assertEquals("no_change", obj(manager.ask("lower", "make it nicer").bodyAsText()).s("refusal"))
+    }
+
+    @Test
+    fun aLockedTableIsLeftOutAndTheRestOfTheRequestStillComesBack() = testApplication {
+        val add = """{"op":"add_table","shape":"round","seats":2,"x":450,"y":60,"w":70,"h":70}"""
+        val fake = FakeMenuProvider("""{"ops":[{"op":"remove_table","table":"L-1"},$add]}""")
+        store(fake)
+        val manager = loginClient()
+        assertEquals(HttpStatusCode.Created, manager.post("/tables/t7/checks").status)
+
+        val p = obj(manager.ask("lower", "Remove table L-1 and add one new round table for 2 seats").bodyAsText())
+        assertNull(p["refusal"]?.jsonPrimitive?.content?.takeIf { it != "null" }, p.toString())
+        assertEquals(listOf("add_table"), p.kinds())
+        assertEquals(listOf("table L-1 has an open bill: not removed"), p.rejected())
+        assertEquals(listOf("t7"), p.protectedTables())
+
+        // the model writes only the add: the line is still there
+        fake.reply = """{"ops":[$add]}"""
+        val q = obj(manager.ask("lower", "Remove table L-1 and add one new round table for 2 seats").bodyAsText())
+        assertEquals(listOf("add_table"), q.kinds())
+        assertEquals(listOf("table L-1 has an open bill, so it stays as it is"), q.rejected())
+        assertEquals(HttpStatusCode.OK, manager.applyEdit("lower", q.s("proposalId")).status)
+        assertTrue("t7" in live("lower"))
+
+        // "L-10" is not "L-1"
+        fake.reply = """{"ops":[$add]}"""
+        assertEquals(emptyList(), obj(manager.ask("lower", "add a table for 1 next to L-10").bodyAsText()).rejected())
+    }
+
+    @Test
+    fun aLockedTableByVoiceGetsTheSameAnswerInTheSpokenLanguage() = testApplication {
+        val fake = FakeMenuProvider("""{"transcript":"Entferne Tisch L-1","language":"de","ops":[]}""")
+        store(fake)
+        val manager = loginClient()
+        assertEquals(HttpStatusCode.Created, manager.post("/tables/t7/checks").status)
+        val res = manager.say("/zones/lower/ai-edit/voice")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val p = obj(res.bodyAsText())
+        assertEquals("table_locked", p.s("refusal"), p.toString())
+        assertTrue(p.s("message").startsWith("Tisch L-1 hat eine offene Rechnung"), p.s("message"))
+        assertEquals(listOf("Tisch L-1 hat eine offene Rechnung und bleibt, wie er ist"), p.rejected())
+        assertEquals(listOf("t7"), p.protectedTables())
+    }
+
     @Test
     fun aNumberThatWasNotAskedForIsDroppedSilentlyNotRejected() = testApplication {
         // the model echoes t7's own number while moving it (a no-op renumber), and gives l11 a

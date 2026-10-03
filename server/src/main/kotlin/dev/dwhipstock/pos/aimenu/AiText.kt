@@ -49,6 +49,10 @@ internal object AiText {
             "la mesa $1 tiene una cuenta abierta: no se movió, cambió ni renumeró",
             "Tisch $1 hat eine offene Rechnung: nicht verschoben, umgeformt oder umnummeriert",
             "tafel $1 het ’n oop rekening: nie geskuif, verander of hernommer nie"),
+        rule("table (.+) has an open bill, so it stays as it is", "la table $1 a une addition ouverte, elle reste telle quelle",
+            "la mesa $1 tiene una cuenta abierta, así que se queda como está",
+            "Tisch $1 hat eine offene Rechnung und bleibt, wie er ist",
+            "tafel $1 het ’n oop rekening, so dit bly soos dit is"),
         rule("renumbering skipped: two tables would share a number",
             "renumérotation ignorée : deux tables auraient le même numéro",
             "renumeración omitida: dos mesas tendrían el mismo número",
@@ -65,6 +69,26 @@ internal object AiText {
             "zu viele Entfernungen auf einmal; höchstens $1 pro Anfrage",
             "te veel verwyderings op een slag; hoogstens $1 per versoek"),
     )
+
+    /** The reply when every part of the request was a table with an open bill: one table, several. */
+    private val LOCKED = mapOf(
+        "en" to ("Table {t} has an open bill, so it stays as it is. Close the bill first, then ask again." to
+            "Tables {t} have open bills, so they stay as they are. Close the bills first, then ask again."),
+        "fr" to ("La table {t} a une addition ouverte, elle reste donc telle quelle. Fermez d'abord l'addition, puis redemandez." to
+            "Les tables {t} ont des additions ouvertes, elles restent donc telles quelles. Fermez d'abord les additions, puis redemandez."),
+        "es" to ("La mesa {t} tiene una cuenta abierta, así que se queda como está. Cierra primero la cuenta y vuelve a pedirlo." to
+            "Las mesas {t} tienen cuentas abiertas, así que se quedan como están. Cierra primero las cuentas y vuelve a pedirlo."),
+        "de" to ("Tisch {t} hat eine offene Rechnung und bleibt deshalb, wie er ist. Schließen Sie zuerst die Rechnung und fragen Sie dann noch einmal." to
+            "Die Tische {t} haben offene Rechnungen und bleiben deshalb, wie sie sind. Schließen Sie zuerst die Rechnungen und fragen Sie dann noch einmal."),
+        "af" to ("Tafel {t} het ’n oop rekening, so dit bly soos dit is. Sluit eers die rekening en vra dan weer." to
+            "Tafels {t} het oop rekenings, so hulle bly soos hulle is. Sluit eers die rekenings en vra dan weer."),
+    )
+
+    /** The table_locked reply: [labels] have an open bill and stay as they are, in [lang] (English when unknown). */
+    fun locked(labels: List<String>, lang: String?): String {
+        val (one, many) = LOCKED[lang?.take(2)?.lowercase()] ?: LOCKED.getValue("en")
+        return (if (labels.size == 1) one else many).replace("{t}", labels.joinToString(", "))
+    }
 
     fun skips(lines: List<String>, lang: String?): List<String> = lines.map { skip(it, lang) }
 

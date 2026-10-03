@@ -435,6 +435,110 @@ class RoomAiTest {
         assertEquals("2", room.tables().single { it.s("id") == "t1" }.s("seats"))
     }
 
+    private fun JsonObject.rejected() = this["rejected"]!!.jsonArray.map { it.jsonPrimitive.content }
+    private fun JsonObject.protectedTables() = this["protectedTables"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+    /** Live bug: "Remove table O-1" (open bill) answered no_change, "I couldn't find a change…". */
+    @Test
+    fun onlyALockedTableAskedForIsATableLockedRefusalThatSaysWhy() = testApplication {
+        app()
+        store(locked = listOf("t1"))
+        // the model proposes the removal: the server leaves it out and says why
+        fake.reply = { _, _, _, _ -> """{"summary":"x","ops":[{"op":"remove_table","table":"D-1"}]}""" }
+        val p = chat("Remove table D-1").body()
+        assertEquals("table_locked", p.s("refusal"), p.toString())
+        assertEquals("Table D-1 has an open bill, so it stays as it is. Close the bill first, then ask again.", p.s("message"))
+        assertEquals(listOf("t1"), p.protectedTables())
+        assertEquals(listOf("table D-1 has an open bill: not removed"), p.rejected())
+
+        // the model leaves it out ("ops": []): the request named D-1, so the same answer, not no_change
+        fake.reply = { _, _, _, _ -> """{"summary":"","ops":[]}""" }
+        val dropped = chat("Remove table D-1").body()
+        assertEquals("table_locked", dropped.s("refusal"), dropped.toString())
+        assertTrue(dropped.s("message")!!.startsWith("Table D-1 has an open bill"), dropped.s("message"))
+        assertEquals(listOf("table D-1 has an open bill, so it stays as it is"), dropped.rejected())
+        assertEquals(listOf("t1"), dropped.protectedTables())
+
+        // renumbering, moving or reshaping it: the same, in the request's language
+        for ((op, lang) in listOf(""""number":9""" to "fr", """"x":800,"y":600""" to "es", """"shape":"round"""" to "de")) {
+            fake.reply = { _, _, _, _ -> """{"language":"$lang","ops":[{"op":"update_table","table":"D-1",$op}]}""" }
+            val r = chat("table D-1").body()
+            assertEquals("table_locked", r.s("refusal"), r.toString())
+            assertTrue(r.s("message")!!.contains("D-1"), r.s("message"))
+            assertEquals(listOf("t1"), r.protectedTables())
+            val expected = mapOf(
+                "fr" to "La table D-1 a une addition ouverte, elle reste donc telle quelle.",
+                "es" to "La mesa D-1 tiene una cuenta abierta, así que se queda como está.",
+                "de" to "Tisch D-1 hat eine offene Rechnung und bleibt deshalb, wie er ist.",
+            ).getValue(lang)
+            assertTrue(r.s("message")!!.startsWith(expected), r.s("message"))
+            assertEquals(1, r.rejected().size, r.rejected().toString())
+            assertFalse(r.rejected().single().startsWith("table D-1 has"), "translated: ${r.rejected()}")
+        }
+        // Afrikaans, and the model told to still write the op (never "ops": [] because of a lock)
+        fake.reply = { _, _, _, _ -> """{"language":"af","ops":[{"op":"remove_table","table":"D-1"}]}""" }
+        val af = chat("Verwyder tafel D-1").body()
+        assertEquals("Tafel D-1 het ’n oop rekening, so dit bly soos dit is. Sluit eers die rekening en vra dan weer.", af.s("message"))
+        assertEquals(listOf("tafel D-1 het ’n oop rekening: nie verwyder nie"), af.rejected())
+        assertTrue("never return \"ops\": [] because of it" in fake.lastSystem)
+        // nothing at all asked of a locked table: still no_change
+        fake.reply = { _, _, _, _ -> """{"ops":[]}""" }
+        assertEquals("no_change", chat("make it nicer").body().s("refusal"))
+    }
+
+    @Test
+    fun aLockedTableIsLeftOutAndTheRestOfTheRequestStillComesBack() = testApplication {
+        app()
+        store(locked = listOf("t1"))
+        val add = """{"op":"add_table","shape":"round","seats":2,"x":600,"y":500,"w":70,"h":70}"""
+        // the model writes both: the add comes back, the removal is a rejected line
+        fake.reply = { _, _, _, _ -> """{"summary":"x","ops":[{"op":"remove_table","table":"D-1"},$add]}""" }
+        val p = chat("Remove table D-1 and add one new round table for 2 seats").body()
+        assertEquals(null, p["refusal"]?.jsonPrimitive?.content?.takeIf { it != "null" }, p.toString())
+        assertEquals(listOf("add_table"), p["changes"]!!.jsonArray.map { it.jsonObject.s("kind") })
+        assertEquals(listOf("table D-1 has an open bill: not removed"), p.rejected())
+        assertEquals(listOf("t1"), p.protectedTables())
+        assertEquals(emptyList(), p["removedTables"]!!.jsonArray.toList())
+
+        // the model writes only the add: the request named D-1, so the line is still there
+        fake.reply = { _, _, _, _ -> """{"summary":"x","ops":[$add]}""" }
+        val q = chat("Remove table D-1 and add one new round table for 2 seats").body()
+        assertEquals(listOf("add_table"), q["changes"]!!.jsonArray.map { it.jsonObject.s("kind") })
+        assertEquals(listOf("table D-1 has an open bill, so it stays as it is"), q.rejected())
+
+        // a move of a locked table next to an allowed move: D-3 moves, D-1 stays with its line
+        fake.reply = { _, _, _, _ ->
+            """{"language":"fr","ops":[{"op":"update_table","table":"D-1","x":800},{"op":"update_table","table":"D-3","x":700}]}"""
+        }
+        val m = chat("déplace les tables D-1 et D-3").body()
+        assertEquals(listOf("t3"), m.tables().map { it.s("id") })
+        assertEquals(listOf("la table D-1 a une addition ouverte : ni déplacée, ni modifiée, ni renumérotée"), m.rejected())
+        // "O-10" is not "O-1", and a seat count is not a table number
+        fake.reply = { _, _, _, _ -> """{"ops":[$add]}""" }
+        assertEquals(emptyList(), chat("add a table for 1 next to D-10").body().rejected())
+    }
+
+    @Test
+    fun aLockedTableByVoiceGetsTheSameAnswerInTheSpokenLanguage() = testApplication {
+        app()
+        store(locked = listOf("t1"))
+        // the model heard it but left the op out
+        fake.reply = { _, _, _, _ -> """{"transcript":"Entferne Tisch D-1","language":"de","ops":[]}""" }
+        val r = client.submitFormWithBinaryData("/v1/room-ai/chat/voice?venue=vieux-port&room=upper", formData {
+            append("lang", "en")
+            append("audio", "RIFF".toByteArray() + ByteArray(4000), Headers.build {
+                append(HttpHeaders.ContentType, "audio/wav")
+                append(HttpHeaders.ContentDisposition, "filename=\"v.wav\"")
+            })
+        }) { header(HttpHeaders.Cookie, "pos_portal_session=$manager") }
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        val p = r.body()
+        assertEquals("table_locked", p.s("refusal"), p.toString())
+        assertTrue(p.s("message")!!.startsWith("Tisch D-1 hat eine offene Rechnung"), p.s("message"))
+        assertEquals(listOf("Tisch D-1 hat eine offene Rechnung und bleibt, wie er ist"), p.rejected())
+        assertEquals(listOf("t1"), p.protectedTables())
+    }
+
     @Test
     fun manyRemovalsNeedAnExtraYes() = testApplication {
         app()

@@ -43,6 +43,8 @@ object AiGuard {
         FLOOR_OFF_TOPIC("off_topic"),
         /** The floor assistant: nothing it could safely change (or no speech heard). */
         FLOOR_NO_CHANGE("no_change"),
+        /** The floor assistant: every part asked was a table with an open bill (it stays as it is). */
+        FLOOR_TABLE_LOCKED("table_locked"),
         /** The reply was cut off or wasn't usable JSON — a technical hiccup, not an off-topic
          *  request: worth trying again as-is. */
         INCOMPLETE("menu_ai_incomplete"),
@@ -92,6 +94,13 @@ object AiGuard {
             "es" to "No encontré ningún cambio que hacer en esta sala. Indica la mesa o el elemento y qué cambiar, por ejemplo «pon 6 lugares en la mesa 3» o «añade una mesa redonda para 4».",
             "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 3 mit 6 Plätzen“ oder „einen runden Vierertisch hinzufügen“.",
             "af" to "Ek kon nie ’n verandering vir hierdie vertrek daarin vind nie. Noem die tafel of voorwerp en wat moet verander, byvoorbeeld “gee tafel 3 ses sitplekke” of “voeg ’n ronde tafel vir 4 by”.",
+        ),
+        Refusal.FLOOR_TABLE_LOCKED to mapOf(
+            "en" to "That table has an open bill, so it stays as it is. Close the bill first, then ask again.",
+            "fr" to "Cette table a une addition ouverte, elle reste donc telle quelle. Fermez d'abord l'addition, puis redemandez.",
+            "es" to "Esa mesa tiene una cuenta abierta, así que se queda como está. Cierra primero la cuenta y vuelve a pedirlo.",
+            "de" to "Dieser Tisch hat eine offene Rechnung und bleibt deshalb, wie er ist. Schließen Sie zuerst die Rechnung und fragen Sie dann noch einmal.",
+            "af" to "Daardie tafel het ’n oop rekening, so dit bly soos dit is. Sluit eers die rekening en vra dan weer.",
         ),
         Refusal.INCOMPLETE to mapOf(
             "en" to "The AI's answer was cut off. Please try again.",
