@@ -73,6 +73,11 @@ class CheckScreen extends StatefulWidget {
     this.panelTop,
   });
 
+  /// The last "drop the empty bill" call a table's screen made as it was
+  /// left (see [_CheckScreenState._dropIfLeftEmpty]); the floor waits for it
+  /// before it reloads, so the table is already free. Never fails.
+  static Future<void> dropping = Future<void>.value();
+
   /// The empty order the counter shows before its first item (never stored).
   static Check emptyOrder() =>
       Check(0, '', 'OPEN', 0, [], [], [], 0, 0, 0, 0, [], null);
@@ -123,6 +128,10 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   /// Checks this screen is done with (paid, emptied, cleared, gone): a poll
   /// answer for one of them that arrives late changes nothing.
   final Set<int> _settled = {};
+
+  /// Moved or merged: the destination's screen has the bill now.
+  bool _handedOff = false;
+  bool _dropSent = false;
 
   @override
   void initState() {
@@ -181,7 +190,26 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
     if (KitchenApi.enabled && !widget.counterOrder) {
       KitchenApi.sendQuietly(_checkId);
     }
+    _dropIfLeftEmpty();
     super.dispose();
+  }
+
+  /// A table tapped, then left with nothing put on it: the store drops the
+  /// empty bill so the floor doesn't show the table taken. Best effort; the
+  /// store itself keeps any bill something was ever put on. Not the counter
+  /// (its new order isn't stored) nor carry-out (it drops its own).
+  void _dropIfLeftEmpty() {
+    if (_dropSent || _handedOff) return;
+    if (widget.counterOrder || widget.carryOut || _embedded) return;
+    final c = _check;
+    if (_checkId == 0 || c == null || c.id != _checkId) return;
+    if (c.status != 'OPEN' || c.lines.isNotEmpty || c.pendingLines.isNotEmpty) {
+      return;
+    }
+    _dropSent = true;
+    CheckScreen.dropping = Api.dropIfEmpty(
+      _checkId,
+    ).timeout(const Duration(seconds: 8)).then((_) {}, onError: (_) {});
   }
 
   /// Paid, emptied or voided: back to where we came from, or (counter) on
@@ -674,6 +702,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       return;
     }
     if (!mounted) return;
+    _handedOff = true;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) =>
@@ -798,38 +827,44 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
   Widget build(BuildContext context) {
     final l = L.of(context);
     final check = _check;
-    return Scaffold(
-      body: SafeArea(
-        child: _error != null
-            ? Center(child: Text(_error!))
-            : check == null
-            ? const DelayedSpinner()
-            : Column(
-                children: [
-                  // kitchen printer trouble (kitchen tickets only; else empty)
-                  const KitchenQueueBanner(),
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, c) => Row(
-                        children: [
-                          _navRail(check, l),
-                          const VerticalDivider(),
-                          Expanded(child: _menuColumn(l)),
-                          const VerticalDivider(),
-                          // fixed cart: roomy on the landscape tablet, narrower
-                          // when the screen is (portrait / small windows)
-                          SizedBox(
-                            width: !widget.counterOrder && c.maxWidth >= 1100
-                                ? 420
-                                : 340,
-                            child: _billPanel(check, l),
-                          ),
-                        ],
+    return PopScope(
+      // back arrow, system back, or the floor: an empty bill is dropped
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _dropIfLeftEmpty();
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: _error != null
+              ? Center(child: Text(_error!))
+              : check == null
+              ? const DelayedSpinner()
+              : Column(
+                  children: [
+                    // kitchen printer trouble (kitchen tickets only; else empty)
+                    const KitchenQueueBanner(),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, c) => Row(
+                          children: [
+                            _navRail(check, l),
+                            const VerticalDivider(),
+                            Expanded(child: _menuColumn(l)),
+                            const VerticalDivider(),
+                            // fixed cart: roomy on the landscape tablet, narrower
+                            // when the screen is (portrait / small windows)
+                            SizedBox(
+                              width: !widget.counterOrder && c.maxWidth >= 1100
+                                  ? 420
+                                  : 340,
+                              child: _billPanel(check, l),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
