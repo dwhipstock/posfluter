@@ -34,6 +34,15 @@ object PrintWords {
     private val SPECIALS = mapOf("en" to "Specials", "fr" to "Spéciaux", "es" to "Especiales", "de" to "Angebote", "af" to "Spesiale")
     fun specials(lang: String) = pick(SPECIALS, lang)
 
+    private val FOOTER = mapOf("en" to "Enjoy!", "fr" to "Bon appétit !", "es" to "¡Buen provecho!", "de" to "Guten Appetit!", "af" to "Geniet dit!")
+    private val RESPONSIBLY = mapOf(
+        "en" to "Enjoy! Please drink responsibly.", "fr" to "Bon appétit ! À consommer avec modération.",
+        "es" to "¡Buen provecho! Bebe con moderación.", "de" to "Guten Appetit! Bitte trinken Sie verantwortungsvoll.",
+        "af" to "Geniet dit! Drink asseblief verantwoordelik.",
+    )
+    /** The footer when the AI's is not usable: a friendly line (and responsible drinking with alcohol on the page). */
+    fun footer(lang: String, alcohol: Boolean) = pick(if (alcohol) RESPONSIBLY else FOOTER, lang(lang))
+
     private val TODAY_PREFIX = mapOf("en" to "Today", "fr" to "Aujourd'hui", "es" to "Hoy", "de" to "Heute", "af" to "Vandag")
     /** "Today" — the label of today's specials box. */
     fun today(lang: String) = pick(TODAY_PREFIX, lang)
