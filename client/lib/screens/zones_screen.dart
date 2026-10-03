@@ -1117,6 +1117,8 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
               CheckScreen(checkId: check.id, tableLabel: table.displayLabel),
         ),
       );
+      // left with nothing on it: the bill is being dropped; reload after
+      await CheckScreen.dropping;
       _reload();
     } catch (e) {
       if (mounted) showApiError(context, e);

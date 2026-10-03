@@ -652,7 +652,9 @@ fun Route.posRoutes(
                 .where { DiningTables.deletedAt.isNull() }
                 .orderBy(DiningTables.sortOrder)
                 .groupBy({ it[DiningTables.zoneId] }) { row ->
+                    // an empty bill left open (the app was closed on it) doesn't occupy the table
                     val open = checkService.openCheckForTable(row[DiningTables.id])
+                        ?.takeUnless { checkService.isAbandonedEmpty(it) }
                     TableDto(
                         row[DiningTables.id], row[DiningTables.label], row[DiningTables.parentTableId],
                         row[DiningTables.nameOverride], open?.id, open?.status,
@@ -743,6 +745,12 @@ fun Route.posRoutes(
         val req = call.receive<AddOpenLineRequest>()
         call.respond(HttpStatusCode.Created,
             checkService.addOpenLine(checkId(call), req.name, req.unitPriceCents, req.qty, req.note))
+    }
+
+    // the table was left with nothing put on it: the empty bill is dropped so
+    // the table shows free; anything on it (a line, a payment…) = no change
+    post("/checks/{id}/drop-if-empty") {
+        call.respond(checkService.dropIfEmpty(checkId(call)))
     }
 
     delete("/checks/{id}/lines/{lineId}") {

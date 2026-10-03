@@ -1108,6 +1108,11 @@ class Api {
   static Future<Check> getCheck(int id) async =>
       Check.fromJson(await _get('/checks/$id'));
 
+  /// A table's bill left with nothing on it: the store drops it (the table
+  /// shows free). A bill with anything on it comes back unchanged.
+  static Future<Check> dropIfEmpty(int id) async =>
+      Check.fromJson(await _post('/checks/$id/drop-if-empty'));
+
   /// A card payment still on the reader for this check (the store or the
   /// tablet restarted mid-payment): the store settles it with the reader and
   /// says where it is.

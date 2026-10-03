@@ -193,6 +193,11 @@ class CheckService(private val config: CustomerConfig) {
 
     private val log = LoggerFactory.getLogger(CheckService::class.java)
 
+    companion object {
+        /** How long an empty bill may sit open before the floor shows its table as free ([isAbandonedEmpty]). */
+        val EMPTY_BILL_GRACE: java.time.Duration = java.time.Duration.ofMinutes(2)
+    }
+
     /**
      * Kitchen tickets (kitchen.printing=on), else null and nothing here changes.
      * Called only after the check's own transaction has committed, and never
@@ -1405,6 +1410,63 @@ class CheckService(private val config: CustomerConfig) {
         })
         loadCheck(checkId)
     })
+
+    /**
+     * A table tapped, then left with nothing put on it: the empty bill is
+     * dropped (CANCELLED, reason "empty", like [cancelUnpaid]) so the table
+     * shows free again. Only a bill nothing ever touched — see [neverUsed];
+     * otherwise nothing changes and the bill comes back as it is. One
+     * transaction (the store has one writer), so a line or a payment can't
+     * land between the check and the cancel. Idempotent: a bill already
+     * dropped comes back CANCELLED.
+     */
+    fun dropIfEmpty(checkId: Int): CheckView {
+        val dropped = transaction {
+            val check = requireCheck(checkId)
+            if (!neverUsed(check)) return@transaction false
+            Checks.update({ (Checks.id eq checkId) and (Checks.status eq "OPEN") }) {
+                it[status] = "CANCELLED"
+                it[closedAt] = VenueClock.now()
+            }
+            Outbox.write("check.cancelled", "check", checkId.toString(), buildJsonObject {
+                put("checkId", checkId)
+                put("reason", "empty")
+            })
+            true
+        }
+        val view = getCheck(checkId)
+        return if (dropped) afterKitchen(view) else view
+    }
+
+    /**
+     * An empty bill left open longer than [EMPTY_BILL_GRACE] (the app was
+     * closed on the check screen): the floor shows its table as free. The
+     * bill itself is left alone — tapping the table opens it again.
+     */
+    fun isAbandonedEmpty(view: CheckView): Boolean {
+        if (view.status != "OPEN" || view.lines.isNotEmpty() || view.pendingLines.isNotEmpty() ||
+            view.tenders.isNotEmpty() || view.split != null) return false
+        return transaction {
+            val check = Checks.selectAll().where { Checks.id eq view.id }.firstOrNull() ?: return@transaction false
+            neverUsed(check) && check[Checks.openedAt].isBefore(VenueClock.now().minus(EMPTY_BILL_GRACE))
+        }
+    }
+
+    /**
+     * Nothing was ever put on this bill: OPEN (not locked for payment), no
+     * line of any kind (rung, guest/phone pending, removed), no corkage, no
+     * payment (even a reversed one), no card on the reader, no split.
+     * Inside a transaction.
+     */
+    private fun neverUsed(check: ResultRow): Boolean {
+        val id = check[Checks.id].value
+        return check[Checks.status] == "OPEN" &&
+            check[Checks.corkageBottles] == 0 &&
+            CheckLines.selectAll().where { CheckLines.checkId eq id }.empty() &&
+            Tenders.selectAll().where { Tenders.transactionId eq id }.empty() &&
+            BillGroups.selectAll().where { BillGroups.checkId eq id }.empty() &&
+            CardInFlight.on(id).isEmpty()
+    }
 
     /**
      * A card attempt ended with nothing taken (declined, cancelled, timed out):
