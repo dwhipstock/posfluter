@@ -179,6 +179,10 @@ object PrintAi {
         appendLine("- The look you pick and the pictures (\"art\", \"motif\") are decoration, NOT facts about the venue: never turn")
         appendLine("  them into claims in the text (a picture of a fireplace does not mean the venue has one). The tagline speaks of")
         appendLine("  the food, the drink and the mood only, never of the venue's rooms, furniture or features.")
+        appendLine("- Never state a rule, condition or policy: no dine-in or take-out only, no limits, no \"while supplies last\", no")
+        appendLine("  ID or age, no reservations, no discounts, no opening hours, no prices or times. \"footer\" is one short friendly")
+        appendLine("  line (\"Enjoy!\") or, when drinks with alcohol are on the menu, a responsible-drinking line; a policy only when")
+        appendLine("  the manager's notes give it.")
         appendLine("- Write every text in $languageName ($lang). Warm, appetising, plain words; no emoji, no hashtags, no URLs.")
         appendLine("- Lengths: title ≤ $TITLE_MAX characters, tagline ≤ $TAGLINE_MAX, section title ≤ $SECTION_TITLE_MAX, section intro")
         appendLine("  ≤ $INTRO_MAX, blurb ≤ $BLURB_MAX (one line per item, true to its name and description), footer ≤ $FOOTER_MAX.")
@@ -345,17 +349,24 @@ object PrintAi {
      * few items falls back to the plain picks. Null: not a usable reply.
      */
     fun parse(reply: String, kind: MenuKind, c: PrintCatalog, candidates: List<PrintItem>, lang: String,
-              venueNames: Collection<String> = emptyList()): AiPlan? = parseOutcome(reply, kind, c, candidates, lang, venueNames).plan
+              venueNames: Collection<String> = emptyList(), notes: String? = null): AiPlan? =
+        parseOutcome(reply, kind, c, candidates, lang, venueNames, notes).plan
 
     /** A parsed reply and how it read: [ReplyJson.Read.how] (ok, repaired_truncated, …) or why there is no plan. */
     class Outcome(val plan: AiPlan?, val reason: String)
 
     fun parseOutcome(reply: String, kind: MenuKind, c: PrintCatalog, candidates: List<PrintItem>, lang: String,
-                     venueNames: Collection<String> = emptyList()): Outcome {
+                     venueNames: Collection<String> = emptyList(), notes: String? = null): Outcome {
         val read = ReplyJson.read(reply)
         val root = read.root ?: return Outcome(null, read.how)
         val plan = build(root, kind, c, candidates, lang, venueNames)
-        return Outcome(plan, read.how)
+        // rules, conditions and policies the venue never gave are not printed (the notes may give one)
+        val policyOk = notes != null && Policies.statesPolicy(notes)
+        val p = plan.plan
+        val alcohol = p.itemIds.any { c.item(it)?.isAlcohol == true }
+        val tagline = if (policyOk) p.tagline else p.tagline?.let { Policies.withoutPolicies(it) }
+        val footer = (if (policyOk) p.footer else p.footer?.let { Policies.withoutPolicies(it) }) ?: PrintWords.footer(lang, alcohol)
+        return Outcome(plan.copy(plan = p.copy(tagline = tagline, footer = footer)), read.how)
     }
 
     private fun build(root: JsonObject, kind: MenuKind, c: PrintCatalog, candidates: List<PrintItem>, lang: String,

@@ -67,7 +67,7 @@ class MenuPrintAiTest {
         assertNull(r.plan.tagline, "a price in the tagline")
         assertTrue(r.plan.blurbs.getValue("burger").length <= PrintAi.BLURB_MAX)
         assertTrue(r.plan.blurbs.getValue("burger").endsWith("…"))
-        assertNull(r.plan.blurbs["veggie"]); assertNull(r.plan.blurbs["nachos"]); assertNull(r.plan.footer)
+        assertNull(r.plan.blurbs["veggie"]); assertNull(r.plan.blurbs["nachos"]); assertEquals(PrintWords.footer("en", alcohol = true), r.plan.footer) // the fixed line instead
         // when a special runs is printed from the menu: an hour in the copy is dropped
         assertNull(PrintAi.copy(kotlinx.serialization.json.JsonPrimitive("Join us from 4 to 6 pm"), 120))
         assertNull(PrintAi.copy(kotlinx.serialization.json.JsonPrimitive("Tous les jours de 16 h à 18 h"), 120))
@@ -94,7 +94,7 @@ class MenuPrintAiTest {
             "footer":"See you at the Fox and Fiddle Bar","blurbs":{"burger":"Our Pub Burger, stacked high."}}"""
         val r = PrintAi.parse(reply, MenuKind.FULL, c, c.items, "de", own)!!
         assertEquals("Speisekarte", r.plan.title)
-        assertNull(r.plan.tagline); assertNull(r.plan.footer)
+        assertNull(r.plan.tagline); assertEquals(PrintWords.footer("de", alcohol = true), r.plan.footer)
         assertEquals("Our Pub Burger, stacked high.", r.plan.blurbs["burger"])
         assertEquals("Drinks", PrintAi.parse(reply, MenuKind.DRINKS, c, c.items, "en", own)!!.plan.title)
         // the prompt says so too: the name is never the AI's, venue facts only from the notes
