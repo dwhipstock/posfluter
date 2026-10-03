@@ -967,25 +967,32 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      // Delete gives way (ellipsizes) before Cancel/Save do
-                      if (!isNew)
-                        Flexible(
-                          child: TextButton.icon(
-                            icon: const Icon(
-                              LucideIcons.trash2,
-                              size: 18,
-                              color: T.destructive,
-                            ),
-                            label: Text(
-                              l.deleteItem,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: T.destructive),
-                            ),
-                            onPressed: _busy ? null : _deleteItem,
-                          ),
+                      // Delete takes all the room Cancel/Save leave (a short
+                      // word: "Löschen"); only a very narrow editor ellipsizes
+                      Expanded(
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: isNew
+                              ? null
+                              : TextButton.icon(
+                                  key: const Key('item-delete'),
+                                  icon: const Icon(
+                                    LucideIcons.trash2,
+                                    size: 18,
+                                    color: T.destructive,
+                                  ),
+                                  label: Text(
+                                    l.deleteItemShort,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: T.destructive,
+                                    ),
+                                  ),
+                                  onPressed: _busy ? null : _deleteItem,
+                                ),
                         ),
-                      const Spacer(),
+                      ),
                       TextButton(
                         onPressed: _busy
                             ? null

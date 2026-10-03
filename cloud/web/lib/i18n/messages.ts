@@ -237,7 +237,7 @@ export const messages = {
 
   // ── tax report ────────────────────────────────────────────────────────
   tax_title: m("Rapport des taxes", "Sales tax report"),
-  tax_rate_badge: m("{label} {rate} %", "{label} {rate}%"),
+  tax_rate_badge: m("{label} {rate}%", "{label} {rate}%"),
   tax_note: m(
     "TPS et TVQ ajoutées aux prix avant taxes, telles que perçues à chaque vente — net = brut − taxes.",
     "GST and QST added on top of pre-tax prices, as charged on each sale — net = gross − tax."
@@ -674,7 +674,7 @@ export const messages = {
     "Cash payments round to the nearest 5¢. Sales and tax stay exact; the rounding is counted separately, in each store’s own currency."
   ),
   retail_badge: m("Boutique", "Bottle shop"),
-  tax_col_rate: m("{label} {rate} %", "{label} {rate}%"),
+  tax_col_rate: m("{label} {rate}%", "{label} {rate}%"),
   tax_by_code: m("Par taxe", "By tax"),
   tax_col_tax: m("Taxe", "Tax"),
   // who the store pays each tax to (NC sales tax → NCDOR, Wake food tax → Wake County)

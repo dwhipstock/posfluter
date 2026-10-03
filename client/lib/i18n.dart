@@ -2536,6 +2536,11 @@ class L {
     'Artikel löschen',
     'Verwyder item',
   );
+
+  /// The item editor's delete button: one short word, so it fits beside
+  /// Cancel and Save in every language (the confirm says "Delete item").
+  String get deleteItemShort =>
+      _t('Supprimer', 'Delete', 'Eliminar', 'Löschen', 'Verwyder');
   String deleteItemConfirm(String name) => _t(
     'Retirer « $name » du menu ? Les anciennes additions le conservent, mais il disparaît de tous les écrans.',
     'Remove "$name" from the menu? Old bills keep it; it disappears from every screen.',

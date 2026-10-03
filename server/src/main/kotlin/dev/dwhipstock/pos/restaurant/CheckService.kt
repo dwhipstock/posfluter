@@ -2089,7 +2089,7 @@ class CheckService(private val config: CustomerConfig) {
             add(PrintLine.Blank)
             add(PrintLine.Text(msg(SLIP_REASON) + " " + reason))
             add(PrintLine.Blank)
-            add(PrintLine.Text(policy.footerText, Align.CENTER))
+            add(PrintLine.Text(ReceiptRenderer.footer(policy.footerText, locale), Align.CENTER))
         }
         return dev.dwhipstock.pos.sdk.PrinterAdapter.renderText(lines)
     }

@@ -691,19 +691,15 @@ const lineName = l => {
     ? nm({ names: l.variantNames }, l.variantLabelFr, l.variantLabelEn) : "";
   return esc(name + (variant ? " (" + variant + ")" : ""));
 };
-// "GST 5%" / "TVQ 9,975 %" / "GST 9,975 %" (es, de: the comma, the English
-// label); Afrikaans writes it the English way, "GST 9.975%" (North American
-// figures) — the rate is the server's decimal string
+// "GST 5%" / "TVQ 9.975%" (fr: the French label): the rate reads the same
+// in every language, a dot and no space ("8.25%"), as on the POS and the
+// receipts — the rate is the server's decimal string
 // A store that shows its taxes as one line sends one entry, code "TAX":
-// "Tax (8.25%)" / "Taxes (8,25 %)" in the guest's language.
-const taxRate = t => lang === "en" || lang === "af"
-  ? `${t.ratePercent}%`
-  : `${String(t.ratePercent).replace(".", ",")}\u00a0%`;
+// "Tax (8.25%)" / "Taxes (8.25%)" in the guest's language.
+const taxRate = t => `${t.ratePercent}%`;
 const taxLabel = t => t.code === "TAX"
   ? `${(lang === "fr" ? t.labelFr : t.labelEn) || T().taxWord} (${taxRate(t)})`
-  : lang === "en" || lang === "af"
-  ? `${t.labelEn} ${t.ratePercent}%`
-  : `${lang === "fr" ? t.labelFr : t.labelEn} ${String(t.ratePercent).replace(".", ",")}\u00a0%`;
+  : `${lang === "fr" ? t.labelFr : t.labelEn} ${taxRate(t)}`;
 const billRow = l => `
   <div class="brow">
     <span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>

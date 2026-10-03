@@ -5,6 +5,7 @@ import '../api.dart' show Item, Variant;
 import '../i18n.dart' show pickName;
 import '../server_discovery.dart';
 import '../store_profile.dart' show formatMoney;
+import '../widgets/word_fit_text.dart';
 import 'kiosk_api.dart';
 import 'kiosk_controller.dart';
 import 'kiosk_i18n.dart';
@@ -681,10 +682,10 @@ class _Tile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  // wraps between words only: a long word shrinks to fit
+                  WordFitText(
                     _name(c, item),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    key: Key('kiosk-item-name-${item.id}'),
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,

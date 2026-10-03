@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -33,8 +34,23 @@ http.Response _json(Object b, [int s = 200]) => http.Response.bytes(
   headers: {'content-type': 'application/json'},
 );
 
+/// The real fonts, so labels measure as on the tablet (the test binding
+/// otherwise draws every glyph as a wide box).
+Future<void> _loadFonts() async {
+  final manifest =
+      jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
+  for (final entry in manifest) {
+    final loader = FontLoader(entry['family'] as String);
+    for (final font in entry['fonts'] as List) {
+      loader.addFont(rootBundle.load(font['asset'] as String));
+    }
+    await loader.load();
+  }
+}
+
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
+    await _loadFonts();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
@@ -59,6 +75,8 @@ void main() {
     double dpr = 2,
     TerminalStatus terminal = TerminalStatus.none,
     int? orderNumber,
+    bool counterOrder = false,
+    StripeStatus stripe = StripeStatus.off,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = dpr;
@@ -69,9 +87,10 @@ void main() {
           theme: buildPosTheme(),
           home: TenderScreen(
             check: Check.fromJson(_check()),
-            stripeStatus: () async => StripeStatus.off,
+            stripeStatus: () async => stripe,
             terminalStatus: () async => terminal,
             orderNumber: orderNumber,
+            counterOrder: counterOrder,
           ),
         ),
       ),
@@ -96,6 +115,19 @@ void main() {
       'Pay — Order #105',
     );
     await tester.pumpWidget(const SizedBox());
+    // a new counter order has no number until it is paid: never "Bill #"
+    await pump(tester, counterOrder: true);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('pay-title'))).data,
+      'Pay — New order',
+    );
+    await tester.pumpWidget(const SizedBox());
+    await pump(tester, counterOrder: true, orderNumber: 112);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('pay-title'))).data,
+      'Pay — Order #112',
+    );
+    await tester.pumpWidget(const SizedBox());
     Prefs.instance.lang = 'fr';
     addTearDown(() => Prefs.instance.lang = 'en');
     await pump(tester, orderNumber: 105);
@@ -104,6 +136,55 @@ void main() {
       allOf(startsWith('Payer — Commande n'), endsWith('105')),
     );
   });
+
+  // five tenders on the Express tablet (1920x1200 at 100%: 1280 wide at
+  // 150%): every label whole, wrapped between words, in every language
+  for (final lang in ['en', 'fr', 'es', 'de', 'af']) {
+    testWidgets('five tenders fit, labels whole, at 1280 wide ($lang)', (
+      tester,
+    ) async {
+      Prefs.instance.lang = lang;
+      addTearDown(() => Prefs.instance.lang = 'en');
+      await pump(
+        tester,
+        size: const Size(1920, 1200),
+        dpr: 1.5,
+        stripe: const StripeStatus(configured: true, available: true),
+        terminal: const TerminalStatus(kind: 'simulator', available: true),
+      );
+      await tester.pump();
+      expect(tester.view.physicalSize.width / 1.5, 1280);
+      for (final t in ['CASH', 'CARD', 'BANK_TRANSFER', 'STRIPE', 'TERMINAL']) {
+        final tile = find.byKey(ValueKey('tender-tile-$t'));
+        expect(tile, findsOneWidget, reason: t);
+        final label = tester.renderObject<RenderParagraph>(
+          find.descendant(
+            of: find.byKey(ValueKey('tender-label-$t')),
+            matching: find.byType(RichText),
+          ),
+        );
+        expect(label.didExceedMaxLines, isFalse, reason: '$lang $t cut off');
+        // every word on one line: never split inside a word
+        final text = label.text.toPlainText();
+        for (final word in text.split(' ')) {
+          final start = text.indexOf(word);
+          final boxes = label.getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: start + word.length),
+          );
+          expect(
+            boxes.map((b) => b.top).toSet(),
+            hasLength(1),
+            reason: '$lang "$word" split across lines',
+          );
+        }
+        expect(
+          tester.getRect(find.byKey(ValueKey('tender-label-$t'))).bottom,
+          lessThanOrEqualTo(tester.getRect(tile).bottom),
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   Future<void> type(WidgetTester tester, String digits) async {
     for (final d in digits.split('')) {

@@ -353,8 +353,18 @@ object ReceiptRenderer {
         }
 
         add(PrintLine.Blank)
-        add(PrintLine.Text(policy.footerText, Align.CENTER))
+        add(PrintLine.Text(footer(policy.footerText, locale), Align.CENTER))
     }
+
+    /** The footer the store ships with (venue settings); it prints in the receipt's language. */
+    const val DEFAULT_FOOTER = "Thank you for visiting!"
+
+    /**
+     * The receipt's closing line: the default footer in the receipt's language
+     * ("Vielen Dank für Ihren Besuch!"); a venue's own footer as typed.
+     */
+    fun footer(footerText: String, locale: LocaleCode): String =
+        if (footerText.trim() == DEFAULT_FOOTER) Messages.get(MessageKey.RECEIPT_THANK_YOU, locale) else footerText
 
     /** An item line's text: "Fries (Large) ×2". Spanish / German read the translations table, else English. */
     fun itemText(item: ReceiptItem, locale: LocaleCode): String {
