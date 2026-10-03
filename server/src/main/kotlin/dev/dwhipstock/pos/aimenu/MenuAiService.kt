@@ -433,9 +433,12 @@ class MenuAiService(
             val started = now()
             // the language of the answer: the request's own once the model has said, else the user's
             var lang = who?.lang
-            fun refuse(r: AiGuard.Refusal, heard: String? = null, rejected: List<String> = emptyList()) =
+            fun refuse(r: AiGuard.Refusal, heard: String? = null, rejected: List<String> = emptyList(),
+                       plan: FloorEditAi.Plan? = null) =
                 FloorEditProposalDto("", zoneId, p.id, p.model, transcript = heard, rejected = AiText.skips(rejected, lang),
-                    existingTables = existing, elapsedMs = now() - started, refusal = r.code, message = AiGuard.reply(r, lang))
+                    existingTables = existing, protectedTables = plan?.protectedTables.orEmpty(), elapsedMs = now() - started,
+                    refusal = r.code, message = if (r == AiGuard.Refusal.FLOOR_TABLE_LOCKED && !plan?.lockedAsked.isNullOrEmpty())
+                        AiText.locked(plan!!.lockedAsked, lang) else AiGuard.reply(r, lang))
             // plainly not a floor-plan request: the fixed reply, and the model is never asked
             if (audio == null && (AiGuard.offTopic(t) || AiGuard.hatefulRequest(t))) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC)
             val room = transaction { FloorEditAi.context(zoneId) }
@@ -459,8 +462,12 @@ class MenuAiService(
                 return@tracked refuse(if (e.tooMany) AiGuard.Refusal.TOO_MANY_CHANGES else AiGuard.Refusal.INCOMPLETE, heard)
             }
             if (parsed.refused) return@tracked refuse(AiGuard.Refusal.FLOOR_OFF_TOPIC, heard)
-            val plan = transaction { FloorEditAi.plan(zoneId, parsed.ops) }
-            if (plan.changes.isEmpty()) return@tracked refuse(AiGuard.Refusal.FLOOR_NO_CHANGE, heard, parsed.rejected + plan.rejected)
+            // the request's own words (or what was heard) too: a table with an open bill the model left out still gets its line
+            val plan = transaction { FloorEditAi.plan(zoneId, parsed.ops, asked = heard ?: t) }
+            // nothing left to do: only a table with an open bill was asked for → say so, not "no change found"
+            if (plan.changes.isEmpty()) return@tracked refuse(
+                if (plan.lockedAsked.isNotEmpty()) AiGuard.Refusal.FLOOR_TABLE_LOCKED else AiGuard.Refusal.FLOOR_NO_CHANGE,
+                heard, parsed.rejected + plan.rejected, plan)
             val cutoff = now() - PROPOSAL_TTL_MS
             floorProposals.entries.removeIf { it.value.at < cutoff }
             val id = UUID.randomUUID().toString()

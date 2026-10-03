@@ -243,7 +243,9 @@ internal object FloorEditAi {
           concerned its new "number", in reading order (top to bottom, left to right). Leave "number" out of
           every other op, including one that only moves, reshapes or reseats a table; new tables get null
           unless a number is asked for.
-        - Tables with "openBill": true have guests: never move, reshape, renumber or remove them.
+        - Tables with "openBill": true have guests: they stay as they are, and the server tells the manager
+          why. When the manager asks to move, reshape, renumber or remove one, still write that op as asked
+          (never leave it out, and never return "ops": [] because of it), and still write every other op asked for.
         - Object types: BAR_FRONT (the bar counter), POOL (pool table), PILLAR, ENTRANCE, HOST_STAND, KITCHEN,
           RESTROOMS, STAGE (a stage or bandstand for live music), CARRY_OUT (a carry-out / to-go / pickup spot, where to-go orders wait; usually by the door). Anything else (a jukebox, a piano, a window) is CUSTOM with a short name (1 to 3 words)
           and an icon from: ${FLOOR_OBJECT_ICONS.joinToString(", ")} ("star" if none fits).
@@ -308,6 +310,23 @@ internal object FloorEditAi {
     }
 
     private fun number(label: String) = Regex("(\\d+)$").find(label.trim())?.value?.toIntOrNull()
+
+    /**
+     * The open-bill tables the manager's own words ([asked]: the request, or what was
+     * heard) name — "O-1", "o1", "O-01" — that no op [touched]: the model left that part
+     * out instead of proposing it, so the manager still hears why it stays as it is.
+     * Only a label with letters counts ("a table for 2" is not table 2; "O-10" is not O-1).
+     */
+    internal fun lockedNamed(asked: String?, cur: Map<String, RoomTableDto>, locked: Set<String>, touched: Set<String>): List<String> {
+        if (asked.isNullOrBlank()) return emptyList()
+        return cur.values.filter { it.id in locked && it.id !in touched }.filter { t ->
+            val k = key(t.label)
+            val digits = Regex("(\\d+)$").find(k)?.value ?: return@filter false
+            val letters = k.removeSuffix(digits)
+            letters.isNotEmpty() && Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(letters) + "[-\\u2010\\u2011 ]?0*" +
+                digits.trimStart('0').ifEmpty { "0" } + "(?![\\p{N}])", RegexOption.IGNORE_CASE).containsMatchIn(asked)
+        }.map { it.id }
+    }
 
     private fun tableDto(r: ResultRow) = RoomTableDto(id = r[DiningTables.id], label = r[DiningTables.label],
         x = r[DiningTables.x], y = r[DiningTables.y], width = r[DiningTables.width], height = r[DiningTables.height],
@@ -413,6 +432,8 @@ internal object FloorEditAi {
         val existingTables: Int,
         val protectedTables: List<String>,
         val roomName: String,
+        /** Labels of the open-bill tables the request asked to change (left as they are, each with a rejected line). */
+        val lockedAsked: List<String> = emptyList(),
     )
 
     private fun RoomTableDto.box() = Box.of(x, y, width, height, rotation)
@@ -421,7 +442,7 @@ internal object FloorEditAi {
     private fun relabel(label: String, n: Int, prefix: String) =
         if (number(label) != null) label.trim().replace(Regex("(\\d+)$"), "$n") else "$prefix-$n"
 
-    fun plan(zoneId: String, ops0: List<FloorOp>): Plan {
+    fun plan(zoneId: String, ops0: List<FloorOp>, asked: String? = null): Plan {
         val room = RoomLayoutAi.room(zoneId)
         val locked = locked(room)
         val anchors = anchors(room)
@@ -440,6 +461,8 @@ internal object FloorEditAi {
             }
         }
         val rejected = mutableListOf<String>()
+        // the open-bill tables the request asked to change: each stays as it is, with its rejected line
+        val lockedAsked = LinkedHashSet<String>()
         fun label(id: String) = cur[id]?.label ?: "?"
 
         // 1. removals
@@ -451,7 +474,7 @@ internal object FloorEditAi {
         if (removals <= MAX_REMOVES) for (op in ops) when (op) {
             is FloorOp.RemoveTable -> when {
                 op.id !in cur -> rejected += "unknown table"
-                op.id in locked -> rejected += "table ${label(op.id)} has an open bill: not removed"
+                op.id in locked -> { rejected += "table ${label(op.id)} has an open bill: not removed"; lockedAsked += label(op.id) }
                 op.id in anchors -> rejected += "table ${label(op.id)} has sub-tables: not removed"
                 else -> removedT += op.id
             }
@@ -473,7 +496,7 @@ internal object FloorEditAi {
             var op = op0
             if (op.id in locked) {
                 val asked = listOf(op.shape, op.x, op.y, op.w, op.h, op.rotation, op.number).any { it != null }
-                if (asked) rejected += "table ${old.label} has an open bill: not moved, reshaped or renumbered"
+                if (asked) { rejected += "table ${old.label} has an open bill: not moved, reshaped or renumbered"; lockedAsked += old.label }
                 op = FloorOp.UpdateTable(op.id, seats = op.seats)
             }
             // "round" / "circle" → "ROUND", so a same-shape echo is not a change and a real one is
@@ -550,6 +573,13 @@ internal object FloorEditAi {
         val addedT = added.tables.mapIndexed { i, t -> t.copy(id = "new-t${i + 1}") }
         val addedO = added.objects.mapIndexed { i, o -> o.copy(id = "new-o${i + 1}") }
 
+        // a locked table the request named but the model left out: the manager still hears why
+        val touched = ops.mapNotNull { (it as? FloorOp.UpdateTable)?.id ?: (it as? FloorOp.RemoveTable)?.id }.toSet()
+        for (id in lockedNamed(asked, cur, locked, touched)) {
+            rejected += "table ${label(id)} has an open bill, so it stays as it is"
+            lockedAsked += label(id)
+        }
+
         // 5. the list the manager reads
         var n = 0
         fun id() = "c${++n}"
@@ -577,7 +607,7 @@ internal object FloorEditAi {
 
         return Plan(changes, updatedT.values.toList() + addedT, updatedO.values.toList() + addedO,
             removedT.toList(), removedO.toList(), rejected, updatedT.values.toList(), updatedO.values.toList(),
-            addedT, addedO, cur.size, locked.filter { it in cur }.sorted(), room.name)
+            addedT, addedO, cur.size, locked.filter { it in cur }.sorted(), room.name, lockedAsked.toList())
     }
 
     // --- apply (inside a transaction): the plan again against the room now, then the writes ---

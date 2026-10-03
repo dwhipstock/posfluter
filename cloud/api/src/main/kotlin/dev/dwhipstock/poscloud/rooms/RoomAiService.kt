@@ -143,9 +143,17 @@ internal object RoomReplies {
         "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 3 mit 6 Plätzen“ oder „einen runden Vierertisch hinzufügen“.",
         "af" to "Ek kon nie ’n verandering vir hierdie vertrek daarin vind nie. Noem die tafel of voorwerp en wat moet verander, byvoorbeeld “gee tafel 3 ses sitplekke” of “voeg ’n ronde tafel vir 4 by”.",
     )
+    private val FLOOR_TABLE_LOCKED = mapOf(
+        "en" to "That table has an open bill, so it stays as it is. Close the bill first, then ask again.",
+        "fr" to "Cette table a une addition ouverte, elle reste donc telle quelle. Fermez d'abord l'addition, puis redemandez.",
+        "es" to "Esa mesa tiene una cuenta abierta, así que se queda como está. Cierra primero la cuenta y vuelve a pedirlo.",
+        "de" to "Dieser Tisch hat eine offene Rechnung und bleibt deshalb, wie er ist. Schließen Sie zuerst die Rechnung und fragen Sie dann noch einmal.",
+        "af" to "Daardie tafel het ’n oop rekening, so dit bly soos dit is. Sluit eers die rekening en vra dan weer.",
+    )
 
     enum class R(val code: String) { ROOM_OFF_TOPIC("off_topic"), ROOM_NO_LAYOUT("no_change"), FLOOR_OFF_TOPIC("off_topic"),
-        FLOOR_NO_CHANGE("no_change"), INCOMPLETE("menu_ai_incomplete"), TOO_MANY("menu_ai_too_many_changes") }
+        FLOOR_NO_CHANGE("no_change"), FLOOR_TABLE_LOCKED("table_locked"), INCOMPLETE("menu_ai_incomplete"),
+        TOO_MANY("menu_ai_too_many_changes") }
 
     fun reply(r: R, lang: String?): String {
         val l = lang?.take(2)?.lowercase()
@@ -154,6 +162,7 @@ internal object RoomReplies {
             R.ROOM_NO_LAYOUT -> ROOM_NO_LAYOUT
             R.FLOOR_OFF_TOPIC -> FLOOR_OFF_TOPIC
             R.FLOOR_NO_CHANGE -> FLOOR_NO_CHANGE
+            R.FLOOR_TABLE_LOCKED -> FLOOR_TABLE_LOCKED
             R.INCOMPLETE -> return AiGuard.reply(AiGuard.Refusal.INCOMPLETE, l)
             R.TOO_MANY -> return AiGuard.reply(AiGuard.Refusal.TOO_MANY_CHANGES, l)
         }
@@ -474,9 +483,11 @@ class RoomAiService(
             val m = requireModel(voice = audio != null)
             val started = now()
             var lang = who.lang
-            fun refuse(r: RoomReplies.R, heard: String? = null, rejected: List<String> = emptyList()) =
+            fun refuse(r: RoomReplies.R, heard: String? = null, rejected: List<String> = emptyList(), plan: FloorEditAi.Plan? = null) =
                 FloorEditProposalDto("", who.venue.venueId, roomId, m.model, transcript = heard, rejected = AiText.skips(rejected, lang),
-                    existingTables = room0.tables.size, elapsedMs = now() - started, refusal = r.code, message = RoomReplies.reply(r, lang))
+                    existingTables = room0.tables.size, protectedTables = plan?.protectedTables.orEmpty(), elapsedMs = now() - started,
+                    refusal = r.code, message = if (r == RoomReplies.R.FLOOR_TABLE_LOCKED && !plan?.lockedAsked.isNullOrEmpty())
+                        AiText.locked(plan!!.lockedAsked, lang) else RoomReplies.reply(r, lang))
             // plainly not a floor-plan request: the fixed reply, and the model is never asked
             if (text != null && (AiGuard.offTopic(text) || AiGuard.hatefulRequest(text))) return@tracked refuse(RoomReplies.R.FLOOR_OFF_TOPIC)
             val bilingual = transaction { bilingual(scope) }
@@ -493,8 +504,12 @@ class RoomAiService(
                 return@tracked refuse(if (e.tooMany) RoomReplies.R.TOO_MANY else RoomReplies.R.INCOMPLETE, heard)
             }
             if (parsed.refused) return@tracked refuse(RoomReplies.R.FLOOR_OFF_TOPIC, heard)
-            val plan = FloorEditAi.plan(room0, parsed.ops)
-            if (plan.changes.isEmpty()) return@tracked refuse(RoomReplies.R.FLOOR_NO_CHANGE, heard, parsed.rejected + plan.rejected)
+            // the request's own words (or what was heard) too: a table with an open bill the model left out still gets its line
+            val plan = FloorEditAi.plan(room0, parsed.ops, asked = heard ?: text)
+            // nothing left to do: only a table with an open bill was asked for → say so, not "no change found"
+            if (plan.changes.isEmpty()) return@tracked refuse(
+                if (plan.lockedAsked.isNotEmpty()) RoomReplies.R.FLOOR_TABLE_LOCKED else RoomReplies.R.FLOOR_NO_CHANGE,
+                heard, parsed.rejected + plan.rejected, plan)
             sweep()
             val id = UUID.randomUUID().toString()
             val removals = plan.removedTables.size + plan.removedObjects.size

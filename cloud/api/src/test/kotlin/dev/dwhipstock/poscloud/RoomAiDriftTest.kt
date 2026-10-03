@@ -66,6 +66,9 @@ class RoomAiDriftTest {
         assertTrue("Write \"summary\" in that SAME language" in port)
         // the floor assistant: an open bill is the only lock
         assertTrue("Tables with \"openBill\": true have guests" in port)
+        // a locked table is still written as an op (the server says why), and the rest of the request kept
+        assertTrue("never return \"ops\": [] because of it" in port)
+        assertTrue("fun lockedNamed(" in port && "fun locked(labels: List<String>, lang: String?)" in port)
         // several photos of one room: merged by shared landmarks, each table once (the user line too)
         assertTrue("landmarks they share (the bar, the walls and corners, doors, windows, pillars)" in port)
         assertTrue("fun userPrompt(count: Int)" in port)

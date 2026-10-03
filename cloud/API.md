@@ -527,7 +527,9 @@ and room calls together). Off without a key (409 `menu_ai_disabled`); 409
   their id, added ones `new-t1` / `new-o1`…), removedTables, removedObjects, rejected (in the request's
   language), existingTables, protectedTables, elapsedMs, refusal, message, bulk }`. `kind`: `add_table |
   update_table | remove_table | add_object | update_object | remove_object`; `field`: `number | shape | seats
-  | position | size | rotation`. 404 `room_not_found`.
+  | position | size | rotation`. A table with an open bill (in `protectedTables`) stays as it is: any change
+  to it is left out with a `rejected` line, the rest still comes back; when it was all that was asked,
+  `refusal: table_locked` with `message` naming it (else `off_topic | no_change`). 404 `room_not_found`.
 - `POST /v1/room-ai/apply?venue=` `{ proposalId, confirmed? }` → `{ applyId, roomId, applied, summary }`. The
   plan is checked again against the room NOW (a bill opened since is respected). More than 2 removals:
   409 `menu_ai_confirm_required` until `confirmed: true`. 409 `room_no_change` when nothing is left to do.
