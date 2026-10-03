@@ -774,6 +774,45 @@ export interface AiProposal {
   transcript?: string | null;
   /** Items the manager asked a picture for; each is made with /menu-ai/photos/generate. */
   photos?: AiPhotoAsk[];
+  /** Sales-based requests: the ranking the server recomputed from the store's sales (never the model's numbers). */
+  sales?: AiSalesBasis[];
+  /** What the manager should know about those (a size refused, no sales in the period…). */
+  salesNotes?: AiSalesNote[];
+  /** A question about sales, answered from `sales`: nothing to apply. */
+  answer?: boolean;
+}
+
+/** One item's sales over a basis's period (minor units in the basis's currency). */
+export interface AiSalesRow {
+  itemId: string;
+  name: string;
+  category?: string | null;
+  units: number;
+  revenueMinor: number;
+  /** The store day it last sold (within 90 days). */
+  lastSold?: string | null;
+}
+
+/** What a sales-based proposal or answer is based on: from / to are the store's business days (inclusive). */
+export interface AiSalesBasis {
+  rank: "top" | "bottom" | "unsold" | "list";
+  by: "units" | "revenue";
+  n: number;
+  from: string;
+  to: string;
+  /** unsold: not sold in this many days */
+  days?: number | null;
+  store: string;
+  currency: string;
+  rows: AiSalesRow[];
+}
+
+export interface AiSalesNote {
+  code: "no_sales" | "fewer_items" | "pick_corrected" | "size_refused" | "already_lower" | "item_skipped" | "too_many" | "none_match" | "bad_request" | string;
+  item?: string | null;
+  size?: string | null;
+  n?: number | null;
+  want?: number | null;
 }
 
 /** One picture the assistant was asked for (nothing is drawn until the portal asks). */

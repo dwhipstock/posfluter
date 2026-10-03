@@ -401,6 +401,36 @@ Every call but status needs `?venue=<id>` (400 `venue_required` without it,
   counts, time taken; never the text, the audio, the prompt or a key. `menu_ai_applies` holds each
   apply's undo.
 
+#### Sales-aware requests (portal only)
+
+The assistant knows the store's item sales ("make my top 5 sellers $2 cheaper on Tuesdays", "86
+anything that hasn't sold in 2 weeks", "put our 3 slowest drinks on happy hour Mon–Fri 4–6 at $5",
+"which burgers sold best last month?"). Cloud only (`menuai/MenuAiSales.kt`): the store's assistant and
+the shared parser are unchanged.
+
+- The model gets a `<sales_data>` table of the ONE store in scope (the caller's tenant): per live item,
+  units and revenue over the last 7, 30 and 90 full business days ending yesterday, and the day it last
+  sold. Same rows and day rules as `GET /v1/reports/items`: lines of CLOSED checks, by close time, each
+  business day from the store zone's midnight. At most 400 rows.
+- The model answers such a request with a `sales_select` op (rank top / bottom / unsold / list, by units
+  or revenue, a period of 1–90 days or a calendar month, n, the items it narrows to, and what to do).
+  The cloud takes it out before the parser, **recomputes the ranking from the real numbers** (ties: the
+  other figure, then the name) and uses its own list whatever the model picked (`pick_corrected`). It
+  then writes the plain ops itself — `set_specials` (the item's other specials kept), `update_item`
+  prices, or `active: false` — which the shared parser validates like any other. Relative prices are per
+  size: `menu price − amount`, or a percentage rounded half-up to the cent (to .05 / .95 only when asked).
+  A size that would end at or below 0, or not below the menu price (a special), is left out
+  (`size_refused`); so is one that already has a special as low over the same days and hours
+  (`already_lower`; the store charges the cheapest special in force).
+- Proposal additions: `sales: [{ rank, by, n, from, to, days, store, currency, rows: [{ itemId, name,
+  category, units, revenueMinor, lastSold }] }]` (what it is based on), `salesNotes: [{ code, item, size,
+  n, want }]` (`no_sales | none_match | fewer_items | pick_corrected | size_refused | already_lower |
+  item_skipped | too_many | bad_request`) and `answer`. A question gets `answer: true`, no `proposalId`
+  and no changes (logged as `answered`); the summary is dropped (the numbers on screen are the
+  cloud's). No sales in the period: `no_sales`, nothing proposed (never "86 the whole menu" because a
+  store didn't sync).
+- Same guard, limits, bulk confirm, apply, undo, roles and audit as any other request.
+
 #### AI item photos (`/v1/menu-ai/photos`)
 
 The store's AI photos (docs/ai-photos.md) for one item of one store: a picture in the store's house

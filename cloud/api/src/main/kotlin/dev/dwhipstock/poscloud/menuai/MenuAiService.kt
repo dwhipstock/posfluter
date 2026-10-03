@@ -785,7 +785,7 @@ internal class MenuSnapshot(
     /** The live (on, priced) items as the sales logic sees them, named in [lang]. */
     fun salesItems(lang: String): Map<String, SalesItem> = items.values.filter { it.active }.associate { i ->
         i.id to SalesItem(i.id, pick(lang, i.nameEn, i.nameFr, i.names),
-            cats.firstOrNull { it.id == i.categoryId }?.let { pick(lang, it.nameEn, it.nameFr, it.names) } ?: "",
+            cats.firstOrNull { it.id == i.categoryId }?.let { pick(lang, it.nameEn, it.nameFr, it.names) } ?: "", i.categoryId,
             i.variants.map { v -> SalesSize(v.id, if (lang == "fr") v.labelFr.ifBlank { v.labelEn } else v.labelEn.ifBlank { v.labelFr }, v.priceCents) },
             i.specials)
     }

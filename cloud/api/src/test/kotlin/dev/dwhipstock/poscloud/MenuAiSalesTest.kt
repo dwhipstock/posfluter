@@ -251,6 +251,62 @@ class MenuAiSalesTest {
     }
 
     @Test
+    fun aDeeperSpecialAlreadyOnThoseDaysIsKept() = testApplication {
+        app(); bootstrap(); seedSales()
+        // today: burger 9.00 on Tuesdays (deeper than 12.45 - 2.00), lager pint 7.00 on Tuesdays (shallower)
+        fake.reply = """{"summary":"x","ops":[
+            {"op":"set_specials","item":"burger","specials":[{"days":["tue"],"label":"Burger Tuesday","prices":[{"variant":"burger:regular","priceMinor":900}]}]},
+            {"op":"set_specials","item":"lager","specials":[{"days":["tue"],"label":"","prices":[{"variant":"lager:pint","priceMinor":700}]}]}]}"""
+        val first = chat("burger tuesday 9, lager pints 7 on tuesdays")
+        val a = client.post("/v1/menu-ai/apply?venue=vieux-port") {
+            header(HttpHeaders.Cookie, "pos_portal_session=$owner"); contentType(ContentType.Application.Json)
+            setBody("""{"proposalId":"${first.s("proposalId")}","changeIds":["c1","c2"]}""")
+        }
+        assertEquals(HttpStatusCode.OK, a.status, a.bodyAsText())
+
+        fake.reply = top5TuesdayWrongPick
+        val p = chat("Take my top 5 selling items for the last 30 days and make them \$2.00 cheaper on Tuesdays")
+        val titles = p.list("changes").map { it.s("title") }
+        // the burger keeps its 9.00 Tuesday price: not raised to 10.45
+        assertFalse("Copper Burger" in titles, titles.toString())
+        assertTrue(p.list("salesNotes").any { it.s("code") == "already_lower" && it.s("item") == "Copper Burger" })
+        // the lager's Tuesday special takes the new prices: pint 7.00 → 6.25, and the pitcher joins it
+        val lager = p.list("changes").first { it.s("title") == "Lantern House Lager" }.list("details")
+        assertTrue(lager.any { it.s("label") == "pint · Tue" && it.s("afterMinor") == "625" }, lager.toString())
+        assertTrue(lager.any { it.s("label") == "pitcher · Tue" && it.s("afterMinor") == "2200" }, lager.toString())
+    }
+
+    @Test
+    fun aNarrowerHappyHourDoesNotBlockAnAllDaySpecial() = testApplication {
+        app(); bootstrap(); seedSales()
+        fake.reply = """{"summary":"x","ops":[{"op":"set_specials","item":"lager","specials":[{"days":["mon","tue","wed","thu","fri"],
+            "from":"16:00","to":"18:00","label":"Happy hour","prices":[{"variant":"lager:pint","priceMinor":500}]}]}]}"""
+        val first = chat("happy hour lager pints 5")
+        client.post("/v1/menu-ai/apply?venue=vieux-port") {
+            header(HttpHeaders.Cookie, "pos_portal_session=$owner"); contentType(ContentType.Application.Json)
+            setBody("""{"proposalId":"${first.s("proposalId")}","changeIds":["c1"]}""")
+        }.also { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
+        fake.reply = top5TuesdayWrongPick
+        val p = chat("Take my top 5 selling items for the last 30 days and make them \$2.00 cheaper on Tuesdays")
+        // the store charges the cheapest special in force: 5.00 from 4 to 6, 6.25 the rest of Tuesday
+        val lager = p.list("changes").first { it.s("title") == "Lantern House Lager" }.list("details")
+        assertTrue(lager.any { it.s("label") == "pint · Tue" && it.s("afterMinor") == "625" }, lager.toString())
+        assertFalse(p.notes().contains("already_lower"))
+    }
+
+    @Test
+    fun categoriesStandForTheirItemsAndAnEmptyPickSaysSo() = testApplication {
+        app(); bootstrap(); seedSales()
+        fake.reply = """{"summary":"x","ops":[{"op":"sales_select","rank":"bottom","days":30,"n":2,"among":["beer"],"then":{"do":"answer"}}]}"""
+        assertEquals(listOf("stout" to 0L, "porter" to 0L), chat("my 2 slowest beers?").rows())
+        // everything named sold this week: nothing to take off, and it says so
+        fake.reply = """{"summary":"x","ops":[{"op":"sales_select","rank":"unsold","days":7,"among":["lager","ipa"],"then":{"do":"86"}}]}"""
+        val p = chat("86 the beers that didn't sell this week")
+        assertEquals(listOf("none_match"), p.notes())
+        assertEquals(0, p.list("changes").size)
+    }
+
+    @Test
     fun priceMath() {
         fun spec(s: String) = testJson.parseToJsonElement(s).jsonObject
         assertEquals(625L, salesPrice(825, spec("""{"change_minor":-200}""")))

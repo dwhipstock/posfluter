@@ -3,7 +3,7 @@
 // 16-bit WAV — browsers record webm/opus or mp4/aac), the change checklist's
 // ticking rules, and the error codes' message keys. No React, no fetch:
 // lib/menu-ai.test.ts covers them.
-import type { AiChange } from "./types";
+import type { AiChange, AiSalesBasis, AiSalesNote } from "./types";
 import type { MsgKey } from "./i18n/messages";
 
 /** The clip the cloud gets: 16 kHz is plenty for speech and keeps 30 s under 1 MB. */
@@ -113,6 +113,61 @@ export function aiErrorKey(code: string): MsgKey | null {
     default:
       return null;
   }
+}
+
+// --- sales-based answers and proposals (the server computes every number) ---
+
+/** The headline of a sales basis ("Top 5 by units sold"): its message key and placeholders. */
+export function salesHeadline(b: AiSalesBasis): { key: MsgKey; vars: Record<string, string | number> } {
+  switch (b.rank) {
+    case "top":
+      return { key: b.by === "revenue" ? "ai_sales_top_revenue" : "ai_sales_top_units", vars: { n: b.n } };
+    case "bottom":
+      return { key: b.by === "revenue" ? "ai_sales_bottom_revenue" : "ai_sales_bottom_units", vars: { n: b.n } };
+    case "unsold":
+      return { key: "ai_sales_unsold", vars: { days: b.days ?? 0 } };
+    default:
+      return { key: "ai_sales_list", vars: {} };
+  }
+}
+
+/** A sales note → its message key (null: not one the portal knows, not shown). */
+export function salesNoteKey(n: AiSalesNote): MsgKey | null {
+  switch (n.code) {
+    case "no_sales":
+      return "ai_sales_note_no_sales";
+    case "fewer_items":
+      return "ai_sales_note_fewer";
+    case "pick_corrected":
+      return "ai_sales_note_corrected";
+    case "size_refused":
+      return n.size ? "ai_sales_note_size_refused" : "ai_sales_note_item_refused";
+    case "already_lower":
+      return n.size ? "ai_sales_note_size_already_lower" : "ai_sales_note_already_lower";
+    case "item_skipped":
+      return "ai_sales_note_item_skipped";
+    case "too_many":
+      return "ai_sales_note_too_many";
+    case "none_match":
+      return "ai_sales_note_none_match";
+    case "bad_request":
+      return "ai_sales_note_bad";
+    default:
+      return null;
+  }
+}
+
+/**
+ * The basis line's items: "Lantern House Lager (412), Copper Burger (388), …"
+ * — at most [max] names, each with its units (or revenue, for a revenue
+ * ranking), formatted by the caller.
+ */
+export function basisItems(b: AiSalesBasis, units: (n: number) => string, money: (minor: number) => string, max = 5): string {
+  const shown = b.rows.slice(0, max).map((r) => {
+    if (b.rank === "unsold") return r.name;
+    return `${r.name} (${b.by === "revenue" ? money(r.revenueMinor) : units(r.units)})`;
+  });
+  return shown.join(", ") + (b.rows.length > max ? ", …" : "");
 }
 
 /** "0:07" for a seconds count. */

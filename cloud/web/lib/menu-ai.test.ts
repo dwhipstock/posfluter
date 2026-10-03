@@ -1,9 +1,9 @@
 // The AI assistant's pure helpers: the voice clip's WAV, the checklist's ticking rules, error messages.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { aiErrorKey, allTicked, clock, encodeWav, tickedIds, toggleChange, toMono, VOICE_RATE } from "./menu-ai";
+import { aiErrorKey, allTicked, basisItems, clock, encodeWav, salesHeadline, salesNoteKey, tickedIds, toggleChange, toMono, VOICE_RATE } from "./menu-ai";
 import { messages } from "./i18n/messages";
-import type { AiChange } from "./types";
+import type { AiChange, AiSalesBasis } from "./types";
 
 test("a stereo 48 kHz recording becomes 16 kHz mono", () => {
   const left = new Float32Array(48_000).fill(0.5);
@@ -65,4 +65,45 @@ test("the recording clock", () => {
   assert.equal(clock(0), "0:00");
   assert.equal(clock(7.9), "0:07");
   assert.equal(clock(30), "0:30");
+});
+
+const basis: AiSalesBasis = {
+  rank: "top",
+  by: "units",
+  n: 5,
+  from: "2026-09-03",
+  to: "2026-10-02",
+  store: "Copper Lantern — Glenwood South",
+  currency: "USD",
+  rows: [
+    { itemId: "lager", name: "Lantern House Lager", units: 412, revenueMinor: 339_900 },
+    { itemId: "burger", name: "Copper Burger", units: 1388, revenueMinor: 1_728_060 },
+  ],
+};
+
+test("a sales basis line lists the server's numbers, never more than asked", () => {
+  const units = (n: number) => n.toLocaleString("en-US");
+  const money = (m: number) => `$${(m / 100).toFixed(2)}`;
+  assert.equal(basisItems(basis, units, money), "Lantern House Lager (412), Copper Burger (1,388)");
+  assert.equal(basisItems({ ...basis, by: "revenue" }, units, money), "Lantern House Lager ($3399.00), Copper Burger ($17280.60)");
+  assert.equal(basisItems(basis, units, money, 1), "Lantern House Lager (412), …");
+  assert.equal(basisItems({ ...basis, rank: "unsold" }, units, money), "Lantern House Lager, Copper Burger");
+});
+
+test("every sales headline and note has a message", () => {
+  const all: AiSalesBasis[] = [
+    basis,
+    { ...basis, by: "revenue" },
+    { ...basis, rank: "bottom" },
+    { ...basis, rank: "unsold", days: 14 },
+    { ...basis, rank: "list" },
+  ];
+  for (const b of all) assert.ok(messages[salesHeadline(b).key], b.rank);
+  assert.deepEqual(salesHeadline({ ...basis, rank: "unsold", days: 14 }).vars, { days: 14 });
+  for (const code of ["no_sales", "fewer_items", "pick_corrected", "size_refused", "already_lower", "item_skipped", "too_many", "none_match", "bad_request"]) {
+    const k = salesNoteKey({ code });
+    assert.ok(k && messages[k], code);
+  }
+  assert.equal(salesNoteKey({ code: "size_refused", item: "Lager", size: "pitcher" }), "ai_sales_note_size_refused");
+  assert.equal(salesNoteKey({ code: "something_new" }), null);
 });

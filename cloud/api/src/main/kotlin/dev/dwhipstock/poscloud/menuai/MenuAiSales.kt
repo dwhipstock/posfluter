@@ -69,7 +69,7 @@ data class AiSalesBasis(
 /**
  * Something the manager should know about a sales-based change, rendered by
  * the portal in its own language. code: no_sales | fewer_items | pick_corrected |
- * size_refused | item_skipped | too_many | bad_request.
+ * size_refused | already_lower | item_skipped | too_many | none_match | bad_request.
  */
 @Serializable
 data class AiSalesNote(
@@ -182,7 +182,7 @@ internal class SalesFacts(
 
 /** One live menu item as the sales logic sees it (names in the manager's language). */
 internal class SalesItem(
-    val id: String, val name: String, val category: String,
+    val id: String, val name: String, val category: String, val categoryId: String,
     val sizes: List<SalesSize>, val specials: List<NewSpecial>,
 )
 
@@ -224,10 +224,11 @@ Sales (this portal only):
     last "days" days, "n" ignored), "list" (only to answer about named items: their numbers, nothing ranked).
   - "by": "units", or "revenue" when the manager says revenue, money or dollars.
   - The period: "days" (1 to 90 full days ending yesterday: "last 30 days" = 30, "last 2 weeks" = 14, "last week" = 7; default 30),
-    or "month":"YYYY-MM" for a calendar month ("last month" = the month before today's).
-  - "n": how many (default 5). "among": only when the request narrows the items ("drinks", "burgers", "beers"): every live item
-    that IS one, judged by its name and category; leave it out for the whole menu. "items": your own pick from <sales_data>,
-    best first; the server checks it against the real numbers and uses its own ranking.
+    or "month":"YYYY-MM" for a calendar month: "last month" (in any language) is always "month":"${YearMonth.from(today).minusMonths(1)}".
+  - "n": how many (default 5; "best"/"top" with no number = 5). "among": only when the request narrows the items ("drinks",
+    "burgers", "beers"): the ids of every live item that IS one, judged by its name, not only its category (a sandwich in
+    "Burgers & Sandwiches" is not a burger; every beer, wine and cocktail is a drink); leave it out for the whole menu.
+    "items": your own pick from <sales_data>, best first; the server checks it against the real numbers and uses its own ranking.
   - "then" is what to do with the items:
     {"do":"answer"} — a question: no change.
     {"do":"special","days":[...],"from":"HH:mm","to":"HH:mm","label":"","price":{...},"sizes":"all"} — a day or hour price, the
@@ -265,21 +266,30 @@ internal class SalesPlanner(private val facts: SalesFacts, private val items: Ma
         val ACTIONS = setOf("answer", "special", "price", "86")
     }
 
-    private fun bad(): SalesPlan = SalesPlan(null, listOf(AiSalesNote("bad_request")), emptyList(), false, emptySet(), emptySet())
+    private val log = org.slf4j.LoggerFactory.getLogger(SalesPlanner::class.java)
+
+    /** A selection the server can't work out: nothing changes. [why] is a fixed word, never the model's text. */
+    private fun bad(why: String): SalesPlan {
+        log.info("AI menu: sales selection not usable ($why)")
+        return SalesPlan(null, listOf(AiSalesNote("bad_request")), emptyList(), false, emptySet(), emptySet())
+    }
 
     fun plan(o: JsonObject): SalesPlan {
         val then = o["then"] as? JsonObject ?: buildJsonObject { put("do", "answer") }
         val action = then["do"].str()?.lowercase() ?: "answer"
-        if (action !in ACTIONS) return bad()
+        if (action !in ACTIONS) return bad("action")
         val rank = o["rank"].str()?.lowercase() ?: "top"
-        if (rank !in setOf("top", "bottom", "unsold", "list")) return bad()
-        if (rank == "list" && action != "answer") return bad()
+        if (rank !in setOf("top", "bottom", "unsold", "list")) return bad("rank")
+        if (rank == "list" && action != "answer") return bad("list_change")
         val by = if (o["by"].str()?.lowercase() == "revenue") "revenue" else "units"
-        val win = window(o) ?: return bad()
+        val win = window(o) ?: return bad("period")
         val n = (o["n"].int() ?: DEFAULT_N).coerceIn(1, MAX_PICK)
         // the pool: live items of this menu, narrowed to what the model says "drinks" are
-        val among = (o["among"] as? JsonArray)?.mapNotNull { it.str() }?.filter { it in items }?.distinct()
-        if (o["among"] is JsonArray && among.isNullOrEmpty()) return bad()
+        // (item ids; a category id stands for its items)
+        val among = (o["among"] as? JsonArray)?.mapNotNull { it.str() }?.flatMap { id ->
+            if (id in items) listOf(id) else items.values.filter { it.categoryId == id }.map { it.id }
+        }?.distinct()
+        if (o["among"] is JsonArray && among.isNullOrEmpty()) return bad("among")
         val pool = among?.map { items.getValue(it) } ?: items.values.toList()
         val modelPick = (o["items"] as? JsonArray)?.mapNotNull { it.str() }?.distinct().orEmpty()
 
@@ -312,6 +322,7 @@ internal class SalesPlanner(private val facts: SalesFacts, private val items: Ma
             else -> pool.sortedWith(best).take(MAX_PICK)
         }
         if (noSales) notes += AiSalesNote("no_sales")
+        else if (picked.isEmpty()) notes += AiSalesNote("none_match")
         else if ((rank == "top" || rank == "bottom") && picked.size < n) notes += AiSalesNote("fewer_items", n = picked.size, want = n)
         if (!noSales && rank != "list" && modelPick.isNotEmpty() && modelPick.toSet() != picked.map { it.id }.toSet())
             notes += AiSalesNote("pick_corrected")
@@ -358,32 +369,52 @@ internal class SalesPlanner(private val facts: SalesFacts, private val items: Ma
             else -> i.sizes
         }
         val special = action == "special"
+        val days = if (!special) emptyList()
+            else (then["days"] as? JsonArray)?.mapNotNull { it.str() }?.takeIf { it.isNotEmpty() }
+                ?: run { notes += AiSalesNote("item_skipped", i.name); return null }
+        val canonDays = MenuChangeSetParser.DAYS.filter { d -> days.any { it.trim().lowercase().take(3) == d } }
+        val from = then["from"].str()?.takeIf { it.isNotBlank() }
+        val to = then["to"].str()?.takeIf { it.isNotBlank() }
+        // the store charges the cheapest special in force, so a new one never raises a price; but one the item
+        // already has over at least these days and hours, at or below the new price, makes it pointless
+        val covering = i.specials.filter { sp -> sp.days.containsAll(canonDays) && covers(sp.from, sp.to, from, to) }
         val prices = linkedMapOf<String, Long>()
         for (z in sizes) {
             val p = newPrice(z.priceMinor, price)
             val ok = p != null && p > 0 && (if (special) p < z.priceMinor else p != z.priceMinor) && p <= maxPrice()
-            if (ok) prices[z.id] = p!!
-            else notes += AiSalesNote("size_refused", i.name, z.label.takeIf { i.sizes.size > 1 })
+            val size = z.label.takeIf { i.sizes.size > 1 }
+            when {
+                !ok -> notes += AiSalesNote("size_refused", i.name, size)
+                special && covering.any { sp -> (sp.prices[z.id] ?: Long.MAX_VALUE) <= p!! } ->
+                    notes += AiSalesNote("already_lower", i.name, size)
+                else -> prices[z.id] = p!!
+            }
         }
         if (prices.isEmpty()) return null
         if (!special) return buildJsonObject {
             put("op", "update_item"); put("item", i.id)
             putJsonArray("prices") { prices.forEach { (v, p) -> addJsonObject { put("variant", v); put("priceMinor", p) } } }
         }
-        val days = (then["days"] as? JsonArray)?.mapNotNull { it.str() } ?: run { notes += AiSalesNote("item_skipped", i.name); return null }
-        val from = then["from"].str()?.takeIf { it.isNotBlank() }
-        val to = then["to"].str()?.takeIf { it.isNotBlank() }
         val label = then["label"].str()?.trim()?.takeIf { it.isNotEmpty() }
-        val canonDays = MenuChangeSetParser.DAYS.filter { d -> days.any { it.trim().lowercase().take(3) == d } }
-        // the item's other specials stay; one on exactly the same days and hours is replaced
-        val keep = i.specials.filterNot { it.days == canonDays && it.from == from && it.to == to }
+        // the item's other specials stay; one on exactly the same days and hours takes the new prices
+        // (its sizes not in this change keep theirs)
+        val same = i.specials.firstOrNull { it.days == canonDays && it.from == from && it.to == to }
         return buildJsonObject {
             put("op", "set_specials"); put("item", i.id)
             putJsonArray("specials") {
-                keep.forEach { sp -> add(specialJson(sp.days, sp.from, sp.to, sp.label, sp.prices)) }
-                add(specialJson(days, from, to, label, prices))
+                i.specials.filter { it !== same }.forEach { sp -> add(specialJson(sp.days, sp.from, sp.to, sp.label, sp.prices)) }
+                add(specialJson(days, from, to, label ?: same?.label, (same?.prices.orEmpty() + prices)))
             }
         }
+    }
+
+    /** An existing window [f]..[t] (null = all day) spans the new one [nf]..[nt]. Overnight windows: only an exact match. */
+    private fun covers(f: String?, t: String?, nf: String?, nt: String?): Boolean = when {
+        f == null || t == null -> true
+        nf == null || nt == null -> false
+        f == nf && t == nt -> true
+        f < t && nf < nt -> f <= nf && nt <= t
+        else -> false
     }
 
     private fun specialJson(days: List<String>, from: String?, to: String?, label: String?, prices: Map<String, Long>) = buildJsonObject {
