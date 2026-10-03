@@ -429,6 +429,15 @@ the shared parser are unchanged.
   and no changes (logged as `answered`); the summary is dropped (the numbers on screen are the
   cloud's). No sales in the period: `no_sales`, nothing proposed (never "86 the whole menu" because a
   store didn't sync).
+- How the specials are doing (`rank: specials`, `menuai/MenuAiSalesInsights.kt`): per special, the
+  average units a special day (inside its hours) vs a comparable other day at the same hours — the rest
+  of its group (weekdays or weekend), else every other day — over the last 8 weeks (`onAvg`, `offAvg`,
+  `baseline`, `liftPct`; `enough: false` with fewer than 3 days of either kind or nothing sold on the
+  other days). An answer, or (`end_weak`, 4 weeks) a proposal removing each special with enough data
+  and under 10% lift (`all_working` when there is none). It assumes each special ran the whole period
+  (`assumes_whole_period`). `rank: happy_hour`: the top items inside the menu's happy-hour windows (its
+  timed specials; the ones labelled happy hour when there are any) over 30 days, with `sharePct` of each
+  item's units sold there; `no_happy_hour` without one.
 - Same guard, limits, bulk confirm, apply, undo, roles and audit as any other request.
 
 #### AI item photos (`/v1/menu-ai/photos`)

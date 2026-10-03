@@ -128,6 +128,11 @@ class MenuAiSalesLiveTest {
                 "en" to "Put our 3 slowest drinks on happy hour Mon–Fri 4–6 at \$5",
                 "en" to "Which burgers sold best last month?",
                 "de" to "Welche Burger haben sich letzten Monat am besten verkauft?",
+                "en" to "How is my Tuesday burger special doing?",
+                "en" to "Did happy hour work?",
+                "en" to "What sells during happy hour?",
+                "en" to "End specials that aren't working",
+                "fr" to "Comment va mon spécial burger du mardi ?",
             ).let { all -> System.getenv("MENU_AI_SALES_CASES")?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.map { all[it] } ?: all }
 
             for ((lang, text) in cases) {
@@ -169,7 +174,10 @@ class MenuAiSalesLiveTest {
                 (s(o, "days")?.let { " (not sold in $it days)" } ?: "") + ":\n")
             o["rows"]!!.jsonArray.forEach { r ->
                 val row = r.jsonObject
-                append("    ${s(row, "name")}: ${s(row, "units")} sold, ${s(row, "revenueMinor")} ¢, last ${s(row, "lastSold")}\n")
+                append("    ${s(row, "name")}${s(row, "special")?.let { " ($it)" } ?: ""}: ${s(row, "units")} sold, ${s(row, "revenueMinor")} ¢, last ${s(row, "lastSold")}" +
+                    (s(row, "liftPct")?.let { ", ${s(row, "onAvg")}/day vs ${s(row, "offAvg")} on ${s(row, "baseline")}, lift $it%" } ?: "") +
+                    (if (s(row, "enough") == "false") ", too little data" else "") +
+                    (s(row, "sharePct")?.let { ", $it% of its sales" } ?: "") + "\n")
             }
         }
         p["salesNotes"]?.jsonArray?.forEach { append("  note: ${it.jsonObject}\n") }

@@ -1,7 +1,7 @@
 // The AI assistant's pure helpers: the voice clip's WAV, the checklist's ticking rules, error messages.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { aiErrorKey, allTicked, basisItems, clock, encodeWav, salesHeadline, salesNoteKey, tickedIds, toggleChange, toMono, VOICE_RATE } from "./menu-ai";
+import { aiErrorKey, allTicked, basisItems, clock, encodeWav, liftKey, salesHeadline, salesNoteKey, signedPct, tickedIds, toggleChange, toMono, VOICE_RATE } from "./menu-ai";
 import { messages } from "./i18n/messages";
 import type { AiChange, AiSalesBasis } from "./types";
 
@@ -106,4 +106,27 @@ test("every sales headline and note has a message", () => {
   }
   assert.equal(salesNoteKey({ code: "size_refused", item: "Lager", size: "pitcher" }), "ai_sales_note_size_refused");
   assert.equal(salesNoteKey({ code: "something_new" }), null);
+});
+
+test("how the specials are doing: lifts, baselines and the notes", () => {
+  assert.equal(signedPct(140), "+140%");
+  assert.equal(signedPct(-5), "−5%");
+  assert.equal(signedPct(0), "0%");
+  assert.equal(liftKey("weekdays"), "ai_sales_lift_weekdays");
+  assert.equal(liftKey("weekend"), "ai_sales_lift_weekend");
+  assert.equal(liftKey("other_days"), "ai_sales_lift_other");
+  const specials: AiSalesBasis = {
+    ...basis,
+    rank: "specials",
+    rows: [
+      { itemId: "burger", name: "Copper Burger", units: 328, revenueMinor: 0, special: "Tue", liftPct: 140, enough: true },
+      { itemId: "poutine", name: "Poutine", units: 0, revenueMinor: 0, special: "Sun", enough: false },
+    ],
+  };
+  assert.equal(basisItems(specials, String, String), "Copper Burger (Tue): +140%, Poutine (Sun): –");
+  for (const b of [specials, { ...basis, rank: "happy_hour" as const }]) assert.ok(messages[salesHeadline(b).key], b.rank);
+  for (const code of ["no_specials", "no_happy_hour", "all_working", "assumes_whole_period"]) {
+    const k = salesNoteKey({ code });
+    assert.ok(k && messages[k], code);
+  }
 });

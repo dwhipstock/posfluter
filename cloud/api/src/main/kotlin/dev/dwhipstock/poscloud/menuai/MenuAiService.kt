@@ -385,7 +385,8 @@ class MenuAiService(
         val summary = if (plans.isNotEmpty() && (plans.any { it.answer } || notes.any { it.code == "pick_corrected" })) "" else parsed.summary
         if (parsed.ops.isEmpty() && asks.isEmpty() && plans.isNotEmpty()) {
             log.info("AI menu via ${m.id}/${m.model}: sales answer (${bases.sumOf { it.rows.size }} row(s)), ${elapsed}ms")
-            return AiProposalDto("", who.venue.venueId, who.venue.currency, m.model, summary, emptyList(), rejected, elapsed,
+            // nothing to apply: the model's summary ("ending the weak specials…") would only contradict the notes
+            return AiProposalDto("", who.venue.venueId, who.venue.currency, m.model, "", emptyList(), rejected, elapsed,
                 transcript = heard, sales = bases, salesNotes = notes, answer = plans.any { it.answer })
         }
         if (parsed.ops.isEmpty() && asks.isEmpty()) return refusal(who, AiGuard.Refusal.NO_CHANGE, rejected, elapsed, heard, lang)

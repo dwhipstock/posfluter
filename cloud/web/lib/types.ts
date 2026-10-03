@@ -791,11 +791,22 @@ export interface AiSalesRow {
   revenueMinor: number;
   /** The store day it last sold (within 90 days). */
   lastSold?: string | null;
+  /** rank "specials": the special ("Tue"), average units a special day vs a comparable other day, and the lift. */
+  special?: string | null;
+  onAvg?: number | null;
+  offAvg?: number | null;
+  /** weekdays | weekend | other_days */
+  baseline?: string | null;
+  liftPct?: number | null;
+  /** false: too little data to say */
+  enough?: boolean | null;
+  /** rank "happy_hour": the share of its units sold inside happy hour, in percent */
+  sharePct?: number | null;
 }
 
 /** What a sales-based proposal or answer is based on: from / to are the store's business days (inclusive). */
 export interface AiSalesBasis {
-  rank: "top" | "bottom" | "unsold" | "list";
+  rank: "top" | "bottom" | "unsold" | "list" | "specials" | "happy_hour";
   by: "units" | "revenue";
   n: number;
   from: string;
@@ -805,6 +816,8 @@ export interface AiSalesBasis {
   store: string;
   currency: string;
   rows: AiSalesRow[];
+  /** happy_hour: the windows looked at ("Mon–Fri 16:00–18:00") */
+  special?: string | null;
 }
 
 export interface AiSalesNote {

@@ -41,6 +41,21 @@ data class AiSalesRow(
     val units: Long, val revenueMinor: Long,
     /** The store's business day it last sold (within 90 days; may be today); null = not in 90 days. */
     val lastSold: String? = null,
+    // --- rank "specials": one row per special, how it is doing (units / revenue are on its special days) ---
+    /** The special, described in the manager's language ("Tue", "Happy hour · Mon–Fri 16:00–18:00"). */
+    val special: String? = null,
+    /** Average units a special day (inside its hours) vs a comparable other day (the same hours). */
+    val onAvg: Double? = null,
+    val offAvg: Double? = null,
+    /** weekdays | weekend | other_days: what the other days are. */
+    val baseline: String? = null,
+    /** (on − off) / off, in percent; null with [enough] false. */
+    val liftPct: Int? = null,
+    /** False: too little data to say (fewer than 3 days of either kind, or nothing sold on the other days). */
+    val enough: Boolean? = null,
+    // --- rank "happy_hour": units / revenue are inside the happy-hour windows ---
+    /** The share of the item's units sold inside them, in percent. */
+    val sharePct: Int? = null,
 )
 
 /**
@@ -51,7 +66,7 @@ data class AiSalesRow(
  */
 @Serializable
 data class AiSalesBasis(
-    /** top | bottom | unsold | list */
+    /** top | bottom | unsold | list | specials | happy_hour */
     val rank: String,
     /** units | revenue */
     val by: String,
@@ -64,12 +79,15 @@ data class AiSalesBasis(
     val store: String,
     val currency: String,
     val rows: List<AiSalesRow>,
+    /** happy_hour: the windows looked at ("Mon–Fri 16:00–18:00"), in the manager's language. */
+    val special: String? = null,
 )
 
 /**
  * Something the manager should know about a sales-based change, rendered by
  * the portal in its own language. code: no_sales | fewer_items | pick_corrected |
- * size_refused | already_lower | item_skipped | too_many | none_match | bad_request.
+ * size_refused | already_lower | item_skipped | too_many | none_match | bad_request |
+ * no_specials | no_happy_hour | all_working | assumes_whole_period.
  */
 @Serializable
 data class AiSalesNote(
@@ -238,6 +256,11 @@ Sales (this portal only):
   - "price": {"change_minor":-200} ("${'$'}2 cheaper"; a raise is positive), {"change_percent":-20} ("20% off"; add "round":"nickel"
     or "round":"95" only when the manager asks for prices ending in .05 / .95), or {"to_minor":500} ("at ${'$'}5").
   - "sizes": "all" (every size; the default for a relative price), or "smallest" (a flat "${'$'}5 beer" special: the smaller size).
+  - "rank":"specials": how the menu's current specials are doing (the server compares each special's sales on its days and hours
+    with comparable other days). "then" {"do":"answer"} for a question ("how is my Tuesday burger special doing?", "did happy
+    hour work?"; "among" = the items whose specials are asked about, or leave it out for all of them), or {"do":"end_weak"} to
+    end the specials that aren't working ("end specials that aren't working"). "days" optional (14 to 90).
+  - "rank":"happy_hour" with {"do":"answer"}: what sells during happy hour ("what sells during happy hour?"); "n" as above.
 - The summary then says what will change in words, without sales figures (the server shows the numbers).
 """.trim()
 }
@@ -263,7 +286,7 @@ internal class SalesPlanner(private val facts: SalesFacts, private val items: Ma
         /** Items one selection may cover (a bigger "86 everything unsold" is cut here, and still needs the bulk confirm). */
         const val MAX_PICK = 40
         const val DEFAULT_N = 5
-        val ACTIONS = setOf("answer", "special", "price", "86")
+        val ACTIONS = setOf("answer", "special", "price", "86", "end_weak")
     }
 
     private val log = org.slf4j.LoggerFactory.getLogger(SalesPlanner::class.java)
@@ -279,6 +302,14 @@ internal class SalesPlanner(private val facts: SalesFacts, private val items: Ma
         val action = then["do"].str()?.lowercase() ?: "answer"
         if (action !in ACTIONS) return bad("action")
         val rank = o["rank"].str()?.lowercase() ?: "top"
+        // how the specials are doing / what sells in happy hour (MenuAiSalesInsights.kt)
+        when (rank) {
+            "specials" -> return if (action == "answer" || action == "end_weak")
+                SalesInsights(facts, items, lang).specials(o, end = action == "end_weak") else bad("specials_action")
+            "happy_hour" -> return if (action == "answer")
+                SalesInsights(facts, items, lang).happyHour(o, (o["n"].int() ?: DEFAULT_N).coerceIn(1, MAX_PICK)) else bad("happy_hour_action")
+        }
+        if (action == "end_weak") return bad("action")
         if (rank !in setOf("top", "bottom", "unsold", "list")) return bad("rank")
         if (rank == "list" && action != "answer") return bad("list_change")
         val by = if (o["by"].str()?.lowercase() == "revenue") "revenue" else "units"

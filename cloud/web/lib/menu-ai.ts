@@ -126,6 +126,10 @@ export function salesHeadline(b: AiSalesBasis): { key: MsgKey; vars: Record<stri
       return { key: b.by === "revenue" ? "ai_sales_bottom_revenue" : "ai_sales_bottom_units", vars: { n: b.n } };
     case "unsold":
       return { key: "ai_sales_unsold", vars: { days: b.days ?? 0 } };
+    case "specials":
+      return { key: "ai_sales_specials", vars: {} };
+    case "happy_hour":
+      return { key: "ai_sales_happy_hour", vars: { n: b.n } };
     default:
       return { key: "ai_sales_list", vars: {} };
   }
@@ -152,6 +156,14 @@ export function salesNoteKey(n: AiSalesNote): MsgKey | null {
       return "ai_sales_note_none_match";
     case "bad_request":
       return "ai_sales_note_bad";
+    case "no_specials":
+      return "ai_sales_note_no_specials";
+    case "no_happy_hour":
+      return "ai_sales_note_no_happy_hour";
+    case "all_working":
+      return "ai_sales_note_all_working";
+    case "assumes_whole_period":
+      return "ai_sales_note_whole_period";
     default:
       return null;
   }
@@ -165,9 +177,20 @@ export function salesNoteKey(n: AiSalesNote): MsgKey | null {
 export function basisItems(b: AiSalesBasis, units: (n: number) => string, money: (minor: number) => string, max = 5): string {
   const shown = b.rows.slice(0, max).map((r) => {
     if (b.rank === "unsold") return r.name;
+    if (b.rank === "specials") return `${r.name} (${r.special ?? ""}): ${r.liftPct != null ? signedPct(r.liftPct) : "–"}`;
     return `${r.name} (${b.by === "revenue" ? money(r.revenueMinor) : units(r.units)})`;
   });
   return shown.join(", ") + (b.rows.length > max ? ", …" : "");
+}
+
+/** A lift: "+140%", "−5%", "0%" (a real minus sign). */
+export function signedPct(n: number): string {
+  return n > 0 ? `+${n}%` : n < 0 ? `−${Math.abs(n)}%` : "0%";
+}
+
+/** The message comparing a special's days with the other days (by what the other days are). */
+export function liftKey(baseline: string | null | undefined): MsgKey {
+  return baseline === "weekdays" ? "ai_sales_lift_weekdays" : baseline === "weekend" ? "ai_sales_lift_weekend" : "ai_sales_lift_other";
 }
 
 /** "0:07" for a seconds count. */

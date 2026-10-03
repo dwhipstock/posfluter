@@ -11,11 +11,11 @@ import { ApiError, post, postForm } from "@/lib/api";
 import { useApi, useMe } from "@/lib/hooks";
 import { useI18n, useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
-import { aiErrorKey, allTicked, basisItems, clock, encodeWav, MAX_RECORD_SECONDS, salesHeadline, salesNoteKey, tickedIds, toggleChange, toMono } from "@/lib/menu-ai";
-import { count } from "@/lib/format";
+import { aiErrorKey, allTicked, basisItems, clock, encodeWav, liftKey, MAX_RECORD_SECONDS, salesHeadline, salesNoteKey, signedPct, tickedIds, toggleChange, toMono } from "@/lib/menu-ai";
+import { count, decimal } from "@/lib/format";
 import { useMoney } from "@/lib/money";
 import { shortStoreName, useStores } from "@/lib/store";
-import type { AiApplyResult, AiChange, AiChangeDetail, AiProposal, AiRevertResult, AiSalesBasis, AiStatus } from "@/lib/types";
+import type { AiApplyResult, AiChange, AiChangeDetail, AiProposal, AiRevertResult, AiSalesBasis, AiSalesRow, AiStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -458,6 +458,21 @@ function SalesView({ proposal }: { proposal: AiProposal }) {
     const h = salesHeadline(b);
     return t(h.key, h.vars);
   };
+  const avg = (n: number | null | undefined) => (n == null ? "–" : Number.isInteger(n) ? count(n, locale) : decimal(n, 1, locale));
+  const rowText = (b: AiSalesBasis, r: AiSalesRow) => {
+    switch (b.rank) {
+      case "unsold":
+        return r.lastSold ? t("ai_sales_last_sold", { date: fmt.day(r.lastSold) }) : t("ai_sales_never");
+      case "specials":
+        return r.enough && r.liftPct != null
+          ? t(liftKey(r.baseline), { on: avg(r.onAvg), off: avg(r.offAvg), lift: signedPct(r.liftPct) })
+          : t("ai_sales_lift_unknown");
+      case "happy_hour":
+        return t("ai_sales_hh_row", { units: units(r.units), share: r.sharePct ?? 0 });
+      default:
+        return t("ai_sales_row", { units: units(r.units), revenue: m.fmtIn(b.currency, r.revenueMinor) });
+    }
+  };
   const shown = bases.filter((b) => b.rows.length > 0);
   const noteVars = bases[0] ? period(bases[0]) : { from: "", to: "", store: "" };
   return (
@@ -471,19 +486,17 @@ function SalesView({ proposal }: { proposal: AiProposal }) {
             <p className="text-sm font-medium text-ink">{headline(b)}</p>
             <ol className="space-y-1">
               {b.rows.map((r, j) => (
-                <li key={r.itemId} className="flex flex-wrap items-baseline gap-x-2 text-sm text-neutral-800">
+                <li key={`${r.itemId}-${j}`} className="flex flex-wrap items-baseline gap-x-2 text-sm text-neutral-800">
                   <span className="w-5 shrink-0 tabular-nums text-neutral-600">{j + 1}.</span>
-                  <span className="min-w-0 break-words font-medium text-ink">{r.name}</span>
-                  <span className="tabular-nums text-neutral-700">
-                    {b.rank === "unsold"
-                      ? r.lastSold
-                        ? t("ai_sales_last_sold", { date: fmt.day(r.lastSold) })
-                        : t("ai_sales_never")
-                      : t("ai_sales_row", { units: units(r.units), revenue: m.fmtIn(b.currency, r.revenueMinor) })}
+                  <span className="min-w-0 break-words font-medium text-ink">
+                    {r.name}
+                    {r.special && <span className="font-normal text-neutral-700"> · {r.special}</span>}
                   </span>
+                  <span className="tabular-nums text-neutral-700">{rowText(b, r)}</span>
                 </li>
               ))}
             </ol>
+            {b.rank === "happy_hour" && b.special && <p className="text-xs text-neutral-600">{t("ai_sales_hh_windows", { windows: b.special })}</p>}
             <p className="text-xs text-neutral-600">{t("ai_sales_period", period(b))}</p>
           </div>
         ) : (
