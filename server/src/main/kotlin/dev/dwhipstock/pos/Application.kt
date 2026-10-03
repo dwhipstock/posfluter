@@ -108,6 +108,9 @@ fun Application.module(
     sagePoppy: Boolean = SagePoppy.matches(venueId),
     // pronghorn: the gas station (a retail counter + the forecourt)
     pronghorn: Boolean = Pronghorn.matches(venueId),
+    // the Copper Lantern demo's menu specials (CopperLanternSpecials); the test
+    // suite turns them off (POS_DEMO_SPECIALS=off: its totals don't follow the clock)
+    demoSpecials: Boolean = System.getenv("POS_DEMO_SPECIALS") != "off",
     // the forecourt controller: FORECOURT_URL (the simulator; default
     // http://127.0.0.1:8086). Test seams: a fake adapter, no background poll,
     // and a handle on the service.
@@ -222,14 +225,10 @@ fun Application.module(
             sagePoppy -> SagePoppySeed.seedIfEmpty()
             venue.quickServe -> {
                 dev.dwhipstock.pos.customers.copperlantern.CopperLanternExpressSeed.seedIfEmpty()
-                // the demo's specials (once): a Tuesday burger, weekday happy hour
-                dev.dwhipstock.pos.customers.copperlantern.CopperLanternSpecials.seed(venue)
                 CopperLanternSeed.seedTranslations(express = true)
             }
             else -> {
                 CopperLanternSeed.seedIfEmpty(venue)
-                // the demo's specials (once): Prime Rib Fri & Sat, Sunday Roast, a Tuesday burger, weekday happy hour
-                dev.dwhipstock.pos.customers.copperlantern.CopperLanternSpecials.seed(venue)
                 CopperLanternSeed.seedTranslations()
             }
         }
@@ -252,6 +251,19 @@ fun Application.module(
     // updated in place, only where they still hold the old values (items,
     // photos, rooms, tables, staff and sales are never touched). A no-op once done.
     if (!pronghorn && !sagePoppy) dev.dwhipstock.pos.customers.copperlantern.CopperLanternRaleighMove.run(venue)
+    // the demo's specials (once, on a Copper Lantern store with the demo menu):
+    // the pubs get Prime Rib Fri & Sat, a Sunday Roast, a Tuesday burger and
+    // weekday happy hour; Express a Tuesday Double Cheeseburger and happy hour.
+    // Outside the seed-mode branch: a tablet linked to the cloud starts with
+    // seedMode=none, and its menu is still the demo's. Tried again after each
+    // menu pull (below) until done, for a tablet whose menu comes from the cloud.
+    val specialsPending = java.util.concurrent.atomic.AtomicBoolean(!pronghorn && !sagePoppy)
+    val seedSpecials: () -> Unit = {
+        if (specialsPending.get() &&
+            dev.dwhipstock.pos.customers.copperlantern.CopperLanternSpecials.seed(venue, enabled = demoSpecials)
+        ) specialsPending.set(false)
+    }
+    runCatching(seedSpecials).onFailure { log.warn("demo specials not added: ${it.message}") }
     // the forecourt rings fuel up as catalog items: every gas station has them
     if (pronghorn) PronghornSeed.ensureFuelItems()
     // every table must have its customer link token (033); covers any row a
@@ -486,6 +498,8 @@ fun Application.module(
             // "expected" hint (CONTRACT §9) — read-only, never gates anything
             stock = if (config.profile.kind == StoreProfile.Kind.RETAIL) stockService else null,
             stockIntervalSeconds = System.getenv("CLOUD_STOCK_PULL_SECONDS")?.toLongOrNull() ?: 300L,
+            // a tablet whose demo menu came from the portal gets the demo's specials once it is there
+            afterMenuPull = seedSpecials,
         ).start(this)
         log.info("cloud sync enabled → $syncUrl (every ${interval}s)")
     }

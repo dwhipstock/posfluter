@@ -11,6 +11,9 @@ import dev.dwhipstock.pos.base.Items
 import dev.dwhipstock.pos.base.Translations
 import dev.dwhipstock.pos.db.SyncState
 import dev.dwhipstock.pos.sdk.MenuSpecials
+import dev.dwhipstock.pos.sync.Hlc
+import dev.dwhipstock.pos.sync.MenuClock
+import dev.dwhipstock.pos.sync.MenuFields
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 
@@ -28,9 +31,23 @@ import org.jetbrains.exposed.sql.transactions.transaction
  * Happy hour has no name of its own, so every screen and receipt calls it
  * "Happy hour" in the reader's language. A dish or special a manager already
  * set is never touched, and it runs once per store ([SEEDED_KEY]).
+ *
+ * It runs on every Copper Lantern store, whatever its seed mode: a tablet
+ * linked to the cloud starts with `seedMode=none` (its menu comes from the
+ * portal), and the v1 seed sat inside the seed-mode branch, so the Express
+ * tablet never got its specials. It runs at startup and again after a menu
+ * pull, so a tablet whose menu arrives from the cloud gets them too.
+ *
+ * v2: a store that already ran v1 ([LEGACY_KEY]) gets only what is still
+ * missing: a special lands on an item only when nothing ever wrote that
+ * item's specials (its sync register still holds migration 064's "before
+ * sync" stamp). A special a manager cleared has a real stamp, so it stays
+ * cleared; one already there is never touched, so nothing is doubled.
  */
 object CopperLanternSpecials {
-    const val SEEDED_KEY = "menu_specials_seeded_v1"
+    const val SEEDED_KEY = "menu_specials_seeded_v2"
+    /** The first version's flag, set by every store that ran it. */
+    const val LEGACY_KEY = "menu_specials_seeded_v1"
 
     private val WEEKDAYS = listOf("mon", "tue", "wed", "thu", "fri")
     private const val HAPPY_FROM = "16:00"
@@ -52,32 +69,56 @@ object CopperLanternSpecials {
     )
 
     /** [enabled]: `POS_DEMO_SPECIALS=off` leaves them out (the test suite: its totals don't follow the clock). */
-    fun seed(venue: CopperLanternVenue, enabled: Boolean = System.getenv("POS_DEMO_SPECIALS") != "off") = transaction {
-        if (!enabled || !ItemSchedules.present() || SyncState.get(SEEDED_KEY) != null) return@transaction
+    /**
+     * True once this store is done (or switched off); false = not yet (no
+     * demo menu here yet, e.g. a tablet still waiting for its first menu
+     * pull), so the caller may try again later.
+     */
+    fun seed(venue: CopperLanternVenue, enabled: Boolean = System.getenv("POS_DEMO_SPECIALS") != "off"): Boolean = transaction {
+        if (!enabled) return@transaction true
+        if (!ItemSchedules.present()) return@transaction false
+        if (SyncState.get(SEEDED_KEY) != null) return@transaction true
         // a store whose menu isn't the demo's (empty, or the owner's own) gets nothing
-        if (Items.selectAll().where { Items.id eq "lantern-lager" }.empty()) return@transaction
+        if (Items.selectAll().where { Items.id eq "lantern-lager" }.empty()) return@transaction false
+        // v1 ran here: only items whose specials nothing ever wrote
+        val onlyUntouched = SyncState.get(LEGACY_KEY) != null
+        fun add(itemId: String, days: List<String>, from: String?, to: String?, prices: Map<String, Long>) =
+            special(itemId, days, from, to, prices, onlyUntouched)
         if (venue.quickServe) {
-            special("double-cheeseburger", listOf("tue"), null, null, mapOf("double-cheeseburger:regular" to 995L))
-            special("lantern-lager", WEEKDAYS, HAPPY_FROM, HAPPY_TO, mapOf("lantern-lager:16oz" to 500L))
-            special("pinot-noir", WEEKDAYS, HAPPY_FROM, HAPPY_TO, mapOf("pinot-noir:glass" to 750L))
+            add("double-cheeseburger", listOf("tue"), null, null, mapOf("double-cheeseburger:regular" to 995L))
+            add("lantern-lager", WEEKDAYS, HAPPY_FROM, HAPPY_TO, mapOf("lantern-lager:16oz" to 500L))
+            add("pinot-noir", WEEKDAYS, HAPPY_FROM, HAPPY_TO, mapOf("pinot-noir:glass" to 750L))
         } else {
             pubDishes.forEach(::dish)
-            special("lantern-burger", listOf("tue"), null, null, mapOf("lantern-burger:regular" to 1495L))
-            special("lantern-lager", WEEKDAYS, HAPPY_FROM, HAPPY_TO, mapOf("lantern-lager:pint" to 500L))
-            special("cab-merlot", WEEKDAYS, HAPPY_FROM, HAPPY_TO, mapOf("cab-merlot:glass" to 700L))
+            add("lantern-burger", listOf("tue"), null, null, mapOf("lantern-burger:regular" to 1495L))
+            add("lantern-lager", WEEKDAYS, HAPPY_FROM, HAPPY_TO, mapOf("lantern-lager:pint" to 500L))
+            add("cab-merlot", WEEKDAYS, HAPPY_FROM, HAPPY_TO, mapOf("cab-merlot:glass" to 700L))
         }
         SyncState.set(SEEDED_KEY, "1")
+        true
     }
 
     private fun live(id: String) = Items.selectAll().where { Items.id eq id }.firstOrNull()?.takeIf { it[Items.deletedAt] == null }
 
-    /** One more special on [itemId], where the store has that dish and those sizes and no specials of its own yet. */
-    private fun special(itemId: String, days: List<String>, from: String?, to: String?, prices: Map<String, Long>) {
+    /** Whether anything (a manager, the cloud, the v1 seed) ever set [itemId]'s specials, even to none. */
+    private fun specialsEverSet(itemId: String): Boolean {
+        if (!MenuClock.present()) return false
+        val reg = MenuClock.regs(MenuFields.ITEM, itemId)["specials"] ?: return false
+        return reg.hlc != Hlc.LEGACY
+    }
+
+    /**
+     * One more special on [itemId], where the store has that dish and those
+     * sizes and no specials of its own yet ([onlyUntouched]: and nothing ever
+     * set them, not even to none).
+     */
+    private fun special(itemId: String, days: List<String>, from: String?, to: String?, prices: Map<String, Long>, onlyUntouched: Boolean) {
         live(itemId) ?: return
         val sizes = ItemVariants.selectAll().where { ItemVariants.itemId eq itemId }
             .filter { it[ItemVariants.deletedAt] == null }.map { it[ItemVariants.id] }.toSet()
         val p = prices.filterKeys { it in sizes }.takeIf { it.isNotEmpty() } ?: return
         if (ItemSchedules.of(itemId).specials.isNotEmpty()) return
+        if (onlyUntouched && specialsEverSet(itemId)) return
         CatalogOps.patchItem(itemId, ItemPatchRequest(specials = listOf(MenuSpecials.Special(days, from, to, p))))
     }
 
