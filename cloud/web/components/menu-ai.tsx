@@ -486,13 +486,15 @@ function SalesView({ proposal }: { proposal: AiProposal }) {
             <p className="text-sm font-medium text-ink">{headline(b)}</p>
             <ol className="space-y-1">
               {b.rows.map((r, j) => (
-                <li key={`${r.itemId}-${j}`} className="flex flex-wrap items-baseline gap-x-2 text-sm text-neutral-800">
+                <li key={`${r.itemId}-${j}`} className="flex items-baseline gap-x-2 text-sm text-neutral-800">
                   <span className="w-5 shrink-0 tabular-nums text-neutral-600">{j + 1}.</span>
-                  <span className="min-w-0 break-words font-medium text-ink">
-                    {r.name}
-                    {r.special && <span className="font-normal text-neutral-700"> · {r.special}</span>}
+                  <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                    <span className="min-w-0 break-words font-medium text-ink">
+                      {r.name}
+                      {r.special && <span className="font-normal text-neutral-700"> · {r.special}</span>}
+                    </span>
+                    <span className="tabular-nums text-neutral-700">{rowText(b, r)}</span>
                   </span>
-                  <span className="tabular-nums text-neutral-700">{rowText(b, r)}</span>
                 </li>
               ))}
             </ol>

@@ -117,19 +117,24 @@ export function aiErrorKey(code: string): MsgKey | null {
 
 // --- sales-based answers and proposals (the server computes every number) ---
 
+/** "Top 3", not "Top 5", when only 3 qualified (a note says so). */
+function shownN(b: AiSalesBasis): number {
+  return b.rows.length > 0 ? Math.min(b.n, b.rows.length) : b.n;
+}
+
 /** The headline of a sales basis ("Top 5 by units sold"): its message key and placeholders. */
 export function salesHeadline(b: AiSalesBasis): { key: MsgKey; vars: Record<string, string | number> } {
   switch (b.rank) {
     case "top":
-      return { key: b.by === "revenue" ? "ai_sales_top_revenue" : "ai_sales_top_units", vars: { n: b.n } };
+      return { key: b.by === "revenue" ? "ai_sales_top_revenue" : "ai_sales_top_units", vars: { n: shownN(b) } };
     case "bottom":
-      return { key: b.by === "revenue" ? "ai_sales_bottom_revenue" : "ai_sales_bottom_units", vars: { n: b.n } };
+      return { key: b.by === "revenue" ? "ai_sales_bottom_revenue" : "ai_sales_bottom_units", vars: { n: shownN(b) } };
     case "unsold":
       return { key: "ai_sales_unsold", vars: { days: b.days ?? 0 } };
     case "specials":
       return { key: "ai_sales_specials", vars: {} };
     case "happy_hour":
-      return { key: "ai_sales_happy_hour", vars: { n: b.n } };
+      return { key: "ai_sales_happy_hour", vars: { n: shownN(b) } };
     default:
       return { key: "ai_sales_list", vars: {} };
   }

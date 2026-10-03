@@ -100,6 +100,8 @@ test("every sales headline and note has a message", () => {
   ];
   for (const b of all) assert.ok(messages[salesHeadline(b).key], b.rank);
   assert.deepEqual(salesHeadline({ ...basis, rank: "unsold", days: 14 }).vars, { days: 14 });
+  // "Top 2" when only 2 qualified
+  assert.deepEqual(salesHeadline(basis).vars, { n: 2 });
   for (const code of ["no_sales", "fewer_items", "pick_corrected", "size_refused", "already_lower", "item_skipped", "too_many", "none_match", "bad_request"]) {
     const k = salesNoteKey({ code });
     assert.ok(k && messages[k], code);
