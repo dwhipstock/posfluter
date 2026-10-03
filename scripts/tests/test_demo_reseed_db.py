@@ -195,15 +195,15 @@ class DemoReseedDbTest(unittest.TestCase):
                                                    " count(*) FILTER (WHERE venue_id = 'express') FROM shifts WHERE status = 'CLOSED'"))
         self.assertEqual("2026-08-05\t2026-10-03", psql(
             self.dsn, "SELECT min(closed_at AT TIME ZONE 'America/New_York')::date, max(closed_at AT TIME ZONE 'America/New_York')::date"
-                      " FROM checks WHERE check_id >= 1000000"))
-        totals = psql(self.dsn, "SELECT venue_id, count(*), sum(grand_total_cents) FROM checks WHERE check_id >= 1000000"
+                      " FROM checks WHERE check_id >= 20000"))
+        totals = psql(self.dsn, "SELECT venue_id, count(*), sum(grand_total_cents) FROM checks WHERE check_id >= 20000"
                                 " GROUP BY 1 ORDER BY 1")
 
         # a rerun replaces only its own rows: the same totals, today's sale still there
         code, out = self.run_tool("--yes", "--no-backup")
         self.assertEqual(0, code, out)
         self.assertEqual(totals, psql(self.dsn, "SELECT venue_id, count(*), sum(grand_total_cents) FROM checks"
-                                                " WHERE check_id >= 1000000 GROUP BY 1 ORDER BY 1"))
+                                                " WHERE check_id >= 20000 GROUP BY 1 ORDER BY 1"))
         self.assertEqual("1", psql(self.dsn, "SELECT count(*) FROM checks WHERE venue_id = 'vieux-port' AND check_id = 9"))
 
         code, out = self.run_tool("--verify-only")
@@ -211,9 +211,38 @@ class DemoReseedDbTest(unittest.TestCase):
         self.assertIn("last 7 days", out)
         self.assertIn("2026-10-03 Sat", out)
 
+        code, out = self.run_tool("--check")
+        self.assertEqual(0, code, out)
+        self.assertIn("read-only, nothing changed", out)
+        self.assertIn("day-only Prime Rib (prime-rib) on Fri/Sat; Sunday Roast (sunday-roast) on Sun", out)
+        self.assertIn("special  Copper Lantern Burger regular: $14.95 (menu $19.25) Tue all day", out)
+        self.assertIn("special  Double Cheeseburger regular: $9.95 (menu $12.95) Tue all day", out)
+        self.assertIn("demo checks start at #20,000", out)
+        self.assertEqual(totals, psql(self.dsn, "SELECT venue_id, count(*), sum(grand_total_cents) FROM checks"
+                                                " WHERE check_id >= 20000 GROUP BY 1 ORDER BY 1"))
+
+    def test_refuses_when_a_store_sent_a_number_in_the_demo_range(self):
+        # a store whose own numbering reached 20,000: its check is in the ingest log
+        psql(self.dsn, "INSERT INTO checks (tenant_id, venue_id, check_id, status, closed_at, grand_total_cents)"
+                       " VALUES ('copperlantern', 'vieux-port', 20000, 'CLOSED', '2026-09-01 13:00-04', 500)"
+                       " ON CONFLICT DO NOTHING;"
+                       "INSERT INTO events (tenant_id, venue_id, event_id, event_type, aggregate_type, aggregate_id, payload,"
+                       " store_seq, store_created_at, received_at) VALUES ('copperlantern', 'vieux-port', 'e-20000',"
+                       " 'check.closed', 'check', '20000', '{}', 2, now(), now());")
+        try:
+            before = psql(self.dsn, "SELECT count(*), sum(grand_total_cents) FROM checks")
+            code, out = self.run_tool()
+            self.assertEqual(2, code, out)
+            self.assertIn("REFUSE   1 row(s) numbered 20,000-99,999 are not ours", out)
+            code, out = self.run_tool("--yes", "--no-backup")
+            self.assertEqual(2, code, out)
+            self.assertEqual(before, psql(self.dsn, "SELECT count(*), sum(grand_total_cents) FROM checks"))
+        finally:
+            psql(self.dsn, "DELETE FROM events WHERE event_id = 'e-20000';")
+
     def test_refuses_when_a_kept_sale_uses_the_reserved_range(self):
         psql(self.dsn, "INSERT INTO checks (tenant_id, venue_id, check_id, status, closed_at, grand_total_cents)"
-                       " VALUES ('copperlantern', 'express', 1999999, 'CLOSED', '2026-10-04 13:00-04', 500);")
+                       " VALUES ('copperlantern', 'express', 99999, 'CLOSED', '2026-10-04 13:00-04', 500);")
         try:
             code, out = self.run_tool()
             self.assertEqual(2, code, out)
@@ -221,7 +250,7 @@ class DemoReseedDbTest(unittest.TestCase):
             code, out = self.run_tool("--yes", "--no-backup")
             self.assertEqual(2, code, out)
         finally:
-            psql(self.dsn, "DELETE FROM checks WHERE venue_id = 'express' AND check_id = 1999999;")
+            psql(self.dsn, "DELETE FROM checks WHERE venue_id = 'express' AND check_id = 99999;")
 
     def test_transaction_rolls_back_on_error(self):
         before = psql(self.dsn, "SELECT count(*), coalesce(sum(grand_total_cents), 0) FROM checks")

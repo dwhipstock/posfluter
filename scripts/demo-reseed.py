@@ -14,7 +14,10 @@ What it does, per store (default: vieux-port = Glenwood South, and express):
 
 Plan mode is the default: it prints exactly what would be deleted and inserted
 and changes nothing. ``--yes`` does it: first a full ``pg_dump`` (gzip) to
-``~/backups`` on the server, then everything in ONE transaction.
+``~/backups`` on the server, then everything in ONE transaction. ``--check``
+is read-only: each store's catalog as the tool sees it (specials, day-only
+items, floor, staff, the tax of the latest sale, sales on file, highest
+check number).
 
 Tables it deletes from and inserts into (and nothing else):
 
@@ -46,9 +49,18 @@ Where the store's facts come from (so the history looks like what it sends):
             when it is added
   counter   Express sales sit on the "counter-1" register; kiosk orders are
             opened by "kiosk"; Glenwood carry-out on "carry-out-1"
-  ids       every generated id is in [1,000,000, 1,999,999] (real store ids
-            are small SQLite row ids); the run refuses if a sale it would
-            keep already has an id in that range
+  numbers   generated checks, shifts, refunds and cash movements are
+            numbered from 20,000 (to 99,999), so the journal reads like a
+            store's own (#20,417); line and tender ids, which nobody sees, are
+            in [1,000,000, 1,999,999]. Real stores number from 1 and are in
+            the low thousands. The guard: the run aborts (plan and, again,
+            inside the transaction) if anything in 20,000-99,999 is not ours,
+            i.e. a check or shift that a store SENT (its check.* / shift.*
+            event is in the ingest log; rows this script writes never have
+            one), or any row from today on (which the wipe keeps). So a store
+            whose own numbering ever reached 20,000 stops the run instead of
+            having its sales overwritten. The plan prints each store's highest
+            check number and how far it is from 20,000.
 
 Sales are generated between 10:30 and 23:59 store time, so the reports'
 midnight business day and the specials' 4 a.m. business day name the same
@@ -67,6 +79,8 @@ Usage (Sunday: plan first, read it, then the same command with --yes):
   scripts/demo-reseed.py --ssh ... --dry-run-sql /tmp/reseed.sql
   # numbers only, again later
   scripts/demo-reseed.py --ssh ... --verify-only
+  # read-only look at the hosted catalog as the tool sees it (specials, day-only items, staff, tax)
+  scripts/demo-reseed.py --ssh ... --check
 
   The ssh target, key and container also come from DEMO_RESEED_SSH,
   DEMO_RESEED_SSH_KEY and DEMO_RESEED_CONTAINER. The Postgres container is
@@ -105,8 +119,16 @@ from zoneinfo import ZoneInfo
 TENANT = "copperlantern"
 DEFAULT_STORES = ("vieux-port", "express")
 KNOWN_STORES = ("vieux-port", "express", "plateau")
+# Numbers people see (journal check #, shift, refund, cash movement): from 20,000, one sequence per
+# store. Real stores number from 1 and are in the low thousands; the run refuses if a store's own
+# numbers ever reached this range (see wipe_predicates "clash").
+NUM_MIN = 20_000
+NUM_MAX = 99_999
+# Ids nobody sees (line and tender ids): far above anything a store makes.
 ID_MIN = 1_000_000
 ID_MAX = 1_999_999
+RANGES = {"check": (NUM_MIN, NUM_MAX), "shift": (NUM_MIN, NUM_MAX), "refund": (NUM_MIN, NUM_MAX),
+          "movement": (NUM_MIN, NUM_MAX), "line": (ID_MIN, ID_MAX), "tender": (ID_MIN, ID_MAX)}
 DEFAULT_SEED = 20261008
 DAY_STARTS_AT_HOUR = 4  # sdk/MenuSpecials.kt
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -479,8 +501,9 @@ class Ids:
         self.n = {}
 
     def next(self, kind: str) -> int:
-        v = self.n.get(kind, ID_MIN - 1) + 1
-        if v > ID_MAX:
+        lo, hi = RANGES[kind]
+        v = self.n.get(kind, lo - 1) + 1
+        if v > hi:
             raise SystemExit(f"too many {kind} rows for the reserved id range")
         self.n[kind] = v
         return v
@@ -500,6 +523,10 @@ PUB_DAY = (0.72, 0.86, 0.86, 1.05, 1.32, 1.38, 0.92)        # Mon..Sun
 COUNTER_DAY = (0.82, 1.02, 0.90, 0.95, 1.15, 1.22, 0.85)
 PUB_HOURS = {11: 1, 12: 8, 13: 9, 14: 4, 15: 2, 16: 4, 17: 6, 18: 9, 19: 11, 20: 10, 21: 8, 22: 6, 23: 3}
 PUB_WEEKEND_HOURS = {11: 3, 12: 10, 13: 10, 14: 6, 15: 4, 16: 4, 17: 6, 18: 9, 19: 11, 20: 10, 21: 9, 22: 7, 23: 4}
+# Express: guests per order, and what one guest orders (a combo is main + side + drink)
+COUNTER_PEOPLE = (90, 8, 2)
+COUNTER_SHAPES = {("main", "side", "drink"): 20, ("main",): 30, ("main", "drink"): 17, ("main", "side"): 7,
+                  ("side", "drink"): 13, ("drink",): 8, ("dessert", "drink"): 3, ("dessert",): 2}
 COUNTER_HOURS = {10: 2, 11: 12, 12: 18, 13: 12, 14: 5, 15: 4, 16: 5, 17: 9, 18: 10, 19: 7, 20: 4}
 VOID_REASONS = ("Entered on the wrong table", "Guest walked out before ordering", "Duplicate check", "Test by manager")
 REFUND_REASONS = ("Food came out cold", "Wrong order", "Guest complaint", "Charged twice", "Order error")
@@ -627,7 +654,7 @@ class Generator:
         for close in closes:
             h = close.hour
             meal = "lunch" if h < 15 else "happy" if h < 18 else "dinner" if h < 21 else "late"
-            covers = rng.choices((1, 2, 3, 4, 5, 6), (24, 42, 12, 14, 4, 4))[0]
+            covers = rng.choices((1, 2, 3, 4, 5, 6), (30, 42, 10, 12, 3, 3))[0]
             stay = {"lunch": (35, 70), "happy": (40, 120), "dinner": (55, 110), "late": (35, 150)}[meal]
             opened = max(open_at, close - dt.timedelta(minutes=rng.randint(*stay) + 5 * covers))
             span = (close - opened).total_seconds()
@@ -636,19 +663,19 @@ class Generator:
                 return opened + dt.timedelta(seconds=int(span * frac))
 
             lines: list[Line] = []
-            main_p = {"lunch": 0.88, "happy": 0.30, "dinner": 0.90, "late": 0.25}[meal]
-            drinks = {"lunch": (0, 1, 1), "happy": (1, 1, 2, 2, 3), "dinner": (0, 1, 1, 2, 2, 3), "late": (1, 2, 2, 3, 3)}[meal]
+            main_p = {"lunch": 0.85, "happy": 0.25, "dinner": 0.82, "late": 0.2}[meal]
+            drinks = {"lunch": (0, 0, 1), "happy": (1, 1, 2), "dinner": (0, 1, 1, 1, 2), "late": (1, 1, 2, 2)}[meal]
             # a pub's drinks are mostly beer, wine and cocktails; the alcohol-free ones sell at lunch
             soft_w = 0.9 if meal == "lunch" else 0.25
             soft = (lambda it, w=soft_w: 1.0 if it.is_alcohol else w)
-            if rng.random() < {"lunch": 0.2, "happy": 0.45, "dinner": 0.45, "late": 0.4}[meal]:
+            if rng.random() < {"lunch": 0.12, "happy": 0.3, "dinner": 0.3, "late": 0.25}[meal]:
                 self.add(rng, lines, {"side"}, at(0.12))
             for _ in range(covers):
                 for k in range(rng.choice(drinks)):
                     self.add(rng, lines, {"drink"}, at(0.05 + 0.6 * k / 3 + rng.uniform(0, 0.1)), soft)
                 if rng.random() < main_p:
                     self.add(rng, lines, {"main"} if meal != "late" else {"main", "side"}, at(rng.uniform(0.15, 0.3)))
-                if meal in ("dinner", "lunch") and rng.random() < (0.22 if meal == "dinner" else 0.08):
+                if meal in ("dinner", "lunch") and rng.random() < (0.12 if meal == "dinner" else 0.05):
                     self.add(rng, lines, {"dessert"}, at(rng.uniform(0.7, 0.85)))
             table = self.pick_table(rng, covers)
             c = self.finish_check(rng, lines, table, opened, close, rng.choice(self.servers), covers, "TABLE", "DINE_IN", out)
@@ -684,24 +711,23 @@ class Generator:
             kiosk = rng.random() < 0.40
             mode = "TAKE_OUT" if rng.random() < 0.58 else "DINE_IN"
             opened = close - dt.timedelta(seconds=rng.randint(150, 480) if kiosk else rng.randint(60, 240))
-            people = rng.choices((1, 2, 3, 4), (60, 28, 8, 4))[0]
+            people = rng.choices((1, 2, 3), COUNTER_PEOPLE)[0]
             lines: list[Line] = []
-            evening = close.hour >= 16
+            beer = 0.25 if close.hour >= 16 else 0.05
+            drink_w = (lambda it, b=beer: b * 4 if it.is_alcohol else 1.0)
             for _ in range(people):
-                if rng.random() < 0.88:
-                    self.add(rng, lines, {"main"}, opened)
-                if rng.random() < 0.5:
-                    self.add(rng, lines, {"side"}, opened)
-                if rng.random() < 0.78:
-                    beer = 0.25 if evening else 0.05
-                    self.add(rng, lines, {"drink"}, opened, lambda it, b=beer: b * 4 if it.is_alcohol else 1.0)
-                if rng.random() < 0.12:
-                    self.add(rng, lines, {"dessert"}, opened)
+                shape = rng.choices(list(COUNTER_SHAPES), list(COUNTER_SHAPES.values()))[0]
+                for role in shape:
+                    self.add(rng, lines, {role}, opened, drink_w if role == "drink" else self.counter_main if role == "main" else None)
             by = KIOSK_USER if kiosk else rng.choice(self.servers)
             c = self.finish_check(rng, lines, COUNTER + (0,), opened, close, by, people, "KIOSK" if kiosk else "POS", mode, out)
             if c:
                 self.pay(rng, c, 0.88, 0.30, (0.10, 0.18), False)
         return out
+
+    @staticmethod
+    def counter_main(it: Item) -> float:
+        return 1.0 if min(v.price for v in it.variants) < 1300 else 0.5
 
     def pick_table(self, rng, covers):
         fit = [t for t in self.s.tables if t[5] >= covers] or self.s.tables
@@ -908,22 +934,36 @@ def window_end(store: Store, today: dt.date, include_today: bool) -> dt.datetime
 def wipe_predicates(store: Store, end: dt.datetime) -> dict:
     """WHERE clauses (alias-free) selecting what the wipe removes for one store."""
     base = f"tenant_id = {q(TENANT)} AND venue_id = {q(store.id)}"
-    rng = f"BETWEEN {ID_MIN} AND {ID_MAX}"
+    rng = f"BETWEEN {NUM_MIN} AND {NUM_MAX}"
+    ids = f"BETWEEN {ID_MIN} AND {ID_MAX}"
     e = ts(end)
+    T, V = q(TENANT), q(store.id)
+
+    def sent(alias: str, aggregate: str, col: str) -> str:
+        # a row a store sent: its event (check.closed / check.voided, shift.*) is in the ingest log.
+        # Rows this script wrote never have one. IN (subquery): one hashed pass over the log, not one per row
+        # (events has no index on aggregate_id).
+        return (f"{alias}.{col}::text IN (SELECT ev.aggregate_id FROM events ev WHERE ev.tenant_id = {T} "
+                f"AND ev.venue_id = {V} AND ev.aggregate_type = '{aggregate}')")
     return {
         "checks": f"{base} AND (closed_at < {e} OR closed_at IS NULL OR check_id {rng})",
         "refunds": f"{base} AND (created_at < {e} OR created_at IS NULL OR refund_id {rng})",
         "shifts": f"{base} AND ((status <> 'OPEN' AND (opened_at < {e} OR opened_at IS NULL)) OR shift_id {rng})",
         "cash_movements": f"{base} AND (created_at < {e} OR created_at IS NULL OR movement_id {rng})",
-        "fuel_sales": f"{base} AND (completed_at < {e} OR completed_at IS NULL OR fuel_sale_id {rng})",
-        # rows we would KEEP that already use the reserved range: a real store got there, refuse
+        "fuel_sales": f"{base} AND (completed_at < {e} OR completed_at IS NULL)",  # never generated
+        # The guard: refuse when the generated number range holds anything that is not ours --
+        # a check or shift a store sent (its event is in the ingest log: the store's own numbers
+        # reached 20,000, so its next sales would land on ours), or any row this run would keep.
         "clash": " UNION ALL ".join([
-            f"SELECT 'checks' FROM checks WHERE {base} AND check_id {rng} AND closed_at >= {e}",
+            f"SELECT 'checks' FROM checks c WHERE c.{base.replace(' AND venue_id', ' AND c.venue_id')} AND c.check_id {rng} "
+            f"AND (c.closed_at >= {e} OR {sent('c', 'check', 'check_id')})",
+            f"SELECT 'shifts' FROM shifts s WHERE s.{base.replace(' AND venue_id', ' AND s.venue_id')} AND s.shift_id {rng} "
+            f"AND {sent('s', 'shift', 'shift_id')}",
             f"SELECT 'refunds' FROM refunds WHERE {base} AND refund_id {rng} AND created_at >= {e}",
             f"SELECT 'cash_movements' FROM cash_movements WHERE {base} AND movement_id {rng} AND created_at >= {e}",
             f"SELECT 'shifts' FROM shifts WHERE {base} AND shift_id {rng} AND (status = 'OPEN' OR opened_at >= {e})",
             f"SELECT 'check_tenders' FROM check_tenders t WHERE t.{base.replace(' AND venue_id', ' AND t.venue_id')} "
-            f"AND t.tender_id {rng} AND NOT EXISTS (SELECT 1 FROM checks c WHERE c.tenant_id = t.tenant_id "
+            f"AND t.tender_id {ids} AND NOT EXISTS (SELECT 1 FROM checks c WHERE c.tenant_id = t.tenant_id "
             f"AND c.venue_id = t.venue_id AND c.check_id = t.check_id AND (c.closed_at < {e} OR c.check_id {rng}))",
         ]),
     }
@@ -943,8 +983,8 @@ def render_sql(stores: list[Store], gens: dict, end_by_store: dict) -> str:
     ids = ",".join(q(s.id) for s in stores)
     out = [
         "-- scripts/demo-reseed.py: wipe + regenerate demo sales history, one transaction.",
-        "-- Generated rows use ids in the reserved range "
-        f"[{ID_MIN}, {ID_MAX}]; rerunning replaces them.",
+        f"-- Generated checks, shifts, refunds and cash movements are numbered from {NUM_MIN} (to {NUM_MAX});",
+        f"-- line and tender ids are in [{ID_MIN}, {ID_MAX}]. Rerunning replaces them.",
         "BEGIN;",
         "SET LOCAL lock_timeout = '20s';",
         "DO $guard$ BEGIN",
@@ -959,7 +999,7 @@ def render_sql(stores: list[Store], gens: dict, end_by_store: dict) -> str:
             f"-- ===== {s.id}: wipe synced sales before {end_by_store[s.id].isoformat()} (and every reserved-range row)",
             "DO $clash$ BEGIN",
             f"  IF EXISTS ({p['clash']}) THEN",
-            f"    RAISE EXCEPTION 'store {s.id}: a sale this run keeps already has an id in [{ID_MIN},{ID_MAX}]'; END IF;",
+            f"    RAISE EXCEPTION 'store {s.id}: numbers {NUM_MIN}-{NUM_MAX} hold a sale or shift that is not ours'; END IF;",
             "END $clash$;",
             f"CREATE TEMP TABLE reseed_checks ON COMMIT DROP AS SELECT check_id FROM checks WHERE {p['checks']};",
             f"CREATE TEMP TABLE reseed_refunds ON COMMIT DROP AS SELECT refund_id FROM refunds WHERE {p['refunds']};",
@@ -1026,8 +1066,8 @@ def render_sql(stores: list[Store], gens: dict, end_by_store: dict) -> str:
         exp_checks = len(checks)
         out += [
             "DO $after$ BEGIN",
-            f"  IF (SELECT count(*) FROM checks WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {ID_MIN} AND {ID_MAX}) <> {exp_checks}",
-            f"     OR (SELECT count(*) FROM check_lines WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {ID_MIN} AND {ID_MAX}) <> {len(lines)}",
+            f"  IF (SELECT count(*) FROM checks WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {NUM_MIN} AND {NUM_MAX}) <> {exp_checks}",
+            f"     OR (SELECT count(*) FROM check_lines WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {NUM_MIN} AND {NUM_MAX}) <> {len(lines)}",
             f"  THEN RAISE EXCEPTION 'store {s.id}: inserted rows do not add up; rolled back'; END IF;",
             "END $after$;",
         ]
@@ -1185,10 +1225,12 @@ UNION ALL SELECT 'shifts', count(*), '', '', 0 FROM shifts WHERE {p['shifts']}
 UNION ALL SELECT 'cash_movements', count(*), '', '', 0 FROM cash_movements WHERE {p['cash_movements']}
 UNION ALL SELECT 'fuel_sales', count(*), '', '', 0 FROM fuel_sales WHERE {p['fuel_sales']}
 UNION ALL SELECT 'kept_checks', count(*), '', '', coalesce(sum(grand_total_cents) FILTER (WHERE status = 'CLOSED'), 0) FROM checks
-  WHERE tenant_id = {T} AND venue_id = {V} AND closed_at >= {e} AND check_id NOT BETWEEN {ID_MIN} AND {ID_MAX}
+  WHERE tenant_id = {T} AND venue_id = {V} AND closed_at >= {e} AND check_id NOT BETWEEN {NUM_MIN} AND {NUM_MAX}
 UNION ALL SELECT 'open_shifts', count(*), coalesce(min(opened_at AT TIME ZONE {q(store.tz)})::text, ''), '', 0 FROM shifts
-  WHERE tenant_id = {T} AND venue_id = {V} AND status = 'OPEN' AND shift_id NOT BETWEEN {ID_MIN} AND {ID_MAX}
-UNION ALL SELECT 'clash', count(*), '', '', 0 FROM ({p['clash']}) x;
+  WHERE tenant_id = {T} AND venue_id = {V} AND status = 'OPEN' AND shift_id NOT BETWEEN {NUM_MIN} AND {NUM_MAX}
+UNION ALL SELECT 'clash', count(*), '', '', 0 FROM ({p['clash']}) x
+UNION ALL SELECT 'real_max', count(*), '', '', coalesce(max(aggregate_id::bigint), 0) FROM events
+  WHERE tenant_id = {T} AND venue_id = {V} AND aggregate_type = 'check' AND aggregate_id ~ '^[0-9]{{1,12}}$';
 """
     return {r[0]: {"n": int(r[1]), "from": r[2], "to": r[3], "cents": int(r[4])} for r in db.rows(sql)}
 
@@ -1303,7 +1345,10 @@ def print_plan(stores, gens, wipes, ends, args, first, last, db_desc):
             print(f"  KEEP     {fmt_n(w['kept_checks']['n'])} sale(s) from {end.date()} on ({money(w['kept_checks']['cents'])}); "
                   f"open shifts: {w['open_shifts']['n']}" + (f" (oldest opened {w['open_shifts']['from'][:16]})" if w["open_shifts"]["n"] else ""))
             if w["clash"]["n"]:
-                print(f"  REFUSE   {w['clash']['n']} kept row(s) already use ids {ID_MIN:,}-{ID_MAX:,}: the store's ids got there")
+                print(f"  REFUSE   {w['clash']['n']} row(s) numbered {NUM_MIN:,}-{NUM_MAX:,} are not ours (a store sent them, "
+                      "or they are from today on): the store's own numbers reached the demo range")
+            print(f"  NUMBERS  demo checks #{NUM_MIN:,} on; the store's own highest check # is {w['real_max']['cents']:,}"
+                  f" ({fmt_n(NUM_MIN - w['real_max']['cents'])} to go before it would reach them)")
         t = e["totals"]
         print(f"  INSERT   checks {fmt_n(f['checks'])} closed + {f['voids']} void ({f['perDay'][0]}-{f['perDay'][1]} a day), "
               f"lines {fmt_n(f['lines'])}, tenders {fmt_n(f['tenders'])}, refunds {f['refunds']}, shifts {f['shifts']}, "
@@ -1381,6 +1426,72 @@ def print_verify(stores, got, expected, first, last):
     return ok
 
 
+def check_figures(db: Db, store: Store, end: dt.datetime) -> dict:
+    """--check: what the cloud holds for a store, read-only."""
+    T, V, e = q(TENANT), q(store.id), ts(end)
+    row = db.rows(f"""
+SELECT (SELECT count(*) FROM checks WHERE tenant_id = {T} AND venue_id = {V} AND closed_at < {e}),
+       (SELECT coalesce(min(closed_at AT TIME ZONE {q(store.tz)})::date::text, '') FROM checks WHERE tenant_id = {T} AND venue_id = {V}),
+       (SELECT count(*) FROM checks WHERE tenant_id = {T} AND venue_id = {V} AND closed_at >= {e}),
+       (SELECT count(*) FROM shifts WHERE tenant_id = {T} AND venue_id = {V} AND status = 'OPEN'),
+       (SELECT coalesce(max(aggregate_id::bigint), 0) FROM events WHERE tenant_id = {T} AND venue_id = {V}
+          AND aggregate_type = 'check' AND aggregate_id ~ '^[0-9]{{1,12}}$'),
+       (SELECT count(*) FROM checks WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {NUM_MIN} AND {NUM_MAX});""")[0]
+    return {"before": int(row[0]), "first": row[1], "today": int(row[2]), "open": int(row[3]), "realMax": int(row[4]),
+            "inRange": int(row[5])}
+
+
+def print_check(doc: dict, db: Db | None, desc: str, args) -> None:
+    """--check: the catalog each store will be generated from, exactly as the generator reads it. Changes nothing."""
+    print("demo-reseed --check: read-only, nothing changed")
+    print(f"  target   {desc}")
+    if doc.get("tenantsInDb"):
+        print(f"  tenants in this database: {', '.join(doc['tenantsInDb'])}")
+    for v in sorted(doc["venues"], key=lambda v: (v["id"] not in args.store_list, v["id"])):
+        st = store_from_doc(v)
+        chosen = "reseeded by default" if st.id in DEFAULT_STORES else "not reseeded unless --stores names it"
+        print()
+        print(f"{st.name} ({st.id}), {st.tz}, {st.currency}: {chosen}")
+        roles = {}
+        for it in st.items:
+            roles[it.role] = roles.get(it.role, 0) + 1
+        print(f"  menu     {len(st.items)} live items with a price in {len(st.categories)} categories "
+              f"({', '.join(f'{k} {n}' for k, n in sorted(roles.items()))})")
+        day_only = [it for it in st.items if it.available_days]
+        print("  day-only " + ("; ".join(f"{it.name_en} ({it.id}) on {'/'.join(d.capitalize() for d in it.available_days)}"
+                                         for it in day_only) or "none"))
+        n = 0
+        for it in st.items:
+            sizes = {x.id: x for x in it.variants}
+            for sp in it.specials:
+                for vid, cents in sorted(sp.prices.items()):
+                    n += 1
+                    size = sizes.get(vid)
+                    when = "/".join(d.capitalize() for d in sp.days) + (f" {sp.start}-{sp.end}" if sp.start else " all day")
+                    note = ("" if size and cents < size.price else
+                            "  <- NOT RUNG: no such size" if not size else "  <- NOT RUNG: not cheaper than the menu price")
+                    reg = money(size.price) if size else "?"
+                    print(f"  special  {it.name_en} {vid.split(':')[-1]}: {money(cents)} (menu {reg}) {when}"
+                          f"{' ' + repr(sp.label) if sp.label else ''}{note}")
+        if not n:
+            print("  special  none")
+        print(f"  floor    {len(st.tables)} tables" + (f" in {', '.join(sorted({t[4] for t in st.tables}))}" if st.tables else
+                                                      " (counter store: sales on the counter register)"))
+        print(f"  staff    {', '.join(f'{x[1]} ({x[2].lower()})' for x in st.staff)}")
+        if st.last_taxes:
+            got = ", ".join(f"{x.get('code')} {x.get('ratePercent')}%" for x in st.last_taxes)
+            same = sorted((x.get("code"), str(x.get("ratePercent"))) for x in st.last_taxes) == sorted((t[0], t[3]) for t in NC_TAXES)
+            print(f"  tax      latest sale: {got}" + ("  (matches what the tool charges)" if same else
+                                                       f"  <- DIFFERS from what the tool charges: {', '.join(t[0] + ' ' + t[3] + '%' for t in NC_TAXES)}"))
+        if db:
+            today = args.today or dt.datetime.now(st.zone).date()
+            f = check_figures(db, st, window_end(st, today, args.include_today))
+            print(f"  sales    {fmt_n(f['before'])} before {today} (since {f['first'] or '-'}), {f['today']} from {today} on, "
+                  f"{f['open']} open shift(s)")
+            print(f"  numbers  the store's own highest check # is {f['realMax']:,}; demo checks start at #{NUM_MIN:,}"
+                  f" ({f['inRange']:,} checks already numbered {NUM_MIN:,}-{NUM_MAX:,})")
+
+
 # ------------------------------------------------------------------ main
 
 def parse_args(argv):
@@ -1396,6 +1507,9 @@ def parse_args(argv):
     p.add_argument("--yes", action="store_true", help="do it: backup, wipe and insert in one transaction, verify")
     p.add_argument("--dry-run-sql", metavar="FILE", help="write the SQL to FILE and stop (changes nothing)")
     p.add_argument("--verify-only", action="store_true", help="print the report figures for the window and stop")
+    p.add_argument("--check", action="store_true",
+                   help="read-only: print each store's catalog as this tool sees it (specials, day-only items, floor, "
+                        "staff, tax, sales on file, highest check #) and stop")
     p.add_argument("--plan-json", metavar="FILE", help="write the expected report figures as JSON (tests)")
     p.add_argument("--menu-json", metavar="FILE", help="generate offline from this catalog document (no database)")
     p.add_argument("--ssh", default=os.environ.get("DEMO_RESEED_SSH"), help="user@host of the portal box (env DEMO_RESEED_SSH)")
@@ -1444,6 +1558,9 @@ def main(argv=None) -> int:
     if doc.get("tenant", TENANT) != TENANT:
         print(f"refusing: catalog is for tenant {doc.get('tenant')}", file=sys.stderr)
         return 2
+    if args.check:
+        print_check(doc, db, desc, args)
+        return 0
     by_id = {v["id"]: v for v in doc["venues"]}
     missing = [s for s in args.store_list if s not in by_id]
     if missing:

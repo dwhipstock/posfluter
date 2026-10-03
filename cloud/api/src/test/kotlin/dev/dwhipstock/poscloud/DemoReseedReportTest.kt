@@ -175,7 +175,8 @@ class DemoReseedReportTest {
         // the older synced sale is gone, today's is still there
         val journal = get("/v1/reports/journal?venue=vieux-port&from=2026-09-25&to=2026-09-25&limit=200")["rows"]!!.jsonArray
         assertTrue(journal.none { it.jsonObject.int("checkId") == 41 })
-        assertTrue(journal.all { it.jsonObject.int("checkId") >= 1_000_000 })
+        // generated checks are numbered from 20000, like a store's own
+        assertTrue(journal.all { it.jsonObject.int("checkId") in 20_000..99_999 })
         val today = get("/v1/reports/summary?venue=vieux-port&from=2026-10-04&to=2026-10-04")
         assertEquals(1, today.int("checkCount"))
         assertEquals(1083, today.long("grossCents"))

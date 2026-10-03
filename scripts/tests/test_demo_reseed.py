@@ -221,6 +221,12 @@ class Shape(unittest.TestCase):
         self.assertTrue(0.34 <= cf["kiosk"] / cf["counterTotal"] <= 0.46)
         self.assertGreater(cf["cardShare"], 0.8)
 
+    def test_average_checks(self):
+        pub = PUB.expected()["totals"]["avgCheckCents"]
+        counter = COUNTER.expected()["totals"]["avgCheckCents"]
+        self.assertTrue(4800 <= pub <= 6000, pub)        # ~$22-28 a head with drinks
+        self.assertTrue(1400 <= counter <= 1700, counter)  # a burger, fries and a drink, mostly alone
+
     def test_lunch_and_dinner_peaks(self):
         hours = PUB.expected()["hourly"]
         self.assertGreater(hours["13"]["checkCount"], hours["15"]["checkCount"])
@@ -246,8 +252,14 @@ class Shape(unittest.TestCase):
                     ids["tender"] += [t.tender_id for t in c.tenders]
                     ids["line"] += [ln.line_id for ln in c.lines]
             for kind, xs in ids.items():
+                lo, hi = rs.RANGES[kind]
                 self.assertEqual(len(xs), len(set(xs)), kind)
-                self.assertTrue(all(rs.ID_MIN <= x <= rs.ID_MAX for x in xs), kind)
+                self.assertTrue(all(lo <= x <= hi for x in xs), kind)
+            # what people see starts at #20,000 and counts up; line / tender ids are far from any store's
+            self.assertEqual(20_000, min(ids["check"]))
+            self.assertEqual(20_000, min(ids["shift"]))
+            self.assertGreaterEqual(min(ids["line"] + ids["tender"]), 1_000_000)
+        self.assertLess(rs.NUM_MIN + 366 * 200, rs.NUM_MAX, "a year of the busiest counter fits the range")
 
     def test_voids_refunds_and_the_z_report(self):
         voids = [c for c in all_checks(PUB) if c.status == "VOID"]
@@ -292,6 +304,9 @@ class Safety(unittest.TestCase):
         self.assertEqual({"checks", "check_lines", "check_tenders", "refunds", "shifts", "cash_movements"}, inserted)
         self.assertNotRegex(sql, r"(?i)\b(UPDATE|TRUNCATE|DROP TABLE (?!reseed_)|ALTER)\b")
         self.assertIn("tenant_id = 'copperlantern' AND venue_id = 'vieux-port'", sql)
+        # the guard: a number in the demo range that a store sent (it is in the ingest log) aborts the run
+        self.assertIn("c.check_id::text IN (SELECT ev.aggregate_id FROM events ev", sql)
+        self.assertIn("RAISE EXCEPTION 'store vieux-port: numbers 20000-99999 hold a sale or shift that is not ours'", sql)
         self.assertNotIn("sagepoppy", sql)
         # every DELETE is scoped to the tenant and one store
         for stmt in re.findall(r"DELETE FROM [^;]+;", sql):
