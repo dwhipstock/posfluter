@@ -57,8 +57,8 @@ class CheckScreen extends StatefulWidget {
   /// shows the headline.
   final bool carryOut;
 
-  /// A carry-out order's number (105): the pay screen says "Order #105",
-  /// as the counter's receipt does, not the bill number.
+  /// A carry-out or counter (kiosk) order's number (105): the pay screen
+  /// says "Order #105", as the counter shows it, not the bill number.
   final int? orderNumber;
   const CheckScreen({
     super.key,
@@ -1701,7 +1701,9 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                             builder: (_) => TenderScreen(
                                               check: _check ?? check,
                                               counterOrder: widget.counterOrder,
-                                              orderNumber: widget.carryOut
+                                              orderNumber:
+                                                  widget.carryOut ||
+                                                      widget.counterOrder
                                                   ? widget.orderNumber
                                                   : null,
                                               headline: widget.carryOut

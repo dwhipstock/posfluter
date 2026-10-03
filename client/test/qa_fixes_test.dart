@@ -2,10 +2,12 @@
 // a part-paid bill still owes, the item editor puts the store's own language
 // first and asks before Esc throws edits away, and the X / Z report keeps the
 // two NC taxes apart for remittance.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -58,8 +60,23 @@ Future<void> _pump(WidgetTester tester, Widget screen, MockClient store) async {
   }, () => store);
 }
 
+/// The real fonts, so text measures as on the tablet (the test binding
+/// otherwise draws every glyph as a wide box).
+Future<void> _loadFonts() async {
+  final manifest =
+      jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
+  for (final entry in manifest) {
+    final loader = FontLoader(entry['family'] as String);
+    for (final font in entry['fonts'] as List) {
+      loader.addFont(rootBundle.load(font['asset'] as String));
+    }
+    await loader.load();
+  }
+}
+
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
+    await _loadFonts();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
@@ -147,6 +164,32 @@ void main() {
         leftOf(tester, l.nameFrLabel),
         lessThan(leftOf(tester, l.nameEnLabel)),
       );
+    });
+
+    testWidgets('the delete button reads whole in every language', (
+      tester,
+    ) async {
+      StoreProfile.current = const StoreProfile(
+        locales: ['en', 'fr', 'es', 'de', 'af'],
+      );
+      await openFirstItem(tester);
+      for (final lang in ['en', 'fr', 'es', 'de', 'af']) {
+        unawaited(Prefs.instance.setLang(lang));
+        await tester.pumpAndSettle();
+        expect(Prefs.instance.lang, lang);
+        final label = tester.renderObject<RenderParagraph>(
+          find
+              .descendant(
+                of: find.byKey(const Key('item-delete')),
+                matching: find.byType(RichText),
+              )
+              .last, // after the bin icon
+        );
+        expect(label.text.toPlainText(), L.forLang(lang).deleteItemShort);
+        expect(label.didExceedMaxLines, isFalse, reason: '$lang cut off');
+      }
+      Prefs.instance.lang = 'en';
+      await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('Esc with no changes closes; with changes it asks first', (

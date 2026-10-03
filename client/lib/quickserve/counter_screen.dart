@@ -48,6 +48,9 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
   /// A kiosk order being paid: its number ("K12"); null = rung here.
   String? _kiosk;
 
+  /// That order's number (105) for the pay and receipt bars ("Order #105").
+  int? _orderNumber;
+
   List<CounterOrder> _waiting = const [];
   Timer? _poll;
 
@@ -110,6 +113,7 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
     setState(() {
       _checkId = 0;
       _kiosk = null;
+      _orderNumber = null;
       _mode = _defaultMode;
     });
     _reloadWaiting();
@@ -189,6 +193,7 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
       _checkId = o.checkId;
       _mode = o.serviceMode;
       _kiosk = o.label;
+      _orderNumber = o.orderNumber;
     });
   }
 
@@ -527,6 +532,7 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
               checkId: _checkId,
               tableLabel: _kiosk != null ? q.kioskOrder(_kiosk!) : q.newOrder,
               counterOrder: true,
+              orderNumber: _orderNumber,
               createOrder: _createOrder,
               onFinished: _next,
               onDiscard: _discard,

@@ -40,7 +40,7 @@ type TaxDay = Omit<DayRow, "byVenue"> & { venueId: string };
 const CANADIAN = new Set(["GST", "QST"]);
 
 function TaxPage() {
-  const { t, fmt, locale, name } = useI18n();
+  const { t, fmt, name } = useI18n();
   const range = useRange();
   const meta = useExportMeta();
   const storeExport = useStoreExport();
@@ -55,10 +55,11 @@ function TaxPage() {
     ? cashRoundingAmounts(data.totals.cashRoundingCents, data.byCurrency, money?.currency ?? m.scopeCurrency)
     : [];
   const hasRounding = rounding.length > 0;
-  const rateText = (r: string) => (locale === "fr" || locale === "de" ? r.replace(".", ",") : r);
+  // the rate reads the same in every language, a dot and no space ("9.975%"),
+  // as on the POS and the receipts
   const taxLabel = (r: { code: string; labelFr: string; labelEn: string; ratePercent: string }) =>
     r.ratePercent
-      ? t("tax_col_rate", { label: name(r.labelFr, r.labelEn) || r.code, rate: rateText(r.ratePercent) })
+      ? t("tax_col_rate", { label: name(r.labelFr, r.labelEn) || r.code, rate: r.ratePercent })
       : name(r.labelFr, r.labelEn) || r.code;
   // GST / QST day columns only where Canadian taxes were charged: a US-only
   // scope shows its own tax in the "by tax" table instead of two zero columns
@@ -235,7 +236,7 @@ function TaxPage() {
             <Badge key={`${r.code}-${r.ratePercent}-${r.currency ?? ""}`} variant="pink">
               {t("tax_rate_badge", {
                 label: name(r.labelFr, r.labelEn) || r.code,
-                rate: rateText(r.ratePercent),
+                rate: r.ratePercent,
               })}
             </Badge>
           ))}

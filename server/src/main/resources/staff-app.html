@@ -1059,13 +1059,12 @@ function renderCheck() {
     <div class="row"><span class="nm">${esc(pick(f.labelFr, f.labelEn))}</span><span>${money(f.amountCents)}</span></div>`;
 
   // prices are pre-tax: subtotal, then each tax added on top (GST / QST), from the server;
-  // rates in French and German take a decimal comma, English/Spanish/Afrikaans "9.975%"
+  // the rate reads the same in every language, a dot and no space ("9.975%"),
+  // as on the POS and the receipts
+  const rateOf = r => `${r}%`;
   const taxLabel = t => lang === "fr"
-    ? `${t.labelFr} ${String(t.ratePercent).replace(".", ",")}\u00a0%`
-    : lang === "de"
-    ? `${t.labelEn} ${String(t.ratePercent).replace(".", ",")}\u00a0%`
-    : `${lang === "es" && t.labelEn === "Sales Tax" ? "Impuesto sobre las ventas" : t.labelEn} ${t.ratePercent}%`;
-  const rateOf = r => lang === "fr" || lang === "de" ? `${r.replace(".", ",")} %` : `${r}%`;
+    ? `${t.labelFr} ${rateOf(t.ratePercent)}`
+    : `${lang === "es" && t.labelEn === "Sales Tax" ? "Impuesto sobre las ventas" : t.labelEn} ${rateOf(t.ratePercent)}`;
   // a store that shows its taxes as one line ("Tax (8.25%)"): the server's
   // itemised amounts added up, the rates summed in thousandths (no float drift)
   const taxes = store.taxCombined && (check.taxes || []).length > 1 ? (() => {

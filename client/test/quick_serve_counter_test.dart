@@ -595,6 +595,8 @@ void main() {
       await payCash(tester, r'$8.01');
       // the receipt: the number the customer is called by, given on payment
       expect(find.text('Order #101 · Take out'), findsOneWidget);
+      // rung here: numbered as it is paid, and the receipt bar says so
+      expect(find.text('Receipt — Order #101'), findsOneWidget);
       await tester.tap(find.text('Done'));
       await settle(tester);
 
@@ -633,7 +635,19 @@ void main() {
       await settle(tester);
       expect(find.byKey(const Key('badge-brownie')), findsOneWidget);
 
-      await payCash(tester, r'$16.51');
+      // the pay and receipt bars go by the order's number, not the bill's
+      await tester.tap(find.text('Pay'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<Text>(find.byKey(const Key('pay-title'))).data,
+        'Pay — Order #112',
+      );
+      await tester.tap(find.widgetWithText(OutlinedButton, r'$16.51'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+      await tester.pumpAndSettle();
+      expect(find.text('Receipt — Order #112'), findsOneWidget);
+      expect(find.textContaining('Bill #'), findsNothing);
       expect(
         find.text('Order #112 · Dine in'),
         findsOneWidget,

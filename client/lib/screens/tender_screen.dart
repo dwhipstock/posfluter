@@ -14,6 +14,7 @@ import '../widgets/card_pending_banner.dart';
 import '../widgets/open_shift_prompt.dart';
 import '../widgets/stale_check.dart';
 import '../widgets/tax_rows.dart';
+import '../widgets/word_fit_text.dart';
 
 /// Split-tender payment. Three big method tiles across the top, outstanding
 /// prominent, quick-amount strip + numpad for cash. The check closes (and the
@@ -47,8 +48,9 @@ class TenderScreen extends StatefulWidget {
   /// Shown big on the receipt screen (a carry-out order: "Order #105 · Carry-out").
   final String? headline;
 
-  /// A carry-out order's number: the bar says "Order #105" (the counter's
-  /// wording) instead of "Bill #5". Null (a table's check): "Bill #".
+  /// An order's number (counter, kiosk or carry-out): the pay and receipt
+  /// bars say "Order #105" (the counter's wording) instead of "Bill #5".
+  /// Null: a table's check says "Bill #"; a new counter order "New order".
   final int? orderNumber;
   const TenderScreen({
     super.key,
@@ -449,22 +451,30 @@ class _TenderScreenState extends State<TenderScreen> {
     _warnIfPrinterOffline();
     // counter: the number the customer is called by, given as it was paid
     String? headline = widget.headline;
+    int? number = widget.orderNumber;
     if (widget.counterOrder) {
       try {
         final o = await QuickServeApi.order(_check.id);
         if (o.orderNumber != null && mounted) {
           final q = Q.of(context);
+          number = o.orderNumber;
           headline =
               '${q.orderNo(o.orderNumber!)} · ${o.takeOut ? q.takeOut : q.dineIn}';
         }
       } catch (_) {} // the receipt carries it too
     }
     if (!mounted) return;
+    // an order (counter, kiosk, carry-out): "Receipt — Order #105", the
+    // number the counter shows; a table's check keeps "Receipt — Bill #"
+    final title = number == null
+        ? null
+        : '${L.of(context).receipt} — ${Q.of(context).orderNo(number)}';
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ReceiptScreen(
           checkId: _check.id,
           text: receipt,
+          title: title,
           headline: headline,
           autoDismiss: widget.counterOrder ? const Duration(seconds: 8) : null,
         ),
@@ -579,8 +589,14 @@ class _TenderScreenState extends State<TenderScreen> {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    // an order (counter, kiosk, carry-out) goes by its number, as the counter
+    // shows it ("Order #105"); a new counter order has none until it is paid
     final n = widget.orderNumber;
-    final doc = n != null ? Q.of(context).orderNo(n) : l.billNo(_check.id);
+    final doc = n != null
+        ? Q.of(context).orderNo(n)
+        : widget.counterOrder
+        ? Q.of(context).newOrder
+        : l.billNo(_check.id);
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -836,12 +852,21 @@ class _TenderScreenState extends State<TenderScreen> {
                   size: 24,
                   color: selected ? T.primary : (enabled ? T.textMuted : fg),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: T.small(color: fg, weight: FontWeight.w600),
+                const SizedBox(height: 2),
+                // five tenders on a tablet: a long label ("Karte (Terminal)")
+                // takes two lines, between words, never cut off
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: WordFitText(
+                      label,
+                      key: ValueKey('tender-label-$value'),
+                      textAlign: TextAlign.center,
+                      style: T
+                          .small(color: fg, weight: FontWeight.w600)
+                          .copyWith(height: 1.15),
+                    ),
+                  ),
                 ),
               ],
             ),

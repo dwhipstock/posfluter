@@ -183,7 +183,7 @@ class ShiftService(private val config: CustomerConfig) {
             add(PrintLine.Blank)
             add(PrintLine.Text(msg(SLIP_REASON) + " " + reason))
             add(PrintLine.Blank)
-            add(PrintLine.Text(policy.footerText, Align.CENTER))
+            add(PrintLine.Text(dev.dwhipstock.pos.sdk.ReceiptRenderer.footer(policy.footerText, policy.locale), Align.CENTER))
         }
         return PrinterAdapter.renderText(lines)
     }

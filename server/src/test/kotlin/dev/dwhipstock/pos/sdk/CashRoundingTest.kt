@@ -197,4 +197,21 @@ class CashRoundingTest {
         val even = kv(ReceiptRenderer.render(receipt(emptyList(), Money(1007), Money.ZERO), policy, ReceiptKind.PROVISIONAL))
         assertTrue(even.none { it.startsWith("Rounding") || it.startsWith("Cash total") }, even.joinToString("\n"))
     }
+
+    @Test
+    fun theDefaultFooterFollowsTheReceiptLanguageACustomOneStaysAsTyped() {
+        val card = ReceiptTender("Carte", "Card", Money(1007), Money(1007), Money.ZERO, Money.ZERO, "CARD")
+        fun last(footer: String, lang: dev.dwhipstock.pos.sdk.i18n.LocaleCode) = PrinterAdapter.renderText(
+            ReceiptRenderer.render(receipt(listOf(card)), ReceiptPolicy.Standard("t", emptyList(), footer, showTax = false, locale = lang)),
+        ).lines().map { it.trim() }.last { it.isNotEmpty() }
+        val L = dev.dwhipstock.pos.sdk.i18n.LocaleCode
+        assertEquals("Thank you for visiting!", last(ReceiptRenderer.DEFAULT_FOOTER, L.EN))
+        assertEquals("Vielen Dank für Ihren Besuch!", last(ReceiptRenderer.DEFAULT_FOOTER, L.DE))
+        assertEquals("Merci de votre visite\u00A0!", last(ReceiptRenderer.DEFAULT_FOOTER, L.FR))
+        assertEquals("¡Gracias por su visita!", last(ReceiptRenderer.DEFAULT_FOOTER, L.ES))
+        assertEquals("Dankie vir u besoek!", last(ReceiptRenderer.DEFAULT_FOOTER, L.AF))
+        // a venue's own footer prints as typed, in any language
+        assertEquals("Danke, bis bald!", last("Danke, bis bald!", L.EN))
+        assertEquals("See you soon!", last("See you soon!", L.DE))
+    }
 }
