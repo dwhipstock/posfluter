@@ -51,6 +51,9 @@ class CloudSync(
     // screen's "expected" hint, CONTRACT §9). Null → never pulled.
     private val stock: dev.dwhipstock.pos.retail.StockService? = null,
     private val stockIntervalSeconds: Long = 300,
+    // Run after each menu pull that caught up with the portal (outside its
+    // transaction and any cloud apply, so its edits go up like a manager's).
+    private val afterMenuPull: () -> Unit = {},
 ) {
     private val log = LoggerFactory.getLogger(CloudSync::class.java)
 
@@ -126,7 +129,13 @@ class CloudSync(
      * catches up from its cursor once it is back.
      */
     fun pullMenuOnce() {
-        if (System.nanoTime() < nextMenuPullNanos) return
+        if (!pullMenuPages()) return
+        runCatching(afterMenuPull).onFailure { log.warn("after menu pull: ${it.message}") }
+    }
+
+    /** True when the store caught up with the portal's menu feed. */
+    private fun pullMenuPages(): Boolean {
+        if (System.nanoTime() < nextMenuPullNanos) return false
         var pages = 0
         while (pages++ < 50) {
             val since = stateLong(MenuSync.MENU_CURSOR) ?: 0L
@@ -134,10 +143,10 @@ class CloudSync(
             val failed = transaction { MenuSync.failedCount() }
             val sentAt = System.currentTimeMillis()
             val page = runCatching { transport.fetchMenuChanges(since, epoch, failed) }
-                .getOrElse { log.warn("menu pull failed: ${it.message}"); return }
+                .getOrElse { log.warn("menu pull failed: ${it.message}"); return false }
             if (page == null) {
                 nextMenuPullNanos = System.nanoTime() + 300L * 1_000_000_000
-                return
+                return true
             }
             val receivedAt = System.currentTimeMillis()
             page.serverTimeMs?.let { server ->
@@ -160,10 +169,11 @@ class CloudSync(
             MenuSync.applyPage(page)
             // photos from the portal: queued by the page (with its cursor), fetched outside its transaction
             PhotoSync.drain(transport, photoStore)
-            if (page.changes.isEmpty()) return
+            if (page.changes.isEmpty()) return true
             log.info("menu sync: applied ${page.changes.size} change(s) from the portal (cursor ${page.cursor})")
-            if (page.cursor <= since && !newEpoch) return
+            if (page.cursor <= since && !newEpoch) return true
         }
+        return false
     }
 
     /**
