@@ -11,10 +11,11 @@ import { ApiError, post, postForm } from "@/lib/api";
 import { useApi, useMe } from "@/lib/hooks";
 import { useI18n, useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
-import { aiErrorKey, allTicked, clock, encodeWav, MAX_RECORD_SECONDS, tickedIds, toggleChange, toMono } from "@/lib/menu-ai";
+import { aiErrorKey, allTicked, basisItems, clock, encodeWav, liftKey, MAX_RECORD_SECONDS, salesHeadline, salesNoteKey, signedPct, tickedIds, toggleChange, toMono } from "@/lib/menu-ai";
+import { count, decimal } from "@/lib/format";
 import { useMoney } from "@/lib/money";
 import { shortStoreName, useStores } from "@/lib/store";
-import type { AiApplyResult, AiChange, AiChangeDetail, AiProposal, AiRevertResult, AiStatus } from "@/lib/types";
+import type { AiApplyResult, AiChange, AiChangeDetail, AiProposal, AiRevertResult, AiSalesBasis, AiSalesRow, AiStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -326,7 +327,7 @@ function AskForm({
 }) {
   const t = useT();
   const status = useAiStatus();
-  const examples: MsgKey[] = ["ai_example_1", "ai_example_2", "ai_example_3", ...(status?.photos ? (["ai_example_photo"] as MsgKey[]) : [])];
+  const examples: MsgKey[] = ["ai_example_sales", "ai_example_1", "ai_example_2", "ai_example_3", ...(status?.photos ? (["ai_example_photo"] as MsgKey[]) : [])];
   return (
     <div className="space-y-3">
       <textarea
@@ -416,6 +417,7 @@ function ProposalView({
       ) : (
         <>
           {proposal.summary && <p className="text-sm font-medium text-ink">{proposal.summary}</p>}
+          <SalesView proposal={proposal} />
           {proposal.changes.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">{t("ai_changes")}</h3>
@@ -434,6 +436,94 @@ function ProposalView({
         </>
       )}
       {proposal.rejected.length > 0 && <p className="text-xs text-neutral-600">{t("ai_skipped", { n: proposal.rejected.length })}</p>}
+    </div>
+  );
+}
+
+/**
+ * What a sales-based proposal or answer is based on — every number computed by
+ * the cloud from the store's sales, never the model's. A proposal gets one
+ * basis line above its changes; an answer gets a plain list.
+ */
+function SalesView({ proposal }: { proposal: AiProposal }) {
+  const t = useT();
+  const { fmt, locale } = useI18n();
+  const m = useMoney();
+  const bases = proposal.sales ?? [];
+  const notes = (proposal.salesNotes ?? []).filter((n) => salesNoteKey(n) !== null);
+  if (bases.length === 0 && notes.length === 0) return null;
+  const period = (b: AiSalesBasis) => ({ from: fmt.day(b.from), to: fmt.day(b.to), store: shortStoreName(b.store) });
+  const units = (n: number) => count(n, locale);
+  const headline = (b: AiSalesBasis) => {
+    const h = salesHeadline(b);
+    return t(h.key, h.vars);
+  };
+  const avg = (n: number | null | undefined) => (n == null ? "–" : Number.isInteger(n) ? count(n, locale) : decimal(n, 1, locale));
+  const rowText = (b: AiSalesBasis, r: AiSalesRow) => {
+    switch (b.rank) {
+      case "unsold":
+        return r.lastSold ? t("ai_sales_last_sold", { date: fmt.day(r.lastSold) }) : t("ai_sales_never");
+      case "specials":
+        return r.enough && r.liftPct != null
+          ? t(liftKey(r.baseline), { on: avg(r.onAvg), off: avg(r.offAvg), lift: signedPct(r.liftPct) })
+          : t("ai_sales_lift_unknown");
+      case "happy_hour":
+        return t("ai_sales_hh_row", { units: units(r.units), share: r.sharePct ?? 0 });
+      default:
+        return t("ai_sales_row", { units: units(r.units), revenue: m.fmtIn(b.currency, r.revenueMinor) });
+    }
+  };
+  const shown = bases.filter((b) => b.rows.length > 0);
+  const noteVars = bases[0] ? period(bases[0]) : { from: "", to: "", store: "" };
+  return (
+    <div className="space-y-2">
+      {proposal.answer && shown.length > 0 && (
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">{t("ai_sales_answer")}</h3>
+      )}
+      {shown.map((b, i) =>
+        proposal.answer ? (
+          <div key={i} className="space-y-1.5 rounded-lg border border-neutral-200 bg-surface px-3 py-2.5">
+            <p className="text-sm font-medium text-ink">{headline(b)}</p>
+            <ol className="space-y-1">
+              {b.rows.map((r, j) => (
+                <li key={`${r.itemId}-${j}`} className="flex items-baseline gap-x-2 text-sm text-neutral-800">
+                  <span className="w-5 shrink-0 tabular-nums text-neutral-600">{j + 1}.</span>
+                  <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                    <span className="min-w-0 break-words font-medium text-ink">
+                      {r.name}
+                      {r.special && <span className="font-normal text-neutral-700"> · {r.special}</span>}
+                    </span>
+                    <span className="tabular-nums text-neutral-700">{rowText(b, r)}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            {b.rank === "happy_hour" && b.special && <p className="text-xs text-neutral-600">{t("ai_sales_hh_windows", { windows: b.special })}</p>}
+            <p className="text-xs text-neutral-600">{t("ai_sales_period", period(b))}</p>
+          </div>
+        ) : (
+          <div key={i} className="space-y-1 rounded-lg bg-neutral-50 px-3 py-2.5">
+            <p className="break-words text-sm text-neutral-800">
+              <span className="font-medium text-ink">
+                {headline(b)}, {period(b).from} – {period(b).to}, {period(b).store}:
+              </span>{" "}
+              {basisItems(b, units, (minor) => m.fmtIn(b.currency, minor))}
+            </p>
+            <p className="text-xs text-neutral-600">{t("ai_sales_period", period(b))}</p>
+          </div>
+        )
+      )}
+      {notes.map((n, i) => (
+        <p key={i} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          {t(salesNoteKey(n)!, {
+            ...noteVars,
+            item: n.item ?? "",
+            size: n.size ?? "",
+            n: n.n ?? 0,
+            want: n.want ?? 0,
+          })}
+        </p>
+      ))}
     </div>
   );
 }

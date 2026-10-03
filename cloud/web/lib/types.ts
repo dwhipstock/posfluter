@@ -774,6 +774,58 @@ export interface AiProposal {
   transcript?: string | null;
   /** Items the manager asked a picture for; each is made with /menu-ai/photos/generate. */
   photos?: AiPhotoAsk[];
+  /** Sales-based requests: the ranking the server recomputed from the store's sales (never the model's numbers). */
+  sales?: AiSalesBasis[];
+  /** What the manager should know about those (a size refused, no sales in the period…). */
+  salesNotes?: AiSalesNote[];
+  /** A question about sales, answered from `sales`: nothing to apply. */
+  answer?: boolean;
+}
+
+/** One item's sales over a basis's period (minor units in the basis's currency). */
+export interface AiSalesRow {
+  itemId: string;
+  name: string;
+  category?: string | null;
+  units: number;
+  revenueMinor: number;
+  /** The store day it last sold (within 90 days). */
+  lastSold?: string | null;
+  /** rank "specials": the special ("Tue"), average units a special day vs a comparable other day, and the lift. */
+  special?: string | null;
+  onAvg?: number | null;
+  offAvg?: number | null;
+  /** weekdays | weekend | other_days */
+  baseline?: string | null;
+  liftPct?: number | null;
+  /** false: too little data to say */
+  enough?: boolean | null;
+  /** rank "happy_hour": the share of its units sold inside happy hour, in percent */
+  sharePct?: number | null;
+}
+
+/** What a sales-based proposal or answer is based on: from / to are the store's business days (inclusive). */
+export interface AiSalesBasis {
+  rank: "top" | "bottom" | "unsold" | "list" | "specials" | "happy_hour";
+  by: "units" | "revenue";
+  n: number;
+  from: string;
+  to: string;
+  /** unsold: not sold in this many days */
+  days?: number | null;
+  store: string;
+  currency: string;
+  rows: AiSalesRow[];
+  /** happy_hour: the windows looked at ("Mon–Fri 16:00–18:00") */
+  special?: string | null;
+}
+
+export interface AiSalesNote {
+  code: "no_sales" | "fewer_items" | "pick_corrected" | "size_refused" | "already_lower" | "item_skipped" | "too_many" | "none_match" | "bad_request" | string;
+  item?: string | null;
+  size?: string | null;
+  n?: number | null;
+  want?: number | null;
 }
 
 /** One picture the assistant was asked for (nothing is drawn until the portal asks). */
