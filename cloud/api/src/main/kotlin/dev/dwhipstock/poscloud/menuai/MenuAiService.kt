@@ -97,6 +97,16 @@ data class AiProposalDto(
      * /menu-ai/photos/generate and shows it to accept. Nothing is drawn yet.
      */
     val photos: List<AiPhotoAskDto> = emptyList(),
+    /**
+     * Sales-based requests ("my top 5 sellers $2 off on Tuesdays", "which burgers
+     * sold best?"): the ranking the server recomputed from the store's sales,
+     * shown above the changes. Every number here is computed, never the model's.
+     */
+    val sales: List<AiSalesBasis> = emptyList(),
+    /** What the manager should know about those (a size refused, fewer items than asked, no sales…). */
+    val salesNotes: List<AiSalesNote> = emptyList(),
+    /** A question about sales, answered from [sales]: nothing to apply. */
+    val answer: Boolean = false,
 )
 
 /** One item to make a photo for (the model's `generate_photo` op, checked against the menu). */
@@ -204,6 +214,8 @@ class MenuAiService(
         private const val PROPOSAL_TTL_MS = 30 * 60_000L
         private const val MAX_PROPOSALS = 200
         private const val MAX_ITEMS_IN_PROMPT = 600
+        /** Sales selections read from one reply (more are ignored). */
+        private const val MAX_SALES_ASKS = 4
         val LANGS = listOf("en", "fr", "es", "de", "af")
         /** The portal's languages beyond the fr / en catalog slots: set_name may fill these. */
         val EXTRA_LANGS = setOf("es", "de", "af")
@@ -247,7 +259,7 @@ class MenuAiService(
         val started = now()
         return try {
             call().also { r ->
-                record(who, kind, r.refusal ?: "proposed", r.changes.size + r.photos.size, r.rejected.size, now() - started,
+                record(who, kind, r.refusal ?: if (r.answer) "answered" else "proposed", r.changes.size + r.photos.size, r.rejected.size, now() - started,
                     r.proposalId.ifEmpty { null })
             }
         } catch (e: MenuAiException) {
@@ -314,13 +326,22 @@ class MenuAiService(
         val voice = audio != null
         val m = (if (voice) voiceModel else model)
             ?: throw MenuAiException(409, "menu_ai_disabled", "the AI assistant is not set up on this portal")
-        val snap = transaction { MenuSnapshot.load(who, MAX_ITEMS_IN_PROMPT) }
+        val today = java.time.Instant.ofEpochMilli(now()).atZone(who.venue.zone).toLocalDate()
+        // the sales facts: this tenant's ONE store in scope, nothing else (MenuAiSales.kt; cloud only)
+        val (snap, sales) = transaction {
+            MenuSnapshot.load(who, MAX_ITEMS_IN_PROMPT).let { s ->
+                s to SalesFacts.load(who.principal.tenantId, who.venue.venueId, who.venue.name, who.venue.currency, who.venue.zone, today)
+            }
+        }
+        val salesItems = snap.salesItems(who.lang)
         val started = now()
         val system = systemPrompt(who, snap) + "\n" +
             AiVoice.replyLanguage(LANGS, "${LANGUAGE_NAMES[who.lang]} (${who.lang})") +
-            (if (voice) "\n" + AiVoice.prompt(LANGS.joinToString(", ") { "$it (${LANGUAGE_NAMES[it]})" }) else "")
+            (if (voice) "\n" + AiVoice.prompt(LANGS.joinToString(", ") { "$it (${LANGUAGE_NAMES[it]})" }) else "") +
+            "\n" + SalesAsks.prompt(today)
         val reply = try {
-            m.complete(system, "<current_menu>\n${snap.json}\n</current_menu>\n\n$request", audio)
+            m.complete(system, "<current_menu>\n${snap.json}\n</current_menu>\n\n" +
+                "<sales_data>\n${sales.table(salesItems.values.toList())}\n</sales_data>\n\n$request", audio)
         } catch (e: MenuAiException) {
             // the provider's own safety refusal is the same fixed reply, not an error
             if (e.code == "menu_ai_refused") return refusal(who, AiGuard.Refusal.OFF_TOPIC, elapsed = now() - started)
@@ -338,8 +359,14 @@ class MenuAiService(
         if (heard != null && !AiVoice.safe(heard)) return refusal(who, AiGuard.Refusal.OFF_TOPIC, elapsed = elapsed, lang = lang)
         // picture requests are the portal's own op: taken out before the store's parser sees the reply
         val split = if (photos.enabled) PhotoAsks.split(reply) else PhotoAsks.Split(reply, emptyList())
+        // sales selections too: recomputed here, turned into plain ops the shared parser then checks
+        val salesSplit = SalesAsks.split(split.reply)
+        val plans = if (salesSplit.asks.isEmpty()) emptyList() else transaction {
+            val planner = SalesPlanner(sales, salesItems, lang)
+            salesSplit.asks.take(MAX_SALES_ASKS).map(planner::plan)
+        }
         val parsed = try {
-            MenuChangeSetParser.parse(split.reply, snap.facts(lang), MenuScope.CHAT)
+            MenuChangeSetParser.parse(withSalesOps(salesSplit.reply, plans), snap.facts(lang), MenuScope.CHAT)
         } catch (e: MenuAiReplyException) {
             log.info("AI menu via ${m.id}: unusable reply")
             return refusal(who, if (e.tooMany) AiGuard.Refusal.TOO_MANY_CHANGES else AiGuard.Refusal.INCOMPLETE,
@@ -352,11 +379,20 @@ class MenuAiService(
         val rejected = parsed.rejected + askRejected
         if (parsed.ops.isEmpty() && asks.isEmpty() && parsed.offensive > 0 && parsed.offensive == parsed.rejected.size)
             return refusal(who, AiGuard.Refusal.OFF_TOPIC, elapsed = elapsed, heard = heard, lang = lang)
+        val bases = plans.mapNotNull { it.basis }
+        val notes = plans.flatMap { it.notes }.distinct()
+        // the model's own words never restate sales: an answer is the server's list, and a corrected pick's summary is dropped
+        val summary = if (plans.isNotEmpty() && (plans.any { it.answer } || notes.any { it.code == "pick_corrected" })) "" else parsed.summary
+        if (parsed.ops.isEmpty() && asks.isEmpty() && plans.isNotEmpty()) {
+            log.info("AI menu via ${m.id}/${m.model}: sales answer (${bases.sumOf { it.rows.size }} row(s)), ${elapsed}ms")
+            return AiProposalDto("", who.venue.venueId, who.venue.currency, m.model, summary, emptyList(), rejected, elapsed,
+                transcript = heard, sales = bases, salesNotes = notes, answer = plans.any { it.answer })
+        }
         if (parsed.ops.isEmpty() && asks.isEmpty()) return refusal(who, AiGuard.Refusal.NO_CHANGE, rejected, elapsed, heard, lang)
         if (parsed.ops.isEmpty()) {
             log.info("AI menu via ${m.id}/${m.model}: ${asks.size} photo request(s), ${rejected.size} rejected, ${elapsed}ms")
-            return AiProposalDto("", who.venue.venueId, who.venue.currency, m.model, parsed.summary, emptyList(),
-                rejected, elapsed, transcript = heard, photos = asks)
+            return AiProposalDto("", who.venue.venueId, who.venue.currency, m.model, summary, emptyList(),
+                rejected, elapsed, transcript = heard, photos = asks, sales = bases, salesNotes = notes)
         }
         sweep()
         val ops = parsed.ops.indices.map { "c${it + 1}" }.zip(parsed.ops).toMap()
@@ -364,12 +400,30 @@ class MenuAiService(
         val oldPrices = parsed.ops.filterIsInstance<MenuOp.UpdateItem>().flatMap { it.prices.keys }
             .associateWith { snap.facts(lang).variantPrices[it] ?: 0L }
         proposals[proposalId] = Proposal(who.principal.tenantId, who.venue.venueId, who.principal.userId, ops,
-            parsed.summary, now(), oldPrices, snap.bilingual)
+            summary, now(), oldPrices, snap.bilingual)
         val changes = ops.map { (id, op) -> snap.preview(id, op, ops, who.lang) }
         val bulk = bulkReasons(parsed.ops, oldPrices)
         log.info("AI menu via ${m.id}/${m.model}: ${changes.size} change(s), ${asks.size} photo(s), ${rejected.size} rejected, ${elapsed}ms")
-        return AiProposalDto(proposalId, who.venue.venueId, who.venue.currency, m.model, parsed.summary, changes,
-            rejected, elapsed, bulk = bulk.isNotEmpty(), bulkReasons = bulk, transcript = heard, photos = asks)
+        return AiProposalDto(proposalId, who.venue.venueId, who.venue.currency, m.model, summary, changes,
+            rejected, elapsed, bulk = bulk.isNotEmpty(), bulkReasons = bulk, transcript = heard, photos = asks,
+            sales = bases, salesNotes = notes)
+    }
+
+    /**
+     * The reply the shared parser reads: the model's ops, minus any it wrote
+     * itself for the items a sales selection covers (the server's replace them),
+     * plus the ops each of [plans] computed.
+     */
+    private fun withSalesOps(reply: String, plans: List<SalesPlan>): String {
+        if (plans.isEmpty()) return reply
+        val root = runCatching { Json.parseToJsonElement(reply) as? JsonObject }.getOrNull() ?: return reply
+        val own = (root["ops"] as? JsonArray).orEmpty().filterNot { el ->
+            val o = el as? JsonObject ?: return@filterNot false
+            val kind = (o["op"] as? JsonPrimitive)?.contentOrNull
+            val item = (o["item"] as? JsonPrimitive)?.contentOrNull
+            plans.any { p -> kind in p.dropKinds && item in p.items }
+        }
+        return JsonObject(root + ("ops" to JsonArray(own + plans.flatMap { it.ops }))).toString()
     }
 
     private fun sweep() {
@@ -726,6 +780,14 @@ internal class MenuSnapshot(
             }
         }
         return out to rejected
+    }
+
+    /** The live (on, priced) items as the sales logic sees them, named in [lang]. */
+    fun salesItems(lang: String): Map<String, SalesItem> = items.values.filter { it.active }.associate { i ->
+        i.id to SalesItem(i.id, pick(lang, i.nameEn, i.nameFr, i.names),
+            cats.firstOrNull { it.id == i.categoryId }?.let { pick(lang, it.nameEn, it.nameFr, it.names) } ?: "",
+            i.variants.map { v -> SalesSize(v.id, if (lang == "fr") v.labelFr.ifBlank { v.labelEn } else v.labelEn.ifBlank { v.labelFr }, v.priceCents) },
+            i.specials)
     }
 
     fun facts(requestLang: String) = MenuFacts(
