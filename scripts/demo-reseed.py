@@ -5,10 +5,12 @@ What it does, per store (default: vieux-port = Glenwood South, and express):
 
   1. WIPE the synced sales the cloud holds for the store before today 00:00
      store time (``--include-today``: also today), plus every row this script
-     ever inserted (its reserved id range, any date).
-  2. GENERATE ``--days`` days of history ending yesterday from the store's
-     CURRENT cloud menu (prices, sizes, categories, day-only items, day and
-     happy-hour prices), with the store's own tax and cash-rounding math.
+     ever inserted (its number range, any date -- today's too).
+  2. GENERATE ``--days`` (default 365: a year) of history ending yesterday
+     from the store's CURRENT cloud menu (prices, sizes, categories, day-only
+     items, day and happy-hour prices), with the store's own tax and
+     cash-rounding math; ``--today-until HH:MM`` also generates today's sales
+     up to that store time (typical of the weekday), next to the live ones.
   3. VERIFY by running the reports' own SQL (the portal Dashboard and Reports
      read these sums) and printing totals per store and per day.
 
@@ -50,17 +52,36 @@ Where the store's facts come from (so the history looks like what it sends):
   counter   Express sales sit on the "counter-1" register; kiosk orders are
             opened by "kiosk"; Glenwood carry-out on "carry-out-1"
   numbers   generated checks, shifts, refunds and cash movements are
-            numbered from 20,000 (to 99,999), so the journal reads like a
+            numbered from 20,000 (to 499,999), so the journal reads like a
             store's own (#20,417); line and tender ids, which nobody sees, are
             in [1,000,000, 1,999,999]. Real stores number from 1 and are in
             the low thousands. The guard: the run aborts (plan and, again,
-            inside the transaction) if anything in 20,000-99,999 is not ours,
-            i.e. a check or shift that a store SENT (its check.* / shift.*
-            event is in the ingest log; rows this script writes never have
-            one), or any row from today on (which the wipe keeps). So a store
-            whose own numbering ever reached 20,000 stops the run instead of
-            having its sales overwritten. The plan prints each store's highest
-            check number and how far it is from 20,000.
+            inside the transaction) if a store ever SENT a check, shift,
+            refund or cash movement numbered in that range -- its event is in
+            the ingest log; rows this script writes never have one. Then the
+            store's own numbering reached the demo range and nothing there can
+            be wiped. So everything numbered 20,000+ without an event is ours
+            (today's generated sales included) and is replaced on a rerun,
+            while live sales (low numbers, with events) are never touched.
+            The plan prints each store's highest check number and its headroom.
+
+The year's shape: slow growth (+10% a year), seasons (Glenwood's patio
+summer, a January dip, December holidays; Express steadier, lunch-led), the
+week around Thanksgiving busier, both stores closed on Thanksgiving Day and
+Christmas Day, four local-event Saturdays at Glenwood (+40%), weather-like
+day noise, Monday the slowest weekday. The specials (and the day-only dishes
+that came with them) exist from ``--specials-since`` (default: ten weeks
+before today); before that the same items sell at the menu price with no
+lift. While they run, the ones that work lift their item (Tuesday burgers
+about +90-150% vs other weekdays; happy-hour drinks about +60-100% vs the
+same hours at the weekend and, per check, vs 2-4 pm), a happy hour brings a
+few more guests in, and one does not work (Glenwood's Cabernet Merlot glass,
+about +5%). The plan prints each special's lift and verdict.
+
+Performance: one transaction of COPY blocks (``--sql-style insert`` writes
+plain INSERTs instead), sent over ssh with compression. A year of both
+stores (~35k + ~46k checks; ``--volume 1.6`` for ~55k + ~73k) is ~80 MB
+(~125 MB) of SQL and applies in seconds.
 
 Sales are generated between 10:30 and 23:59 store time, so the reports'
 midnight business day and the specials' 4 a.m. business day name the same
@@ -81,6 +102,8 @@ Usage (Sunday: plan first, read it, then the same command with --yes):
   scripts/demo-reseed.py --ssh ... --verify-only
   # read-only look at the hosted catalog as the tool sees it (specials, day-only items, staff, tax)
   scripts/demo-reseed.py --ssh ... --check
+  # demo morning: also today's sales up to 11:30, so the Today dashboard is not empty
+  scripts/demo-reseed.py --ssh ... --yes --today-until 11:30
 
   The ssh target, key and container also come from DEMO_RESEED_SSH,
   DEMO_RESEED_SSH_KEY and DEMO_RESEED_CONTAINER. The Postgres container is
@@ -89,8 +112,9 @@ Usage (Sunday: plan first, read it, then the same command with --yes):
   DEMO_RESEED_DSN) talks to a local Postgres instead (tests, rehearsal).
   ``--menu-json FILE`` generates offline from a catalog file (no database).
 
-Options: --stores vieux-port,express  --days 60  --seed N  --today YYYY-MM-DD
-         --include-today  --plan-json FILE (expected totals, for tests)
+Options: --stores vieux-port,express  --days 365  --seed N  --today YYYY-MM-DD
+         --include-today  --today-until HH:MM  --specials-since YYYY-MM-DD
+         --volume 1.0  --sql-style copy|insert  --plan-json FILE (expected totals, for tests)
 
 Tests: python3 -m unittest scripts/tests/test_demo_reseed.py (generator);
 cloud/api DemoReseedReportTest (the SQL against the migrated schema, read
@@ -112,6 +136,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -123,7 +148,7 @@ KNOWN_STORES = ("vieux-port", "express", "plateau")
 # store. Real stores number from 1 and are in the low thousands; the run refuses if a store's own
 # numbers ever reached this range (see wipe_predicates "clash").
 NUM_MIN = 20_000
-NUM_MAX = 99_999
+NUM_MAX = 499_999
 # Ids nobody sees (line and tender ids): far above anything a store makes.
 ID_MIN = 1_000_000
 ID_MAX = 1_999_999
@@ -443,7 +468,7 @@ class Check:
     mode: str    # DINE_IN | TAKE_OUT | CARRY_OUT
     void_reason: str | None = None
     voided_by: str | None = None
-    shift_id: int = 0
+    shift_id: int | None = 0
 
 
 @dataclasses.dataclass
@@ -492,6 +517,7 @@ class Shift:
     expected_cash: int = 0
     cash_rounding: int = 0
     tips: int = 0
+    partial: bool = False
 
 
 class Ids:
@@ -516,8 +542,66 @@ def stable_unit(key: str) -> float:
 
 # Signature dishes sell more (ids from the seeded menus; absent ids are ignored).
 BOOST = {"lantern-burger": 2.4, "wings": 2.0, "fish-chips": 2.0, "lantern-lager": 2.6, "nachos": 1.5, "steak-frites": 1.3,
-         "amber-ale": 1.4, "late-fries": 2.2, "double-cheeseburger": 2.0, "fountain-soda": 3.0, "chicken-tenders": 1.8,
-         "poutine": 1.4, "club": 1.3, "copper-old-fashioned": 1.3, "cab-merlot": 1.2, "pinot-noir": 1.2}
+         "amber-ale": 1.4, "cab-merlot": 1.7, "late-fries": 2.2, "double-cheeseburger": 2.0, "fountain-soda": 3.0, "chicken-tenders": 1.8,
+         "poutine": 1.4, "club": 1.3, "copper-old-fashioned": 1.3, "pinot-noir": 1.2}
+
+# Specials that WORK lift their item while in force; a few do not (so "which specials should I end?"
+# has an answer). The pull is a weight on that item (and its special size) whenever a special is in
+# force for it; tuned so the generated history shows, by units:
+#   a day special (Tuesday burgers)   about +90-150% on its day vs the other weekdays
+#   a happy-hour drink (4-6 pm)       about +60-100% vs the same hours at the weekend, and per check
+#                                     vs 2-4 pm on the same days
+#   a special that does not work      +3-5%
+SPECIALS_WEEKS = 10  # by default the specials began ten weeks ago: "before vs after" has a before
+DAY_PULL = 2.6
+WINDOW_PULL = 1.5
+SPECIAL_PULL = {
+    "lantern-burger:regular": 2.9, "double-cheeseburger:regular": 2.8,
+    "lantern-lager:pint": 3.4, "lantern-lager:16oz": 1.8, "pinot-noir:glass": 2.6,
+    # the one that does not work: barely anyone switches to the deal (this pull only makes up for the
+    # $5 lager drawing drinkers away in the same hour)
+    "cab-merlot:glass": 1.45,
+}
+# a happy hour brings a few more guests in: checks closing in its window on its days
+HAPPY_HOUR_HALO = 1.12
+# a store's "how is my special doing" verdicts (plan output)
+WORKING, NOT_WORKING = 0.30, 0.15
+
+# ---- a year's shape (per business day; Generator.day_factor)
+GROWTH_PER_YEAR = 0.10  # slow growth: a day now sells ~10% more than the same day a year ago
+# month -> demand: the patio summer at Glenwood, the January dip, the December holidays
+PUB_SEASON = {1: 0.80, 2: 0.86, 3: 0.94, 4: 1.00, 5: 1.05, 6: 1.15, 7: 1.18, 8: 1.17, 9: 1.10, 10: 1.00, 11: 0.97, 12: 1.10}
+# Express is steadier: office lunches all year, a little summer, a softer January
+COUNTER_SEASON = {1: 0.90, 2: 0.94, 3: 0.98, 4: 1.00, 5: 1.02, 6: 1.04, 7: 1.04, 8: 1.04, 9: 1.03, 10: 1.00, 11: 0.99, 12: 1.03}
+EVENT_SATURDAYS = 4      # Glenwood: a few local-event Saturdays (game day, a festival) ...
+EVENT_LIFT = 1.40        # ... at +40%
+
+
+def thanksgiving(year: int) -> dt.date:
+    """The fourth Thursday of November."""
+    first = dt.date(year, 11, 1)
+    return first + dt.timedelta(days=(3 - first.weekday()) % 7 + 21)
+
+
+def closed_on(day: dt.date) -> bool:
+    """Both stores close on Thanksgiving Day and Christmas Day: no sales at all."""
+    return day == thanksgiving(day.year) or (day.month, day.day) == (12, 25)
+
+
+def holiday_factor(day: dt.date, counter: bool) -> float:
+    tg = thanksgiving(day.year)
+    if tg - dt.timedelta(days=3) <= day <= tg + dt.timedelta(days=3):  # the week around Thanksgiving
+        return 1.08 if counter else 1.18
+    if day.month == 12 and day.day <= 23:  # office parties, shoppers
+        return 1.04 if counter else 1.10
+    if (day.month, day.day) == (12, 24):
+        return 0.60
+    if (day.month, day.day) == (12, 31):
+        return 0.90 if counter else 1.25
+    if (day.month, day.day) == (1, 1):
+        return 0.65
+    return 1.0
+
 
 PUB_DAY = (0.72, 0.86, 0.86, 1.05, 1.32, 1.38, 0.92)        # Mon..Sun
 COUNTER_DAY = (0.82, 1.02, 0.90, 0.95, 1.15, 1.22, 0.85)
@@ -534,12 +618,20 @@ PAID_OUT = ("Petty cash: limes and lemons", "Petty cash: ice", "Petty cash: clea
 
 
 class Generator:
-    def __init__(self, store: Store, seed: int, first_day: dt.date, days: int, volume: float = 1.0):
+    def __init__(self, store: Store, seed: int, first_day: dt.date, days: int, volume: float = 1.0,
+                 since: dt.date | None = None, today_until: dt.time | None = None):
         self.s = store
         self.seed = seed
         self.first = first_day
         self.days = days
         self.volume = volume
+        # the specials (and the day-only dishes that came with them) exist from [since]; before it the
+        # same items sell at the menu price with no lift. None = the whole window.
+        self.since = since or first_day
+        # also generate the day after the window (today) up to this store time; None = no
+        self.today_until = today_until
+        self.last = first_day + dt.timedelta(days=days - 1)
+        self.events = self.event_days()
         self.ids = Ids()
         self.shifts: list[Shift] = []
         managers = [x for x in store.staff if x[2] in ("MANAGER", "OWNER", "ADMIN")] or store.staff
@@ -560,17 +652,48 @@ class Generator:
         h, m = divmod(minute_of_day, 60)
         return dt.datetime.combine(day, dt.time(h, m, second), tzinfo=self.s.zone)
 
+    def live(self, it: Item, m: Moment) -> tuple:
+        """[it]'s specials as they stood on [m]'s business day: none before they began."""
+        return it.specials if m.date >= self.since else ()
+
+    def event_days(self) -> set:
+        """Glenwood's local-event Saturdays: a few, spread over the window, the same for a seed."""
+        if self.s.counter or self.days < 60:
+            return set()
+        sats = [self.first + dt.timedelta(days=i) for i in range(self.days)
+                if (self.first + dt.timedelta(days=i)).weekday() == 5 and not closed_on(self.first + dt.timedelta(days=i))]
+        rng = random.Random(f"{self.seed}|{self.s.id}|events")
+        step = len(sats) / EVENT_SATURDAYS
+        return {sats[min(len(sats) - 1, int(step * k + rng.uniform(0, step)))] for k in range(EVENT_SATURDAYS)}
+
+    def day_factor(self, rng: random.Random, day: dt.date) -> float:
+        """How busy [day] is beside its weekday: growth, season, holidays, an event, the weather."""
+        years_ago = (self.last - day).days / 365.0
+        growth = (1 + GROWTH_PER_YEAR) ** -years_ago
+        season = (COUNTER_SEASON if self.s.counter else PUB_SEASON)[day.month]
+        event = EVENT_LIFT if day in self.events else 1.0
+        # weather-like noise: most days a little either way, now and then a washout or a glorious day
+        swing = 0.05 if self.s.counter else 0.08
+        weather = rng.uniform(1 - swing, 1 + swing)
+        roll = rng.random()
+        if roll < 0.07:
+            weather *= 0.88 if self.s.counter else (0.70 if 5 <= day.month <= 9 else 0.80)  # rain (the patio empties)
+        elif roll > 0.96:
+            weather *= 1.05 if self.s.counter else 1.12
+        return growth * season * holiday_factor(day, self.s.counter) * event * weather
+
     def pick_item(self, rng: random.Random, role_set, at: dt.datetime, extra=None):
         m = moment(at)
         pool, weights = [], []
         for it in self.s.items:
             if it.role not in role_set or not sold_on(it.available_days, m):
                 continue
+            if it.available_days and m.date < self.since:
+                continue  # a day-only dish came on the menu with the specials
             w = self.base_weight[it.id]
             if it.available_days:
                 w *= 2.0  # the day's feature dish
-            if any(in_force(sp, m) for sp in it.specials):
-                w *= 3.0  # Tuesday burgers, happy-hour lager
+            w *= self.pull(it, m)  # Tuesday burgers, happy-hour lager (a special that works)
             if extra:
                 w *= extra(it)
             pool.append(it)
@@ -579,19 +702,49 @@ class Generator:
             return None
         return rng.choices(pool, weights)[0]
 
-    @staticmethod
-    def pick_variant(rng: random.Random, item: Item) -> Variant:
+    def pull(self, it: Item, m: Moment) -> float:
+        """How much a special in force at [m] pulls [it]: its strongest special's pull, else 1."""
+        best = 1.0
+        for sp in self.live(it, m):
+            if in_force(sp, m):
+                for vid in sp.prices:
+                    best = max(best, SPECIAL_PULL.get(vid, WINDOW_PULL if sp.start else DAY_PULL))
+        return best
+
+    def pick_variant(self, rng: random.Random, item: Item, m: Moment | None = None) -> Variant:
         if len(item.variants) == 1:
             return item.variants[0]
         low = min(v.price for v in item.variants)
-        return rng.choices(item.variants, [(low / v.price) ** 1.8 for v in item.variants])[0]
+        weights = [(low / v.price) ** 1.8 for v in item.variants]
+        if m is not None:  # the size on special is the one people order (a pint at $5 rather than a pitcher)
+            for i, v in enumerate(item.variants):
+                if any(v.id in sp.prices and in_force(sp, m) for sp in self.live(item, m)):
+                    weights[i] *= max(1.0, SPECIAL_PULL.get(v.id, 1.5))
+        return rng.choices(item.variants, weights)[0]
+
+    def halo_hours(self, day: dt.date) -> set:
+        """The hours a happy hour of this store runs on [day] (its checks get [HAPPY_HOUR_HALO])."""
+        code = DAYS[day.weekday()]
+        hours = set()
+        if day < self.since:
+            return hours
+        for it in self.s.items:
+            for sp in it.specials:
+                if sp.start and sp.end and code in sp.days:
+                    hours.update(range(minutes(sp.start) // 60, (minutes(sp.end) + 59) // 60))
+        return hours
+
+    def hour_weights(self, day: dt.date, hours: dict) -> tuple[list, list]:
+        halo = self.halo_hours(day)
+        return list(hours), [w * (HAPPY_HOUR_HALO if h in halo else 1.0) for h, w in hours.items()]
 
     def add(self, rng, lines, role_set, at, extra=None, qty=1):
         it = self.pick_item(rng, role_set, at, extra)
         if it is None:
             return
-        v = self.pick_variant(rng, it)
-        unit, sp = price_at(it.specials, v.id, v.price, moment(at))
+        m = moment(at)
+        v = self.pick_variant(rng, it, m)
+        unit, sp = price_at(self.live(it, m), v.id, v.price, m)
         for ln in lines:  # the same size at the same price again: one more on that line
             if ln.variant.id == v.id and ln.unit == unit:
                 ln.qty += qty
@@ -643,17 +796,17 @@ class Generator:
     # --- one business day
     def day_pub(self, rng: random.Random, day: dt.date, index: int):
         wd = day.weekday()
-        trend = 0.95 + 0.10 * (index / max(1, self.days - 1))
-        n = round(95 * PUB_DAY[wd] * trend * rng.uniform(0.92, 1.08) * self.volume)
-        n = max(round(56 * self.volume), min(round(134 * self.volume), n)) if self.volume >= 1 else max(3, n)
+        n = round(95 * PUB_DAY[wd] * self.day_factor(rng, day) * self.volume)
+        n = max(round(30 * self.volume), min(round(200 * self.volume), n)) if self.volume >= 1 else max(3, n)
         hours = PUB_WEEKEND_HOURS if wd >= 5 else PUB_HOURS
         out: list[Check] = []
         closes = sorted(self.local(day, h * 60 + rng.randint(0, 59), rng.randint(0, 59))
-                        for h in rng.choices(list(hours), list(hours.values()), k=n))
+                        for h in rng.choices(*self.hour_weights(day, hours), k=n))
         open_at = self.local(day, 11 * 60)
         for close in closes:
             h = close.hour
-            meal = "lunch" if h < 15 else "happy" if h < 18 else "dinner" if h < 21 else "late"
+            # 2-6 pm is the afternoon drinking crowd, happy hour or not: the special is what changes at 4
+            meal = "lunch" if h < 14 else "happy" if h < 18 else "dinner" if h < 21 else "late"
             covers = rng.choices((1, 2, 3, 4, 5, 6), (30, 42, 10, 12, 3, 3))[0]
             stay = {"lunch": (35, 70), "happy": (40, 120), "dinner": (55, 110), "late": (35, 150)}[meal]
             opened = max(open_at, close - dt.timedelta(minutes=rng.randint(*stay) + 5 * covers))
@@ -701,19 +854,18 @@ class Generator:
 
     def day_counter(self, rng: random.Random, day: dt.date, index: int):
         wd = day.weekday()
-        trend = 0.95 + 0.10 * (index / max(1, self.days - 1))
-        n = round(135 * COUNTER_DAY[wd] * trend * rng.uniform(0.9, 1.1) * self.volume)
-        n = max(round(80 * self.volume), min(round(200 * self.volume), n)) if self.volume >= 1 else max(3, n)
+        n = round(135 * COUNTER_DAY[wd] * self.day_factor(rng, day) * self.volume)
+        n = max(round(60 * self.volume), min(round(260 * self.volume), n)) if self.volume >= 1 else max(3, n)
         out: list[Check] = []
         closes = sorted(self.local(day, h * 60 + rng.randint(0 if h > 10 else 45, 59), rng.randint(0, 59))
-                        for h in rng.choices(list(COUNTER_HOURS), list(COUNTER_HOURS.values()), k=n))
+                        for h in rng.choices(*self.hour_weights(day, COUNTER_HOURS), k=n))
         for close in closes:
             kiosk = rng.random() < 0.40
             mode = "TAKE_OUT" if rng.random() < 0.58 else "DINE_IN"
             opened = close - dt.timedelta(seconds=rng.randint(150, 480) if kiosk else rng.randint(60, 240))
             people = rng.choices((1, 2, 3), COUNTER_PEOPLE)[0]
             lines: list[Line] = []
-            beer = 0.25 if close.hour >= 16 else 0.05
+            beer = 0.25 if close.hour >= 18 else 0.08
             drink_w = (lambda it, b=beer: b * 4 if it.is_alcohol else 1.0)
             for _ in range(people):
                 shape = rng.choices(list(COUNTER_SHAPES), list(COUNTER_SHAPES.values()))[0]
@@ -744,10 +896,17 @@ class Generator:
         return rng.choices(fit, weights)[0]
 
     def generate(self) -> "Generator":
-        for index in range(self.days):
+        extra = 1 if self.today_until else 0
+        for index in range(self.days + extra):
             day = self.first + dt.timedelta(days=index)
+            if closed_on(day):
+                continue
             rng = random.Random(f"{self.seed}|{self.s.id}|{day.isoformat()}")
             checks = self.day_counter(rng, day, index) if self.s.counter else self.day_pub(rng, day, index)
+            partial = index == self.days
+            if partial:  # today, so far: what a typical day of this weekday has sold by then
+                until = dt.datetime.combine(day, self.today_until, tzinfo=self.s.zone)
+                checks = [c for c in checks if c.closed_at <= until]
             if not checks:
                 continue
             # a few voids: a check that was rung and then voided by a manager (no payment, no lines sent)
@@ -771,8 +930,10 @@ class Generator:
                 refunds.append(Refund(self.ids.next("refund"), c, c.total, c.subtotal, c.tax, c.taxes, tt,
                                       cash_adjustment(c.total) if tt == "CASH" else 0, rng.choice(REFUND_REASONS),
                                       rng.choice(self.managers), at))
+            if partial:
+                refunds = [x for x in refunds if x.at <= until]
             movements = []
-            if rng.random() < (0.12 if self.s.counter else 0.2):
+            if rng.random() < (0.12 if self.s.counter else 0.2) and not partial:
                 movements.append(Movement(self.ids.next("movement"), "OUT", rng.choice((1500, 2000, 2500, 3500, 4800)),
                                           rng.choice(PAID_OUT), rng.choice(self.managers),
                                           self.local(day, rng.randint(14 * 60, 17 * 60))))
@@ -782,15 +943,25 @@ class Generator:
                        last + dt.timedelta(minutes=rng.randint(15, 45)), rng.choice(self.managers), rng.choice(self.managers),
                        20000 if self.s.counter else 30000, checks, refunds, movements,
                        rng.choices((0, 0, 0, 0, 0, -5, 5, -100, 100, -250, 200), k=1)[0])
+            sh.partial = partial  # today: no Z-report yet, so no shift row; its sales carry no shift
             for c in checks:
-                c.shift_id = sh.shift_id
+                c.shift_id = None if partial else sh.shift_id
             for r in refunds:
-                r.shift_id = sh.shift_id
+                r.shift_id = None if partial else sh.shift_id
             for mv in movements:
                 mv.shift_id = sh.shift_id
             self.close_shift(sh)
             self.shifts.append(sh)
         return self
+
+    @property
+    def history(self) -> list:
+        """The closed days of the window (today's partial day left out)."""
+        return [sh for sh in self.shifts if not sh.partial]
+
+    @property
+    def today(self):
+        return next((sh for sh in self.shifts if sh.partial), None)
 
     @staticmethod
     def close_shift(sh: Shift):
@@ -821,14 +992,15 @@ class Generator:
         sh.tips = sum(b["tipCents"] for b in sh.breakdown)
 
     # --- what the reports should show
-    def expected(self) -> dict:
+    def expected(self, today: bool = False) -> dict:
+        """What the reports should show for the window (or, [today], for today's generated sales so far)."""
         days, pay, items, hours = {}, {}, {}, {}
         rounding = 0
 
         def day_row(d):
             return days.setdefault(d, {"checks": 0, "gross": 0, "tax": 0, "voids": 0, "voidCents": 0,
                                        "refunds": 0, "refundCents": 0, "refundTax": 0})
-        for sh in self.shifts:
+        for sh in ([self.today] if self.today else []) if today else self.history:
             for c in sh.checks:
                 d = day_row(c.closed_at.date().isoformat())
                 if c.status == "VOID":
@@ -872,6 +1044,9 @@ class Generator:
             "payments": {k: {"count": v[0], "amountCents": v[1]} for k, v in sorted(pay.items())},
             "items": {k: {"qty": v[0], "revenueCents": v[1]} for k, v in sorted(items.items())},
             "hourly": {k: {"checkCount": v[0], "grossCents": v[1]} for k, v in sorted(hours.items(), key=lambda kv: int(kv[0]))},
+            "months": {m: {"checkCount": sum(v["checks"] for d, v in days.items() if d[:7] == m),
+                           "grossCents": sum(v["gross"] - v["refundCents"] for d, v in days.items() if d[:7] == m)}
+                       for m in sorted({d[:7] for d in days})},
         }
 
     def facts(self) -> dict:
@@ -882,7 +1057,7 @@ class Generator:
         lines = [ln for c in closed for ln in c.lines]
         card = sum(t.applied for t in tenders if t.type == "CARD")
         total = sum(t.applied for t in tenders) or 1
-        per_day = [sum(1 for c in sh.checks if c.status == "CLOSED") for sh in self.shifts]
+        per_day = [sum(1 for c in sh.checks if c.status == "CLOSED") for sh in self.history]
         specials = {}
         for ln in lines:
             if ln.special:
@@ -893,7 +1068,10 @@ class Generator:
                 day_only.setdefault(ln.item.id, set()).add(moment(ln.added_at).day)
         return {
             "checks": len(closed), "voids": len(checks) - len(closed), "lines": len(lines), "tenders": len(tenders),
-            "refunds": sum(len(sh.refunds) for sh in self.shifts), "shifts": len(self.shifts),
+            "refunds": sum(len(sh.refunds) for sh in self.shifts), "shifts": len(self.history),
+            "today": sum(1 for c in self.today.checks if c.status == "CLOSED") if self.today else 0,
+            "closedDays": [d.isoformat() for d in (self.first + dt.timedelta(days=i) for i in range(self.days)) if closed_on(d)],
+            "events": sorted(d.isoformat() for d in self.events),
             "movements": sum(len(sh.movements) for sh in self.shifts),
             "perDay": (min(per_day), max(per_day)) if per_day else (0, 0),
             "cardShare": card / total, "tips": sum(sh.tips for sh in self.shifts),
@@ -904,6 +1082,83 @@ class Generator:
             "specialLines": specials, "dayOnly": {k: sorted(v, key=DAYS.index) for k, v in day_only.items()},
             "items": len(self.s.items),
         }
+
+
+def special_lifts(g: "Generator") -> list[dict]:
+    """How each special did in the generated history, the way a manager (or the menu AI) would ask it,
+    from closed sales by business day and closing hour:
+      day special    units per special day vs per other weekday (Mon-Fri)
+      window special units in the window on its days vs the same hours on the other days (the weekend),
+                     and units per check in the window vs the two hours before it, same days
+    plus the window's checks per day vs the other days (the halo)."""
+    closed = [c for sh in g.history for c in sh.checks if c.status == "CLOSED"]
+    all_days = sorted({sh.date for sh in g.history})
+    days = [d for d in all_days if d >= g.since]      # while the specials run
+    before = [d for d in all_days if g.since - dt.timedelta(days=len(days) or 1) <= d < g.since]  # as long, just before
+    checks = {}
+    for c in closed:
+        k = (c.closed_at.date(), c.closed_at.hour)
+        checks[k] = checks.get(k, 0) + 1
+
+    def mean(xs):
+        return sum(xs) / len(xs) if xs else 0.0
+
+    def lift(a, b):
+        return a / b - 1 if b else None
+    out = []
+    for it in g.s.items:
+        for sp in it.specials:
+            for vid in sorted(sp.prices):
+                units = {}
+                for c in closed:
+                    for ln in c.lines:
+                        if ln.variant.id == vid:
+                            k = (c.closed_at.date(), c.closed_at.hour)
+                            units[k] = units.get(k, 0) + ln.qty
+                on = [d for d in days if DAYS[d.weekday()] in sp.days]
+                on_before = [d for d in before if DAYS[d.weekday()] in sp.days]
+                row = {"item": it.id, "name": it.name_en, "variant": vid, "days": list(sp.days), "from": sp.start, "to": sp.end,
+                       "specialDays": len(on), "since": g.since.isoformat()}
+                if sp.start and sp.end:
+                    win = range(minutes(sp.start) // 60, (minutes(sp.end) + 59) // 60)
+                    pre = range(max(0, win[0] - 2), win[0])
+                    off = [d for d in days if d not in on]
+
+                    def per_day(ds, hours):
+                        return mean([sum(units.get((d, h), 0) for h in hours) for d in ds])
+
+                    def share(ds, hours):
+                        n = sum(checks.get((d, h), 0) for d in ds for h in range(24))
+                        return sum(checks.get((d, h), 0) for d in ds for h in hours) / n if n else 0.0
+
+                    def per_check(ds, hours):
+                        n = sum(checks.get((d, h), 0) for d in ds for h in hours)
+                        return sum(units.get((d, h), 0) for d in ds for h in hours) / n if n else 0.0
+                    row.update(kind="window", unitsPerDay=per_day(on, win), otherUnitsPerDay=per_day(off, win),
+                               vsBeforeStart=lift(per_day(on, win), per_day(on_before, win)) if on_before else None,
+                               vsOtherDays=lift(per_day(on, win), per_day(off, win)),
+                               vsBefore=lift(per_check(on, win), per_check(on, pre)),
+                               # the window's share of the day's checks, vs the same weekdays before the start
+                               halo=lift(share(on, win), share(on_before, win)) if on_before else None)
+                else:
+                    off = [d for d in days if d not in on and d.weekday() < 5] or [d for d in days if d not in on]
+                    a = mean([sum(units.get((d, h), 0) for h in range(24)) for d in on])
+                    b = mean([sum(units.get((d, h), 0) for h in range(24)) for d in off])
+                    a0 = mean([sum(units.get((d, h), 0) for h in range(24)) for d in on_before])
+                    row.update(kind="day", unitsPerDay=a, otherUnitsPerDay=b, vsOtherDays=lift(a, b), vsBefore=None, halo=None,
+                               vsBeforeStart=lift(a, a0) if on_before else None)
+                # the verdict: the comparisons made while the special runs, averaged (steadier than either)
+                during = [x for x in (row["vsOtherDays"], row["vsBefore"]) if x is not None]
+                main = mean(during) if during else None
+                row["lift"] = main
+                row["verdict"] = ("working" if main is not None and main >= WORKING else
+                                  "not working" if main is not None and main < NOT_WORKING else "so-so")
+                out.append(row)
+    return out
+
+
+def pct(x) -> str:
+    return "n/a" if x is None else f"{x * 100:+.0f}%"
 
 
 # ------------------------------------------------------------------ SQL
@@ -922,63 +1177,134 @@ def ts(t: dt.datetime) -> str:
     return f"'{t.isoformat(sep=' ', timespec='seconds')}'::timestamptz"
 
 
-def jb(v) -> str:
-    return q(json.dumps(v, separators=(",", ":"), ensure_ascii=False)) + "::jsonb"
-
-
 def window_end(store: Store, today: dt.date, include_today: bool) -> dt.datetime:
     day = today + dt.timedelta(days=1) if include_today else today
     return dt.datetime.combine(day, dt.time(0, 0), tzinfo=store.zone)
 
 
 def wipe_predicates(store: Store, end: dt.datetime) -> dict:
-    """WHERE clauses (alias-free) selecting what the wipe removes for one store."""
+    """WHERE clauses (alias-free) selecting what the wipe removes for one store: every synced sale
+    before [end], and every row this script ever wrote (the 20000+ numbers, any date -- today's too)."""
     base = f"tenant_id = {q(TENANT)} AND venue_id = {q(store.id)}"
     rng = f"BETWEEN {NUM_MIN} AND {NUM_MAX}"
-    ids = f"BETWEEN {ID_MIN} AND {ID_MAX}"
     e = ts(end)
     T, V = q(TENANT), q(store.id)
 
-    def sent(alias: str, aggregate: str, col: str) -> str:
-        # a row a store sent: its event (check.closed / check.voided, shift.*) is in the ingest log.
-        # Rows this script wrote never have one. IN (subquery): one hashed pass over the log, not one per row
-        # (events has no index on aggregate_id).
-        return (f"{alias}.{col}::text IN (SELECT ev.aggregate_id FROM events ev WHERE ev.tenant_id = {T} "
-                f"AND ev.venue_id = {V} AND ev.aggregate_type = '{aggregate}')")
+    # The guard: a store SENT something numbered 20000+ -- its check.*, shift.*, refund.created or
+    # cash.movement event names a number in the range. Rows this script writes never have an event.
+    # Then the store's own numbering reached the demo range: refuse, never delete or overwrite.
+    # One pass over the store's own events (no aggregate_id index needed, no per-row lookups).
+    clash = (f"SELECT ev.aggregate_type FROM events ev WHERE ev.tenant_id = {T} AND ev.venue_id = {V} "
+             f"AND ev.aggregate_type IN ('check', 'shift', 'refund', 'cash_movement') "
+             f"AND (CASE WHEN ev.aggregate_id ~ '^[0-9]{{1,12}}$' THEN ev.aggregate_id::bigint END) {rng}")
     return {
         "checks": f"{base} AND (closed_at < {e} OR closed_at IS NULL OR check_id {rng})",
         "refunds": f"{base} AND (created_at < {e} OR created_at IS NULL OR refund_id {rng})",
         "shifts": f"{base} AND ((status <> 'OPEN' AND (opened_at < {e} OR opened_at IS NULL)) OR shift_id {rng})",
         "cash_movements": f"{base} AND (created_at < {e} OR created_at IS NULL OR movement_id {rng})",
         "fuel_sales": f"{base} AND (completed_at < {e} OR completed_at IS NULL)",  # never generated
-        # The guard: refuse when the generated number range holds anything that is not ours --
-        # a check or shift a store sent (its event is in the ingest log: the store's own numbers
-        # reached 20,000, so its next sales would land on ours), or any row this run would keep.
-        "clash": " UNION ALL ".join([
-            f"SELECT 'checks' FROM checks c WHERE c.{base.replace(' AND venue_id', ' AND c.venue_id')} AND c.check_id {rng} "
-            f"AND (c.closed_at >= {e} OR {sent('c', 'check', 'check_id')})",
-            f"SELECT 'shifts' FROM shifts s WHERE s.{base.replace(' AND venue_id', ' AND s.venue_id')} AND s.shift_id {rng} "
-            f"AND {sent('s', 'shift', 'shift_id')}",
-            f"SELECT 'refunds' FROM refunds WHERE {base} AND refund_id {rng} AND created_at >= {e}",
-            f"SELECT 'cash_movements' FROM cash_movements WHERE {base} AND movement_id {rng} AND created_at >= {e}",
-            f"SELECT 'shifts' FROM shifts WHERE {base} AND shift_id {rng} AND (status = 'OPEN' OR opened_at >= {e})",
-            f"SELECT 'check_tenders' FROM check_tenders t WHERE t.{base.replace(' AND venue_id', ' AND t.venue_id')} "
-            f"AND t.tender_id {ids} AND NOT EXISTS (SELECT 1 FROM checks c WHERE c.tenant_id = t.tenant_id "
-            f"AND c.venue_id = t.venue_id AND c.check_id = t.check_id AND (c.closed_at < {e} OR c.check_id {rng}))",
-        ]),
+        "clash": clash,
     }
 
 
-def batched(rows, n=400):
-    for i in range(0, len(rows), n):
-        yield rows[i:i + n]
+class Json:
+    """A jsonb value for the SQL writers."""
+
+    def __init__(self, v):
+        self.text = json.dumps(v, separators=(",", ":"), ensure_ascii=False)
 
 
-def insert(table: str, cols: str, rows: list[str]) -> list[str]:
-    return [f"INSERT INTO {table} ({cols}) VALUES\n" + ",\n".join(chunk) + ";" for chunk in batched(rows)]
+def sql_value(v) -> str:
+    if isinstance(v, Json):
+        return q(v.text) + "::jsonb"
+    if isinstance(v, dt.datetime):
+        return ts(v)
+    return q(v)
 
 
-def render_sql(stores: list[Store], gens: dict, end_by_store: dict) -> str:
+def copy_value(v) -> str:
+    """COPY text format: \\N is NULL; backslash, tab, newline and CR are escaped."""
+    if v is None:
+        return "\\N"
+    if isinstance(v, Json):
+        v = v.text
+    elif isinstance(v, dt.datetime):
+        v = v.isoformat(sep=" ", timespec="seconds")
+    elif isinstance(v, bool):
+        v = "t" if v else "f"
+    v = str(v)
+    return v.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n").replace("\r", "\\r")
+
+
+TABLE_COLUMNS = {
+    "shifts": "tenant_id,venue_id,shift_id,status,opened_at,opened_by,opening_float_cents,closed_at,closed_by,revenue_cents,"
+              "transaction_count,avg_check_cents,corkage_cents,tender_breakdown,expected_cash_cents,closing_count_cents,"
+              "over_short_cents,currency,cash_rounding_cents",
+    "checks": "tenant_id,venue_id,check_id,status,table_id,table_label,zone_id,zone_name_fr,zone_name_en,shift_id,opened_at,"
+              "closed_at,opened_by,grand_total_cents,tax_included_cents,corkage_bottles,corkage_cents,service_charge_cents,"
+              "void_reason,voided_by,gst_cents,qst_cents,taxes,currency",
+    "check_lines": "tenant_id,venue_id,check_id,line_id,item_id,variant_id,category_id,name_fr,name_en,variant_label_fr,"
+                   "variant_label_en,display_name,qty,unit_price_cents,line_total_cents",
+    "check_tenders": "tenant_id,venue_id,tender_id,check_id,type,amount_tendered_cents,amount_applied_cents,"
+                     "rounding_adjustment_cents,change_cents,tendered_at",
+    "refunds": "tenant_id,venue_id,refund_id,check_id,shift_id,gross_cents,net_cents,tax_included_cents,tender_type,reason,"
+               "refunded_by,table_label,zone_id,zone_name_fr,zone_name_en,created_at,gst_cents,qst_cents,taxes,currency,"
+               "rounding_adjustment_cents",
+    "cash_movements": "tenant_id,venue_id,movement_id,shift_id,direction,amount_cents,reason,created_by,created_at,currency",
+}
+
+
+def rows_for(store: Store, g: "Generator") -> dict:
+    """Every row to insert for one store, per table, as value tuples."""
+    T, V, C = TENANT, store.id, store.currency
+    out = {t: [] for t in TABLE_COLUMNS}
+    for sh in g.shifts:
+        if not sh.partial:
+            out["shifts"].append((T, V, sh.shift_id, "CLOSED", sh.opened_at, sh.opened_by, sh.float_cents, sh.closed_at,
+                                  sh.closed_by, sh.revenue, sh.count, sh.revenue // sh.count if sh.count else 0, 0,
+                                  Json(sh.breakdown), sh.expected_cash, sh.expected_cash + sh.over_short, sh.over_short, C,
+                                  sh.cash_rounding))
+        for c in sh.checks:
+            tid, tlabel, zid, zfr, zen, _ = c.table
+            if c.status == "CLOSED":
+                out["checks"].append((T, V, c.check_id, "CLOSED", tid, tlabel, zid, zfr, zen, c.shift_id, c.opened_at,
+                                      c.closed_at, c.opened_by, c.total, c.tax, 0, 0, 0, None, None, 0, 0, Json(c.taxes), C))
+                for ln in c.lines:
+                    multi = len(ln.item.variants) > 1
+                    out["check_lines"].append((T, V, c.check_id, ln.line_id, ln.item.id, ln.variant.id, ln.item.category_id,
+                                               ln.item.name_fr, ln.item.name_en, ln.variant.label_fr if multi else None,
+                                               ln.variant.label_en if multi else None, None, ln.qty, ln.unit, ln.total))
+                for t in c.tenders:
+                    out["check_tenders"].append((T, V, t.tender_id, c.check_id, t.type, t.tendered, t.applied, t.rounding,
+                                                 t.change, t.at))
+            else:
+                out["checks"].append((T, V, c.check_id, "VOID", tid, tlabel, zid, zfr, zen, c.shift_id, c.opened_at,
+                                      c.closed_at, c.opened_by, c.total, c.tax, None, None, None, c.void_reason, c.voided_by,
+                                      0, 0, Json(c.taxes), C))
+        for rf in sh.refunds:
+            _, tlabel, zid, zfr, zen, _ = rf.check.table
+            out["refunds"].append((T, V, rf.refund_id, rf.check.check_id, rf.shift_id, rf.gross, rf.net, rf.tax,
+                                   rf.tender_type, rf.reason, rf.by, tlabel, zid, zfr, zen, rf.at, 0, 0, Json(rf.taxes), C,
+                                   rf.rounding))
+        for m in sh.movements:
+            out["cash_movements"].append((T, V, m.movement_id, m.shift_id, m.direction, m.amount, m.reason, m.by, m.at, C))
+    return out
+
+
+def emit(table: str, rows: list, style: str) -> list[str]:
+    cols = TABLE_COLUMNS[table]
+    if not rows:
+        return []
+    if style == "copy":  # psql reads the data that follows from the same script
+        return [f"COPY {table} ({cols}) FROM STDIN;",
+                "\n".join("\t".join(copy_value(v) for v in row) for row in rows), "\\."]
+    return [f"INSERT INTO {table} ({cols}) VALUES\n" + ",\n".join(
+        "(" + ",".join(sql_value(v) for v in row) + ")" for row in rows[i:i + 500]) + ";" for i in range(0, len(rows), 500)]
+
+
+def render_sql(stores: list[Store], gens: dict, end_by_store: dict, style: str = "copy") -> str:
+    """The whole run as one transaction. style "copy" (psql: COPY ... FROM STDIN, compact and fast) or
+    "insert" (plain multi-row INSERTs: readable, and what a JDBC client can run)."""
     T = q(TENANT)
     ids = ",".join(q(s.id) for s in stores)
     out = [
@@ -995,79 +1321,36 @@ def render_sql(stores: list[Store], gens: dict, end_by_store: dict) -> str:
     ]
     for s in stores:
         p = wipe_predicates(s, end_by_store[s.id])
+        V = q(s.id)
         out += [
-            f"-- ===== {s.id}: wipe synced sales before {end_by_store[s.id].isoformat()} (and every reserved-range row)",
+            f"-- ===== {s.id}: wipe synced sales before {end_by_store[s.id].isoformat()} (and every row numbered {NUM_MIN}+)",
             "DO $clash$ BEGIN",
             f"  IF EXISTS ({p['clash']}) THEN",
             f"    RAISE EXCEPTION 'store {s.id}: numbers {NUM_MIN}-{NUM_MAX} hold a sale or shift that is not ours'; END IF;",
             "END $clash$;",
             f"CREATE TEMP TABLE reseed_checks ON COMMIT DROP AS SELECT check_id FROM checks WHERE {p['checks']};",
             f"CREATE TEMP TABLE reseed_refunds ON COMMIT DROP AS SELECT refund_id FROM refunds WHERE {p['refunds']};",
-            f"DELETE FROM check_lines l USING reseed_checks d WHERE l.tenant_id = {T} AND l.venue_id = {q(s.id)} AND l.check_id = d.check_id;",
-            f"DELETE FROM check_tenders t USING reseed_checks d WHERE t.tenant_id = {T} AND t.venue_id = {q(s.id)} AND t.check_id = d.check_id;",
-            f"DELETE FROM check_tenders WHERE tenant_id = {T} AND venue_id = {q(s.id)} AND tender_id BETWEEN {ID_MIN} AND {ID_MAX};",
-            f"DELETE FROM checks c USING reseed_checks d WHERE c.tenant_id = {T} AND c.venue_id = {q(s.id)} AND c.check_id = d.check_id;",
-            f"DELETE FROM refund_lines l USING reseed_refunds d WHERE l.tenant_id = {T} AND l.venue_id = {q(s.id)} AND l.refund_id = d.refund_id;",
-            f"DELETE FROM refunds r USING reseed_refunds d WHERE r.tenant_id = {T} AND r.venue_id = {q(s.id)} AND r.refund_id = d.refund_id;",
+            "ANALYZE reseed_checks;",  # good plans for the deletes below (a year is ~50k checks)
+            "ANALYZE reseed_refunds;",
+            f"DELETE FROM check_lines l USING reseed_checks d WHERE l.tenant_id = {T} AND l.venue_id = {V} AND l.check_id = d.check_id;",
+            f"DELETE FROM check_tenders t USING reseed_checks d WHERE t.tenant_id = {T} AND t.venue_id = {V} AND t.check_id = d.check_id;",
+            f"DELETE FROM checks c USING reseed_checks d WHERE c.tenant_id = {T} AND c.venue_id = {V} AND c.check_id = d.check_id;",
+            f"DELETE FROM refund_lines l USING reseed_refunds d WHERE l.tenant_id = {T} AND l.venue_id = {V} AND l.refund_id = d.refund_id;",
+            f"DELETE FROM refunds r USING reseed_refunds d WHERE r.tenant_id = {T} AND r.venue_id = {V} AND r.refund_id = d.refund_id;",
             f"DELETE FROM shifts WHERE {p['shifts']};",
             f"DELETE FROM cash_movements WHERE {p['cash_movements']};",
             f"DELETE FROM fuel_sales WHERE {p['fuel_sales']};",
             "DROP TABLE reseed_checks;",
             "DROP TABLE reseed_refunds;",
         ]
-        g = gens[s.id]
-        V, C = q(s.id), q(s.currency)
-        shifts, checks, lines, tenders, refunds, moves = [], [], [], [], [], []
-        for sh in g.shifts:
-            shifts.append(f"({T},{V},{sh.shift_id},'CLOSED',{ts(sh.opened_at)},{q(sh.opened_by)},{sh.float_cents},"
-                          f"{ts(sh.closed_at)},{q(sh.closed_by)},{sh.revenue},{sh.count},{sh.revenue // sh.count if sh.count else 0},0,"
-                          f"{jb(sh.breakdown)},{sh.expected_cash},{sh.expected_cash + sh.over_short},{sh.over_short},{C},{sh.cash_rounding})")
-            for c in sh.checks:
-                tid, tlabel, zid, zfr, zen, _ = c.table
-                if c.status == "CLOSED":
-                    checks.append(f"({T},{V},{c.check_id},'CLOSED',{q(tid)},{q(tlabel)},{q(zid)},{q(zfr)},{q(zen)},{sh.shift_id},"
-                                  f"{ts(c.opened_at)},{ts(c.closed_at)},{q(c.opened_by)},{c.total},{c.tax},0,0,0,NULL,NULL,0,0,"
-                                  f"{jb(c.taxes)},{C})")
-                    for ln in c.lines:
-                        multi = len(ln.item.variants) > 1
-                        lines.append(f"({T},{V},{c.check_id},{ln.line_id},{q(ln.item.id)},{q(ln.variant.id)},{q(ln.item.category_id)},"
-                                     f"{q(ln.item.name_fr)},{q(ln.item.name_en)},{q(ln.variant.label_fr) if multi else 'NULL'},"
-                                     f"{q(ln.variant.label_en) if multi else 'NULL'},NULL,{ln.qty},{ln.unit},{ln.total})")
-                    for t in c.tenders:
-                        tenders.append(f"({T},{V},{t.tender_id},{c.check_id},{q(t.type)},{t.tendered},{t.applied},{t.rounding},"
-                                       f"{t.change},{ts(t.at)})")
-                else:
-                    checks.append(f"({T},{V},{c.check_id},'VOID',{q(tid)},{q(tlabel)},{q(zid)},{q(zfr)},{q(zen)},{sh.shift_id},"
-                                  f"{ts(c.opened_at)},{ts(c.closed_at)},{q(c.opened_by)},{c.total},{c.tax},NULL,NULL,NULL,"
-                                  f"{q(c.void_reason)},{q(c.voided_by)},0,0,{jb(c.taxes)},{C})")
-            for r in sh.refunds:
-                tid, tlabel, zid, zfr, zen, _ = r.check.table
-                refunds.append(f"({T},{V},{r.refund_id},{r.check.check_id},{sh.shift_id},{r.gross},{r.net},{r.tax},{q(r.tender_type)},"
-                               f"{q(r.reason)},{q(r.by)},{q(tlabel)},{q(zid)},{q(zfr)},{q(zen)},{ts(r.at)},0,0,{jb(r.taxes)},{C},{r.rounding})")
-            for m in sh.movements:
-                moves.append(f"({T},{V},{m.movement_id},{sh.shift_id},{q(m.direction)},{m.amount},{q(m.reason)},{q(m.by)},{ts(m.at)},{C})")
-        out.append(f"-- ===== {s.id}: insert {len(checks)} checks, {len(lines)} lines, {len(tenders)} tenders, "
-                   f"{len(refunds)} refunds, {len(shifts)} shifts, {len(moves)} cash movements")
-        out += insert("shifts", "tenant_id,venue_id,shift_id,status,opened_at,opened_by,opening_float_cents,closed_at,closed_by,"
-                      "revenue_cents,transaction_count,avg_check_cents,corkage_cents,tender_breakdown,expected_cash_cents,"
-                      "closing_count_cents,over_short_cents,currency,cash_rounding_cents", shifts)
-        out += insert("checks", "tenant_id,venue_id,check_id,status,table_id,table_label,zone_id,zone_name_fr,zone_name_en,shift_id,"
-                      "opened_at,closed_at,opened_by,grand_total_cents,tax_included_cents,corkage_bottles,corkage_cents,"
-                      "service_charge_cents,void_reason,voided_by,gst_cents,qst_cents,taxes,currency", checks)
-        out += insert("check_lines", "tenant_id,venue_id,check_id,line_id,item_id,variant_id,category_id,name_fr,name_en,"
-                      "variant_label_fr,variant_label_en,display_name,qty,unit_price_cents,line_total_cents", lines)
-        out += insert("check_tenders", "tenant_id,venue_id,tender_id,check_id,type,amount_tendered_cents,amount_applied_cents,"
-                      "rounding_adjustment_cents,change_cents,tendered_at", tenders)
-        out += insert("refunds", "tenant_id,venue_id,refund_id,check_id,shift_id,gross_cents,net_cents,tax_included_cents,"
-                      "tender_type,reason,refunded_by,table_label,zone_id,zone_name_fr,zone_name_en,created_at,gst_cents,"
-                      "qst_cents,taxes,currency,rounding_adjustment_cents", refunds)
-        out += insert("cash_movements", "tenant_id,venue_id,movement_id,shift_id,direction,amount_cents,reason,created_by,"
-                      "created_at,currency", moves)
-        exp_checks = len(checks)
+        rows = rows_for(s, gens[s.id])
+        out.append(f"-- ===== {s.id}: insert " + ", ".join(f"{len(v)} {k}" for k, v in rows.items()))
+        for table in ("shifts", "checks", "check_lines", "check_tenders", "refunds", "cash_movements"):
+            out += emit(table, rows[table], style)
         out += [
             "DO $after$ BEGIN",
-            f"  IF (SELECT count(*) FROM checks WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {NUM_MIN} AND {NUM_MAX}) <> {exp_checks}",
-            f"     OR (SELECT count(*) FROM check_lines WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {NUM_MIN} AND {NUM_MAX}) <> {len(lines)}",
+            f"  IF (SELECT count(*) FROM checks WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {NUM_MIN} AND {NUM_MAX}) <> {len(rows['checks'])}",
+            f"     OR (SELECT count(*) FROM check_lines WHERE tenant_id = {T} AND venue_id = {V} AND check_id BETWEEN {NUM_MIN} AND {NUM_MAX}) <> {len(rows['check_lines'])}",
             f"  THEN RAISE EXCEPTION 'store {s.id}: inserted rows do not add up; rolled back'; END IF;",
             "END $after$;",
         ]
@@ -1089,7 +1372,7 @@ class Db:
         return f"ssh {self.ssh} -> docker container {self.container} (db {self.dbname}, user {self.user})"
 
     def ssh_cmd(self, remote: str) -> list[str]:
-        cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20"]
+        cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "Compression=yes"]
         if self.ssh_key:
             cmd += ["-i", os.path.expanduser(self.ssh_key)]
         return cmd + [self.ssh, remote]
@@ -1217,7 +1500,7 @@ SELECT 'checks', count(*), coalesce(min(closed_at AT TIME ZONE {q(store.tz)})::d
 UNION ALL SELECT 'check_lines', count(*), '', '', 0 FROM check_lines l JOIN d ON l.check_id = d.check_id
   WHERE l.tenant_id = {T} AND l.venue_id = {V}
 UNION ALL SELECT 'check_tenders', count(*), '', '', 0 FROM check_tenders t
-  WHERE t.tenant_id = {T} AND t.venue_id = {V} AND (t.check_id IN (SELECT check_id FROM d) OR t.tender_id BETWEEN {ID_MIN} AND {ID_MAX})
+  WHERE t.tenant_id = {T} AND t.venue_id = {V} AND t.check_id IN (SELECT check_id FROM d)
 UNION ALL SELECT 'refunds', count(*), '', '', 0 FROM r
 UNION ALL SELECT 'refund_lines', count(*), '', '', 0 FROM refund_lines l WHERE l.tenant_id = {T} AND l.venue_id = {V}
   AND l.refund_id IN (SELECT refund_id FROM r)
@@ -1345,8 +1628,8 @@ def print_plan(stores, gens, wipes, ends, args, first, last, db_desc):
             print(f"  KEEP     {fmt_n(w['kept_checks']['n'])} sale(s) from {end.date()} on ({money(w['kept_checks']['cents'])}); "
                   f"open shifts: {w['open_shifts']['n']}" + (f" (oldest opened {w['open_shifts']['from'][:16]})" if w["open_shifts"]["n"] else ""))
             if w["clash"]["n"]:
-                print(f"  REFUSE   {w['clash']['n']} row(s) numbered {NUM_MIN:,}-{NUM_MAX:,} are not ours (a store sent them, "
-                      "or they are from today on): the store's own numbers reached the demo range")
+                print(f"  REFUSE   the store itself sent {w['clash']['n']} sale/shift/refund/cash number(s) in {NUM_MIN:,}-{NUM_MAX:,}: "
+                      "its own numbering reached the demo range, so nothing numbered there can be wiped")
             print(f"  NUMBERS  demo checks #{NUM_MIN:,} on; the store's own highest check # is {w['real_max']['cents']:,}"
                   f" ({fmt_n(NUM_MIN - w['real_max']['cents'])} to go before it would reach them)")
         t = e["totals"]
@@ -1363,10 +1646,35 @@ def print_plan(stores, gens, wipes, ends, args, first, last, db_desc):
                   f"{f['takeOut'] * 100 // max(1, f['checks'])}% (both stay at the store; the cloud has no column for them)")
         else:
             print(f"           avg covers {f['covers']:.1f}, carry-out orders {f['carryOut']}")
+        g = gens[s.id]
+        months = e["months"]
+        print("  MONTHS   " + "  ".join(f"{m[2:]} {money(v['grossCents'])[:-3]}" for m, v in months.items()))
+        if f["closedDays"]:
+            print(f"  CLOSED   {', '.join(f['closedDays'])} (Thanksgiving, Christmas: no sales)")
+        if f["events"]:
+            print(f"  EVENTS   local-event Saturdays (+{(EVENT_LIFT - 1) * 100:.0f}%): {', '.join(f['events'])}")
+        if g.today_until:
+            te = g.expected(today=True)["totals"]
+            print(f"  TODAY    {fmt_n(f['today'])} sales up to {g.today_until.strftime('%H:%M')} ({money(te['grossCents'])}), "
+                  f"numbered like the rest, no shift (live sales today are kept)")
         sp = describe_specials(s)
         print(f"  MENU     {f['items']} items from the cloud catalog" + (f"; {'; '.join(sp)}" if sp else ""))
+        print(f"           specials and day-only dishes from {g.since} (before that: menu prices, no lift)")
         if f["specialLines"]:
             print("           special-price lines: " + ", ".join(f"{k} x{v}" for k, v in sorted(f["specialLines"].items())))
+        for lf in special_lifts(gens[s.id]):
+            when = "/".join(d.capitalize() for d in lf["days"]) + (f" {lf['from']}-{lf['to']}" if lf["from"] else "")
+            size = lf["variant"].split(":")[-1]
+            if lf["kind"] == "day":
+                detail = (f"{lf['unitsPerDay']:.1f} a day vs {lf['otherUnitsPerDay']:.1f} on other weekdays "
+                          f"({pct(lf['vsOtherDays'])})")
+            else:
+                detail = (f"{lf['unitsPerDay']:.1f} in the window a day vs {lf['otherUnitsPerDay']:.1f} at the weekend "
+                          f"({pct(lf['vsOtherDays'])}); per check {pct(lf['vsBefore'])} vs the 2 hours before; "
+                          f"the window's share of the day's checks {pct(lf['halo'])} vs before {lf['since']}")
+            if lf["vsBeforeStart"] is not None:
+                detail += f"; {pct(lf['vsBeforeStart'])} vs the same {'days' if lf['kind'] == 'day' else 'hours'} before {lf['since']}"
+            print(f"  LIFT     {lf['name']} ({size}) {when}: {pct(lf['lift'])}, {lf['verdict'].upper()}: {detail}")
         if f["dayOnly"]:
             print("           day-only items sold on: " + ", ".join(f"{k} {'/'.join(v)}" for k, v in sorted(f["dayOnly"].items())))
         if s.last_taxes:
@@ -1500,7 +1808,14 @@ def parse_args(argv):
                                 epilog="See the header of this file for what it touches and why.")
     p.add_argument("--tenant", default=TENANT, help="must be copperlantern (anything else is refused)")
     p.add_argument("--stores", default=",".join(DEFAULT_STORES), help="comma-separated store ids (default vieux-port,express)")
-    p.add_argument("--days", type=int, default=60, help="days of history, ending yesterday (default 60)")
+    p.add_argument("--days", type=int, default=365, help="days of history, ending yesterday (default 365: a year)")
+    p.add_argument("--specials-since", type=dt.date.fromisoformat,
+                   help=f"the day the specials (and day-only dishes) began; default {SPECIALS_WEEKS} weeks before today")
+    p.add_argument("--today-until", metavar="HH:MM", type=lambda v: dt.time.fromisoformat(v),
+                   help="also generate today's sales up to this store time (typical for the weekday); live sales stay")
+    p.add_argument("--volume", type=float, default=1.0, help="scale every day's number of sales (default 1.0)")
+    p.add_argument("--sql-style", choices=("copy", "insert"), default="copy",
+                   help="copy (default: COPY ... FROM STDIN, compact and fast) or insert (plain INSERTs)")
     p.add_argument("--seed", type=int, default=DEFAULT_SEED, help=f"random seed (default {DEFAULT_SEED})")
     p.add_argument("--today", type=dt.date.fromisoformat, help="pretend today is this date (store time); default: today")
     p.add_argument("--include-today", action="store_true", help="also wipe today's sales (the history still ends yesterday)")
@@ -1578,19 +1893,28 @@ def main(argv=None) -> int:
         print_verify(stores, verify(db, stores, first, last), None, first, last)
         return 0
     ends = {s.id: window_end(s, args.today or dt.datetime.now(s.zone).date(), args.include_today) for s in stores}
-    gens = {s.id: Generator(s, args.seed, first, args.days, 0.25 if s.id == "plateau" else 1.0).generate() for s in stores}
+    since = args.specials_since or today - dt.timedelta(weeks=SPECIALS_WEEKS)
+    t0 = time.monotonic()
+    gens = {s.id: Generator(s, args.seed, first, args.days, args.volume * (0.25 if s.id == "plateau" else 1.0),
+                            since=since, today_until=args.today_until).generate() for s in stores}
+    gen_s = time.monotonic() - t0
     wipes = {s.id: count_wipe(db, s, ends[s.id]) for s in stores} if db else {}
     print_plan(stores, gens, wipes, ends, args, first, last, desc)
     expected = {s.id: gens[s.id].expected() for s in stores}
     if args.plan_json:
-        Path(args.plan_json).write_text(json.dumps({"from": first.isoformat(), "to": last.isoformat(), "stores": expected}, indent=1))
+        Path(args.plan_json).write_text(json.dumps({
+            "from": first.isoformat(), "to": last.isoformat(), "today": today.isoformat(), "since": since.isoformat(),
+            "stores": expected, "todaySoFar": {s.id: gens[s.id].expected(today=True) for s in stores},
+            "lifts": {s.id: special_lifts(gens[s.id]) for s in stores}}, indent=1))
     if any(w["clash"]["n"] for w in wipes.values()):
         print("\nrefusing: see REFUSE above (nothing changed)", file=sys.stderr)
         return 2
-    sql = render_sql(stores, gens, ends)
+    t0 = time.monotonic()
+    sql = render_sql(stores, gens, ends, args.sql_style)
+    print(f"\ngenerated in {gen_s:.1f} s, SQL ({args.sql_style}) {len(sql.encode()) / 1e6:.1f} MB in {time.monotonic() - t0:.1f} s")
     if args.dry_run_sql:
         Path(args.dry_run_sql).write_text(sql)
-        print(f"\nSQL written to {args.dry_run_sql} ({len(sql) / 1e6:.1f} MB); nothing changed.")
+        print(f"SQL written to {args.dry_run_sql}; nothing changed.")
         return 0
     if not args.yes:
         print("\nnothing changed. Run the same command with --yes to back up, wipe and insert (one transaction).")
@@ -1607,9 +1931,16 @@ def main(argv=None) -> int:
                    else f"gunzip -c {path} | psql <dsn>")
         print(f"        to put everything back: {where}'{restore}'")
     print("applying: one transaction ...", flush=True)
+    t0 = time.monotonic()
     db.run(sql)
-    print("applied and committed.")
+    print(f"applied and committed in {time.monotonic() - t0:.1f} s.")
     good = print_verify(stores, verify(db, stores, first, last), expected, first, last)
+    if args.today_until:
+        now = verify(db, stores, today, today)
+        for s in stores:
+            t = now[s.id]["totals"]
+            print(f"  today {today} at {s.id}: {fmt_n(t['checkCount'])} checks, {money(t['grossCents'])} "
+                  f"(generated up to {args.today_until.strftime('%H:%M')}, plus any live sales)")
     return 0 if good else 1
 
 
