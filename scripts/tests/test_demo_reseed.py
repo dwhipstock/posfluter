@@ -187,11 +187,11 @@ class DayOnlyItems(unittest.TestCase):
 
 
 class Determinism(unittest.TestCase):
-    def sql(self, seed):
+    def sql(self, seed, style="insert"):
         stores = [store("vieux-port"), store("express")]
         gens = {s.id: rs.Generator(s, seed, FIRST, 5).generate() for s in stores}
         ends = {s.id: rs.window_end(s, dt.date(2026, 8, 10), False) for s in stores}
-        return rs.render_sql(stores, gens, ends)
+        return rs.render_sql(stores, gens, ends, style)
 
     def test_same_seed_same_sql_other_seed_other_sql(self):
         a, b, c = self.sql(42), self.sql(42), self.sql(43)
@@ -207,7 +207,7 @@ class Shape(unittest.TestCase):
     def test_volumes(self):
         for sh in PUB.shifts:
             closed = [c for c in sh.checks if c.status == "CLOSED"]
-            self.assertTrue(55 <= len(closed) <= 146, len(closed))
+            self.assertTrue(30 <= len(closed) <= 210, len(closed))  # an August week: summer, weather
             self.assertTrue(1 <= sum(c.source == "CARRY_OUT" for c in sh.checks) <= 6)
         for sh in COUNTER.shifts:
             self.assertTrue(78 <= sum(c.status == "CLOSED" for c in sh.checks) <= 200)
@@ -305,8 +305,13 @@ class Safety(unittest.TestCase):
         self.assertNotRegex(sql, r"(?i)\b(UPDATE|TRUNCATE|DROP TABLE (?!reseed_)|ALTER)\b")
         self.assertIn("tenant_id = 'copperlantern' AND venue_id = 'vieux-port'", sql)
         # the guard: a number in the demo range that a store sent (it is in the ingest log) aborts the run
-        self.assertIn("c.check_id::text IN (SELECT ev.aggregate_id FROM events ev", sql)
-        self.assertIn("RAISE EXCEPTION 'store vieux-port: numbers 20000-99999 hold a sale or shift that is not ours'", sql)
+        self.assertIn("ev.aggregate_type IN ('check', 'shift', 'refund', 'cash_movement')", sql)
+        self.assertIn("RAISE EXCEPTION 'store vieux-port: numbers 20000-499999 hold a sale or shift that is not ours'", sql)
+        # COPY (the default) carries the same rows, tab-separated, inside the same transaction
+        copy = Determinism().sql(1, "copy")
+        self.assertEqual(set(re.findall(r"INSERT INTO (\w+)", sql)), set(re.findall(r"COPY (\w+) \(", copy)))
+        self.assertEqual(1, copy.count("COMMIT;"))
+        self.assertLess(len(copy), len(sql))
         self.assertNotIn("sagepoppy", sql)
         # every DELETE is scoped to the tenant and one store
         for stmt in re.findall(r"DELETE FROM [^;]+;", sql):
@@ -323,3 +328,193 @@ class Safety(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------- a year (the default window)
+
+TODAY = dt.date(2026, 10, 4)
+YEAR_FIRST = TODAY - dt.timedelta(days=365)
+SINCE = TODAY - dt.timedelta(weeks=rs.SPECIALS_WEEKS)
+
+
+def year(vid, **kw):
+    return rs.Generator(store(vid), rs.DEFAULT_SEED, YEAR_FIRST, 365, since=SINCE, **kw).generate()
+
+
+YEAR_PUB = year("vieux-port")
+YEAR_COUNTER = year("express")
+
+
+def daily(g):
+    return {sh.date: sum(c.status == "CLOSED" for c in sh.checks) for sh in g.history}
+
+
+def mean(xs):
+    xs = list(xs)
+    return sum(xs) / len(xs)
+
+
+class YearShape(unittest.TestCase):
+    def test_closed_on_thanksgiving_and_christmas(self):
+        for g in (YEAR_PUB, YEAR_COUNTER):
+            days = daily(g)
+            self.assertNotIn(dt.date(2025, 11, 27), days)
+            self.assertNotIn(dt.date(2025, 12, 25), days)
+            self.assertEqual(363, len(days))  # every other day sold
+        self.assertEqual(dt.date(2025, 11, 27), rs.thanksgiving(2025))
+        self.assertEqual(dt.date(2026, 11, 26), rs.thanksgiving(2026))
+
+    def test_growth_is_about_ten_percent_a_year(self):
+        class Calm:  # the weather at its middle: no rain, no glorious day
+            def uniform(self, a, b):
+                return (a + b) / 2
+
+            def random(self):
+                return 0.5
+        g = YEAR_PUB
+        last, year_before = g.last, g.last - dt.timedelta(days=364)  # the same weekday a year earlier, same month
+        ratio = g.day_factor(Calm(), last) / g.day_factor(Calm(), year_before)
+        self.assertTrue(1.08 <= ratio <= 1.12, ratio)
+
+    def test_seasons(self):
+        days = daily(YEAR_PUB)
+        by_month = {m: mean(n for d, n in days.items() if d.month == m) for m in range(1, 13)}
+        self.assertEqual(1, min(by_month, key=by_month.get), "January is the quietest month")
+        summer = mean(n for d, n in days.items() if d.month in (6, 7, 8))
+        spring = mean(n for d, n in days.items() if d.month in (3, 4))
+        self.assertGreater(summer / spring, 1.12, "the patio summer")
+        dec = mean(n for d, n in days.items() if d.month == 12 and d.day <= 23)
+        nov = mean(n for d, n in days.items() if d.month == 11 and abs((d - rs.thanksgiving(2025)).days) > 3)
+        self.assertGreater(dec, nov * 1.1, "the December holidays")
+        tg = rs.thanksgiving(2025)
+        week = mean(n for d, n in days.items() if 0 < abs((d - tg).days) <= 3)
+        before = mean(n for d, n in days.items() if 7 <= (tg - d).days <= 20)
+        self.assertGreater(week, before, "busier around Thanksgiving")
+        # Express is steadier: its months swing less than the pub's
+        cdays = daily(YEAR_COUNTER)
+        swing = lambda ds: (lambda ms: max(ms) / min(ms))([mean(n for d, n in ds.items() if d.month == m) for m in range(1, 13)])
+        self.assertLess(swing(cdays), swing(days))
+
+    def test_event_saturdays(self):
+        days = daily(YEAR_PUB)
+        events = sorted(YEAR_PUB.events)
+        self.assertEqual(rs.EVENT_SATURDAYS, len(events))
+        for d in events:
+            self.assertEqual(5, d.weekday())
+            others = [n for x, n in days.items() if x.weekday() == 5 and x.month == d.month and x not in events]
+            self.assertGreater(days[d], 1.2 * mean(others), d)
+        self.assertEqual(set(), YEAR_COUNTER.events)
+
+    def test_monday_is_the_slowest_weekday_at_both_stores(self):
+        for g in (YEAR_PUB, YEAR_COUNTER):
+            days = daily(g)
+            by_dow = {w: mean(n for d, n in days.items() if d.weekday() == w) for w in range(7)}
+            self.assertEqual(0, min(range(5), key=by_dow.get), by_dow)
+            self.assertGreater(by_dow[4] + by_dow[5], by_dow[0] + by_dow[1])  # Thu-Sat busier
+
+    def test_averages_stay_put(self):
+        self.assertTrue(4800 <= YEAR_PUB.expected()["totals"]["avgCheckCents"] <= 6000)
+        self.assertTrue(1400 <= YEAR_COUNTER.expected()["totals"]["avgCheckCents"] <= 1700)
+
+
+class SpecialsOverTheYear(unittest.TestCase):
+    def test_no_special_and_no_day_only_dish_before_the_start(self):
+        for g in (YEAR_PUB, YEAR_COUNTER):
+            for sh in g.history:
+                for c in sh.checks:
+                    for ln in c.lines:
+                        if sh.date < SINCE:
+                            self.assertIsNone(ln.special)
+                            self.assertEqual(ln.variant.price, ln.unit)
+                            self.assertNotIn(ln.item.id, ("prime-rib", "sunday-roast"))
+        firsts = {}
+        for sh in YEAR_PUB.history:
+            for c in sh.checks:
+                for ln in c.lines:
+                    if ln.special or ln.item.available_days:
+                        firsts.setdefault(ln.item.id, sh.date)
+        self.assertTrue(all(d >= SINCE for d in firsts.values()), firsts)
+        self.assertLessEqual(max(firsts.values()), SINCE + dt.timedelta(days=7), "each starts in its first week")
+
+    def test_before_the_start_tuesday_burgers_are_ordinary(self):
+        units = {}
+        for sh in YEAR_PUB.history:
+            if SINCE - dt.timedelta(weeks=20) <= sh.date < SINCE:
+                units.setdefault(sh.date, 0)
+                for c in sh.checks:
+                    units[sh.date] += sum(ln.qty for ln in c.lines if ln.variant.id == "lantern-burger:regular")
+        tue = mean(n for d, n in units.items() if d.weekday() == 1)
+        other = mean(n for d, n in units.items() if d.weekday() in (0, 2, 3, 4))
+        self.assertTrue(-0.30 <= tue / other - 1 <= 0.20, tue / other)  # Tuesday is a quieter day, no special
+
+    def lifts(self):
+        return {lf["variant"]: lf for g in (YEAR_PUB, YEAR_COUNTER) for lf in rs.special_lifts(g)}
+
+    def test_the_specials_that_work(self):
+        lf = self.lifts()
+        # a day special: its day vs the other weekdays
+        for vid in ("lantern-burger:regular", "double-cheeseburger:regular"):
+            self.assertTrue(0.90 <= lf[vid]["vsOtherDays"] <= 1.50, (vid, lf[vid]["vsOtherDays"]))
+            self.assertGreater(lf[vid]["vsBeforeStart"], 0.80, vid)
+            self.assertEqual("working", lf[vid]["verdict"])
+        # happy hour 4-6 pm: vs the same hours at the weekend, and per check vs 2-4 pm the same days
+        pint = lf["lantern-lager:pint"]
+        self.assertTrue(0.60 <= pint["lift"] <= 1.00, pint["lift"])
+        self.assertTrue(0.45 <= pint["vsOtherDays"] <= 1.20, pint["vsOtherDays"])
+        self.assertTrue(0.45 <= pint["vsBefore"] <= 1.20, pint["vsBefore"])
+        self.assertGreater(pint["vsBeforeStart"], 0.5)
+        for vid in ("lantern-lager:16oz", "pinot-noir:glass"):  # few glasses at a burger counter: noisier
+            self.assertTrue(0.40 <= lf[vid]["lift"] <= 1.50, (vid, lf[vid]["lift"]))
+            self.assertEqual("working", lf[vid]["verdict"])
+        # the halo: the window takes a slightly bigger share of the day's checks than before
+        self.assertGreater(pint["halo"], 0.0)
+        self.assertLess(pint["halo"], 0.20)
+
+    def test_the_special_that_does_not_work(self):
+        cab = self.lifts()["cab-merlot:glass"]
+        self.assertTrue(-0.05 <= cab["lift"] <= 0.12, cab["lift"])
+        self.assertTrue(-0.12 <= cab["vsOtherDays"] <= 0.15)
+        self.assertTrue(-0.12 <= cab["vsBefore"] <= 0.15)
+        self.assertEqual("not working", cab["verdict"])
+
+    def test_the_plan_prints_each_lift(self):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rs.main(["--menu-json", str(REPO / "scripts" / "tests" / "fixtures" / "copperlantern-catalog.json"),
+                     "--today", TODAY.isoformat()])
+        text = out.getvalue()
+        self.assertRegex(text, r"LIFT     Copper Lantern Burger \(regular\) Tue: \+\d+%, WORKING")
+        self.assertRegex(text, r"LIFT     Cabernet Merlot \(glass\) Mon/Tue/Wed/Thu/Fri 16:00-18:00: [+-]\d+%, NOT WORKING")
+        self.assertIn("CLOSED   2025-11-27, 2025-12-25", text)
+
+
+class TodaySoFar(unittest.TestCase):
+    def test_today_until_generates_a_typical_morning_and_no_shift(self):
+        g = rs.Generator(store("express"), rs.DEFAULT_SEED, TODAY - dt.timedelta(days=28), 28, since=SINCE,
+                         today_until=dt.time(12, 30)).generate()
+        today = g.today
+        self.assertIsNotNone(today)
+        self.assertEqual(TODAY, today.date)
+        closed = [c for c in today.checks if c.status == "CLOSED"]
+        self.assertTrue(closed)
+        until = dt.datetime.combine(TODAY, dt.time(12, 30), tzinfo=rs.ZoneInfo("America/New_York"))
+        self.assertTrue(all(c.closed_at <= until and c.shift_id is None for c in today.checks))
+        # typical of the weekday: like the same weekday's sales by 12:30 in the window
+        same = [sum(1 for c in sh.checks if c.status == "CLOSED" and c.closed_at.time() <= dt.time(12, 30))
+                for sh in g.history if sh.date.weekday() == TODAY.weekday()]
+        self.assertTrue(0.6 * mean(same) <= len(closed) <= 1.5 * mean(same), (len(closed), same))
+        rows = rs.rows_for(g.s, g)
+        self.assertEqual(len(g.history), len(rows["shifts"]))  # no Z-report for a day still running
+        self.assertTrue(all(r[2] >= rs.NUM_MIN for r in rows["checks"]))
+        self.assertNotIn(TODAY.isoformat(), g.expected()["days"])  # the window's figures leave today out
+
+
+class CopyFormat(unittest.TestCase):
+    def test_values(self):
+        self.assertEqual("\\N", rs.copy_value(None))
+        self.assertEqual("a\\tb\\nc\\\\d", rs.copy_value("a\tb\nc\\d"))
+        self.assertEqual('{"a":"x y"}', rs.copy_value(rs.Json({"a": "x y"})))
+        self.assertEqual("2026-10-03 19:00:00-04:00", rs.copy_value(ny(2026, 10, 3, 19, 0)))
+        self.assertEqual("t", rs.copy_value(True))

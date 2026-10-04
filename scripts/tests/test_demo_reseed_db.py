@@ -190,10 +190,10 @@ class DemoReseedDbTest(unittest.TestCase):
         self.assertEqual("0", psql(self.dsn, "SELECT count(*) FROM refund_lines"))
         self.assertEqual("0", psql(self.dsn, "SELECT count(*) FROM shifts WHERE shift_id IN (2, 4)"))
         self.assertEqual("0", psql(self.dsn, "SELECT count(*) FROM cash_movements WHERE movement_id = 3"))
-        # history: 60 shifts per store, every check in the window, nothing after yesterday
-        self.assertEqual("60\t60", psql(self.dsn, "SELECT count(*) FILTER (WHERE venue_id = 'vieux-port'),"
+        # history: a year (365 days less Thanksgiving and Christmas), nothing after yesterday
+        self.assertEqual("363\t363", psql(self.dsn, "SELECT count(*) FILTER (WHERE venue_id = 'vieux-port'),"
                                                    " count(*) FILTER (WHERE venue_id = 'express') FROM shifts WHERE status = 'CLOSED'"))
-        self.assertEqual("2026-08-05\t2026-10-03", psql(
+        self.assertEqual("2025-10-04\t2026-10-03", psql(
             self.dsn, "SELECT min(closed_at AT TIME ZONE 'America/New_York')::date, max(closed_at AT TIME ZONE 'America/New_York')::date"
                       " FROM checks WHERE check_id >= 20000"))
         totals = psql(self.dsn, "SELECT venue_id, count(*), sum(grand_total_cents) FROM checks WHERE check_id >= 20000"
@@ -233,24 +233,39 @@ class DemoReseedDbTest(unittest.TestCase):
             before = psql(self.dsn, "SELECT count(*), sum(grand_total_cents) FROM checks")
             code, out = self.run_tool()
             self.assertEqual(2, code, out)
-            self.assertIn("REFUSE   1 row(s) numbered 20,000-99,999 are not ours", out)
+            self.assertIn("REFUSE   the store itself sent 1 sale/shift/refund/cash number(s) in 20,000-499,999", out)
             code, out = self.run_tool("--yes", "--no-backup")
             self.assertEqual(2, code, out)
             self.assertEqual(before, psql(self.dsn, "SELECT count(*), sum(grand_total_cents) FROM checks"))
         finally:
             psql(self.dsn, "DELETE FROM events WHERE event_id = 'e-20000';")
 
-    def test_refuses_when_a_kept_sale_uses_the_reserved_range(self):
-        psql(self.dsn, "INSERT INTO checks (tenant_id, venue_id, check_id, status, closed_at, grand_total_cents)"
-                       " VALUES ('copperlantern', 'express', 99999, 'CLOSED', '2026-10-04 13:00-04', 500);")
-        try:
-            code, out = self.run_tool()
-            self.assertEqual(2, code, out)
-            self.assertIn("REFUSE", out)
-            code, out = self.run_tool("--yes", "--no-backup")
-            self.assertEqual(2, code, out)
-        finally:
-            psql(self.dsn, "DELETE FROM checks WHERE venue_id = 'express' AND check_id = 99999;")
+    def test_today_until_adds_todays_sales_beside_the_live_ones(self):
+        live = "SELECT count(*), sum(grand_total_cents) FROM checks WHERE check_id < 20000 AND closed_at >= '2026-10-04 00:00-04'"
+        before = psql(self.dsn, live)
+        self.assertEqual("2\t2166", before)  # the two live sales of today (vieux-port 9, express 32)
+        today = ("SELECT venue_id, count(*), max(closed_at AT TIME ZONE 'America/New_York')::time FROM checks"
+                 " WHERE check_id >= 20000 AND closed_at >= '2026-10-04 00:00-04' GROUP BY 1 ORDER BY 1")
+        code, out = self.run_tool("--yes", "--no-backup", "--today-until", "12:30")
+        self.assertEqual(0, code, out)
+        self.assertIn("TODAY    ", out)
+        rows = [r.split("\t") for r in psql(self.dsn, today).splitlines()]
+        self.assertEqual(["express", "vieux-port"], [r[0] for r in rows])
+        self.assertTrue(all(int(r[1]) > 0 and r[2] <= "12:30:00" for r in rows), rows)
+        self.assertEqual("0", psql(self.dsn, "SELECT count(*) FROM checks WHERE check_id >= 20000"
+                                             " AND closed_at >= '2026-10-04 00:00-04' AND shift_id IS NOT NULL"))
+        self.assertEqual(before, psql(self.dsn, live), "live sales today are never touched")
+        # again later in the day: today's generated sales are replaced (up to the new time), live ones kept
+        code, out = self.run_tool("--yes", "--no-backup", "--today-until", "15:00")
+        self.assertEqual(0, code, out)
+        rows2 = [r.split("\t") for r in psql(self.dsn, today).splitlines()]
+        self.assertTrue(all(int(b[1]) > int(a[1]) and b[2] <= "15:00:00" for a, b in zip(rows, rows2)), (rows, rows2))
+        self.assertEqual(before, psql(self.dsn, live))
+        # and without it, they go
+        code, out = self.run_tool("--yes", "--no-backup")
+        self.assertEqual(0, code, out)
+        self.assertEqual("", psql(self.dsn, today))
+        self.assertEqual(before, psql(self.dsn, live))
 
     def test_transaction_rolls_back_on_error(self):
         before = psql(self.dsn, "SELECT count(*), coalesce(sum(grand_total_cents), 0) FROM checks")

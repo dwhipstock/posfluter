@@ -298,6 +298,9 @@ internal fun taxRows(ctx: ReportCtx, sales: List<Pair<String, TaxAmount>>, refun
     }.sortedWith(compareBy({ ctx.currencies.indexOf(it.currency) }, { it.code }, { it.ratePercent }))
 }
 
+/** Check ids per child-row query: well under Postgres's 65,535 bind parameters. */
+@Volatile internal var childRowChunk = 20_000
+
 /** Rows of a per-check child table for exactly these (venue, check) pairs — check ids repeat across stores. */
 private fun childRowsOf(
     ctx: ReportCtx, checks: List<ResultRow>,
@@ -305,9 +308,13 @@ private fun childRowsOf(
 ): List<ResultRow> {
     val idsByVenue = checks.groupBy({ it[Checks.venueId] }, { it[Checks.checkId] })
     if (idsByVenue.isEmpty()) return emptyList()
-    return table.selectAll().where {
-        (tenant eq ctx.tenantId) and anyOf(idsByVenue.map { (v, ids) -> (venue eq v) and (checkId inList ids) })
-    }.toList()
+    // A query may bind at most 65,535 parameters: a year of two busy stores is more checks than
+    // that, so the ids go in chunks (one query per chunk per store).
+    return idsByVenue.flatMap { (v, ids) ->
+        ids.chunked(childRowChunk).flatMap { chunk ->
+            table.selectAll().where { (tenant eq ctx.tenantId) and (venue eq v) and (checkId inList chunk) }.toList()
+        }
+    }
 }
 
 private fun linesOf(ctx: ReportCtx, checks: List<ResultRow>) =

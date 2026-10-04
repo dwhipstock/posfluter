@@ -59,24 +59,51 @@ class DemoReseedReportTest {
     }
 
     /** Runs the generator offline (the fixture catalog) and returns (sql, plan). */
-    private fun generate(py: String): Pair<String, JsonObject> {
+    private fun generate(py: String, vararg extra: String): Pair<File, JsonObject> {
         val sql = File.createTempFile("reseed", ".sql").apply { deleteOnExit() }
         val plan = File.createTempFile("reseed", ".json").apply { deleteOnExit() }
         val proc = ProcessBuilder(
             py, File(repo, "scripts/demo-reseed.py").path,
             "--menu-json", File(repo, "scripts/tests/fixtures/copperlantern-catalog.json").path,
             "--today", "2026-10-04", "--days", "14", "--seed", "99",
-            "--dry-run-sql", sql.path, "--plan-json", plan.path,
+            "--dry-run-sql", sql.path, "--plan-json", plan.path, *extra,
         ).redirectErrorStream(true).start()
         val out = proc.inputStream.bufferedReader().readText()
-        assertTrue(proc.waitFor(120, TimeUnit.SECONDS) && proc.exitValue() == 0, out)
-        return sql.readText() to testJson.parseToJsonElement(plan.readText()).jsonObject
+        assertTrue(proc.waitFor(300, TimeUnit.SECONDS) && proc.exitValue() == 0, out)
+        return sql to testJson.parseToJsonElement(plan.readText()).jsonObject
     }
 
-    private fun exec(sql: String) {
+    /**
+     * Runs the script's SQL the way psql does: statements as they come, and each
+     * `COPY ... FROM STDIN;` block's data (up to `\.`) through the driver's COPY. Same connection
+     * throughout, so the script's own BEGIN ... COMMIT is the one transaction.
+     */
+    private fun exec(sql: File) {
         DriverManager.getConnection(TestSupport.config.databaseUrl, TestSupport.config.dbUser, TestSupport.config.dbPassword).use { c ->
             c.autoCommit = true
-            c.createStatement().use { it.execute(sql) }
+            val copy = org.postgresql.copy.CopyManager(c.unwrap(org.postgresql.core.BaseConnection::class.java))
+            val statements = StringBuilder()
+            fun flush() {
+                if (statements.isNotBlank()) c.createStatement().use { it.execute(statements.toString()) }
+                statements.setLength(0)
+            }
+            sql.bufferedReader().use { reader ->
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.startsWith("COPY ") && line.endsWith("FROM STDIN;")) {
+                        flush()
+                        val into = copy.copyIn(line.removeSuffix(";"))  // streamed: a year is ~80 MB
+                        while (true) {
+                            val d = reader.readLine() ?: error("COPY block without its end marker")
+                            if (d == "\\.") break
+                            val bytes = (d + "\n").toByteArray()
+                            into.writeToCopy(bytes, 0, bytes.size)
+                        }
+                        into.endCopy()
+                    } else statements.append(line).append('\n')
+                }
+            }
+            flush()
         }
     }
 
@@ -180,5 +207,60 @@ class DemoReseedReportTest {
         val today = get("/v1/reports/summary?venue=vieux-port&from=2026-10-04&to=2026-10-04")
         assertEquals(1, today.int("checkCount"))
         assertEquals(1083, today.long("grossCents"))
+    }
+
+    /** The categories and tables reports read a range's lines in chunks of check ids: same answer as one go. */
+    @Test
+    fun reportsReadChildRowsInChunks() = testApplication {
+        val py = python()
+        assumeTrue("python3 not on PATH", py != null)
+        application { module(TestSupport.config) }
+        exec(generate(py!!).first)
+        val range = "from=$from&to=$to"
+        fun byCategory(o: JsonObject) = o["rows"]!!.jsonArray.associate {
+            it.jsonObject["categoryId"].toString() to (it.jsonObject.long("revenueCents") to it.jsonObject.int("qty"))
+        }
+        val whole = byCategory(get("/v1/reports/categories?$range"))
+        assertTrue(whole.size >= 5)
+        val saved = dev.dwhipstock.poscloud.reports.childRowChunk
+        try {
+            dev.dwhipstock.poscloud.reports.childRowChunk = 7
+            assertEquals(whole, byCategory(get("/v1/reports/categories?$range")))
+        } finally {
+            dev.dwhipstock.poscloud.reports.childRowChunk = saved
+        }
+    }
+
+    /**
+     * A year of both stores (the tool's default), through the portal: the Dashboard's calls for
+     * today, 30 days and the year, and the heaviest reports, each under a few seconds. Opt-in
+     * (DEMO_RESEED_YEAR=1): it loads ~80,000 sales.
+     */
+    @Test
+    fun aYearOfSalesLoadsFast() = testApplication {
+        val py = python()
+        assumeTrue("python3 not on PATH", py != null)
+        assumeTrue("set DEMO_RESEED_YEAR=1", System.getenv("DEMO_RESEED_YEAR") == "1")
+        application { module(TestSupport.config) }
+        val (sql, plan) = generate(py!!, "--days", "365", "--today-until", "12:30")
+        val t0 = System.nanoTime()
+        exec(sql)
+        println("year loaded in ${(System.nanoTime() - t0) / 1_000_000} ms (${sql.length() / 1_000_000} MB of SQL)")
+        val ranges = mapOf("today" to ("2026-10-04" to "2026-10-04"), "30 days" to ("2026-09-04" to "2026-10-03"),
+            "year" to ("2025-10-04" to "2026-10-03"))
+        for ((label, r) in ranges) {
+            for (ep in listOf("summary", "payments", "hourly", "items", "by-venue", "tax", "categories", "tables", "exceptions")) {
+                val t = System.nanoTime()
+                val body = get("/v1/reports/$ep?from=${r.first}&to=${r.second}")
+                val ms = (System.nanoTime() - t) / 1_000_000
+                println("$label $ep: $ms ms")
+                assertTrue(ms < 5_000, "$label $ep took $ms ms")
+                if (ep == "summary" && label == "year") {
+                    val want = plan["stores"]!!.jsonObject.values.sumOf { it.jsonObject["totals"]!!.jsonObject.long("grossCents") }
+                    assertEquals(want, body.long("grossCents"))
+                }
+                if (ep == "summary" && label == "today") assertTrue(body.int("checkCount") > 0)
+            }
+        }
     }
 }
