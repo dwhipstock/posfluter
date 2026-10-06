@@ -88,7 +88,11 @@ function AiAssistant({ onApplied }: { onApplied: () => void }) {
   const t = useT();
   const { locale } = useI18n();
   const { storeId, venues, nameOf } = useStores();
-  const [picked, setPicked] = useState<string | null>(storeId ?? (venues.length === 1 ? venues[0].id : null));
+  // "All stores": start on the first store so the box is never greyed out; the buttons switch it
+  const [picked, setPicked] = useState<string | null>(storeId ?? venues[0]?.id ?? null);
+  useEffect(() => {
+    if (!picked && venues.length > 0) setPicked(venues[0].id);
+  }, [picked, venues]);
   const venue = storeId ?? picked;
   const [phase, setPhase] = useState<Phase>("ask");
   const [text, setText] = useState("");
