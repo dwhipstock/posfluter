@@ -107,7 +107,8 @@ class GeminiRoomModel(
             503 to ""
         }
         if (!dropped && status == 503 && left() > RETRY_PAUSE_MS) { pause(RETRY_PAUSE_MS); post(model).let { status = it.first; text = it.second } }
-        if ((status == 503 || status == 429) && left() > 0) {
+        // a model that is gone (a preview pulled: 404) also falls back, so a room photo never just fails
+        if ((status == 503 || status == 429 || status == 404) && left() > 0) {
             val fallback = if (model == FALLBACK_MODEL) DEFAULT_MODEL else FALLBACK_MODEL
             post(fallback).let { status = it.first; text = it.second }
         }

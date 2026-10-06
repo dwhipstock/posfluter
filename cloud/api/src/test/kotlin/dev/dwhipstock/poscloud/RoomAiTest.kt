@@ -305,18 +305,19 @@ class RoomAiTest {
     }
 
     @Test
-    fun severalPhotosGoToTheMultiViewModelOneStaysOnTheUsualOne() = testApplication {
-        val multi = FakeModel { _, _, _, _ -> layoutReply }
-        app(RoomAiService(TestSupport.config, fake, fake, multiViewModel = multi))
+    fun everyRoomPhotoGoesToThePhotoModel() = testApplication {
+        val photoModel = FakeModel { _, _, _, _ -> layoutReply }
+        app(RoomAiService(TestSupport.config, fake, fake, photoModel = photoModel))
         store()
         fake.reply = { _, _, _, _ -> layoutReply }
         assertEquals(HttpStatusCode.OK, photo(png(20, 20)).status)
-        assertEquals(1 to 0, fake.calls to multi.calls)
+        assertEquals(0 to 1, fake.calls to photoModel.calls)
         assertEquals(HttpStatusCode.OK, photos(png(20, 20), png(20, 20)).status)
-        assertEquals(1 to 1, fake.calls to multi.calls)
-        assertEquals(2, multi.lastImages.size)
-        // the real default: the full flash model merges the views
-        assertEquals("gemini-3.5-flash", dev.dwhipstock.poscloud.rooms.GeminiRoomModel.MULTI_VIEW_MODEL)
+        assertEquals(0 to 2, fake.calls to photoModel.calls)
+        assertEquals(2, photoModel.lastImages.size)
+        // the real default: the strongest model, thinking more (an owner does this once)
+        val c = TestSupport.config
+        assertEquals("gemini-3.1-pro-preview" to "high", c.roomPhotoModel to c.roomPhotoThinking)
     }
 
     @Test

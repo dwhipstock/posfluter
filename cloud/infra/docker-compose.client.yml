@@ -78,6 +78,8 @@ services:
       MENU_AI_DAILY_CAP: "${MENU_AI_DAILY_CAP:-150}"
       MENU_AI_BFL_API_KEY: "${MENU_AI_BFL_API_KEY:-}"
       MENU_PRINT_MODEL: "${MENU_PRINT_MODEL:-}"
+      ROOM_AI_PHOTO_MODEL: "${ROOM_AI_PHOTO_MODEL:-}"
+      ROOM_AI_PHOTO_THINKING: "${ROOM_AI_PHOTO_THINKING:-}"
     depends_on:
       db:
         condition: service_healthy
