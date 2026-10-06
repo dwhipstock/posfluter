@@ -80,6 +80,10 @@ data class CloudConfig(
     // Printed menus (/v1/menu-print) write their copy with the flash model (quality over speed).
     val menuPrintModel: String = env("MENU_PRINT_MODEL") ?: "gemini-3.5-flash",
     val menuAiVoiceModel: String? = env("MENU_AI_VOICE_MODEL"),
+    // A new room from photos (/v1/room-ai/photo): an owner does it once, so the strongest
+    // model and more thinking; counting tables and seats is what matters, not speed or price.
+    val roomPhotoModel: String = env("ROOM_AI_PHOTO_MODEL") ?: "gemini-3.1-pro-preview",
+    val roomPhotoThinking: String = env("ROOM_AI_PHOTO_THINKING") ?: "high",
     // AI requests per store and per portal user per rolling 24 h (on top of 20 per 10 minutes).
     val menuAiDailyCap: Int = env("MENU_AI_DAILY_CAP")?.toIntOrNull()?.takeIf { it > 0 } ?: 150,
     // AI item photos (/v1/menu-ai/photos): Black Forest Labs FLUX first, the Gemini key

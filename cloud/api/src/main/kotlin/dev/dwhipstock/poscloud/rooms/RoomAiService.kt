@@ -191,9 +191,14 @@ class RoomAiService(
     private val config: CloudConfig,
     private val model: RoomAiModel? = config.menuAiKey?.let { GeminiRoomModel(it.value, config.menuAiModel) },
     private val voiceModel: RoomAiModel? = config.menuAiKey?.let { GeminiRoomModel(it.value, config.menuAiVoiceModel ?: config.menuAiModel) },
-    /** A new room from 2–4 photos: merging views needs the full flash model (the lite one undercounted); null = [model]. */
-    private val multiViewModel: RoomAiModel? = (model as? GeminiRoomModel)?.let {
-        config.menuAiKey?.let { k -> GeminiRoomModel(k.value, GeminiRoomModel.MULTI_VIEW_MODEL, budgetMs = 240_000L) }
+    /**
+     * A new room from 1–4 photos: done once per room, so the strongest model ([CloudConfig.roomPhotoModel],
+     * more thinking) — the lite one undercounted tables and seats; null = [model].
+     */
+    private val photoModel: RoomAiModel? = (model as? GeminiRoomModel)?.let {
+        config.menuAiKey?.let { k ->
+            GeminiRoomModel(k.value, config.roomPhotoModel, thinkingLevel = config.roomPhotoThinking, budgetMs = 280_000L)
+        }
     },
     private val now: () -> Long = System::currentTimeMillis,
     private val callsMax: Int = MenuAiService.CALLS_MAX,
@@ -345,7 +350,7 @@ class RoomAiService(
         transaction { RoomState.requireEditable(who.venue.scope) }
         val prefix = prefixFor(roomName)
         return tracked(who, "room_photo", { r -> Triple(r.refusal ?: "proposed", r.tables.size + r.objects.size, r.rejected.size) }) {
-            val m = (if (images.size > 1) multiViewModel else null) ?: requireModel()
+            val m = photoModel ?: requireModel()
             val started = now()
             fun refuse(r: RoomReplies.R, rejected: List<String> = emptyList()) = RoomPhotoProposalDto("", who.venue.venueId, m.model,
                 roomName, prefix, emptyList(), emptyList(), rejected = AiText.skips(rejected, who.lang), elapsedMs = now() - started,
