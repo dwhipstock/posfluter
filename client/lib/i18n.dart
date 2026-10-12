@@ -1802,6 +1802,34 @@ class L {
     th: 'รับแล้ว $amount — ค้างชำระ $due',
   );
 
+  // PromptPay — Thai QR payment, THB stores with promptpay.id set
+  String get promptPay => _t(
+    'PromptPay',
+    'PromptPay',
+    'PromptPay',
+    'PromptPay',
+    'PromptPay',
+    th: 'พร้อมเพย์',
+  );
+  String get showPromptPayQr => _t(
+    'Afficher le code QR',
+    'Show QR code',
+    'Mostrar código QR',
+    'QR-Code anzeigen',
+    'Wys QR-kode',
+    th: 'แสดง QR',
+  );
+  String get promptPayScanHint => _t(
+    'Le client scanne avec son application bancaire. Vérifiez la vôtre, puis touchez Payé.',
+    'The customer scans with their banking app. Check yours, then tap Paid.',
+    'El cliente escanea con su app bancaria. Revise la suya y toque Pagado.',
+    'Der Kunde scannt mit seiner Banking-App. Prüfen Sie Ihre, dann auf Bezahlt tippen.',
+    'Die kliënt skandeer met sy bankprogram. Kyk na joune en tik dan Betaal.',
+    th: 'ลูกค้าสแกนด้วยแอปธนาคาร ตรวจสอบยอดในแอปธนาคารของร้าน แล้วกด ได้รับเงินแล้ว',
+  );
+  String get promptPayPaid =>
+      _t('Payé', 'Paid', 'Pagado', 'Bezahlt', 'Betaal', th: 'ได้รับเงินแล้ว');
+
   // Card (Stripe) — optional tender, test mode, simulated reader
   String get cardStripe => _t(
     'Carte (Stripe)',

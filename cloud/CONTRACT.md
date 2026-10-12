@@ -578,6 +578,7 @@ on-hand hint (§9).
 | `CLOUD_STOCK_PULL_SECONDS` | retail only: how often the on-hand hint (§9) is pulled | `300` |
 | `POS_CASH_ROUNDING` (tablet: `cash.rounding` in store.properties) | `nickel` rounds a cash payment's final amount to 5¢; `unit-down` (also `whole`, `baht`) drops the minor units, down to the whole unit (฿1,234.75 → ฿1,234); `off` charges cash to the cent. Local only, never synced down | the store currency's: `unit-down` for THB, `nickel` for everything else |
 | `POS_STAFF_APP_MFA` (tablet: `staff.app.mfa` in store.properties) | `on` asks staff-app sign-in for an authenticator code after the PIN; `off` is PIN only. Local only, never synced down | `on` |
+| `POS_PROMPTPAY_ID` / `POS_PROMPTPAY_NAME` (tablet: `promptpay.id` / `promptpay.name` in store.properties) | PromptPay QR tender: a Thai mobile number (`0812345678`) or a 13-digit national / tax id, and the account name shown under the QR. Offered only in a THB store; the tender syncs up as type `PROMPTPAY`. Local only, never synced down | unset → no PromptPay |
 
 State lives in the store DB table `sync_state (key TEXT PK, value TEXT)`:
 `push_hwm` (last acked outbox row id), `catalog_cursor` (last applied

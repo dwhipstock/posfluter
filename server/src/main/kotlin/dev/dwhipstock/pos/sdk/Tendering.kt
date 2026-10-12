@@ -10,8 +10,11 @@ import kotlinx.serialization.Serializable
  * TERMINAL = card taken on an integrated terminal other than Stripe (the
  * built-in simulator, J.P. Morgan): same rule, recorded only after the terminal
  * approved it. CARD stays the hand-keyed "card on the counter's own terminal".
+ *
+ * PROMPTPAY = Thailand's QR payment ([PromptPayMethod]): a THB store with a
+ * PromptPay id configured; staff confirms after seeing the money arrive.
  */
-enum class TenderType { CASH, CARD, BANK_TRANSFER, STRIPE, TERMINAL }
+enum class TenderType { CASH, CARD, BANK_TRANSFER, STRIPE, TERMINAL, PROMPTPAY }
 
 /**
  * An electronic tender method the customer offers. Open (not sealed) on purpose:
@@ -36,7 +39,7 @@ interface TenderMethod {
 data class TenderInstructions(
     val type: String,
     val amountCents: Long,
-    /** QR payload for a method that shows one (none ship today); null otherwise. */
+    /** QR payload for a method that shows one (PromptPay); null otherwise. */
     val qrPayload: String? = null,
     /** Ordered display fields (label → value), e.g. bank name / account no. / account name. */
     val displayFields: List<DisplayField> = emptyList(),

@@ -146,7 +146,7 @@ class BarcodeConfig(
         }
 
     // cash, plus the built-in card simulator for now (the default terminal).
-    // TODO(barcode): PromptPay QR comes later.
+    // PromptPay QR is added by the store's own config (promptpay.id, withPromptPay).
     override val electronicTenders: List<TenderMethod>
         get() = listOf(CardMethod(settings.get().cardProcessor.ifBlank { "Card" }))
 }

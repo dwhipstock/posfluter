@@ -461,6 +461,8 @@ class _RefundScreenState extends State<RefundScreen> {
               'CASH',
               'CARD',
               'BANK_TRANSFER',
+              // a PromptPay store sends it back the same way (by hand, from its bank app)
+              if (StoreProfile.current.promptPay) 'PROMPTPAY',
               // back to the Stripe card: only when this bill was paid that way
               if (info.stripeRefundableCents > 0) 'STRIPE',
               // back to the card on the store's terminal (simulator / J.P. Morgan)
@@ -533,6 +535,7 @@ class _RefundScreenState extends State<RefundScreen> {
     'BANK_TRANSFER' => l.bankTransfer,
     'STRIPE' => l.cardStripe,
     'TERMINAL' => l.cardTerminalTender,
+    'PROMPTPAY' => l.promptPay,
     _ => t,
   };
 

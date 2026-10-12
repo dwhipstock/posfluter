@@ -2064,9 +2064,9 @@ class Api {
       RefundInfo.fromJson(await _get('/checks/$checkId/refunds'));
 
   /// Refund by amount ([amountCents]) or by line ([lines] = [{lineId,qty}]).
-  /// [tenderType] is CASH | CARD | BANK_TRANSFER | STRIPE (STRIPE refunds the
-  /// card at Stripe first; refused if Stripe can't be reached). Returns the
-  /// refund + slip.
+  /// [tenderType] is CASH | CARD | BANK_TRANSFER | PROMPTPAY | STRIPE (STRIPE
+  /// refunds the card at Stripe first; refused if Stripe can't be reached).
+  /// Returns the refund + slip.
   static Future<RefundResult> refundCheck(
     int checkId, {
     int? amountCents,

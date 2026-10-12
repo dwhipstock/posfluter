@@ -25,6 +25,9 @@ class StoreProfile {
   /// A gas station: the counter shows the pump grid (GET /forecourt).
   final bool forecourt;
 
+  /// `promptpay.id` is set at a THB store: the pay screen offers PromptPay QR.
+  final bool promptPay;
+
   /// `age.check=looks-under:N`: the cashier may pass a customer who clearly
   /// looks over N without an ID (never for tobacco and vape). Null = an ID
   /// every time (the default).
@@ -52,6 +55,7 @@ class StoreProfile {
     this.legalAge = 21,
     this.kitchenPrinting = false,
     this.forecourt = false,
+    this.promptPay = false,
     this.looksOverAge,
     this.taxCombined = false,
     this.taxLabel = '',
@@ -127,6 +131,7 @@ class StoreProfile {
       legalAge: j['legalAge'] is int ? j['legalAge'] as int : 21,
       kitchenPrinting: j['kitchenPrinting'] == true,
       forecourt: j['forecourt'] == true,
+      promptPay: j['promptPay'] == true,
       looksOverAge: j['looksOverAge'] is int ? j['looksOverAge'] as int : null,
       taxCombined: j['taxDisplay'] == 'combined',
       taxLabel: j['taxLabel'] is String ? (j['taxLabel'] as String).trim() : '',

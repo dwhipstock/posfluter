@@ -95,6 +95,7 @@ export const af: Record<MsgKey, string> = {
   tender_BANK_TRANSFER: "Bankoorplasing",
   tender_STRIPE: "Kaart (Stripe)",
   tender_TERMINAL: "Kaart (terminaal)",
+  tender_PROMPTPAY: "PromptPay",
   dash_title: "Paneelbord",
   kpi_gross: "Bruto",
   kpi_net: "Netto (voor belasting)",
