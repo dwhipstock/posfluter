@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'api.dart' show Item, Variant;
+import 'store_profile.dart';
 
 /// The menu can change under an order (a tablet edit, the AI menu, or the
 /// manager portal synced down): an item or a size deleted, 86'd, repriced.
@@ -63,11 +64,14 @@ class RejectedLine {
     ];
   }
 
-  /// The item's name in [lang]: its translation, else English, else French.
+  /// The item's name in [lang]: its translation, else English, else the
+  /// data-language slot ([nameFr]: French, or Thai at a Thai + English store).
   String name(String lang) {
     final extra = names[lang];
     if (extra != null && extra.isNotEmpty) return extra;
-    if (lang == 'fr' && nameFr.isNotEmpty) return nameFr;
+    if (lang == StoreProfile.current.dataLocale && nameFr.isNotEmpty) {
+      return nameFr;
+    }
     return nameEn.isNotEmpty ? nameEn : nameFr;
   }
 }

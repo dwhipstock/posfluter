@@ -100,6 +100,24 @@ paste the key into a chat or a ticket:
 The store keeps selling throughout; within seconds of connecting it shows as
 online in the portal and its sales history follows.
 
+#### A store's languages (`POS_LOCALES`)
+
+A store can speak other languages than its config's without a rebuild:
+`POS_LOCALES=th,en` (desktop / docker) or `store.locales=th,en` in the
+tablet's `store.properties` — a comma list, the first is the default. Blank or
+unusable keeps the config's languages.
+
+The menu keeps two names per thing (`name_fr` / `name_en` and the other
+`*_fr` / `*_en` pairs). The `*_fr` columns hold the store's **local data
+language**: French by default, Thai at a store that speaks Thai. The rule is
+the first of the store's languages that is `fr` or `th`, else French;
+`POS_DATA_LOCALE` / `store.data_locale` (`fr` | `th`) sets it outright.
+English is always in `*_en`; every other language goes in the translations
+table. The store reports it as `dataLocale` in `GET /health` (and in the
+kiosk's `GET /kiosk/config`); the terminal, the staff phone app, the kitchen
+screen and the guest menu read the `*_fr` names when the user's language is
+the data language. A French + English store is unchanged.
+
 ### End of day — hand over
 
 The owner signs in at their address with the admin email and the password

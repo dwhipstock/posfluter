@@ -53,6 +53,18 @@ test("photo filling needs photos on, and saving needs filling", () => {
   assert.equal(printRequest({ ...base, photos: true, fillPhotos: false }).savePhotos, false);
 });
 
+test("the request says which language the catalog's fr slot holds, and the client's languages", () => {
+  const r = printRequest({ ...base, dataLocale: brand.dataLocale, locales: brand.locales.available });
+  assert.equal(r.dataLocale, brand.dataLocale);
+  assert.deepEqual(r.locales, brand.locales.available);
+  const thai = printRequest({ ...base, lang: "th", dataLocale: "th", locales: ["th", "en"] });
+  assert.equal(thai.dataLocale, "th");
+  assert.deepEqual(thai.locales, ["th", "en"]);
+  // left out when not given (older callers)
+  assert.equal("dataLocale" in printRequest(base), false);
+  assert.equal("locales" in printRequest(base), false);
+});
+
 test("notes are trimmed, capped, and left out when blank", () => {
   assert.equal(printRequest(base).notes, "fall theme");
   assert.equal(printRequest({ ...base, notes: "x".repeat(400) }).notes?.length, 300);

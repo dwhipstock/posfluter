@@ -124,8 +124,8 @@ export function RoomDrawing({
   className?: string;
 }) {
   const t = useT();
-  const { locale } = useI18n();
-  const name = roomName(locale, room);
+  const { locale, dataLocale } = useI18n();
+  const name = roomName(locale, room, dataLocale);
   return (
     <svg
       viewBox={`0 0 ${CANVAS} ${CANVAS}`}
@@ -136,7 +136,7 @@ export function RoomDrawing({
     >
       <rect x={1} y={1} width={CANVAS - 2} height={CANVAS - 2} rx={16} className="fill-surface stroke-neutral-200" strokeWidth={1} vectorEffect="non-scaling-stroke" />
       {room.objects.map((o) => (
-        <ObjectShape key={o.id} o={o} mark={markOf(o.id, highlights, showRemoved)} caption={objectCaption(locale, o, t)} />
+        <ObjectShape key={o.id} o={o} mark={markOf(o.id, highlights, showRemoved)} caption={objectCaption(locale, o, t, dataLocale)} />
       ))}
       {room.tables.map((tb) => (
         <TableShape

@@ -24,7 +24,7 @@
     --ok: #18864b;
     --danger: #c62828;
   }
-  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
   body { background: var(--paper-alt); color: var(--ink); min-height: 100vh; }
   button { font-family: inherit; cursor: pointer; }
 
@@ -345,8 +345,8 @@
 // fr/en (+ es/de/af) at the pubs, en/es at the US store. Every table carries every key
 // (LocaleCoverageTest). French: vous, no-break space before : ; ! ? and ».
 let lang = localStorage.getItem("staff_lang") || "en";
-let store = { locales: ["fr", "en"], currency: "CAD", country: "CA", kitchen: false, taxCombined: false, taxLabel: "" };
-const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans" };
+let store = { locales: ["fr", "en"], dataLocale: "fr", currency: "CAD", country: "CA", kitchen: false, taxCombined: false, taxLabel: "" };
+const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans", th: "ไทย" };
 const STR = {
   fr: {
     whoClockingIn: "Qui commence son quart ?", enterPin: "Entrez votre NIP", pinWrong: "NIP incorrect", managerPos: "En mode démo, le gérant se connecte seulement sur la tablette de caisse",
@@ -468,6 +468,30 @@ const STR = {
     spKicker: "Sage & Poppy · Drankwinkel", spWelcome: "Welkom terug",
     gone: n => `${n} is nie meer beskikbaar nie`, priceNow: (n, p) => `${n}: prys verander na ${p}`, addAt: p => `Voeg by teen ${p}`, menuChanged: "Die spyskaart het verander – kyk na die mandjie",
   },
+  th: {
+    whoClockingIn: "ใครเข้ากะ?", enterPin: "ใส่ PIN ของคุณ", pinWrong: "PIN ไม่ถูกต้อง", managerPos: "ในโหมดสาธิต ผู้จัดการเข้าสู่ระบบได้ที่แท็บเล็ต POS เท่านั้น",
+    logout: "ออกจากระบบ", tabTables: "โต๊ะ", tabPending: "รอยืนยัน",
+    free: "ว่าง", open: "มีลูกค้า", noZones: "ยังไม่มีโซน", closed: "ปิด",
+    addItems: "＋ เพิ่มรายการ", onCheck: "ในบิล", pendingHd: "⏳ ออร์เดอร์ลูกค้า (รอยืนยัน)",
+    rounding: "ปัดเศษ", cashTotal: "ยอดเงินสด",
+    total: "ยอดรวม", emptyCheck: "ยังไม่มีรายการ — แตะ เพิ่มรายการ เพื่อเริ่ม",
+    basket: "ตะกร้า", addToCheck: "เพิ่มลงบิล", subtotal: "ยอดก่อนภาษี", taxWord: "ภาษี", note: "หมายเหตุ (ไม่บังคับ)",
+    add: "＋ เพิ่ม", sizes: "ขนาด", days: ["วันจันทร์","วันอังคาร","วันพุธ","วันพฤหัสบดี","วันศุกร์","วันเสาร์","วันอาทิตย์"], daysShort: ["จ.","อ.","พ.","พฤ.","ศ.","ส.","อา."], daysAnd: " และ ", onlyDays: d => `เฉพาะ ${d}`, happyHour: "แฮปปี้อาวร์", daySpecial: d => `โปรโมชัน${d}`, special: "โปรโมชัน", notToday: "วันนี้ไม่มีขาย", viewBasket: "ดูตะกร้า", addedOne: "เพิ่มแล้ว ✓",
+    linesAdded: "เพิ่มลงบิลแล้ว ✓", accepted: "ยืนยันแล้ว ✓", rejected: "ปฏิเสธแล้ว",
+    noPending: "ไม่มีรายการรอยืนยัน", pendingSub: "ออร์เดอร์ที่ลูกค้าสั่งจากโทรศัพท์จะแสดงที่นี่",
+    cardPending: "การชำระด้วยบัตรยังดำเนินการอยู่ที่เครื่องอ่านบัตร — กำลังตรวจสอบ…",
+    billPaying: "กำลังชำระบิล — เพิ่มรายการไม่ได้", billGone: "บิลนี้ถูกปิดจากอุปกรณ์อื่นแล้ว", failed: "ทำรายการไม่สำเร็จ กรุณาลองอีกครั้ง",
+    zoneClosed: "โซนปิดอยู่", table: "โต๊ะ", loading: "กำลังโหลด…",
+    codePrompt: "ใส่รหัส 6 หลักจากแอปยืนยันตัวตนของคุณ", verify: "ยืนยัน", backBtn: "‹ ย้อนกลับ",
+    enrollPrompt: "สแกน QR ด้วยแอปยืนยันตัวตน แล้วใส่รหัส 6 หลัก",
+    enrollHint: "ตั้งค่าครั้งเดียว — หลังจากนั้นใช้แค่ PIN ได้ 90 วัน", enrollManual: "หรือใส่คีย์นี้เอง:",
+    codeWrong: "รหัสไม่ถูกต้อง ลองอีกครั้ง", resetTitle: "รีเซ็ตแอปยืนยันตัวตน", resetBtn: "รีเซ็ต",
+    resetConfirm: "รีเซ็ตแอปยืนยันตัวตนของ {name} หรือไม่?", resetDone: "รีเซ็ตแล้ว — พนักงานต้องตั้งค่าใหม่",
+    cantReach: "เชื่อมต่อร้านไม่ได้ — ตรวจสอบ Wi-Fi แล้วลองอีกครั้ง", retry: "ลองอีกครั้ง",
+    roleManager: "ผู้จัดการ", roleServer: "พนักงานเสิร์ฟ",
+    spKicker: "Sage & Poppy · ร้านเครื่องดื่ม", spWelcome: "ยินดีต้อนรับกลับ",
+    gone: n => `${n} ไม่มีจำหน่ายแล้ว`, priceNow: (n, p) => `${n}: ราคาเปลี่ยนเป็น ${p}`, addAt: p => `เพิ่มในราคา ${p}`, menuChanged: "เมนูมีการเปลี่ยนแปลง — ตรวจสอบตะกร้า",
+  },
 };
 // Department and zone names in US Spanish (the shop's catalog is English
 // only); same words as the counter app (client/lib/retail/shelf_names.dart).
@@ -511,11 +535,12 @@ const money = cents => (cents / 100).toLocaleString("en-US", {
 // Catalog data carries French and English: French reads the French side,
 // English, Spanish, German and Afrikaans read the English side, unless the row carries
 // its own name in that language (`names`, e.g. { es: …, de: …, af: … }).
-const pick = (fr, en) => lang === "fr" ? fr : en;
+// The "fr" fields hold the store's local language (store.dataLocale: French, or Thai).
+const pick = (fr, en) => lang === store.dataLocale ? fr : en;
 const extra = o => (o && o.names && o.names[lang]) || "";
 // the other language as a small second line (none when it says the same, or
 // outside the fr/en pair)
-const alt = (fr, en) => (lang !== "fr" && lang !== "en") || fr === en ? "" : (lang === "fr" ? en : fr);
+const alt = (fr, en) => (lang !== store.dataLocale && lang !== "en") || fr === en ? "" : (lang === store.dataLocale ? en : fr);
 const iname = i => extra(i) || pick(i.nameFr, i.nameEn);
 const inameAlt = i => alt(i.nameFr, i.nameEn);
 const idesc = i => pick(i.descriptionFr, i.descriptionEn);
@@ -536,7 +561,7 @@ function lineName(l) {
 }
 // outside French and English the check's lines read their names off the menu:
 // fetch it once (no sign-in needed), then draw again
-const extraLang = () => lang !== "fr" && lang !== "en";
+const extraLang = () => lang !== store.dataLocale && lang !== "en";
 async function loadMenu(force = false) {
   if (items.length && !force) return;
   [items, categories] = await Promise.all([
@@ -680,6 +705,8 @@ async function loadStore() {
     if (h && Array.isArray(h.locales) && h.locales.length) store.locales = h.locales.map(l => String(l).toLowerCase());
     if (h && h.currency) store.currency = h.currency;
     if (h && h.country) store.country = h.country;
+    // the language of the "fr" name fields; an older store sends none: the first of fr / th it speaks, else French
+    store.dataLocale = (h && h.dataLocale) || store.locales.find(l => l === "fr" || l === "th") || "fr";
     if (h) store.kitchen = h.kitchenPrinting === true;
     // "combined": the added taxes show as one line, "Tax (8.25%)", like the receipt
     if (h) { store.taxCombined = h.taxDisplay === "combined"; store.taxLabel = h.taxLabel || ""; }
@@ -1064,7 +1091,7 @@ function renderCheck() {
   // the rate reads the same in every language, a dot and no space ("9.975%"),
   // as on the POS and the receipts
   const rateOf = r => `${r}%`;
-  const taxLabel = t => lang === "fr"
+  const taxLabel = t => lang === store.dataLocale
     ? `${t.labelFr} ${rateOf(t.ratePercent)}`
     : `${lang === "es" && t.labelEn === "Sales Tax" ? "Impuesto sobre las ventas" : t.labelEn} ${rateOf(t.ratePercent)}`;
   // a store that shows its taxes as one line ("Tax (8.25%)"): the server's

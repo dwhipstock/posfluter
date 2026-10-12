@@ -121,4 +121,9 @@ test("namesDiff, moveInOrder and extraLangs", () => {
   assert.deepEqual(moveInOrder(["a", "b", "c"], 1, -1), ["b", "a", "c"]);
   assert.deepEqual(moveInOrder(["a", "b", "c"], 2, 1), ["a", "b", "c"]);
   assert.deepEqual(extraLangs(["en", "fr", "es"], { de: "x" }), ["es", "de"]);
+  // a Thai + English client: Thai is the data-language slot, not an extra field
+  assert.deepEqual(extraLangs(["th", "en"], { th: "x" }), []);
+  assert.deepEqual(extraLangs(["th", "en", "fr"], { de: "x" }), ["fr", "de"]);
+  // an English + Spanish shop keeps French as the (hidden) slot
+  assert.deepEqual(extraLangs(["en", "es"], { fr: "x" }), ["es"]);
 });

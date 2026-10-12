@@ -129,6 +129,11 @@ fun Application.module(
     // store.properties `legal.age`; desktop reads POS_LEGAL_AGE. Unset → the
     // store's own default (21 for the US store).
     legalAgeOverride: Int? = null,
+    // the store's languages (POS_LOCALES / store.locales: "th,en") instead of the
+    // profile's, and optionally the language of the *_fr name slots
+    // (POS_DATA_LOCALE / store.data_locale); unset → the profile's, and its rule
+    localesOverride: List<dev.dwhipstock.pos.sdk.i18n.LocaleCode>? = dev.dwhipstock.pos.sdk.i18n.StoreLocales.fromEnv(),
+    dataLocaleOverride: String? = dev.dwhipstock.pos.sdk.i18n.DataLanguage.explicitFromEnv(),
     cloudSyncUrl: String? = System.getenv("CLOUD_SYNC_URL"),
     cloudSyncApiKey: String? = System.getenv("CLOUD_SYNC_API_KEY"),
     publicUrl: String? = System.getenv("POS_PUBLIC_URL"),
@@ -217,6 +222,10 @@ fun Application.module(
         barcode -> Barcode.TIME_ZONE
         else -> CopperLanternConfig.TIME_ZONE
     }
+    // the language of the *_fr name slots, before any seed or catalog code runs
+    // (French unless the store's languages say Thai); set again from the final profile below
+    dev.dwhipstock.pos.sdk.i18n.DataLanguage.use(
+        dev.dwhipstock.pos.sdk.i18n.DataLanguage.resolve(localesOverride.orEmpty(), dataLocaleOverride))
     initDatabase(dbPath)
     // discover i18n message catalogs now so missing-key warnings surface at
     // boot, not on the first printed receipt
@@ -359,12 +368,17 @@ fun Application.module(
     // payment.terminal=off: no card tender at all, not even the hand-keyed one
     // test seam: another store's money rules on the same engine (currency, tax policy, rounding)
     val storeConfig = configOverride?.invoke(baseConfig) ?: baseConfig
-    val config: dev.dwhipstock.pos.sdk.CustomerConfig =
+    val tenderConfig: dev.dwhipstock.pos.sdk.CustomerConfig =
         if (terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.OFF) storeConfig
         else object : dev.dwhipstock.pos.sdk.CustomerConfig by storeConfig {
             override val electronicTenders get() = storeConfig.electronicTenders.filter { it.type != dev.dwhipstock.pos.sdk.TenderType.CARD }
             override fun tenderMethod(type: dev.dwhipstock.pos.sdk.TenderType) = electronicTenders.firstOrNull { it.type == type }
         }
+    // POS_LOCALES / store.locales: the store's languages instead of its profile's
+    val config: dev.dwhipstock.pos.sdk.CustomerConfig = dev.dwhipstock.pos.sdk.withLocales(tenderConfig, localesOverride)
+    dev.dwhipstock.pos.sdk.i18n.DataLanguage.use(
+        dev.dwhipstock.pos.sdk.i18n.DataLanguage.resolve(config.profile.locales, dataLocaleOverride))
+    log.info("Data language (the *_fr name slots): ${dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag}")
     cashRounding.warning?.let { log.warn("Cash rounding config ignored: $it") }
     log.info("Cash rounding: ${dev.dwhipstock.pos.sdk.CashRounding.wireOf(config.roundingPolicy)} (${cashRounding.source})")
     log.info("Store: ${config.displayName} (POS_VENUE=${config.venueId}, ${config.profile.country}, " +
@@ -795,6 +809,13 @@ data class HealthResponse(
     val currency: String = "CAD",
     /** Languages staff can pick; the first is the store's default. */
     val locales: List<String> = listOf("en", "fr"),
+    /**
+     * The language held in the `*_fr` name slots (name_fr, label_fr...): "fr",
+     * or "th" at a Thai + English store ([dev.dwhipstock.pos.sdk.i18n.DataLanguage]).
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.ALWAYS)
+    val dataLocale: String = "fr",
     val legalAge: Int = 18,
     /** Cash payments round to the nickel ("nickel") or are charged to the cent ("off"). */
     val cashRounding: String = "nickel",
@@ -845,6 +866,7 @@ data class HealthResponse(
             country = config.profile.country,
             currency = config.profile.currency,
             locales = config.profile.locales.map { it.tag },
+            dataLocale = dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag,
             legalAge = config.legalAge,
             cashRounding = dev.dwhipstock.pos.sdk.CashRounding.wireOf(config.roundingPolicy),
             kitchenPrinting = kitchenPrinting,

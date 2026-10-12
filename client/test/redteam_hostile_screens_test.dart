@@ -399,7 +399,8 @@ void main() {
 
   // plain demo data, translations only: every label must fit the buttons
   group('5-language labels, plain data', () {
-    for (final lang in ['en', 'fr', 'es', 'de', 'af']) {
+    // and Thai (drawn with the bundled Noto Sans Thai)
+    for (final lang in ['en', 'fr', 'es', 'de', 'af', 'th']) {
       for (final size in [_tab15, _tab8]) {
         final tag = '$lang ${(size.$1 / size.$2).width.toInt()}x'
             '${(size.$1 / size.$2).height.toInt()} logical';

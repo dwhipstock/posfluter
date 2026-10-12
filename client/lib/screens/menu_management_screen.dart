@@ -529,8 +529,9 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
   bool _busy = false;
 
   /// The store's own language first (English in a US store, French in a
-  /// French-first one): name and size fields follow it.
-  bool get _enFirst => StoreProfile.current.defaultLocale != 'fr';
+  /// French-first one, Thai in a Thai-first one): name and size fields follow it.
+  bool get _enFirst =>
+      StoreProfile.current.defaultLocale != StoreProfile.current.dataLocale;
 
   /// Everything the manager can edit, as one string: unsaved changes show
   /// as a difference from the opening [_initial].
@@ -1077,7 +1078,10 @@ class _CategoriesEditorDialogState extends State<_CategoriesEditorDialog> {
           children: [
             for (final (i, (c, label))
                 in [(nameFr, l.nameFrLabel), (nameEn, l.nameEnLabel)]
-                    .reversedIf(StoreProfile.current.defaultLocale != 'fr')
+                    .reversedIf(
+                      StoreProfile.current.defaultLocale !=
+                          StoreProfile.current.dataLocale,
+                    )
                     .indexed) ...[
               if (i > 0) const SizedBox(height: 8),
               TextField(

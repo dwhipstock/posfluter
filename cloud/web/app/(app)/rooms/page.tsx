@@ -120,14 +120,14 @@ export default function RoomsPage() {
 
 function RoomCard({ room, onAsk }: { room: RoomDto; onAsk?: () => void }) {
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, dataLocale } = useI18n();
   const seats = room.tables.reduce((s, x) => s + x.seats, 0);
   const locked = room.tables.filter((x) => x.locked).length;
   return (
     <Card className="min-w-0 overflow-hidden">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2 border-b border-neutral-100 px-4 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="break-words text-sm font-semibold text-ink">{roomName(locale, room)}</h2>
+          <h2 className="break-words text-sm font-semibold text-ink">{roomName(locale, room, dataLocale)}</h2>
           <p className="text-xs tabular-nums text-neutral-700">
             {t("rooms_stats", { tables: room.tables.length, seats, objects: room.objects.length })}
           </p>

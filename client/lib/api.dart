@@ -768,10 +768,7 @@ class Api {
     String managerPin,
   ) async {
     final req =
-        http.MultipartRequest(
-            'POST',
-            Uri.parse('$baseUrl/floor-objects/ai-suggest'),
-          )
+        http.MultipartRequest('POST', _aiUri('/floor-objects/ai-suggest'))
           ..headers['Authorization'] = 'Bearer $_token'
           ..fields['managerPin'] = managerPin
           ..files.add(
@@ -802,10 +799,7 @@ class Api {
     String managerPin,
   ) async {
     final req =
-        http.MultipartRequest(
-            'POST',
-            Uri.parse('$baseUrl/zones/$zoneId/ai-layout'),
-          )
+        http.MultipartRequest('POST', _aiUri('/zones/$zoneId/ai-layout'))
           ..headers['Authorization'] = 'Bearer $_token'
           ..fields['managerPin'] = managerPin;
     for (final (i, p) in photos.indexed) {
@@ -1381,10 +1375,9 @@ class Api {
     String managerPin, {
     String? note,
   }) async {
-    final req =
-        http.MultipartRequest('POST', Uri.parse('$baseUrl/menu-ai/photos'))
-          ..headers['Authorization'] = 'Bearer $_token'
-          ..fields['managerPin'] = managerPin;
+    final req = http.MultipartRequest('POST', _aiUri('/menu-ai/photos'))
+      ..headers['Authorization'] = 'Bearer $_token'
+      ..fields['managerPin'] = managerPin;
     if (note != null && note.trim().isNotEmpty) req.fields['note'] = note;
     for (final (i, p) in photos.indexed) {
       req.files.add(
@@ -1408,7 +1401,7 @@ class Api {
   static Future<MenuProposal> menuAiChat(String text, String managerPin) async {
     final res = await http
         .post(
-          Uri.parse('$baseUrl/menu-ai/chat'),
+          _aiUri('/menu-ai/chat'),
           headers: _headers,
           body: jsonEncode({'managerPin': managerPin, 'text': text}),
         )
@@ -1427,6 +1420,12 @@ class Api {
     await _postVoice('/menu-ai/chat/voice', audio, contentType, managerPin),
   );
 
+  /// An AI endpoint with the screen's language (`?lang=th`): a request typed or
+  /// spoken in Thai right after the language button is answered in Thai.
+  static Uri _aiUri(String path) => Uri.parse(
+    '$baseUrl$path',
+  ).replace(queryParameters: {'lang': Prefs.instance.lang});
+
   static Future<dynamic> _postVoice(
     String path,
     List<int> audio,
@@ -1434,7 +1433,7 @@ class Api {
     String managerPin, {
     Duration timeout = _aiTimeout,
   }) async {
-    final req = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
+    final req = http.MultipartRequest('POST', _aiUri(path))
       ..headers['Authorization'] = 'Bearer $_token'
       ..fields['managerPin'] = managerPin
       ..files.add(
@@ -1463,7 +1462,7 @@ class Api {
   ) async {
     final res = await http
         .post(
-          Uri.parse('$baseUrl/zones/$zoneId/ai-edit'),
+          _aiUri('/zones/$zoneId/ai-edit'),
           headers: _headers,
           body: jsonEncode({'managerPin': managerPin, 'text': text}),
         )
@@ -1518,7 +1517,7 @@ class Api {
   static Future<MenuProposal> menuAiTranslate(String managerPin) async {
     final res = await http
         .post(
-          Uri.parse('$baseUrl/menu-ai/translate'),
+          _aiUri('/menu-ai/translate'),
           headers: _headers,
           body: jsonEncode({'managerPin': managerPin}),
         )

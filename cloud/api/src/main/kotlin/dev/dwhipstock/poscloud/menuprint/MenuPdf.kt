@@ -176,7 +176,10 @@ object MenuPdf {
 
     private fun css(doc: PrintDoc, scale: Double): String {
         val s = doc.style
-        val head = s.headingFont?.let { "'$it', '${MenuFonts.BODY}'" } ?: "'${MenuFonts.BODY}'"
+        val head = s.headingFont?.let { MenuFonts.stack(it, MenuFonts.BODY) } ?: MenuFonts.stack(MenuFonts.BODY)
+        val body = MenuFonts.stack(MenuFonts.BODY)
+        // Thai stacks vowel signs and tone marks above and below the letters: more room between lines
+        val leading = if (doc.lang == "th") "1.55" else "1.32"
         fun pt(v: Double) = "%.1fpt".format(java.util.Locale.US, v * scale)
         val flyer = doc.kind == MenuKind.FLYER
         val upper = if (s.headingUpper) "text-transform: uppercase; letter-spacing: 0.04em;" else ""
@@ -184,8 +187,8 @@ object MenuPdf {
         val headBoost = if (s.headingFont == MenuFonts.AMATIC) 1.35 else 1.0
         return """
             @page { size: ${doc.paper.css}; margin: ${if (flyer) "0.5in" else "0.55in 0.62in 0.7in 0.62in"};
-              ${if (flyer) "" else "@bottom-center { content: counter(page) \" / \" counter(pages); font-family: '${MenuFonts.BODY}'; font-size: 7.5pt; color: ${s.muted}; }"} }
-            body { font-family: '${MenuFonts.BODY}'; color: ${s.ink}; font-size: ${pt(10.0)}; line-height: 1.32; margin: 0; }
+              ${if (flyer) "" else "@bottom-center { content: counter(page) \" / \" counter(pages); font-family: $body; font-size: 7.5pt; color: ${s.muted}; }"} }
+            body { font-family: $body; color: ${s.ink}; font-size: ${pt(10.0)}; line-height: $leading; margin: 0; }
             .head { text-align: center; }
             .logo { max-height: ${if (flyer) "0.9in" else "0.78in"}; max-width: 2.6in; }
             .wordmark { font-family: $head; font-weight: 700; font-size: ${pt(15.0 * headBoost)}; color: ${s.heading}; $upper }

@@ -5,38 +5,94 @@ class SpecialsText {
   final String lang;
   const SpecialsText(this.lang);
 
-  String _t(String fr, String en, String es, String de, String af) =>
-      switch (lang) {
-        'fr' => fr,
-        'es' => es,
-        'de' => de,
-        'af' => af,
-        _ => en,
-      };
+  String _t(
+    String fr,
+    String en,
+    String es,
+    String de,
+    String af, {
+    required String th,
+  }) => switch (lang) {
+    'fr' => fr,
+    'es' => es,
+    'de' => de,
+    'af' => af,
+    'th' => th,
+    _ => en,
+  };
 
   // --- day names (store order: Monday first) ---
 
   String dayShort(String code) => switch (code) {
-    'mon' => _t('lun', 'Mon', 'lun', 'Mo', 'Ma'),
-    'tue' => _t('mar', 'Tue', 'mar', 'Di', 'Di'),
-    'wed' => _t('mer', 'Wed', 'mié', 'Mi', 'Wo'),
-    'thu' => _t('jeu', 'Thu', 'jue', 'Do', 'Do'),
-    'fri' => _t('ven', 'Fri', 'vie', 'Fr', 'Vr'),
-    'sat' => _t('sam', 'Sat', 'sáb', 'Sa', 'Sa'),
-    _ => _t('dim', 'Sun', 'dom', 'So', 'So'),
+    'mon' => _t('lun', 'Mon', 'lun', 'Mo', 'Ma', th: 'จ.'),
+    'tue' => _t('mar', 'Tue', 'mar', 'Di', 'Di', th: 'อ.'),
+    'wed' => _t('mer', 'Wed', 'mié', 'Mi', 'Wo', th: 'พ.'),
+    'thu' => _t('jeu', 'Thu', 'jue', 'Do', 'Do', th: 'พฤ.'),
+    'fri' => _t('ven', 'Fri', 'vie', 'Fr', 'Vr', th: 'ศ.'),
+    'sat' => _t('sam', 'Sat', 'sáb', 'Sa', 'Sa', th: 'ส.'),
+    _ => _t('dim', 'Sun', 'dom', 'So', 'So', th: 'อา.'),
   };
 
   String dayLong(String code) => switch (code) {
-    'mon' => _t('lundi', 'Monday', 'lunes', 'Montag', 'Maandag'),
-    'tue' => _t('mardi', 'Tuesday', 'martes', 'Dienstag', 'Dinsdag'),
-    'wed' => _t('mercredi', 'Wednesday', 'miércoles', 'Mittwoch', 'Woensdag'),
-    'thu' => _t('jeudi', 'Thursday', 'jueves', 'Donnerstag', 'Donderdag'),
-    'fri' => _t('vendredi', 'Friday', 'viernes', 'Freitag', 'Vrydag'),
-    'sat' => _t('samedi', 'Saturday', 'sábado', 'Samstag', 'Saterdag'),
-    _ => _t('dimanche', 'Sunday', 'domingo', 'Sonntag', 'Sondag'),
+    'mon' => _t(
+      'lundi',
+      'Monday',
+      'lunes',
+      'Montag',
+      'Maandag',
+      th: 'วันจันทร์',
+    ),
+    'tue' => _t(
+      'mardi',
+      'Tuesday',
+      'martes',
+      'Dienstag',
+      'Dinsdag',
+      th: 'วันอังคาร',
+    ),
+    'wed' => _t(
+      'mercredi',
+      'Wednesday',
+      'miércoles',
+      'Mittwoch',
+      'Woensdag',
+      th: 'วันพุธ',
+    ),
+    'thu' => _t(
+      'jeudi',
+      'Thursday',
+      'jueves',
+      'Donnerstag',
+      'Donderdag',
+      th: 'วันพฤหัสบดี',
+    ),
+    'fri' => _t(
+      'vendredi',
+      'Friday',
+      'viernes',
+      'Freitag',
+      'Vrydag',
+      th: 'วันศุกร์',
+    ),
+    'sat' => _t(
+      'samedi',
+      'Saturday',
+      'sábado',
+      'Samstag',
+      'Saterdag',
+      th: 'วันเสาร์',
+    ),
+    _ => _t(
+      'dimanche',
+      'Sunday',
+      'domingo',
+      'Sonntag',
+      'Sondag',
+      th: 'วันอาทิตย์',
+    ),
   };
 
-  String get _and => _t(' et ', ' & ', ' y ', ' & ', ' en ');
+  String get _and => _t(' et ', ' & ', ' y ', ' & ', ' en ', th: ' และ ');
 
   /// "Fri & Sat", "Mon, Wed & Fri" (short names).
   String daysShort(List<String> days) {
@@ -53,12 +109,19 @@ class SpecialsText {
     'solo ${daysShort(days)}',
     'nur ${daysShort(days)}',
     'slegs ${daysShort(days)}',
+    th: 'เฉพาะ ${daysShort(days)}',
   );
 
   // --- a special's name (the store's rule: sdk/MenuSpecials.label) ---
 
-  String get happyHour =>
-      _t('Happy hour', 'Happy hour', 'Hora feliz', 'Happy Hour', 'Happy hour');
+  String get happyHour => _t(
+    'Happy hour',
+    'Happy hour',
+    'Hora feliz',
+    'Happy Hour',
+    'Happy hour',
+    th: 'แฮปปี้อาวร์',
+  );
 
   String daySpecial(String code) => _t(
     'Spécial du ${dayLong(code)}',
@@ -66,10 +129,17 @@ class SpecialsText {
     'Especial del ${dayLong(code)}',
     '${dayLong(code)}sangebot',
     '${dayLong(code)}-spesiaal',
+    th: 'เมนูพิเศษ${dayLong(code)}',
   );
 
-  String get special =>
-      _t('Spécial', 'Special', 'Especial', 'Angebot', 'Spesiaal');
+  String get special => _t(
+    'Spécial',
+    'Special',
+    'Especial',
+    'Angebot',
+    'Spesiaal',
+    th: 'เมนูพิเศษ',
+  );
 
   /// The menu's row of what is on special right now.
   String get todaysSpecials => _t(
@@ -78,6 +148,7 @@ class SpecialsText {
     'Especiales de hoy',
     'Heutige Angebote',
     'Vandag se spesiale',
+    th: 'เมนูพิเศษวันนี้',
   );
 
   /// Tapping an item that isn't sold today.
@@ -87,6 +158,7 @@ class SpecialsText {
     'No se vende hoy — solo ${daysShort(days)}',
     'Heute nicht erhältlich — nur ${daysShort(days)}',
     'Nie vandag te koop nie — slegs ${daysShort(days)}',
+    th: 'วันนี้ไม่มีจำหน่าย — เฉพาะ ${daysShort(days)}',
   );
 
   /// The menu price a special replaces: "reg. $12.45".
@@ -96,12 +168,19 @@ class SpecialsText {
     'normal $money',
     'regulär $money',
     'gewoonlik $money',
+    th: 'ปกติ $money',
   );
 
   // --- the menu editor ---
 
-  String get specials =>
-      _t('Spéciaux', 'Specials', 'Especiales', 'Angebote', 'Spesiales');
+  String get specials => _t(
+    'Spéciaux',
+    'Specials',
+    'Especiales',
+    'Angebote',
+    'Spesiales',
+    th: 'เมนูพิเศษ',
+  );
 
   String get specialsHint => _t(
     'Un prix plus bas certains jours, à certaines heures si vous voulez.',
@@ -109,6 +188,7 @@ class SpecialsText {
     'Un precio más bajo algunos días, a ciertas horas si quiere.',
     'Ein niedrigerer Preis an manchen Tagen, auf Wunsch zu bestimmten Zeiten.',
     '’n Laer prys op sommige dae, op sekere ure as u wil.',
+    th: 'ลดราคาในบางวัน และกำหนดช่วงเวลาได้ถ้าต้องการ',
   );
 
   String get addSpecial => _t(
@@ -117,6 +197,7 @@ class SpecialsText {
     'Añadir un especial',
     'Angebot hinzufügen',
     'Voeg ’n spesiaal by',
+    th: 'เพิ่มเมนูพิเศษ',
   );
 
   String get removeSpecial => _t(
@@ -125,6 +206,7 @@ class SpecialsText {
     'Quitar este especial',
     'Dieses Angebot entfernen',
     'Verwyder hierdie spesiaal',
+    th: 'ลบเมนูพิเศษนี้',
   );
 
   String get availableOnlyOn => _t(
@@ -133,6 +215,7 @@ class SpecialsText {
     'Disponible solo los',
     'Nur erhältlich am',
     'Slegs beskikbaar op',
+    th: 'มีเฉพาะวัน',
   );
 
   String get everyDayHint => _t(
@@ -141,10 +224,11 @@ class SpecialsText {
     'Ningún día elegido = todos los días',
     'Kein Tag gewählt = jeden Tag',
     'Geen dag gekies nie = elke dag',
+    th: 'ไม่เลือกวัน = ทุกวัน',
   );
 
-  String get from => _t('De', 'From', 'Desde', 'Von', 'Van');
-  String get to => _t('À', 'To', 'Hasta', 'Bis', 'Tot');
+  String get from => _t('De', 'From', 'Desde', 'Von', 'Van', th: 'ตั้งแต่');
+  String get to => _t('À', 'To', 'Hasta', 'Bis', 'Tot', th: 'ถึง');
 
   String get timeHint => _t(
     'Heures (facultatif, HH:mm)',
@@ -152,6 +236,7 @@ class SpecialsText {
     'Horas (opcional, HH:mm)',
     'Uhrzeit (optional, HH:mm)',
     'Ure (opsioneel, HH:mm)',
+    th: 'ช่วงเวลา (ไม่บังคับ, HH:mm)',
   );
 
   String get nameOptional => _t(
@@ -160,6 +245,7 @@ class SpecialsText {
     'Nombre (opcional)',
     'Bezeichnung (optional)',
     'Naam (opsioneel)',
+    th: 'ชื่อ (ไม่บังคับ)',
   );
 
   String get specialPrice => _t(
@@ -168,6 +254,7 @@ class SpecialsText {
     'Precio especial',
     'Angebotspreis',
     'Spesiale prys',
+    th: 'ราคาพิเศษ',
   );
 
   String get pickADay => _t(
@@ -176,6 +263,7 @@ class SpecialsText {
     'Elija al menos un día para cada especial.',
     'Wählen Sie für jedes Angebot mindestens einen Tag.',
     'Kies ten minste een dag vir elke spesiaal.',
+    th: 'กรุณาเลือกอย่างน้อยหนึ่งวันสำหรับเมนูพิเศษแต่ละรายการ',
   );
 
   String get setAPrice => _t(
@@ -184,6 +272,7 @@ class SpecialsText {
     'Dé un precio especial a al menos un tamaño.',
     'Geben Sie mindestens einer Größe einen Angebotspreis.',
     'Gee ten minste een grootte ’n spesiale prys.',
+    th: 'กรุณาตั้งราคาพิเศษให้อย่างน้อยหนึ่งขนาด',
   );
 
   String get bothTimes => _t(
@@ -192,6 +281,7 @@ class SpecialsText {
     'Indique las dos horas (inicio y fin), o ninguna.',
     'Geben Sie beide Zeiten (Beginn und Ende) an oder keine.',
     'Gee albei tye (begin en einde), of geen.',
+    th: 'กรุณาใส่ทั้งเวลาเริ่มและเวลาสิ้นสุด หรือเว้นว่างทั้งคู่',
   );
 
   String get badTime => _t(
@@ -200,6 +290,7 @@ class SpecialsText {
     'Escriba la hora así: 16:00.',
     'Schreiben Sie die Uhrzeit so: 16:00.',
     'Skryf die tyd so: 16:00.',
+    th: 'กรุณาเขียนเวลาแบบ 16:00',
   );
 
   String get sameTimes => _t(
@@ -208,5 +299,6 @@ class SpecialsText {
     'El inicio y el fin no pueden ser iguales.',
     'Beginn und Ende dürfen nicht gleich sein.',
     'Die begin en einde kan nie dieselfde wees nie.',
+    th: 'เวลาเริ่มและเวลาสิ้นสุดต้องไม่ซ้ำกัน',
   );
 }

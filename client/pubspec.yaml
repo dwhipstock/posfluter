@@ -105,6 +105,7 @@ flutter:
     - assets/fonts/OFL-Barlow.txt
     - assets/fonts/OFL-Inter.txt
     - assets/fonts/OFL-NotoSans.txt
+    - assets/fonts/OFL-NotoSansThai.txt
     - assets/fonts/OFL-PlusJakartaSans.txt
 
   # Bundled, never fetched: the terminal must render identically offline.
@@ -121,6 +122,17 @@ flutter:
     - family: NotoSans
       fonts:
         - asset: assets/fonts/NotoSans-Regular.ttf
+    # Thai (OFL): no other bundled family has Thai glyphs; every text style
+    # falls back to it, so Thai menus and the Thai UI draw the same offline.
+    - family: NotoSansThai
+      fonts:
+        - asset: assets/fonts/NotoSansThai-Regular.ttf
+        - asset: assets/fonts/NotoSansThai-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansThai-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansThai-Bold.ttf
+          weight: 700
     # Sage & Poppy's own type (its brand skin): a geometric grotesk, OFL,
     # Latin subset (English + Spanish); Noto Sans covers anything else.
     - family: PlusJakartaSans

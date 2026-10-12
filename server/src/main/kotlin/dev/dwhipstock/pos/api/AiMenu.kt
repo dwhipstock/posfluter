@@ -35,9 +35,15 @@ data class MenuAiRevertRequest(val managerPin: String? = null, val force: Boolea
 
 private const val MAX_MENU_PHOTO_BYTES = 12 * 1024 * 1024
 
-/** The session's user and device and the approving manager: rate limit key and AI log line. */
+/**
+ * The session's user and device and the approving manager: rate limit key and AI log line.
+ * The language is the screen's (`?lang=`, so a Thai request on a tablet switched to ไทย a
+ * moment ago is answered in Thai), else the user's stored one.
+ */
 internal fun ApplicationCall.aiCaller(approverId: String) = sessionUser().let {
-    AiCaller(it.userId, approverId, it.deviceId, it.languageCode)
+    val screen = request.queryParameters["lang"]?.trim()?.lowercase()
+        ?.takeIf { l -> l.length in 2..8 && dev.dwhipstock.pos.sdk.i18n.Messages.supports(dev.dwhipstock.pos.sdk.i18n.LocaleCode.of(l)) }
+    AiCaller(it.userId, approverId, it.deviceId, screen ?: it.languageCode)
 }
 
 /**

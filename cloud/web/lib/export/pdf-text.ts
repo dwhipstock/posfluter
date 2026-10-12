@@ -6,10 +6,22 @@
 // backwards), and it cannot draw colour emoji at all. So such characters are
 // swapped for "�" (one per run) and the PDF says so; the CSV / Excel exports
 // keep every character.
+//
+// Thai is the exception: it is small (Noto Sans Thai, ~20 KB a face, fetched
+// only when a report has Thai in it) and needs no reordering, only mark
+// positioning, which the font's own tables give. So Thai runs are kept and
+// drawn in that face ([THAI_PDF_FONT]); everything else stays Roboto.
 
 import { PDF_FONT_RANGES } from "./pdf-coverage";
 
 export const PDF_PLACEHOLDER = "�";
+
+/** The pdfmake font name Thai runs are drawn in (lib/export/pdf.ts loads it). */
+export const THAI_PDF_FONT = "NotoSansThai";
+
+/** A Thai letter, vowel, tone mark or digit (U+0E01–U+0E5B). */
+export const isThaiCp = (cp: number) => cp >= 0x0e01 && cp <= 0x0e5b;
+const THAI_RUN = /[\u0E01-\u0E5B]+/g;
 
 function drawable(cp: number): boolean {
   let lo = 0;
@@ -59,6 +71,12 @@ export function pdfText(s: string): { text: string; replaced: boolean } {
       inRun = false;
       continue;
     }
+    if (isThaiCp(baseCp)) {
+      // a Thai cluster (consonant + vowels / tone marks) is drawn whole by the Thai face
+      out += cps.filter((c) => isThaiCp(c.codePointAt(0)!) || (drawable(c.codePointAt(0)!) && !isInvisible(c))).join("");
+      inRun = false;
+      continue;
+    }
     if (drawable(baseCp) && !isMark(base)) {
       // keep the letter; keep only the accents the font has
       out += cps.filter((c, i) => i === 0 || (drawable(c.codePointAt(0)!) && !isInvisible(c))).join("");
@@ -73,22 +91,48 @@ export function pdfText(s: string): { text: string; replaced: boolean } {
   return { text: out, replaced };
 }
 
-/** Every font-drawn string in a pdfmake content tree, run through [pdfText] in place. */
+type Run = string | { text: string; font: string };
+
+/** [s] split into Roboto runs (plain strings) and Thai runs ({ text, font }); null: no Thai. */
+export function thaiRuns(s: string): Run[] | null {
+  if (!/[\u0E01-\u0E5B]/.test(s)) return null;
+  const runs: Run[] = [];
+  let last = 0;
+  for (const m of s.matchAll(THAI_RUN)) {
+    if (m.index! > last) runs.push(s.slice(last, m.index));
+    runs.push({ text: m[0], font: THAI_PDF_FONT });
+    last = m.index! + m[0].length;
+  }
+  if (last < s.length) runs.push(s.slice(last));
+  return runs;
+}
+
+/**
+ * Every font-drawn string in a pdfmake content tree, run through [pdfText] in
+ * place; a string with Thai becomes runs, its Thai drawn in [THAI_PDF_FONT].
+ */
 export function sanitizeContent<T>(node: T, onReplace: () => void): T {
-  const walk = (n: unknown): unknown => {
+  const clean = (s: string): string => {
+    const r = pdfText(s);
+    if (r.replaced) onReplace();
+    return r.text;
+  };
+  const walk = (n: unknown, underText = false): unknown => {
     if (typeof n === "string") {
-      const r = pdfText(n);
-      if (r.replaced) onReplace();
-      return r.text;
+      const text = clean(n);
+      const runs = thaiRuns(text);
+      if (!runs) return text;
+      // under `text` the runs are the value; a bare string (a paragraph, a cell) becomes a text node
+      return underText ? runs : { text: runs };
     }
-    if (Array.isArray(n)) return n.map(walk);
+    if (Array.isArray(n)) return n.map((x) => walk(x)); // an element of a text array becomes its own inline node
     if (n && typeof n === "object") {
       const o = n as Record<string, unknown>;
       const copy: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(o)) {
         // a string is drawn text only under `text`; style names, colours,
         // widths and layouts are copied as-is (nested nodes are walked)
-        copy[k] = k === "text" || (v !== null && typeof v === "object") ? walk(v) : v;
+        copy[k] = k === "text" ? walk(v, true) : v !== null && typeof v === "object" ? walk(v) : v;
       }
       return copy;
     }

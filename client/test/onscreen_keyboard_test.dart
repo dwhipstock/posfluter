@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_client/i18n.dart';
 import 'package:pos_client/keyboard/keyboard_host.dart';
+import 'package:pos_client/keyboard/keyboard_layouts.dart';
 import 'package:pos_client/keyboard/pos_keyboard.dart';
 import 'package:pos_client/store_profile.dart';
 
@@ -494,6 +495,144 @@ void main() {
     expect(kb.visible.value, isTrue);
     expect(_key('ç'), findsOneWidget);
     expect(find.text('Français'), findsOneWidget);
+  });
+
+  group('Thai (Kedmanee)', () {
+    Future<PosKeyboardControl> pumpThai(
+      WidgetTester tester,
+      TextEditingController c, {
+      TextCapitalization capitalization = TextCapitalization.none,
+    }) async {
+      StoreProfile.current = const StoreProfile(locales: ['th', 'en']);
+      FlutterSecureStorage.setMockInitialValues({'pref_lang': 'th'});
+      await Prefs.instance.load();
+      expect(Prefs.instance.lang, 'th');
+      return _pumpField(tester, c, capitalization: capitalization);
+    }
+
+    testWidgets('the Thai layout when the app is in Thai: four letter rows', (
+      tester,
+    ) async {
+      await pumpThai(tester, TextEditingController());
+      expect(find.text('ไทย'), findsOneWidget); // the space bar
+      // the number-row letters on top, then ๆ ไ ำ…, ฟ ห ก…, ผ ป แ…
+      final rows = [
+        for (final k in ['ๅ', 'ๆ', 'ฟ', 'ผ']) tester.getCenter(_key(k)).dy,
+      ];
+      for (var i = 1; i < rows.length; i++) {
+        expect(rows[i], greaterThan(rows[i - 1]));
+      }
+      expect(tester.getCenter(_key('ช')).dy, rows[0]);
+      expect(tester.getCenter(_key('ง')).dy, rows[2]);
+      // marks print on a dotted circle
+      expect(find.text('◌่'), findsOneWidget);
+      expect(_key('q'), findsNothing);
+      // five rows still fit the keyboard's height
+      final board = tester.getRect(find.byType(KeyboardHost));
+      expect(
+        tester.getRect(_key('space')).bottom,
+        lessThanOrEqualTo(board.bottom),
+      );
+      expect(
+        tester.getRect(_key('ๅ')).top,
+        greaterThanOrEqualTo(
+          _screen.height - KeyboardMetrics.of(_screen).height,
+        ),
+      );
+    });
+
+    testWidgets('vowels and tone marks land in Thai order on the consonant', (
+      tester,
+    ) async {
+      final c = TextEditingController();
+      await pumpThai(tester, c);
+      // ก then the tone ่ then the vowel ิ: stored as ก ิ ่ (กิ่)
+      await _typeKeys(tester, 'ก่ิ');
+      expect(c.text, 'ก\u0E34\u0E48');
+      // a second tone replaces the first
+      await _tap(tester, '้');
+      expect(c.text, 'ก\u0E34\u0E49');
+      // backspace takes the tone off, then the vowel, then the consonant
+      await _tap(tester, 'backspace');
+      expect(c.text, 'ก\u0E34');
+      await _tap(tester, 'backspace');
+      expect(c.text, 'ก');
+      await _typeKeys(tester, 'า');
+      expect(c.text, 'กา');
+    });
+
+    testWidgets('shift is the second layer, and never turns on by itself', (
+      tester,
+    ) async {
+      final c = TextEditingController();
+      final kb = await pumpThai(
+        tester,
+        c,
+        capitalization: TextCapitalization.sentences,
+      );
+      expect(kb.shift, ShiftState.off); // no capitals at a sentence start
+      await _tap(tester, 'ก');
+      expect(c.text, 'ก');
+      await _tap(tester, 'shift');
+      expect(find.text('ฏ'), findsOneWidget); // the faces show the layer
+      expect(find.text('๑'), findsOneWidget);
+      await _tap(tester, 'ก');
+      expect(c.text, 'กฏ');
+      expect(kb.shift, ShiftState.off); // once
+      await _tap(tester, 'shift');
+      await _tap(tester, 'ึ'); // shift-ึ is the baht sign
+      expect(c.text, 'กฏ฿');
+    });
+
+    testWidgets('the language key swaps Thai and English letters', (
+      tester,
+    ) async {
+      final c = TextEditingController();
+      final kb = await pumpThai(tester, c);
+      expect(find.text('ABC'), findsOneWidget);
+      await _tap(tester, 'lang');
+      expect(kb.layout, 'en');
+      expect(_key('q'), findsOneWidget);
+      expect(_key('ก'), findsNothing);
+      expect(find.text('English'), findsOneWidget);
+      expect(find.text('กขค'), findsOneWidget);
+      await _typeKeys(tester, 'pad ');
+      await _tap(tester, 'lang');
+      expect(kb.layout, 'th');
+      await _typeKeys(tester, 'ไทย');
+      expect(c.text, 'pad ไทย');
+      // the app language changing drops the swap
+      await _tap(tester, 'lang');
+      await Prefs.instance.setLang('en');
+      await tester.pump();
+      expect(kb.layout, 'en');
+      expect(_key('lang'), findsNothing); // English alone has no language key
+      await Prefs.instance.setLang('th');
+      await tester.pump();
+      expect(kb.layout, 'th');
+    });
+  });
+
+  test('thaiCompose keeps Thai in stored order', () {
+    expect(thaiCompose('ก', '\u0E48'), 'ก\u0E48'); // ก่
+    expect(thaiCompose('ก\u0E48', '\u0E34'), 'ก\u0E34\u0E48'); // กิ่
+    expect(thaiCompose('ก\u0E48', '\u0E49'), 'ก\u0E49'); // tone replaced
+    expect(thaiCompose('ก\u0E34', '\u0E34'), 'ก\u0E34'); // no double vowel
+    expect(thaiCompose('ก\u0E34\u0E48', '\u0E35'), 'ก\u0E35\u0E48'); // กี่
+    expect(thaiCompose('', '\u0E48'), '\u0E48');
+    expect(thaiCompose('ab', 'c'), 'abc');
+    expect(isThaiMark('\u0E31'), isTrue);
+    expect(isThaiMark('ก'), isFalse);
+    expect(isThaiMark('า'), isFalse);
+    expect(keyFace('\u0E48'), '\u25CC\u0E48');
+    expect(shiftedOf('ก', 'th'), 'ฏ');
+    expect(shiftedOf('a', 'en'), 'A');
+    // every Kedmanee key has its shift layer
+    for (final row in letterRows('th')) {
+      for (final k in row) {
+        expect(thaiShifted.containsKey(k), isTrue, reason: k);
+      }
+    }
   });
 
   testWidgets('there is no layout-switch key', (tester) async {

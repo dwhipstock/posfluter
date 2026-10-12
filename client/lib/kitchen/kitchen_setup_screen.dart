@@ -334,10 +334,14 @@ class _KitchenSetupScreenState extends State<KitchenSetupScreen> {
                       value: '',
                       child: Text('${k.languageStore} (${config.language})'),
                     ),
-                    const DropdownMenuItem(
-                      value: 'fr',
-                      child: Text('Français'),
-                    ),
+                    // the data language's tickets (French, or Thai at a Thai store)
+                    if (StoreProfile.current.dataLocale == 'th')
+                      const DropdownMenuItem(value: 'th', child: Text('ไทย'))
+                    else
+                      const DropdownMenuItem(
+                        value: 'fr',
+                        child: Text('Français'),
+                      ),
                     const DropdownMenuItem(value: 'en', child: Text('English')),
                     DropdownMenuItem(
                       value: 'both',

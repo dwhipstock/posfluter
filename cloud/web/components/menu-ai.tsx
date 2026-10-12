@@ -11,6 +11,8 @@ import { ApiError, post, postForm } from "@/lib/api";
 import { useApi, useMe } from "@/lib/hooks";
 import { useI18n, useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
+import { slotLabel } from "@/lib/menu-edit";
+import type { DataLocale } from "@/lib/i18n/translate";
 import { aiErrorKey, allTicked, basisItems, clock, encodeWav, liftKey, MAX_RECORD_SECONDS, salesHeadline, salesNoteKey, signedPct, tickedIds, toggleChange, toMono } from "@/lib/menu-ai";
 import { count, decimal } from "@/lib/format";
 import { useMoney } from "@/lib/money";
@@ -86,7 +88,7 @@ export function errorText(t: T, e: unknown): string {
 
 function AiAssistant({ onApplied }: { onApplied: () => void }) {
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, dataLocale } = useI18n();
   const { storeId, venues, nameOf } = useStores();
   // "All stores": start on the first store so the box is never greyed out; the buttons switch it
   const [picked, setPicked] = useState<string | null>(storeId ?? venues[0]?.id ?? null);
@@ -105,7 +107,9 @@ function AiAssistant({ onApplied }: { onApplied: () => void }) {
   const [busy, setBusy] = useState(false);
   const rec = useVoice((blob) => sendVoice(blob), (k) => setError(t(k)));
 
-  const path = (p: string) => `${p}?venue=${encodeURIComponent(venue ?? "")}`;
+  // the store's data language too: what its *_fr slot holds (a Thai store names things in Thai and English)
+  const path = (p: string) =>
+    `${p}?venue=${encodeURIComponent(venue ?? "")}&dataLocale=${encodeURIComponent(dataLocale)}`;
 
   const show = (p: AiProposal) => {
     setProposal(p);
@@ -577,16 +581,16 @@ function ChangeRow({
   );
 }
 
-function fieldLabel(t: T, d: AiChangeDetail): string {
+function fieldLabel(t: T, d: AiChangeDetail, dataLocale: DataLocale): string {
   switch (d.field) {
     case "nameEn":
       return t("menu_name_en");
     case "nameFr":
-      return t("menu_name_fr");
+      return slotLabel(t, "name", dataLocale);
     case "descriptionEn":
       return t("menu_desc_en");
     case "descriptionFr":
-      return t("menu_desc_fr");
+      return slotLabel(t, "desc", dataLocale);
     case "category":
       return t("menu_col_category");
     case "available":
@@ -607,6 +611,7 @@ function fieldLabel(t: T, d: AiChangeDetail): string {
 
 function DetailLine({ d, currency }: { d: AiChangeDetail; currency: string }) {
   const t = useT();
+  const { dataLocale } = useI18n();
   const m = useMoney();
   const value = (raw: string | null | undefined, minor: number | null | undefined) => {
     if (d.field === "price" && minor != null) return m.fmtIn(currency, minor);
@@ -617,7 +622,7 @@ function DetailLine({ d, currency }: { d: AiChangeDetail; currency: string }) {
   const after = value(d.after, d.afterMinor);
   return (
     <span className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-neutral-700">
-      <span className="text-neutral-600">{fieldLabel(t, d)}:</span>
+      <span className="text-neutral-600">{fieldLabel(t, d, dataLocale)}:</span>
       {before && (
         <>
           <span className="break-words text-neutral-600 line-through">{before}</span>

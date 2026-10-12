@@ -97,7 +97,13 @@ class MenuPrintService(
             throw MenuAiException(429, "menu_print_too_many", "too many printed menus at once: at most $PLANS_MAX every ${WINDOW_MS / 60_000} minutes", retry)
         }
         val started = now()
-        val catalog = transaction { PrintCatalog.of(menuOf(listOf(who.venue.scope)), lang) }
+        val catalog = transaction {
+            val menu = menuOf(listOf(who.venue.scope))
+            val dataLang = dev.dwhipstock.poscloud.menu.DataLang.of(req.dataLocale, req.locales) {
+                menu.items.asSequence().map { it.nameFr } + menu.categories.asSequence().map { it.nameFr }
+            }
+            PrintCatalog.of(menu, lang, dataLang)
+        }
         val moment = TodayRules.moment(clock(), who.venue.zone)
         val candidates = PrintSelect.candidates(kind, catalog, moment.day).take(MAX_PRINTED_ITEMS)
         if (candidates.isEmpty()) throw ConflictException(

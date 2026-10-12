@@ -1,5 +1,6 @@
 package dev.dwhipstock.poscloud.menuprint
 
+import dev.dwhipstock.poscloud.menu.DataLang
 import dev.dwhipstock.poscloud.menu.MenuItemDto
 import dev.dwhipstock.poscloud.menu.MenuResponse
 import kotlinx.serialization.Serializable
@@ -59,6 +60,10 @@ data class PrintRequest(
     val fillPhotos: Boolean = false,
     /** With [fillPhotos]: also keep those pictures as the items' photos (an explicit tick). */
     val savePhotos: Boolean = false,
+    /** The store's data language (what its `*_fr` slots hold: fr | th); null = from [locales], else the menu says ([DataLang]). */
+    val dataLocale: String? = null,
+    /** The store's languages, default first (the portal's brand `locales`): picks the data language when [dataLocale] is missing. */
+    val locales: List<String>? = null,
 )
 
 /** Step 1 (writing the menu): the plan is kept here; [jobId] names it for the artwork and the PDF. */
@@ -165,15 +170,13 @@ data class PrintCatalog(val categories: List<PrintCategory>, val items: List<Pri
          * One store's menu ([MenuResponse] of a single venue) for printing in
          * [lang]: on-sale items only (an item switched off at the till or
          * deleted never prints), items with no size left out, every name in
-         * [lang] when the store has it (else English, else French).
+         * [lang] when the store has it (else English, else the local slot).
+         * [dataLang] is what the `*_fr` slots hold ([DataLang]): French by
+         * default, Thai at a Thai store (so a Thai menu reads them).
          */
-        fun of(menu: MenuResponse, lang: String): PrintCatalog {
-            fun pickName(fr: String, en: String, names: Map<String, String>): String = when (lang) {
-                "fr" -> fr.ifBlank { en }
-                "en" -> en.ifBlank { fr }
-                else -> names[lang]?.takeIf { it.isNotBlank() } ?: en.ifBlank { fr }
-            }.trim()
-            fun desc(i: MenuItemDto) = (if (lang == "fr") i.descriptionFr.ifBlank { i.descriptionEn } else i.descriptionEn.ifBlank { i.descriptionFr })
+        fun of(menu: MenuResponse, lang: String, dataLang: String = DataLang.DEFAULT): PrintCatalog {
+            fun pickName(fr: String, en: String, names: Map<String, String>): String = DataLang.pick(lang, dataLang, fr, en, names).trim()
+            fun desc(i: MenuItemDto) = DataLang.pickText(lang, dataLang, i.descriptionFr, i.descriptionEn)
                 .replace(Regex("\\s+"), " ").trim()
             val items = menu.items.filter { it.active && it.variants.isNotEmpty() }.map { i ->
                 PrintItem(

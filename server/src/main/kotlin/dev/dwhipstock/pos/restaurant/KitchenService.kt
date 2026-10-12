@@ -266,7 +266,8 @@ class KitchenService(
     }
 
     private fun storeLanguage(): KitchenLanguage =
-        if (config.profile.defaultLocale == LocaleCode.FR) KitchenLanguage.FR else KitchenLanguage.EN
+        if (config.profile.defaultLocale == dev.dwhipstock.pos.sdk.i18n.DataLanguage.locale) KitchenLanguage.FR
+        else KitchenLanguage.EN
 
     fun settings(): KitchenSettingsDto = transaction {
         KitchenSettingsDto(

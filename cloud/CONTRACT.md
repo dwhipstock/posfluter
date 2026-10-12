@@ -478,6 +478,24 @@ report (`names`, `categoryNames`), the categories report (`names`) and the
 tables report (zones `names`, tables `zoneNames`). The portal shows the
 reader's language when present, else English, else French.
 
+**The `*_fr` slots hold the store's data language (`dataLocale`).** The column
+and field names stay (`name_fr` / `nameFr`, `label_fr` / `labelFr`,
+`description_fr`, fee and tax `labelFr`), but they mean "the store's local
+language", not always French. The rule, everywhere (store, cloud, portal):
+an explicit setting if present (store: `POS_DATA_LOCALE` /
+`store.data_locale`), else the first of the store's locales that can live in
+the slot (`fr`, `th`), else `fr`. So a French + English store
+(`["en","fr",…]`, and `["en","es"]` stores) keeps French there, exactly as
+before; a Thai + English store (`["th","en"]`) keeps **Thai** there. English is
+always the `*_en` slot; every other language (French at a Thai store included,
+when there is one) is a `names` / `translations` row. The store reports the
+value as `dataLocale` in `GET /health`. A reader in the data language reads the
+`*_fr` slot; a reader in English reads `*_en`; anyone else reads their `names`
+row, else English, else the `*_fr` slot. The cloud keeps no locale list per
+venue: the portal sends `dataLocale` / `locales` where it matters (the printed
+menu, `/v1/menu-print`), and otherwise the cloud reads the menu itself — Thai
+script in the `*_fr` slot means Thai (`menu/DataLang.kt`).
+
 ### `catalog.snapshot` (bootstrap, possibly chunked)
 Written at the store's first-ever sync (`sync_state` flag), carrying the live
 catalog. The cloud mirrors it for display; every later menu edit on the

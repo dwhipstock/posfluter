@@ -14,8 +14,8 @@
 // a Québec pub, en/es for a California shop). Spanish (US) lives in
 // messages.es.ts, keyed by the same MsgKey — a missing Spanish key is a
 // compile error. German lives in messages.de.ts and Afrikaans in
-// messages.af.ts, the same way.
-export type Locale = "fr" | "en" | "es" | "de" | "af";
+// messages.af.ts, and Thai in messages.th.ts, the same way.
+export type Locale = "fr" | "en" | "es" | "de" | "af" | "th";
 
 type Msg = { fr: string; en: string };
 
@@ -814,6 +814,8 @@ export const messages = {
   menu_name_fr: m("Nom (français)", "Name (French)"),
   menu_name_in: m("Nom ({lang})", "Name ({lang})"),
   menu_desc_en: m("Description (anglais)", "Description (English)"),
+  menu_desc_in: m("Description ({lang})", "Description ({lang})"),
+  menu_size_in: m("Format ({lang})", "Size ({lang})"),
   menu_desc_fr: m("Description (français)", "Description (French)"),
   menu_available: m("Disponible", "Available"),
   menu_available_hint: m("Désactivé = en rupture (86) : il disparaît du menu jusqu’à sa réactivation.", "Off = 86’d: it leaves the menu until you turn it back on."),
@@ -878,6 +880,7 @@ export const messages = {
   menu_lang_af: m("afrikaans", "Afrikaans"),
   menu_lang_fr: m("français", "French"),
   menu_lang_en: m("anglais", "English"),
+  menu_lang_th: m("thaï", "Thai"),
 
   // ── menu: the AI assistant ("Ask AI", /v1/menu-ai) ───────────────────
   ai_ask: m("Demander à l’IA", "Ask AI"),

@@ -22,6 +22,7 @@ value class LocaleCode(val tag: String) {
         val ES = LocaleCode("es")
         val DE = LocaleCode("de")
         val AF = LocaleCode("af")
+        val TH = LocaleCode("th")
 
         /** Normalize a stored/user-supplied code ("EN ", "Fr") to a lowercase tag. */
         fun of(raw: String) = LocaleCode(raw.trim().lowercase())
@@ -365,14 +366,20 @@ object Messages {
     }
 }
 
+/**
+ * The `*_fr` slot holds the store's local data language ([DataLanguage]:
+ * French by default, Thai at a Thai + English store); everything else reads
+ * the English side.
+ */
 private val LocaleCode.prefersEnglishData: Boolean
-    get() = tag == LocaleCode.EN.tag || (tag != LocaleCode.FR.tag && Messages.defaultLocale.tag == LocaleCode.EN.tag)
+    get() = tag != DataLanguage.tag
 
 /**
  * Bilingual DATA fields (item names, variant/fee/tender labels): the database
- * carries fr+en columns only, so a locale beyond that pair renders the default
- * locale's side. Seam: per-locale data needs a translations table, not more
- * columns — until then this is the single place that encodes the pair.
+ * carries the local-language (`*_fr`) + English columns, so a locale beyond
+ * that pair renders the English side. Seam: per-locale data lives in the
+ * translations table, not more columns — this is the single place that
+ * encodes the pair.
  */
 fun LocaleCode.dataText(fr: String, en: String): String = if (prefersEnglishData) en else fr
 

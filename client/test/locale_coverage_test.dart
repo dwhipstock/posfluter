@@ -1,7 +1,9 @@
 // Every string the terminal can show exists in every language a store uses:
 // French and English at the pubs (plus Spanish, German and Afrikaans at
 // Copper Lantern),
-// English and Spanish at Sage & Poppy. The
+// English and Spanish at Sage & Poppy, Thai and English at a Thai store
+// (every restaurant table; retail, stock and the forecourt fall back to
+// English in Thai). The
 // string tables are plain Dart (`_t(...)` calls with one literal per
 // language), so this test reads their source and checks each call:
 //
@@ -28,18 +30,19 @@ class _Table {
 }
 
 const _tables = [
-  _Table('lib/i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
-  _Table('lib/kitchen/kitchen_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
+  _Table('lib/i18n.dart', ['fr', 'en', 'es', 'de', 'af', 'th']),
+  _Table('lib/kitchen/kitchen_i18n.dart', ['fr', 'en', 'es', 'de', 'af', 'th']),
   _Table('lib/quickserve/quick_serve_i18n.dart', [
     'fr',
     'en',
     'es',
     'de',
     'af',
+    'th',
   ]),
-  _Table('lib/kiosk/kiosk_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
-  _Table('lib/carryout/carry_out_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
-  _Table('lib/specials_i18n.dart', ['fr', 'en', 'es', 'de', 'af']),
+  _Table('lib/kiosk/kiosk_i18n.dart', ['fr', 'en', 'es', 'de', 'af', 'th']),
+  _Table('lib/carryout/carry_out_i18n.dart', ['fr', 'en', 'es', 'de', 'af', 'th']),
+  _Table('lib/specials_i18n.dart', ['fr', 'en', 'es', 'de', 'af', 'th']),
   _Table('lib/retail/retail_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/stock/stock_i18n.dart', ['en', 'es', 'fr']),
   _Table('lib/forecourt/forecourt_i18n.dart', ['en', 'es', 'fr']),
@@ -63,6 +66,8 @@ const _sameWords = {
   'Code', 'Chat', 'Name', 'Manager', 'Bank', 'Port', 'Simulator', 'Stations',
   // the same word in Afrikaans
   'item', 'items', 'Kiosk', 'Afrikaans',
+  // the same word in Afrikaans: the language's name
+  'Thai',
   // a menu special: French and Afrikaans menus say "happy hour" too
   'Happy', 'hour',
 };
@@ -224,7 +229,7 @@ List<_Call> _calls(_Table table) {
   final calls = <_Call>[];
   for (final m in RegExp(r'(?<![\w$.])_t\(').allMatches(src)) {
     // the helper's own declaration: "String _t(String fr, ...)"
-    if (src.substring(m.end).startsWith('String ')) continue;
+    if (src.substring(m.end).trimLeft().startsWith('String ')) continue;
     final lexer = _Lexer(src)..i = m.end;
     final args = lexer.readArgs();
     final line = '\n'.allMatches(src.substring(0, m.start)).length + 1;
@@ -241,6 +246,16 @@ List<_Call> _calls(_Table table) {
 }
 
 final _word = RegExp(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’-]*|&");
+
+/// Whole Thai texts that stay in English on purpose: what Thai keyboards
+/// print on the key, and the "AI" badge.
+const _thaiKeepsEnglish = {'Shift', 'AI'};
+
+/// Thai letters (U+0E01–U+0E2E consonants, vowels, digits).
+final _thai = RegExp('[\u0E01-\u0E5B]');
+
+/// A Thai combining vowel or tone mark at the very start of a text.
+final _thaiMark = RegExp('^[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]');
 
 bool _allowedSame(String text) =>
     _word.allMatches(text).every((w) => _sameWords.contains(w[0]));
@@ -291,6 +306,23 @@ void main() {
           expect(bad, isEmpty, reason: bad.join('\n'));
         },
       );
+
+      test('Thai: written in Thai script, no French spacing', () {
+        final bad = [
+          for (final c in calls)
+            if (c.texts['th'] case final th?)
+              if (th.contains('\u00A0') ||
+                  // a Thai text with no Thai letter is English left in place
+                  // (unless it is only allowlisted words, like "OK" or "PIN")
+                  (!_thai.hasMatch(th) &&
+                      !_allowedSame(th) &&
+                      !_thaiKeepsEnglish.contains(th)) ||
+                  // a vowel or tone mark can't start a text: it needs a letter
+                  th.split(' | ').any(_thaiMark.hasMatch))
+                '${c.where}: $th',
+        ];
+        expect(bad, isEmpty, reason: bad.join('\n'));
+      });
 
       test('French typography: no-break spaces around : ; ! ? « »', () {
         final bad = <String>[];

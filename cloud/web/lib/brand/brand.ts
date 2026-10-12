@@ -7,7 +7,9 @@
 // This module is isomorphic and pure (no fs): parsing, validation, defaults
 // and the CSS custom properties the Tailwind theme reads (tailwind.config.ts).
 
-export const SUPPORTED_LOCALES = ["en", "fr", "es", "de", "af"] as const;
+import { dataLocaleOf, DATA_SLOT_LOCALES, type DataLocale } from "../i18n/translate";
+
+export const SUPPORTED_LOCALES = ["en", "fr", "es", "de", "af", "th"] as const;
 export type BrandLocale = (typeof SUPPORTED_LOCALES)[number];
 
 /** The shell: a dark sidebar (desktop) + dark bottom bar, or a light top bar + light bottom bar. */
@@ -94,6 +96,12 @@ export interface Brand {
   loginArt: "mark" | "logo";
   font: BrandFont;
   locales: { default: BrandLocale; available: BrandLocale[] };
+  /**
+   * The language the catalog's `*_fr` name slots hold for this client:
+   * brand.json `dataLocale` ("fr" | "th"), else the first of its locales that
+   * is one of those, else "fr" (every French + English or English-only pack).
+   */
+  dataLocale: DataLocale;
   /** The client's currency: the fallback when a store doesn't say. */
   currency: string;
   features: BrandFeatures;
@@ -178,6 +186,12 @@ export function parseBrand(raw: unknown): Brand {
   const def = loc.default ?? available[0];
   if (!available.includes(def)) throw new BrandError("brand.locales.default: must be one of locales.available");
 
+  const dataLocaleRaw = raw.dataLocale;
+  if (dataLocaleRaw !== undefined && !(DATA_SLOT_LOCALES as readonly unknown[]).includes(dataLocaleRaw)) {
+    throw new BrandError(`brand.dataLocale: one of ${DATA_SLOT_LOCALES.join(", ")}`);
+  }
+  const dataLocale = dataLocaleOf(available as string[], dataLocaleRaw as string | undefined);
+
   const currency = typeof raw.currency === "string" ? raw.currency.toUpperCase() : "CAD";
   if (!/^[A-Z]{3}$/.test(currency)) throw new BrandError("brand.currency: a 3-letter code");
 
@@ -238,6 +252,7 @@ export function parseBrand(raw: unknown): Brand {
     loginArt: loginArt(raw, assets.logo),
     font: oneOf(raw, "font", BRAND_FONTS, "inter", "brand"),
     locales: { default: def as BrandLocale, available: available as BrandLocale[] },
+    dataLocale,
     currency,
     features,
     assets,

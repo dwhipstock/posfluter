@@ -948,7 +948,7 @@ private fun zoneClosedMenuPage(tableLabel: String, venueName: String): String = 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${venueName.escapeHtml()}</title>
 <style>
-  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
+  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; }
   body { background: #F3F7FC; color: #17263A; min-height: 100vh; display: flex;
          align-items: center; justify-content: center; padding: 24px; }
   .card { max-width: 420px; text-align: center; background: #FFFFFF; border: 1px solid #C8D5E6;
@@ -963,7 +963,7 @@ private fun zoneClosedMenuPage(tableLabel: String, venueName: String): String = 
   <div class="card">
     <div class="icon">🌧️</div>
     <div class="table">${tableLabel.escapeHtml()}</div>
-    <div class="fr">Cette section est fermée pour le moment.<br>Adressez-vous au personnel.</div>
+    <div class="fr">${if (dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag == "th") "ส่วนนี้ปิดให้บริการชั่วคราว<br>กรุณาติดต่อพนักงาน" else "Cette section est fermée pour le moment.<br>Adressez-vous au personnel."}</div>
     <div class="en">This section is temporarily closed.<br>Please ask staff to help.</div>
   </div>
 </body>
@@ -977,7 +977,7 @@ private fun scanAtTablePage(venueName: String): String = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${venueName.escapeHtml()}</title>
 <style>
-  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
+  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; }
   body { background: #F3F7FC; color: #17263A; min-height: 100vh; display: flex;
          align-items: center; justify-content: center; padding: 24px; }
   .card { max-width: 420px; text-align: center; background: #FFFFFF; border: 1px solid #C8D5E6;
@@ -990,7 +990,7 @@ private fun scanAtTablePage(venueName: String): String = """<!DOCTYPE html>
 <body>
   <div class="card">
     <div class="venue">${venueName.escapeHtml()}</div>
-    <div class="fr">Veuillez balayer le code QR sur votre table.</div>
+    <div class="fr">${if (dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag == "th") "กรุณาสแกน QR โค้ดที่โต๊ะของคุณ" else "Veuillez balayer le code QR sur votre table."}</div>
     <div class="en">Please scan the QR code at your table.</div>
   </div>
 </body>
@@ -1110,7 +1110,7 @@ private fun slipPage(
 <title>Table slips — $venue</title>
 <style>
   @page { size: A6; margin: 0; }
-  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
+  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; }
   body { background: #eee; }
   .slip { width: 105mm; height: 148mm; padding: 10mm; background: #fff; margin: 8px auto;
           display: flex; flex-direction: column; align-items: center; justify-content: center;

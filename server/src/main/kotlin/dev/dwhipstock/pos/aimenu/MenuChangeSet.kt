@@ -403,11 +403,12 @@ Specials rules:
         "es" to listOf("lun", "mar", "mié", "jue", "vie", "sáb", "dom"),
         "de" to listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"),
         "af" to listOf("Ma", "Di", "Wo", "Do", "Vr", "Sa", "So"),
+        "th" to listOf("จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."),
     )
-    private val EVERY_DAY = mapOf("en" to "Every day", "fr" to "Tous les jours", "es" to "Todos los días", "de" to "Jeden Tag", "af" to "Elke dag")
-    private val AND = mapOf("en" to " & ", "fr" to " et ", "es" to " y ", "de" to " & ", "af" to " en ")
-    private val ONLY = mapOf("en" to "Only ", "fr" to "Seulement ", "es" to "Solo ", "de" to "Nur ", "af" to "Net ")
-    private val NONE = mapOf("en" to "No specials", "fr" to "Aucun spécial", "es" to "Sin especiales", "de" to "Keine Angebote", "af" to "Geen spesiale")
+    private val EVERY_DAY = mapOf("en" to "Every day", "fr" to "Tous les jours", "es" to "Todos los días", "de" to "Jeden Tag", "af" to "Elke dag", "th" to "ทุกวัน")
+    private val AND = mapOf("en" to " & ", "fr" to " et ", "es" to " y ", "de" to " & ", "af" to " en ", "th" to " และ ")
+    private val ONLY = mapOf("en" to "Only ", "fr" to "Seulement ", "es" to "Solo ", "de" to "Nur ", "af" to "Net ", "th" to "เฉพาะ ")
+    private val NONE = mapOf("en" to "No specials", "fr" to "Aucun spécial", "es" to "Sin especiales", "de" to "Keine Angebote", "af" to "Geen spesiale", "th" to "ไม่มีโปรโมชัน")
 
     private fun l(lang: String) = lang.lowercase().take(2).takeIf { it in SHORT_DAYS } ?: "en"
 

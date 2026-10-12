@@ -185,8 +185,11 @@ sealed interface ReceiptPolicy {
      * with the venue's paper receipts — deliberately NOT locale-driven, so a
      * locale pack cannot change them. Per-locale date patterns would be a
      * future catalog key (e.g. receipt.date_pattern), not a format here.
+     * The one exception: a Thai receipt prints the Thai way, the Buddhist Era
+     * year (CE + 543) day first ("12/10/2569 14:05", [dev.dwhipstock.pos.sdk.i18n.ThaiDates]).
      */
     fun formatDate(dt: LocalDateTime): String {
+        if (locale.tag == "th") return dev.dwhipstock.pos.sdk.i18n.ThaiDates.receipt(dt) // Buddhist Era, day first
         return "%04d-%02d-%02d %02d:%02d".format(dt.year, dt.monthValue, dt.dayOfMonth, dt.hour, dt.minute)
     }
 
@@ -239,7 +242,7 @@ sealed interface ReceiptPolicy {
         )
 
         override fun formatDate(dt: LocalDateTime): String {
-            if (!usDates) return super.formatDate(dt)
+            if (!usDates || locale.tag == "th") return super.formatDate(dt)
             val h = dt.hour % 12
             val ampm = if (dt.hour < 12) "AM" else "PM"
             return "%02d/%02d/%04d %d:%02d %s".format(dt.monthValue, dt.dayOfMonth, dt.year, if (h == 0) 12 else h, dt.minute, ampm)

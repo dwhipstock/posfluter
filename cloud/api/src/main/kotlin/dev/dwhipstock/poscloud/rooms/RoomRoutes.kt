@@ -141,7 +141,8 @@ private fun roomCaller(call: ApplicationCall, service: RoomAiService, lang: Stri
     requireMenuEditor(principal)
     if (!service.enabled) throw MenuAiException(409, "menu_ai_disabled", "the AI assistant is not set up on this portal")
     if (requested == null || venues.size != 1) throw BadRequestException("pick one store for the AI assistant", "venue_required")
-    return AiCaller(principal, venues.single(), MenuAiService.lang(lang))
+    return AiCaller(principal, venues.single(), MenuAiService.lang(lang),
+        dev.dwhipstock.poscloud.menu.DataLang.resolve(call.request.queryParameters["dataLocale"], null))
 }
 
 private suspend fun ByteReadChannel.readCapped(max: Int, message: String, code: String): ByteArray {

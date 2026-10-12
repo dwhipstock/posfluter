@@ -119,7 +119,37 @@ object ThermalLayout {
             when {
                 fits(candidate, style, style.size, m, content) -> current = candidate
                 fits(word, style, style.size, m, content) -> { flush(); current = word }
-                else -> { flush(); rows += exact(word, style, align, m, content) }
+                else -> { flush(); rows += if (hasThai(word)) wrapThai(word, style, align, m, content) else exact(word, style, align, m, content) }
+            }
+        }
+        flush()
+        return rows
+    }
+
+    private fun hasThai(text: String) = text.any { it in '\u0E00'..'\u0E7F' }
+
+    /**
+     * Thai writes no spaces between words: an over-wide run breaks at the
+     * dictionary word boundaries Java knows for Thai, never inside a word, so
+     * a vowel or tone mark always stays on its consonant. A single word still
+     * too wide goes through [exact] (grapheme clusters).
+     */
+    private fun wrapThai(text: String, style: Style, align: Align, m: TextMeasurer, content: Int): List<Row> {
+        val it = java.text.BreakIterator.getLineInstance(java.util.Locale.forLanguageTag("th"))
+        it.setText(text)
+        val pieces = mutableListOf<String>()
+        var start = it.first()
+        var end = it.next()
+        while (end != java.text.BreakIterator.DONE) { pieces += text.substring(start, end); start = end; end = it.next() }
+        val rows = mutableListOf<Row>()
+        var current = ""
+        fun flush() { if (current.isNotBlank()) rows += Row.Text(current.trimEnd(), style, style.size, align); current = "" }
+        for (piece in pieces) {
+            val candidate = current + piece
+            when {
+                fits(candidate.trimEnd(), style, style.size, m, content) -> current = candidate
+                fits(piece.trimEnd(), style, style.size, m, content) -> { flush(); current = piece }
+                else -> { flush(); rows += exact(piece.trimEnd(), style, align, m, content) }
             }
         }
         flush()

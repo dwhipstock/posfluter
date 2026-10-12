@@ -34,7 +34,7 @@ class ApplicationTest {
         assertEquals(
             """{"status":"ok","pairingRequired":false,"venue":"Copper Lantern — Glenwood South",""" +
                 """"venueId":"vieux-port","brand":"copper-lantern","kind":"restaurant","country":"US",""" +
-                """"currency":"USD","locales":["en","fr","es","de","af"],"legalAge":21,"cashRounding":"nickel",""" +
+                """"currency":"USD","locales":["en","fr","es","de","af"],"dataLocale":"fr","legalAge":21,"cashRounding":"nickel",""" +
                 """"taxDisplay":"combined"}""",
             response.bodyAsText(),
         )

@@ -137,9 +137,63 @@ object ThermalReceiptRenderer {
     private fun font(style: ThermalLayout.Style, size: Float): Font =
         (if (style.bold) boldFont else bodyFont).deriveFont(size)
 
+    // ---- Thai -----------------------------------------------------------------
+    // The host's fonts rarely carry Thai, so the bundled Noto Sans Thai (OFL,
+    // resources/fonts) draws every Thai run; the rest of the line keeps the
+    // body font. A line with Thai is laid out as one shaped TextLayout, so the
+    // above/below vowels and tone marks stack on their consonant (zero width)
+    // instead of being drawn side by side. Lines without Thai take the old path,
+    // pixel for pixel.
+
+    private fun loadThai(name: String): Font? = runCatching {
+        dev.dwhipstock.pos.StoreAssets.readBytesOrNull("fonts/$name")
+            ?.let { Font.createFont(Font.TRUETYPE_FONT, it.inputStream()) }
+    }.getOrNull()
+
+    private val thaiRegular: Font? by lazy { loadThai("NotoSansThai-Regular.ttf") }
+    private val thaiBold: Font? by lazy { loadThai("NotoSansThai-Bold.ttf") ?: thaiRegular?.deriveFont(Font.BOLD) }
+
+    /** Whether [text] has Thai (U+0E00–U+0E7F). */
+    fun hasThai(text: String): Boolean = text.any { it in '\u0E00'..'\u0E7F' }
+
+    /** The font a line's Thai runs are drawn with (null: not bundled, the body font tries). */
+    fun thaiFont(style: ThermalLayout.Style, size: Float): Font? =
+        (if (font(style, size).isBold) thaiBold else thaiRegular)?.deriveFont(size)
+
+    /** The font that draws [text]'s Thai (tests: a Thai line picks the Thai face). */
+    fun fontFor(text: String, style: ThermalLayout.Style, size: Float): Font =
+        if (hasThai(text)) thaiFont(style, size) ?: font(style, size) else font(style, size)
+
+    /** [text] as one shaped layout: Thai runs in the Thai font, the rest in [base]. */
+    private fun shaped(text: String, base: Font, thai: Font, g: java.awt.Graphics2D): java.awt.font.TextLayout {
+        val s = java.text.AttributedString(text)
+        s.addAttribute(java.awt.font.TextAttribute.FONT, base)
+        var i = 0
+        while (i < text.length) {
+            if (text[i] in '\u0E00'..'\u0E7F') {
+                var j = i
+                while (j < text.length && text[j] in '\u0E00'..'\u0E7F') j++
+                s.addAttribute(java.awt.font.TextAttribute.FONT, thai, i, j)
+                i = j
+            } else i++
+        }
+        return java.awt.font.TextLayout(s.iterator, g.fontRenderContext)
+    }
+
+    private fun thaiLayout(text: String, base: Font, g: java.awt.Graphics2D): java.awt.font.TextLayout? {
+        if (text.isEmpty() || !hasThai(text)) return null
+        val thai = (if (base.isBold) thaiBold else thaiRegular)?.deriveFont(base.size2D) ?: return null
+        return shaped(text, base, thai, g)
+    }
+
+    /** Width in dots of [text] in [font]: shaped when it has Thai, else the plain metrics. */
+    private fun textWidth(text: String, font: Font, g: java.awt.Graphics2D): Int =
+        thaiLayout(text, font, g)?.let { kotlin.math.ceil(it.advance.toDouble()).toInt() }
+            ?: g.getFontMetrics(font).stringWidth(text)
+
     /** Java2D widths for the shared [ThermalLayout]. */
     private val measurer = ThermalLayout.TextMeasurer { text, style, size ->
-        scratch.getFontMetrics(font(style, size)).stringWidth(text).toFloat()
+        textWidth(text, font(style, size), scratch).toFloat()
     }
     private val scratch by lazy { scratchGraphics() }
 
@@ -187,18 +241,32 @@ object ThermalReceiptRenderer {
         it.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
     }
 
-    private fun rowHeight(font: Font, g: java.awt.Graphics2D): Int {
+    /** The Thai face's metrics when any of [texts] has Thai (its marks reach higher and lower). */
+    private fun thaiMetrics(font: Font, g: java.awt.Graphics2D, texts: Array<out String>): java.awt.FontMetrics? {
+        if (texts.none(::hasThai)) return null
+        val thai = (if (font.isBold) thaiBold else thaiRegular)?.deriveFont(font.size2D) ?: return null
+        return g.getFontMetrics(thai)
+    }
+
+    /** Baseline offset from the row's top: the taller of the body and (for Thai text) the Thai face. */
+    private fun ascent(font: Font, g: java.awt.Graphics2D, vararg texts: String): Int {
         val m = g.getFontMetrics(font)
-        return m.ascent + m.descent + LINE_PAD
+        return maxOf(m.ascent, thaiMetrics(font, g, texts)?.ascent ?: 0)
+    }
+
+    private fun rowHeight(font: Font, g: java.awt.Graphics2D, vararg texts: String): Int {
+        val m = g.getFontMetrics(font)
+        val t = thaiMetrics(font, g, texts) ?: return m.ascent + m.descent + LINE_PAD
+        return maxOf(m.ascent, t.ascent) + maxOf(m.descent, t.descent) + LINE_PAD
     }
 
     private const val QR_SIZE = 360 // dots — big enough to scan off thermal paper
 
     private fun height(row: ThermalLayout.Row, g: java.awt.Graphics2D): Int = when (row) {
-        is ThermalLayout.Row.Text -> rowHeight(font(row.style, row.size), g)
-        is ThermalLayout.Row.Pair -> rowHeight(font(row.style, row.size), g)
+        is ThermalLayout.Row.Text -> rowHeight(font(row.style, row.size), g, row.text)
+        is ThermalLayout.Row.Pair -> rowHeight(font(row.style, row.size), g, row.left, row.right)
         is ThermalLayout.Row.Qr -> QR_SIZE + LINE_PAD * 2
-        is ThermalLayout.Row.Banner -> rowHeight(font(ThermalLayout.Style.TITLE, row.size), g) + LINE_PAD
+        is ThermalLayout.Row.Banner -> rowHeight(font(ThermalLayout.Style.TITLE, row.size), g, row.text) + LINE_PAD
         ThermalLayout.Row.Divider -> BODY / 2 + LINE_PAD
         ThermalLayout.Row.Blank -> BODY / 2
     }
@@ -207,19 +275,19 @@ object ThermalReceiptRenderer {
         when (row) {
             is ThermalLayout.Row.Text -> {
                 val f = font(row.style, row.size)
-                val w = g.getFontMetrics(f).stringWidth(row.text)
+                val w = textWidth(row.text, f, g)
                 val x = when (row.align) {
                     Align.LEFT -> MARGIN
                     Align.CENTER -> ((width - w) / 2).coerceAtLeast(MARGIN)
                     Align.RIGHT -> width - MARGIN - w
                 }
-                at(g, row.text, f, x, top)
+                at(g, row.text, f, x, top, ascent(f, g, row.text))
             }
             is ThermalLayout.Row.Pair -> {
                 val f = font(row.style, row.size)
-                val m = g.getFontMetrics(f)
-                at(g, row.left, f, MARGIN, top)
-                at(g, row.right, f, width - MARGIN - m.stringWidth(row.right), top)
+                val a = ascent(f, g, row.left, row.right)
+                at(g, row.left, f, MARGIN, top, a)
+                at(g, row.right, f, width - MARGIN - textWidth(row.right, f, g), top, a)
             }
             is ThermalLayout.Row.Qr -> {
                 val qr = qrBitmap(row.data, QR_SIZE)
@@ -229,9 +297,9 @@ object ThermalReceiptRenderer {
                 // black bar inside the margins, the text knocked out in white
                 g.fillRect(MARGIN, top, width - MARGIN * 2, height - LINE_PAD / 2)
                 val f = font(ThermalLayout.Style.TITLE, row.size)
-                val w = g.getFontMetrics(f).stringWidth(row.text)
+                val w = textWidth(row.text, f, g)
                 g.color = Color.WHITE
-                at(g, row.text, f, ((width - w) / 2).coerceAtLeast(MARGIN), top + LINE_PAD / 2)
+                at(g, row.text, f, ((width - w) / 2).coerceAtLeast(MARGIN), top + LINE_PAD / 2, ascent(f, g, row.text))
                 g.color = Color.BLACK
             }
             ThermalLayout.Row.Divider -> {
@@ -261,8 +329,10 @@ object ThermalReceiptRenderer {
         return com.google.zxing.client.j2se.MatrixToImageWriter.toBufferedImage(matrix)
     }
 
-    private fun at(g: java.awt.Graphics2D, text: String, font: Font, x: Int, top: Int) {
+    private fun at(g: java.awt.Graphics2D, text: String, font: Font, x: Int, top: Int, ascent: Int) {
+        val shaped = thaiLayout(text, font, g)
+        if (shaped != null) { shaped.draw(g, x.toFloat(), (top + ascent).toFloat()); return }
         g.font = font
-        g.drawString(text, x, top + g.getFontMetrics(font).ascent)
+        g.drawString(text, x, top + ascent)
     }
 }

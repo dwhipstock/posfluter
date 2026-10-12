@@ -21,11 +21,11 @@ import {
   base64Bytes,
   brandPayload,
   defaultLang,
+  printLangsFor,
   LANG_NAMES,
   logoFile,
   NOTES_MAX,
   pdfFileName,
-  PRINT_LANGS,
   PRINT_STYLES,
   PRINT_TYPES,
   printErrorKey,
@@ -117,7 +117,7 @@ async function logoDataUrl(b: Brand): Promise<string | undefined> {
 
 function MenuPrinter() {
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, available } = useI18n();
   const brand = useBrand();
   const status = usePrintStatus();
   const { storeId, venues, nameOf } = useStores();
@@ -168,7 +168,7 @@ function MenuPrinter() {
     setStep("writing");
     try {
       logo.current ??= logoDataUrl(brand);
-      const req = printRequest({ type, lang, paper, photos, fillPhotos, savePhotos, notes, style, brand: brandPayload(brand, await logo.current) });
+      const req = printRequest({ type, lang, paper, photos, fillPhotos, savePhotos, notes, style, brand: brandPayload(brand, await logo.current), dataLocale: brand.dataLocale, locales: brand.locales.available });
       const p = await post<PrintPlan>(path("/v1/menu-print/plan"), req);
       setPlan(p);
       await finish(p, false);
@@ -271,7 +271,7 @@ function MenuPrinter() {
 
             <div className="grid gap-3 sm:grid-cols-3">
               <Pick label={t("print_language")} value={lang} onChange={(v) => setLang(v as PrintLang)}
-                options={PRINT_LANGS.map((l) => ({ value: l, label: LANG_NAMES[l] }))} />
+                options={printLangsFor(available).map((l) => ({ value: l, label: LANG_NAMES[l] }))} />
               <Pick label={t("print_paper")} value={paper} onChange={(v) => setPaper(v as "letter" | "a4")}
                 options={[{ value: "letter", label: t("print_paper_letter") }, { value: "a4", label: t("print_paper_a4") }]} />
               <Pick label={t("print_style")} value={style} onChange={(v) => setStyle(v as PrintStyle | "auto")}

@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { Locale, MsgKey } from "./messages";
-import { pickName, translate } from "./translate";
+import { dataLocaleOf, pickName, translate, type DataLocale } from "./translate";
 import { makeFmt, type Fmt } from "./format";
 
 export type { Locale } from "./messages";
@@ -13,12 +13,15 @@ interface I18n {
   locale: Locale;
   /** The locales this client's portal offers (its brand pack), in display order. */
   available: Locale[];
+  /** The language the catalog's `*_fr` slots hold ("fr", or "th" at a Thai + English client). */
+  dataLocale: DataLocale;
   setLocale: (l: Locale) => void;
   toggleLocale: () => void;
   t: (key: MsgKey, vars?: Vars) => string;
   fmt: Fmt;
   /**
-   * Data-driven names (items, categories, zones): locale first. Spanish,
+   * Data-driven names (items, categories, zones): locale first. [fr] is the
+   * data-language slot (French, or Thai at a Thai + English client). Spanish,
    * German and Afrikaans read the store’s own name in that language ([names]) when it sent
    * one, else the English name.
    */
@@ -38,13 +41,16 @@ function writeCookie(name: string, value: string) {
 export function LocaleProvider({
   initialLocale,
   available,
+  dataLocale: dataLocaleProp,
   children,
 }: {
   initialLocale: Locale;
   available: Locale[];
+  dataLocale?: DataLocale;
   children: React.ReactNode;
 }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
+  const dataLocale = dataLocaleProp ?? dataLocaleOf(available);
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
@@ -63,25 +69,27 @@ export function LocaleProvider({
 
   const name = useCallback(
     (fr?: string | null, en?: string | null, names?: Record<string, string> | null) =>
-      pickName(locale, fr, en, names),
-    [locale]
+      pickName(locale, fr, en, names, dataLocale),
+    [locale, dataLocale]
   );
   const nameAlt = useCallback(
     (fr?: string | null, en?: string | null) => {
-      // the second line is the pub's other official language; a Spanish
-      // reader (or a client without French) gets no French subtitle
-      if (locale === "es" || locale === "de" || locale === "af" || !available.includes("fr")) return "";
+      // the second line is the store's other catalog language (French or
+      // Thai beside English); a Spanish reader, or a client without its data
+      // language, gets no subtitle
+      if ((locale !== "en" && locale !== dataLocale) || !available.includes(dataLocale)) return "";
       const primary = locale === "en" ? en : fr;
       const alt = locale === "en" ? fr : en;
       return alt && alt !== primary ? alt : "";
     },
-    [locale, available]
+    [locale, available, dataLocale]
   );
 
   const value = useMemo<I18n>(
     () => ({
       locale,
       available,
+      dataLocale,
       setLocale,
       // the next of this client's locales (two locales: a simple flip)
       toggleLocale: () => setLocale(available[(available.indexOf(locale) + 1) % available.length] ?? locale),
@@ -90,7 +98,7 @@ export function LocaleProvider({
       name,
       nameAlt,
     }),
-    [locale, available, setLocale, t, fmt, name, nameAlt]
+    [locale, available, dataLocale, setLocale, t, fmt, name, nameAlt]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -46,6 +46,10 @@ data class KioskConfigResponse(
     val locales: List<String>,
     /** The legal drinking age the kiosk's ID note names (21 in the US). */
     val legalAge: Int = 21,
+    /** The language in the `*_fr` name slots ("fr", or "th" at a Thai + English store). */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.ALWAYS)
+    val dataLocale: String = "fr",
 )
 
 private val qsJson = Json { ignoreUnknownKeys = true }
@@ -112,7 +116,8 @@ fun Route.quickServeRoutes(
     }
     get("/kiosk/config") {
         val device = kioskDevice(call, qs) ?: return@get
-        call.respond(KioskConfigResponse(storeName, venueId, device.name, currency, locales, legalAge))
+        call.respond(KioskConfigResponse(storeName, venueId, device.name, currency, locales, legalAge,
+            dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag))
     }
     post("/kiosk/upsell") {
         kioskDevice(call, qs) ?: return@post

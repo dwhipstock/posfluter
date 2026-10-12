@@ -363,19 +363,26 @@ class PickupOrders(
     fun ticketLabel(checkId: Int, language: KitchenLanguage): String? = transaction {
         val row = row(checkId) ?: return@transaction null
         val number = row[CounterOrders.orderNumber]?.let { "#$it" } ?: row[CounterOrders.kioskNumber]?.let { "K$it" } ?: "—"
+        // the "fr" side is the store's local language (French, or Thai)
+        val thai = dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag == "th"
         if (!sourceOf(row).payFirst) {
+            val local = if (thai) "สั่งกลับบ้าน" else "À EMPORTER"
             val toGo = when (language) {
-                KitchenLanguage.FR -> "À EMPORTER"
+                KitchenLanguage.FR -> local
                 KitchenLanguage.EN -> "TO GO"
-                KitchenLanguage.BOTH -> "À EMPORTER / TO GO"
+                KitchenLanguage.BOTH -> "$local / TO GO"
             }
             return@transaction listOfNotNull(number, toGo, row[CounterOrders.customerName]).joinToString(" · ")
         }
         val takeOut = row[CounterOrders.serviceMode] == "TAKE_OUT"
+        val local = when {
+            thai -> if (takeOut) "กลับบ้าน" else "ทานที่ร้าน"
+            else -> if (takeOut) "Pour emporter" else "Sur place"
+        }
         val mode = when (language) {
-            KitchenLanguage.FR -> if (takeOut) "Pour emporter" else "Sur place"
+            KitchenLanguage.FR -> local
             KitchenLanguage.EN -> if (takeOut) "Take out" else "Dine in"
-            KitchenLanguage.BOTH -> if (takeOut) "Pour emporter / Take out" else "Sur place / Dine in"
+            KitchenLanguage.BOTH -> "$local / " + if (takeOut) "Take out" else "Dine in"
         }
         "$number · $mode"
     }

@@ -39,7 +39,7 @@ internal object RoomObjectSuggest {
         {"nameEn":"","nameFr":"","icon":"<one of the icon keys>","shape":"RECT or ROUND","width":100,"height":100}
         Rules:
         - A short name, 1 to 3 words, as a sign would say it ("Jukebox", "Coat rack").
-        - ${if (bilingual) "The store is bilingual: give both nameEn and nameFr (Québec French)."
+        - ${if (bilingual) "The store is bilingual: give both nameEn and nameFr (${dev.dwhipstock.pos.sdk.i18n.DataLanguage.promptNameRegional})."
             else "Write nameEn; leave nameFr \"\"."}
         - icon is exactly one of: ${FLOOR_OBJECT_ICONS.joinToString(", ")}. Pick the closest; "star" if none fits.
         - shape ROUND for round things (a round rug, a barrel), else RECT.
