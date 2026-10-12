@@ -149,7 +149,7 @@ class ThaiLocaleCloudTest {
 
     @Test
     fun aThaiMenuEmbedsTheThaiFont() {
-        val zone = ZoneId.of("Asia/Bangkok")
+        val zone = ZoneId.of("UTC+07:00")
         val moment = TodayRules.moment(ZonedDateTime.of(2026, 10, 6, 17, 0, 0, 0, zone).toInstant(), zone)
         val brand = PrintBrand.of(PrintBrandInput(name = "Test Kitchen", primary = "#17456E", accent = "#8C4A1C", font = "inter"))
         val c = PrintCatalog.of(thaiMenu, "th", "th")
