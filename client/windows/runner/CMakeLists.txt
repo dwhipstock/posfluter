@@ -36,6 +36,9 @@ if("$ENV{POS_BRAND}" STREQUAL "sagepoppy")
   target_compile_definitions(${BINARY_NAME} PRIVATE "POS_BRAND_SAGEPOPPY")
 elseif("$ENV{POS_BRAND}" STREQUAL "pronghorn")
   target_compile_definitions(${BINARY_NAME} PRIVATE "POS_BRAND_PRONGHORN")
+elseif("$ENV{POS_BRAND}" STREQUAL "barcode")
+  # also picks Barcode Pub's icon in Runner.rc (resource files get these too)
+  target_compile_definitions(${BINARY_NAME} PRIVATE "POS_BRAND_BARCODE")
 endif()
 
 # Add dependency libraries and include directories. Add any application-specific

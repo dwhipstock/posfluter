@@ -43,8 +43,13 @@ const PAGES = ["/login", "/", "/reports", "/reports/payments", "/reports/fuel", 
 const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Everything that would give a pack away: its names (plain, HTML- and JSON-escaped) and its id. */
+// A pack id that is also an everyday word the portal itself prints (Barcode
+// Pub's id "barcode" is the stock page's barcode column) can't be a tell-tale
+// on its own: its names still are, and so is its pack path.
+const ORDINARY_WORDS = new Set(["barcode"]);
 function tellTales(p) {
-  const words = new Set([p.name, p.legalName, p.id].filter(Boolean));
+  const id = ORDINARY_WORDS.has(p.id) ? `brands/${p.id}` : p.id;
+  const words = new Set([p.name, p.legalName, id].filter(Boolean));
   for (const w of [...words]) {
     words.add(escapeHtml(w));
     words.add(w.replace(/&/g, "\\u0026"));

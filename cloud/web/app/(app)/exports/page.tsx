@@ -154,7 +154,7 @@ function ExportsPage() {
       {isOwner && (
         <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center" data-testid="export-all">
           <div className="flex min-w-0 flex-1 items-center gap-4">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-copper text-white">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-copper text-copper-ink">
               <Archive className="h-5 w-5" />
             </div>
             <div className="min-w-0">

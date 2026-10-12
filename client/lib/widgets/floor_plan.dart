@@ -25,11 +25,11 @@ Color? tableStatusColor(TableInfo t, {required bool zoneClosed}) {
 }
 
 /// Text colour for a table filled with [statusColor] (null = not filled).
-Color? _onStatus(Color? statusColor) => switch (statusColor) {
-  T.accent => T.onAccent,
-  T.pending => T.onPending,
-  _ => null,
-};
+Color? _onStatus(Color? statusColor) => statusColor == T.accent
+    ? T.onAccent
+    : statusColor == T.pending
+    ? T.onPending
+    : null;
 
 /// Logical-unit bounding box of a room's tables and props, padded, so the
 /// service view can zoom to what is actually drawn instead of the whole
@@ -397,14 +397,14 @@ class TableShape extends StatelessWidget {
           // the text area (a round table's corners are outside the circle),
           // so they never cover the label at any size
           if (table.isVip)
-            const Positioned(
+            Positioned(
               left: -7,
               top: -7,
               child: _CornerMarker(LucideIcons.star, color: T.attention),
             ),
           // sub-table: same physical spot as its parent, independent bill
           if (table.parentTableId != null)
-            const Positioned(
+            Positioned(
               left: -7,
               bottom: -7,
               child: _CornerMarker(LucideIcons.link, color: T.textMuted),

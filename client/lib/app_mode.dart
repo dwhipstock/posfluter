@@ -49,7 +49,8 @@ class AppMode {
 
   static const _brandDefine = String.fromEnvironment('POS_BRAND');
 
-  /// This build's brand: `copperlantern` (default), `sagepoppy` or `pronghorn`.
+  /// This build's brand: `copperlantern` (default), `sagepoppy`, `pronghorn`
+  /// or `barcode`.
   static const brand = _brandDefine == '' ? 'copperlantern' : _brandDefine;
 
   /// A build brand's own name, for screens shown before the store has said
@@ -57,6 +58,7 @@ class AppMode {
   static String brandNameFor(String brand) => switch (brand) {
     'sagepoppy' => 'Sage & Poppy',
     'pronghorn' => 'Pronghorn',
+    'barcode' => 'Barcode Pub',
     _ => 'Copper Lantern',
   };
 
@@ -68,6 +70,8 @@ class AppMode {
   static int storePortFor(String brand) => switch (brand) {
     'sagepoppy' => 8082,
     'pronghorn' => 8084,
+    // 8088, not 8086: that is the pump simulator's
+    'barcode' => 8088,
     _ => 8080,
   };
 
@@ -77,5 +81,7 @@ class AppMode {
   /// Sage & Poppy 8082. Both can run on one tablet; the stock app (count and
   /// receive is mostly a retail job) looks for Sage & Poppy first.
   static List<int> discoveryPorts({bool? stock}) =>
-      (stock ?? isStock) ? const [8082, 8080, 8084] : const [8080, 8082, 8084];
+      (stock ?? isStock)
+      ? const [8082, 8080, 8084, 8088]
+      : const [8080, 8082, 8084, 8088];
 }

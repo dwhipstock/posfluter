@@ -98,6 +98,10 @@ flutter:
     - assets/sage_poppy_mark.png
     # Pronghorn Fuel & Market mark (branding/pronghorn-mark.svg, rendered)
     - assets/pronghorn_mark.png
+    # Barcode Pub: its neon sign (branding/barcode-logo-original.jpg) and the
+    # script "B" cut from it (branding/barcode-mark.png)
+    - assets/barcode_mark.png
+    - assets/barcode_logo.png
     - assets/fonts/OFL-Barlow.txt
     - assets/fonts/OFL-Inter.txt
     - assets/fonts/OFL-NotoSans.txt

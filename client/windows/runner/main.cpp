@@ -11,6 +11,8 @@
 #define POS_WINDOW_TITLE L"Sage & Poppy POS"
 #elif defined(POS_BRAND_PRONGHORN)
 #define POS_WINDOW_TITLE L"Pronghorn POS"
+#elif defined(POS_BRAND_BARCODE)
+#define POS_WINDOW_TITLE L"Barcode Pub POS"
 #else
 #define POS_WINDOW_TITLE L"Copper Lantern POS"
 #endif

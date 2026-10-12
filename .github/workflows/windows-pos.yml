@@ -53,7 +53,7 @@ jobs:
         run: |
           set -e
           mkdir -p dist
-          for spec in "copperlantern:CopperLanternPOS" "sagepoppy:SageAndPoppyPOS" "pronghorn:PronghornPOS"; do
+          for spec in "copperlantern:CopperLanternPOS" "sagepoppy:SageAndPoppyPOS" "pronghorn:PronghornPOS" "barcode:BarcodePubPOS"; do
             brand="${spec%%:*}"; exe="${spec##*:}"
             (cd client && POS_BRAND="$brand" flutter build windows --release --dart-define=POS_BRAND="$brand")
             out="dist/$exe"

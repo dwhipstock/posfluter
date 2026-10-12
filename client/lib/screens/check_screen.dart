@@ -890,7 +890,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             // unpaid, nothing sent anywhere: the cashier just drops it
             IconButton(
               key: const Key('discard-order'),
-              icon: const Icon(LucideIcons.trash2, color: T.destructive),
+              icon: Icon(LucideIcons.trash2, color: T.destructive),
               tooltip: Q.of(context).discard,
               onPressed: _checkId != 0 && check.status == 'OPEN'
                   ? _discard
@@ -898,7 +898,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
             )
           else
             IconButton(
-              icon: const Icon(LucideIcons.trash2, color: T.destructive),
+              icon: Icon(LucideIcons.trash2, color: T.destructive),
               tooltip: l.voidBillManager,
               onPressed:
                   (check.status == 'OPEN' || check.status == 'TOTAL_LOCKED')
@@ -1140,8 +1140,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                                 T.price(size: 15, weight: FontWeight.w700),
                               ),
                             ),
-                            if (inactive)
-                              const Pill('86', color: T.destructive),
+                            if (inactive) Pill('86', color: T.destructive),
                           ],
                         ),
                       ],
@@ -1281,7 +1280,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                             ),
                           ),
                         ),
-                        if (inactive) const Pill('86', color: T.destructive),
+                        if (inactive) Pill('86', color: T.destructive),
                       ],
                     ),
                   ],
@@ -1321,13 +1320,13 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
       key: const Key('todays-specials'),
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: T.surface,
         border: Border(bottom: BorderSide(color: T.border)),
       ),
       child: Row(
         children: [
-          const Icon(LucideIcons.sparkles, size: 18, color: T.attention),
+          Icon(LucideIcons.sparkles, size: 18, color: T.attention),
           const SizedBox(width: 6),
           Text(
             t.todaysSpecials,
@@ -1368,7 +1367,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
           // panel header: table + bill number, corkage "+"
           Container(
             padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
-            decoration: const BoxDecoration(color: T.navy),
+            decoration: BoxDecoration(color: T.band),
             child: Row(
               children: [
                 Expanded(
@@ -1388,7 +1387,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                         style: T.text(
                           size: 22,
                           weight: FontWeight.w700,
-                          color: T.onPrimary,
+                          color: T.onBand,
                         ),
                       ),
                       Text(
@@ -1399,7 +1398,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                               check.lines.fold(0, (n, x) => n + x.qty),
                             ),
                         ].join('  ·  '),
-                        style: T.small(color: T.onNavyMuted),
+                        style: T.small(color: T.onBandMuted),
                       ),
                     ],
                   ),
@@ -1409,7 +1408,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                     !widget.carryOut)
                   TextButton.icon(
                     style: TextButton.styleFrom(
-                      foregroundColor: T.onPrimary,
+                      foregroundColor: T.onBand,
                       minimumSize: const Size(0, T.minTouch),
                     ),
                     icon: const Icon(LucideIcons.users, size: 18),
@@ -1431,8 +1430,8 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 if (!widget.counterOrder && !widget.carryOut)
                   IconButton(
                     icon: const Icon(LucideIcons.plusCircle),
-                    color: T.onPrimary,
-                    disabledColor: T.onNavyMuted.withValues(alpha: .5),
+                    color: T.onBand,
+                    disabledColor: T.onBandMuted.withValues(alpha: .5),
                     tooltip: l.corkageTitle,
                     constraints: const BoxConstraints(
                       minWidth: T.minTouch,
@@ -1474,7 +1473,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                               if (check.pendingLines.length > 1)
                                 TextButton.icon(
                                   key: const Key('reject-all-pending'),
-                                  icon: const Icon(
+                                  icon: Icon(
                                     LucideIcons.xCircle,
                                     color: T.destructive,
                                     size: 18,
@@ -1525,7 +1524,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
           // total + big green pay button
           Container(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: T.background,
               border: Border(top: BorderSide(color: T.border)),
             ),
@@ -1823,11 +1822,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
           ),
           Text(money(line.lineTotalCents), style: T.price(size: 15)),
           IconButton(
-            icon: const Icon(
-              LucideIcons.checkCircle2,
-              color: T.primary,
-              size: 22,
-            ),
+            icon: Icon(LucideIcons.checkCircle2, color: T.primary, size: 22),
             tooltip: l.acceptOrder,
             constraints: const BoxConstraints(
               minWidth: 52,
@@ -1837,11 +1832,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
                 _guarded(() => Api.acceptPendingLine(_checkId, line.id)),
           ),
           IconButton(
-            icon: const Icon(
-              LucideIcons.xCircle,
-              color: T.destructive,
-              size: 22,
-            ),
+            icon: Icon(LucideIcons.xCircle, color: T.destructive, size: 22),
             tooltip: l.rejectOrder,
             constraints: const BoxConstraints(
               minWidth: 52,
@@ -1984,7 +1975,7 @@ class _CheckScreenState extends State<CheckScreen> with ResumeRefresh {
         color: T.destructive.withValues(alpha: .25),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Icon(LucideIcons.trash2, color: T.destructive),
+        child: Icon(LucideIcons.trash2, color: T.destructive),
       ),
       onDismissed: (_) => _guarded(() => Api.removeLine(_checkId, line.id)),
       child: row,
@@ -2120,15 +2111,11 @@ class _EmptyBill extends StatelessWidget {
             Container(
               width: 76,
               height: 76,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: T.surfaceAlt,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                LucideIcons.receiptText,
-                size: 34,
-                color: T.navy,
-              ),
+              child: Icon(LucideIcons.receiptText, size: 34, color: T.navy),
             ),
             const SizedBox(height: 16),
             Text(

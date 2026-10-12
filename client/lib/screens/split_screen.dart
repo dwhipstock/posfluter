@@ -270,7 +270,7 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
             _modeToggle(l, split),
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(LucideIcons.x, color: T.destructive),
+              icon: Icon(LucideIcons.x, color: T.destructive),
               tooltip: l.clearSplit,
               onPressed: _clearSplit,
             ),
@@ -348,7 +348,7 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           LucideIcons.checkCheck,
                           color: T.primary,
                           size: 32,
@@ -401,7 +401,7 @@ class _SplitScreenState extends State<SplitScreen> with ResumeRefresh {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(LucideIcons.plus, size: 28, color: T.textMuted),
+                  Icon(LucideIcons.plus, size: 28, color: T.textMuted),
                   const SizedBox(height: 6),
                   Text(l.addGroup, style: T.small(weight: FontWeight.w600)),
                 ],

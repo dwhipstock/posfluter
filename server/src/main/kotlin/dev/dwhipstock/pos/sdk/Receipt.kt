@@ -226,8 +226,17 @@ sealed interface ReceiptPolicy {
         val usDates: Boolean = false,
         override val headerRule: Boolean = false,
         override val phone: String = "",
+        /**
+         * The address block in each language the store prints it in (Barcode
+         * Pub: Thai on a Thai receipt, English otherwise). Empty = [headerLines]
+         * in every language.
+         */
+        val headerLinesByLocale: Map<LocaleCode, List<String>> = emptyMap(),
     ) : ReceiptPolicy {
-        override fun withLocale(locale: LocaleCode) = copy(locale = locale)
+        override fun withLocale(locale: LocaleCode) = copy(
+            locale = locale,
+            headerLines = headerLinesByLocale[locale] ?: headerLinesByLocale[LocaleCode.EN] ?: headerLines,
+        )
 
         override fun formatDate(dt: LocalDateTime): String {
             if (!usDates) return super.formatDate(dt)

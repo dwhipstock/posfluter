@@ -52,6 +52,18 @@ export interface BrandPalette {
   successDeep: string;
   /** Text selection highlight. */
   selection: string;
+  /**
+   * Text and icons ON the accent (badges, round icon chips). Optional, default
+   * white; a bright accent (Barcode Pub's hot pink, a signal yellow) needs a
+   * near-black ink instead. Tailwind: `copper-ink`.
+   */
+  onAccent: string;
+  /**
+   * A tiny second highlight: the current page's bar in the sidebar and the
+   * sign-in band's bottom rule. Optional, default the accent (Barcode Pub: its
+   * hot pink, a spark beside the violet). Tailwind: `spark`.
+   */
+  spark: string;
 }
 
 export interface BrandShape {
@@ -75,6 +87,11 @@ export interface Brand {
   wordmarkSub?: string;
   layout: BrandLayout;
   login: BrandLogin;
+  /**
+   * What the "band" sign-in shows on the dark band: the round mark (default)
+   * or the full logo (`assets.logo`, a dark-backed lockup such as a neon sign).
+   */
+  loginArt: "mark" | "logo";
   font: BrandFont;
   locales: { default: BrandLocale; available: BrandLocale[] };
   /** The client's currency: the fallback when a store doesn't say. */
@@ -139,6 +156,12 @@ function cssValue(v: unknown, where: string, fallback: string): string {
   return v;
 }
 
+function loginArt(raw: Obj, logo: string | undefined): "mark" | "logo" {
+  const v = oneOf(raw, "loginArt", ["mark", "logo"] as const, "mark", "brand");
+  if (v === "logo" && !logo) throw new BrandError("brand.loginArt: \"logo\" needs assets.logo");
+  return v;
+}
+
 /** Validate a brand.json and fill in defaults. Throws BrandError with the offending path. */
 export function parseBrand(raw: unknown): Brand {
   if (!isObj(raw)) throw new BrandError("brand.json: expected an object");
@@ -174,6 +197,8 @@ export function parseBrand(raw: unknown): Brand {
   const p = isObj(raw.palette) ? raw.palette : {};
   const palette = {} as BrandPalette;
   for (const k of PALETTE_KEYS) palette[k] = str(p, k, "brand.palette", HEX);
+  palette.onAccent = p.onAccent === undefined ? "#FFFFFF" : str(p, "onAccent", "brand.palette", HEX);
+  palette.spark = p.spark === undefined ? palette.accent : str(p, "spark", "brand.palette", HEX);
 
   const n = isObj(raw.neutral) ? raw.neutral : {};
   const neutral = {} as Brand["neutral"];
@@ -210,6 +235,7 @@ export function parseBrand(raw: unknown): Brand {
     wordmarkSub,
     layout: oneOf(raw, "layout", ["sidebar", "topbar"] as const, "sidebar", "brand"),
     login: oneOf(raw, "login", ["band", "split"] as const, "band", "brand"),
+    loginArt: loginArt(raw, assets.logo),
     font: oneOf(raw, "font", BRAND_FONTS, "inter", "brand"),
     locales: { default: def as BrandLocale, available: available as BrandLocale[] },
     currency,
@@ -243,6 +269,8 @@ export function brandCssVars(b: Brand): Record<string, string> {
     "--c-copper": hexChannels(p.accent),
     "--c-copper-soft": hexChannels(p.accentSoft),
     "--c-copper-text": hexChannels(p.accentText),
+    "--c-copper-ink": hexChannels(p.onAccent),
+    "--c-spark": hexChannels(p.spark),
     "--c-attention": hexChannels(p.attention),
     "--c-accent": hexChannels(p.action),
     "--c-accent-hover": hexChannels(p.actionHover),

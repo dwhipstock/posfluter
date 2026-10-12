@@ -245,10 +245,7 @@ class _StaffDialogState extends State<_StaffDialog> {
         if (!_isNew)
           TextButton(
             onPressed: _busy ? null : _delete,
-            child: Text(
-              l.staffDelete,
-              style: const TextStyle(color: T.destructive),
-            ),
+            child: Text(l.staffDelete, style: TextStyle(color: T.destructive)),
           ),
         TextButton(
           onPressed: _busy ? null : () => Navigator.pop(context, false),

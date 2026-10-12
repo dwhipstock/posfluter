@@ -30,7 +30,8 @@
     "attention": "#8A5A00",
     "success": "#15803D",
     "successDeep": "#0F6630",
-    "selection": "#FFE27A"
+    "selection": "#FFE27A",
+    "onAccent": "#0E1013"
   },
   "neutral": {
     "50": "#F7F8FA",

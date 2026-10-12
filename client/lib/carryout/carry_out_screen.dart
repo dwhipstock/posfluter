@@ -173,10 +173,10 @@ class _CarryOutScreenState extends State<CarryOutScreen> with ResumeRefresh {
     final orders = _orders;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: T.navy,
-        foregroundColor: T.onPrimary,
+        backgroundColor: T.band,
+        foregroundColor: T.onBand,
         // the theme's title is navy (for the white bars): white on this one
-        titleTextStyle: T.headline(color: T.onPrimary),
+        titleTextStyle: T.headline(color: T.onBand),
         title: Text(c.carryOut, key: const Key('carryout-title')),
         actions: [
           Padding(
@@ -271,7 +271,7 @@ class _CarryOutScreenState extends State<CarryOutScreen> with ResumeRefresh {
             const SizedBox(width: 8),
             Pill(
               o.paid ? c.paid : c.payAtPickup,
-              color: o.paid ? const Color(0xFF1E7A4C) : T.attention,
+              color: o.paid ? T.success : T.attention,
             ),
             const SizedBox(width: 12),
             SizedBox(
@@ -437,7 +437,7 @@ class _CarryOutCustomerBarState extends State<CarryOutCustomerBar> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Row(
             children: [
-              const Icon(LucideIcons.user, size: 18, color: T.textPrimary),
+              Icon(LucideIcons.user, size: 18, color: T.textPrimary),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -451,7 +451,7 @@ class _CarryOutCustomerBarState extends State<CarryOutCustomerBar> {
                   ),
                 ),
               ),
-              const Icon(LucideIcons.pencil, size: 16, color: T.textMuted),
+              Icon(LucideIcons.pencil, size: 16, color: T.textMuted),
             ],
           ),
         ),

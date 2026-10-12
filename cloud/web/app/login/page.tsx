@@ -243,18 +243,32 @@ export default function LoginPage() {
 /** A dark brand band across the top with the round badge on it, the form in a card below. */
 function BandLogin({ children }: { children: React.ReactNode }) {
   const t = useT();
+  const brand = useBrand();
   return (
     <div className="relative min-h-dvh bg-paper">
       {/* the tablet's header band, with the brand badge on it */}
       <div className="absolute inset-x-0 top-0 h-[22rem] bg-navy" aria-hidden>
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-copper" />
+        <div className="absolute inset-x-0 bottom-0 h-1 bg-spark" />
       </div>
       <div className="absolute right-4 top-4 z-10">
         <LangToggle tone="dark" />
       </div>
       <div className="relative mx-auto flex w-full max-w-sm flex-col px-4 pb-10 pt-10">
         <div className="mb-6 flex flex-col items-center text-center">
-          <BrandMark large />
+          {brand.loginArt === "logo" && brand.assets.logo ? (
+            // a dark-backed lockup (Barcode Pub's neon sign) sits straight on the band
+            <Image
+              src={brandAssetUrl(brand.assets.logo)}
+              alt={brand.legalName}
+              width={384}
+              height={143}
+              unoptimized
+              priority
+              className="h-auto w-full max-w-[24rem] rounded-xl"
+            />
+          ) : (
+            <BrandMark large />
+          )}
           <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-navy-muted">
             {t("brand_tagline")}
           </p>

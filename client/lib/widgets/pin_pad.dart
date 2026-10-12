@@ -339,11 +339,7 @@ class _ManagerPinDialogState extends State<_ManagerPinDialog> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    LucideIcons.shieldCheck,
-                    size: 20,
-                    color: T.attention,
-                  ),
+                  Icon(LucideIcons.shieldCheck, size: 20, color: T.attention),
                   const SizedBox(width: 8),
                   Text(
                     l.managerApproval,

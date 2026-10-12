@@ -14,50 +14,59 @@ import 'skin.dart';
 /// - touch targets ≥56pt (POS is finger-first)
 /// - every text/background pair used below meets WCAG AA (4.5:1)
 abstract final class T {
+  /// The restaurant screens' colours: the pubs' ([PubPalette.copperLantern], the
+  /// default) or another restaurant brand's ([PubPalette.barcode], dark).
+  /// Set by the brand's theme builder ([buildPosTheme]) before the screens
+  /// build; every colour below reads it.
+  static PubPalette palette = PubPalette.copperLantern;
+
   // brand
-  static const navy = Color(0xFF17456E); // logo badge; white on it ≈ 9.9:1
-  static const navyDeep = Color(0xFF0F3150); // header bands, pressed states
-  static const copper = Color(0xFFA65A23); // white on it ≈ 5.1:1
+  static Color get navy => palette.navy; // logo badge; white on it ≈ 9.9:1
+  static Color get navyDeep => palette.navyDeep; // header bands, pressed states
+  static Color get copper => palette.copper; // white on it ≈ 5.1:1
 
   // roles
-  static const primary = navy; // default buttons, focus, selection
-  static const onPrimary = Colors.white;
-  static const accent = copper; // Pay, selected category, occupied table
-  static const onAccent = Colors.white;
-  static const accentSoft = Color(0xFFF3E3D3); // copper tint for selected rows
+  static Color get primary =>
+      palette.primary; // default buttons, focus, selection
+  static Color get onPrimary => palette.onPrimary;
+  static Color get accent =>
+      palette.accent; // Pay, selected category, occupied table
+  static Color get onAccent => palette.onAccent;
+  static Color get accentSoft => palette.accentSoft; // tint for selected rows
 
-  // surfaces: warm cream, never cool grey
-  static const background = Color(0xFFF6F0E5);
-  static const surface = Color(0xFFFFFCF7);
-  static const surfaceAlt = Color(0xFFEFE6D6); // selected/elevated cards
-  static const border = Color(0xFFDCCFB9); // 1px separators
-  static const textPrimary = Color(0xFF1C2733); // ≈ 13:1 on background
-  static const textMuted = Color(0xFF62574B); // ≈ 6.2:1 on background
-  static const onNavyMuted = Color(0xFFC9D6E3); // secondary text on navy
+  // surfaces: warm cream, never cool grey (the pubs)
+  static Color get background => palette.background;
+  static Color get surface => palette.surface;
+  static Color get surfaceAlt => palette.surfaceAlt; // selected/elevated cards
+  static Color get border => palette.border; // 1px separators
+  static Color get textPrimary => palette.textPrimary; // ≈ 13:1 on background
+  static Color get textMuted => palette.textMuted; // ≈ 6.2:1 on background
+  static Color get onNavyMuted => palette.onNavyMuted; // secondary text on navy
 
-  static const destructive = Color(0xFFB3261E); // void, delete, force-close
-  static const onDestructive = Colors.white;
+  /// The header bands (the floor's app bar, a check's panel header, the
+  /// counter and carry-out bars) and their ink: navy and white at the pubs.
+  static Color get band => palette.band;
+  static Color get onBand => palette.onBand;
+  static Color get onBandMuted => palette.onBandMuted;
+
+  static Color get destructive =>
+      palette.destructive; // void, delete, force-close
+  static Color get onDestructive => palette.onDestructive;
 
   /// Dark amber for warning TEXT and icons on cream (≈ 5.6:1).
-  static const attention = Color(0xFF8C5200);
+  static Color get attention => palette.attention;
 
   /// Guest orders waiting to be verified: a gold fill that reads apart from
   /// the copper of an ordinary occupied table, with dark text on it.
-  static const pending = Color(0xFFF2B53A);
-  static const onPending = Color(0xFF2B1D0A); // ≈ 8.9:1 on [pending]
+  static Color get pending => palette.pending;
+  static Color get onPending => palette.onPending; // ≈ 8.9:1 on [pending]
 
   /// No-photo menu tiles: muted pub-sign hues, each ≥ 4.5:1 as text on its
   /// own light tint, so the two letters stay readable.
-  static const tilePalette = [
-    Color(0xFF17456E), // navy
-    Color(0xFF8A4A1C), // copper
-    Color(0xFF2F5D3A), // bottle green
-    Color(0xFF7A2E3A), // claret
-    Color(0xFF285E61), // teal
-    Color(0xFF5B5220), // olive
-    Color(0xFF5A3D6B), // plum
-    Color(0xFF4A5563), // slate
-  ];
+  static List<Color> get tilePalette => palette.tilePalette;
+
+  /// "Paid", "Ready": a go colour for text and icons.
+  static Color get success => palette.success;
 
   // the one deliberately light surface in the app — physical receipt paper
   static const receiptPaper = Color(0xFFFFFEFB);
@@ -109,28 +118,26 @@ abstract final class T {
   static TextStyle text({
     double size = bodySize,
     FontWeight weight = FontWeight.w400,
-    Color color = textPrimary,
+    Color? color,
   }) => TextStyle(
     fontFamily: family,
     fontFamilyFallback: _fallback,
     fontSize: size,
     fontWeight: weight,
-    color: color,
+    color: color ?? textPrimary,
   );
 
-  static TextStyle small({
-    Color color = textMuted,
-    FontWeight weight = FontWeight.w400,
-  }) => text(size: smallSize, color: color, weight: weight);
+  static TextStyle small({Color? color, FontWeight weight = FontWeight.w400}) =>
+      text(size: smallSize, color: color ?? textMuted, weight: weight);
 
-  static TextStyle headline({Color color = textPrimary}) =>
+  static TextStyle headline({Color? color}) =>
       text(size: headlineSize, weight: FontWeight.w600, color: color);
 
   /// Prices: tabular figures so columns of numbers align.
   static TextStyle price({
     double size = priceSize,
     FontWeight weight = FontWeight.w500,
-    Color color = textPrimary,
+    Color? color,
   }) => text(
     size: size,
     weight: weight,
@@ -159,7 +166,15 @@ abstract final class T {
 
 /// App-wide theme assembled from the tokens: navy primary, cream surfaces,
 /// 1px borders instead of heavy shadows, 8px default radius, 56pt touch minimums.
-ThemeData buildPosTheme() {
+///
+/// [palette] picks the restaurant brand's colours (the pubs' by default, or
+/// Barcode Pub's dark bar) and [skin] its tokens; both are in force before
+/// any screen builds.
+ThemeData buildPosTheme({
+  PubPalette palette = PubPalette.copperLantern,
+  BrandSkin? skin,
+}) {
+  T.palette = palette;
   T.family = T.fontFamily;
   final textTheme = TextTheme(
     bodyLarge: T.text(),
@@ -174,7 +189,8 @@ ThemeData buildPosTheme() {
     headlineSmall: T.headline(),
   );
 
-  const scheme = ColorScheme.light(
+  final scheme = ColorScheme(
+    brightness: palette.brightness,
     primary: T.primary,
     onPrimary: T.onPrimary,
     primaryContainer: T.surfaceAlt,
@@ -203,21 +219,21 @@ ThemeData buildPosTheme() {
   final buttonShape = RoundedRectangleBorder(borderRadius: T.radiusMedium);
   final panelShape = RoundedRectangleBorder(
     borderRadius: T.radiusLarge,
-    side: const BorderSide(color: T.border),
+    side: BorderSide(color: T.border),
   );
 
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
     // the pubs' skin: the same tokens as above (a no-op for their screens)
-    extensions: [BrandSkin.copper],
+    extensions: [skin ?? BrandSkin.copper],
     fontFamily: T.fontFamily,
     fontFamilyFallback: const ['NotoSans'],
     scaffoldBackgroundColor: T.background,
     canvasColor: T.background,
     textTheme: textTheme,
     splashFactory: InkSparkle.splashFactory,
-    iconTheme: const IconThemeData(color: T.textMuted),
+    iconTheme: IconThemeData(color: T.textMuted),
     // warm app bar: 1px bottom border, no shadow, navy title
     appBarTheme: AppBarTheme(
       backgroundColor: T.surface,
@@ -227,13 +243,9 @@ ThemeData buildPosTheme() {
       scrolledUnderElevation: 0,
       centerTitle: false,
       titleTextStyle: T.headline(color: T.navy),
-      shape: const Border(bottom: BorderSide(color: T.border)),
+      shape: Border(bottom: BorderSide(color: T.border)),
     ),
-    dividerTheme: const DividerThemeData(
-      color: T.border,
-      thickness: 1,
-      space: 1,
-    ),
+    dividerTheme: DividerThemeData(color: T.border, thickness: 1, space: 1),
     cardTheme: CardThemeData(
       color: T.surface,
       surfaceTintColor: Colors.transparent,
@@ -264,7 +276,7 @@ ThemeData buildPosTheme() {
       style: OutlinedButton.styleFrom(
         foregroundColor: T.textPrimary,
         backgroundColor: T.surface,
-        side: const BorderSide(color: T.border),
+        side: BorderSide(color: T.border),
         minimumSize: const Size(T.minTouch, T.minTouch),
         shape: buttonShape,
         textStyle: T.text(weight: FontWeight.w500),
@@ -295,7 +307,7 @@ ThemeData buildPosTheme() {
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         shape: WidgetStatePropertyAll(buttonShape),
-        side: const WidgetStatePropertyAll(BorderSide(color: T.border)),
+        side: WidgetStatePropertyAll(BorderSide(color: T.border)),
         backgroundColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected) ? T.navy : T.surface,
         ),
@@ -313,7 +325,7 @@ ThemeData buildPosTheme() {
       selectedColor: T.navy,
       secondarySelectedColor: T.navy,
       checkmarkColor: T.onPrimary,
-      side: const BorderSide(color: T.border),
+      side: BorderSide(color: T.border),
       shape: buttonShape,
       labelStyle: T.small(color: T.textPrimary, weight: FontWeight.w600),
       secondaryLabelStyle: T.small(color: T.onPrimary, weight: FontWeight.w600),
@@ -323,26 +335,26 @@ ThemeData buildPosTheme() {
       fillColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected) ? T.navy : Colors.transparent,
       ),
-      checkColor: const WidgetStatePropertyAll(T.onPrimary),
-      side: const BorderSide(color: T.textMuted, width: 1.5),
+      checkColor: WidgetStatePropertyAll(T.onPrimary),
+      side: BorderSide(color: T.textMuted, width: 1.5),
     ),
     radioTheme: RadioThemeData(
       fillColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected) ? T.navy : T.textMuted,
       ),
     ),
-    sliderTheme: const SliderThemeData(
+    sliderTheme: SliderThemeData(
       activeTrackColor: T.navy,
       thumbColor: T.navy,
       inactiveTrackColor: T.border,
     ),
-    expansionTileTheme: const ExpansionTileThemeData(
+    expansionTileTheme: ExpansionTileThemeData(
       iconColor: T.navy,
       collapsedIconColor: T.textMuted,
       textColor: T.textPrimary,
       collapsedTextColor: T.textPrimary,
     ),
-    bottomSheetTheme: const BottomSheetThemeData(
+    bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: T.surface,
       surfaceTintColor: Colors.transparent,
       showDragHandle: false,
@@ -359,19 +371,19 @@ ThemeData buildPosTheme() {
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       enabledBorder: OutlineInputBorder(
         borderRadius: T.radiusMedium,
-        borderSide: const BorderSide(color: T.border),
+        borderSide: BorderSide(color: T.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: T.radiusMedium,
-        borderSide: const BorderSide(color: T.navy, width: 1.5),
+        borderSide: BorderSide(color: T.navy, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: T.radiusMedium,
-        borderSide: const BorderSide(color: T.destructive),
+        borderSide: BorderSide(color: T.destructive),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: T.radiusMedium,
-        borderSide: const BorderSide(color: T.destructive),
+        borderSide: BorderSide(color: T.destructive),
       ),
     ),
     dialogTheme: DialogThemeData(
@@ -412,10 +424,20 @@ ThemeData buildPosTheme() {
     ),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(color: T.navyDeep, borderRadius: T.radiusSmall),
-      textStyle: T.small(color: Colors.white, weight: FontWeight.w500),
+      textStyle: T.small(color: T.onPrimary, weight: FontWeight.w500),
       waitDuration: const Duration(milliseconds: 300),
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(color: T.navy),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: T.navy),
+    // a brand's spark (Barcode: hot pink) marks focus and the active tab only
+    focusColor: palette.spark?.withValues(alpha: .35),
+    tabBarTheme: palette.spark == null
+        ? null
+        : TabBarThemeData(
+            indicatorColor: palette.spark,
+            labelColor: T.textPrimary,
+            unselectedLabelColor: T.textMuted,
+            dividerColor: T.border,
+          ),
     popupMenuTheme: PopupMenuThemeData(
       color: T.surface,
       surfaceTintColor: Colors.transparent,
@@ -423,9 +445,154 @@ ThemeData buildPosTheme() {
       shadowColor: const Color(0x3317456E),
       shape: RoundedRectangleBorder(
         borderRadius: T.radiusMedium,
-        side: const BorderSide(color: T.border),
+        side: BorderSide(color: T.border),
       ),
       textStyle: T.text(),
     ),
+  );
+}
+
+/// The restaurant screens' colours ([T.palette]). Every pair the screens
+/// use meets WCAG AA (4.5:1): ink on a fill is always that fill's `on…`.
+@immutable
+class PubPalette {
+  final Brightness brightness;
+  final Color navy, navyDeep, copper;
+  final Color primary, onPrimary, accent, onAccent, accentSoft;
+  final Color background, surface, surfaceAlt, border;
+  final Color textPrimary, textMuted, onNavyMuted;
+  final Color band, onBand, onBandMuted;
+  final Color destructive, onDestructive, attention, pending, onPending;
+
+  /// "Paid", "Ready": a go colour as text and icons on the surfaces.
+  final Color success;
+
+  /// A small highlight only (focus rings, the active tab): never a fill.
+  /// Null = the primary.
+  final Color? spark;
+  final List<Color> tilePalette;
+
+  const PubPalette({
+    required this.brightness,
+    required this.navy,
+    required this.navyDeep,
+    required this.copper,
+    required this.primary,
+    required this.onPrimary,
+    required this.accent,
+    required this.onAccent,
+    required this.accentSoft,
+    required this.background,
+    required this.surface,
+    required this.surfaceAlt,
+    required this.border,
+    required this.textPrimary,
+    required this.textMuted,
+    required this.onNavyMuted,
+    required this.band,
+    required this.onBand,
+    required this.onBandMuted,
+    required this.destructive,
+    required this.onDestructive,
+    required this.attention,
+    required this.pending,
+    required this.onPending,
+    required this.success,
+    this.spark,
+    required this.tilePalette,
+  });
+
+  bool get isDark => brightness == Brightness.dark;
+
+  /// The Copper Lantern pubs: the logo's deep navy, warm cream, a copper accent.
+  static const copperLantern = PubPalette(
+    brightness: Brightness.light,
+    navy: Color(0xFF17456E),
+    navyDeep: Color(0xFF0F3150),
+    copper: Color(0xFFA65A23),
+    primary: Color(0xFF17456E),
+    onPrimary: Colors.white,
+    accent: Color(0xFFA65A23),
+    onAccent: Colors.white,
+    accentSoft: Color(0xFFF3E3D3),
+    background: Color(0xFFF6F0E5),
+    surface: Color(0xFFFFFCF7),
+    surfaceAlt: Color(0xFFEFE6D6),
+    border: Color(0xFFDCCFB9),
+    textPrimary: Color(0xFF1C2733),
+    textMuted: Color(0xFF62574B),
+    onNavyMuted: Color(0xFFC9D6E3),
+    band: Color(0xFF17456E),
+    onBand: Colors.white,
+    onBandMuted: Color(0xFFC9D6E3),
+    destructive: Color(0xFFB3261E),
+    onDestructive: Colors.white,
+    attention: Color(0xFF8C5200),
+    pending: Color(0xFFF2B53A),
+    onPending: Color(0xFF2B1D0A),
+    success: Color(0xFF1E7A4C),
+    tilePalette: [
+      Color(0xFF17456E), // navy
+      Color(0xFF8A4A1C), // copper
+      Color(0xFF2F5D3A), // bottle green
+      Color(0xFF7A2E3A), // claret
+      Color(0xFF285E61), // teal
+      Color(0xFF5B5220), // olive
+      Color(0xFF5A3D6B), // plum
+      Color(0xFF4A5563), // slate
+    ],
+  );
+
+  /// Barcode Pub, Bangkok: a dark, calm bar in the neon sign's violet.
+  /// Near-black and dark-grey surfaces with light neutral text; violet
+  /// (#D45CFF, sampled from the sign's glow) where the pubs use navy:
+  /// buttons, selection, the active room, always with near-black ink on it
+  /// (6.4:1; white on it is only 3.1:1). The pubs' copper accent (Pay, the
+  /// selected category, an occupied table) is a lighter violet. The header
+  /// bands are the sign's near-black ([band]), not violet. Hot pink is
+  /// only a spark ([spark]: focus rings, the active tab), never a fill.
+  /// Measured on #26262A (the lightest surface): text 12.8:1, muted 5.8:1,
+  /// violet 4.9:1, red 4.9:1, green 7.8:1.
+  static const barcode = PubPalette(
+    brightness: Brightness.dark,
+    navy: Color(0xFFD45CFF),
+    navyDeep: Color(
+      0xFFE08CFF,
+    ), // lighter violet: pressed states, ink on surfaceAlt
+    copper: Color(0xFFE08CFF),
+    primary: Color(0xFFD45CFF),
+    onPrimary: Color(0xFF0A0A0A),
+    accent: Color(0xFFE08CFF),
+    onAccent: Color(0xFF0A0A0A),
+    accentSoft: Color(0xFF2A1736), // a dark violet tint for selected rows
+    background: Color(0xFF141414),
+    surface: Color(0xFF1C1C1E),
+    surfaceAlt: Color(0xFF26262A),
+    border: Color(0xFF3A3A3E),
+    textPrimary: Color(0xFFECECEF),
+    textMuted: Color(0xFFA0A0A8),
+    onNavyMuted: Color(0xFF2E0A3D), // secondary ink on violet fills (5.5:1)
+    // calm header bands: the sign's own near-black, light ink, violet only
+    // in what sits on them (the logo, the buttons)
+    band: Color(0xFF1E1E20),
+    onBand: Color(0xFFECECEF),
+    onBandMuted: Color(0xFFA0A0A8),
+    destructive: Color(0xFFF26464),
+    onDestructive: Color(0xFF0A0A0A),
+    attention: Color(0xFFF59E0B),
+    pending: Color(0xFFF2B53A),
+    onPending: Color(0xFF2B1D0A),
+    success: Color(0xFF4ADE80),
+    spark: Color(0xFFFF1F8E),
+    tilePalette: [
+      Color(0xFFD45CFF), // violet
+      Color(0xFFF5B547), // amber
+      Color(0xFF4ADE80), // green
+      Color(0xFFFF7AB8), // pink
+      Color(0xFF2DD4BF), // teal
+      Color(0xFFFB923C), // orange
+      Color(0xFFE08CFF), // lilac
+      Color(0xFFCBD5E1), // silver
+    ],
   );
 }

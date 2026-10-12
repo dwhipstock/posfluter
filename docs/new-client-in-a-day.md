@@ -146,6 +146,46 @@ zone. It sells and runs its pumps with no internet at all; when it is online
 it sends its sales — fuel sales (`fuel.sale`, CONTRACT §2) included — up to
 this portal only.
 
+## Worked example: the fourth client, a Bangkok pub that starts blank
+
+Barcode Pub is a neighbourhood pub in Bangkok: one restaurant store
+(`barcode-pub`), Thai baht, Bangkok time, Thai first with English. Unlike the
+demo clients it brings **no menu and no rooms**: the owner builds both in the
+portal (or with the AI assistant), so its store starts empty.
+
+**The brand pack** is `cloud/web/brands/barcode/`: the pub's own neon sign —
+`logo.png` (the whole sign, violet on near-black) and the script "B" from it
+(`mark-192.png`, `mark-384.png`, `icon.png`) — and `brand.json`: the near-black
+`sidebar` and `band` sign-in with `"loginArt": "logo"` (the sign sits straight
+on the dark band instead of the round mark), the sign's neon violet as the
+brand colour (`#D45CFF` with near-black ink on it, `onAccent`; filled buttons
+in a deeper `#9B30D9` so white text keeps 4.5:1; `#7E22CE` for small violet
+text on the light pages) and hot pink `#FF1F8E` as a small `spark` only (the
+current page's bar, the band's rule, one chart series), `THB`. The portal's
+pages stay light (it is light-only by design). The Thai name is บาร์โค้ด; the
+pack has no per-language name, so the portal says "Barcode Pub". Until the
+portal speaks Thai the pack offers `en` only (TODO feat/thai-locale: `th` +
+`en`, default `th`).
+
+**Provision** (on the server; read the `--dry-run` plan first; the domain is a
+placeholder until the client's own name is set up):
+
+```sh
+cloud/infra/new-client.sh barcode barcode-manager.lostmindllc.com \
+  --name "Barcode Pub" --brand barcode \
+  --store "barcode-pub=Barcode Pub" \
+  --zone Asia/Bangkok --currency THB --country TH --no-fx \
+  --store-seed none \
+  --admin-email <owner email> \
+  --registry <registry> --image-tag <git-sha> --up
+```
+
+`--store-seed none` writes `POS_SEED=none` into
+`clients/barcode/stores/barcode-pub.env`: the store starts with an empty menu
+and floor plan and one bootstrap manager (PIN 1234, changed at first sign-in).
+The store is started with `POS_VENUE=barcode-pub`; its languages (`th`, `en`),
+VAT and receipt come from the store's own configuration, not from this file.
+
 ## Try it on a laptop
 
 `scripts/demo-clients.sh up --stores` runs three clients side by side behind

@@ -181,6 +181,33 @@ class BrandSkin extends ThemeExtension<BrandSkin> {
     icons: IconStyle.rounded,
   );
 
+  /// Barcode Pub, Bangkok: the pubs' restaurant screens (floor plan, checks,
+  /// the brand-panel sign-in) on a dark bar palette ([PubPalette.barcode]):
+  /// flat near-black surfaces (no shadows: they vanish on black anyway),
+  /// slightly tighter corners, quick motion.
+  // TODO(feat/thai-locale): a Thai-capable family / fallback once it lands.
+  static final barcode = BrandSkin(
+    id: 'barcode',
+    fontFamily: T.fontFamily,
+    fontFallback: const ['NotoSans'],
+    headlineTracking: -0.2,
+    radiusSmall: BorderRadius.circular(4),
+    radiusMedium: BorderRadius.circular(8),
+    radiusLarge: BorderRadius.circular(12),
+    tileRadius: BorderRadius.circular(10),
+    pillControls: false,
+    space: 8,
+    gutter: 16,
+    raised: const [],
+    fast: const Duration(milliseconds: 90),
+    normal: const Duration(milliseconds: 140),
+    ease: T.ease,
+    shell: ShellLayout.topBar,
+    login: LoginLayout.brandPanel,
+    receiptHeader: ReceiptHeaderStyle.centered,
+    icons: IconStyle.line,
+  );
+
   static BrandSkin of(BuildContext context) =>
       Theme.of(context).extension<BrandSkin>() ?? copper;
 

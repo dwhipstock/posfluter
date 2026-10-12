@@ -23,8 +23,9 @@ const config: Config = {
         paper: v("--c-paper"),
         surface: { DEFAULT: v("--c-surface"), alt: v("--c-surface-alt") },
         navy: { DEFAULT: v("--c-navy"), deep: v("--c-navy-deep"), muted: v("--c-navy-muted") },
-        copper: { DEFAULT: v("--c-copper"), soft: v("--c-copper-soft"), text: v("--c-copper-text") },
+        copper: { DEFAULT: v("--c-copper"), soft: v("--c-copper-soft"), text: v("--c-copper-text"), ink: v("--c-copper-ink") },
         attention: v("--c-attention"),
+        spark: v("--c-spark"),
         accent: { DEFAULT: v("--c-accent"), hover: v("--c-accent-hover") },
         neutral: {
           50: v("--c-n-50"),

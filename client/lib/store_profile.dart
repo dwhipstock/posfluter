@@ -6,7 +6,7 @@
 class StoreProfile {
   final String venueId;
 
-  /// 'copper-lantern' | 'sage-poppy' | 'pronghorn'
+  /// 'copper-lantern' | 'sage-poppy' | 'pronghorn' | 'barcode'
   final String brand;
 
   /// 'restaurant' | 'retail' | 'quick-serve'
@@ -66,6 +66,10 @@ class StoreProfile {
   bool get isSagePoppy => brand == 'sage-poppy';
   bool get isPronghorn => brand == 'pronghorn';
 
+  /// Barcode Pub (Bangkok): the pubs' restaurant screens in its own dark
+  /// palette ([PubPalette.barcode]), not a retail brand's own screens.
+  bool get isBarcode => brand == 'barcode';
+
   /// A retail brand with its own skin and palette (not the pubs' look).
   bool get hasOwnBrand => isSagePoppy || isPronghorn;
 
@@ -75,6 +79,8 @@ class StoreProfile {
       ? 'Sage & Poppy'
       : isPronghorn
       ? 'Pronghorn'
+      : isBarcode
+      ? 'Barcode Pub'
       : null;
   String get defaultLocale => locales.first;
 

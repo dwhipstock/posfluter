@@ -501,9 +501,47 @@ class _BrandPanel extends StatelessWidget {
   final bool horizontal;
   const _BrandPanel({required this.logoSize, this.horizontal = false});
 
+  /// Barcode Pub: its neon sign (the whole logo, on the sign's own
+  /// near-black, so it glows like the real one) over "STAFF TERMINAL".
+  Widget _barcodePanel(L l) {
+    return ColoredBox(
+      color: BrandLogo.barcodeSignBackground,
+      child: SafeArea(
+        right: false,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: logoSize * 2.6),
+                  child: Image.asset(
+                    BrandLogo.barcodeLogoAsset,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.medium,
+                    semanticLabel: 'Barcode Pub',
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  l.staffTerminal.toUpperCase(),
+                  style: T
+                      .small(color: T.textMuted, weight: FontWeight.w600)
+                      .copyWith(letterSpacing: 2),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    if (StoreProfile.current.isBarcode) return _barcodePanel(l);
     final sagePoppy = StoreProfile.current.isSagePoppy;
     // Sage & Poppy: its own name, its own colours (sage band, poppy accent)
     final brand = sagePoppy ? 'Sage & Poppy' : Api.venueBrand;
@@ -549,7 +587,7 @@ class _BrandPanel extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: sagePoppy
               ? const [Color(0xFF52724F), Color(0xFF2F4630)]
-              : const [T.navy, T.navyDeep],
+              : [T.navy, T.navyDeep],
         ),
       ),
       child: SafeArea(

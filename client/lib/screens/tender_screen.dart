@@ -711,11 +711,7 @@ class _TenderScreenState extends State<TenderScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Row(
                   children: [
-                    const Icon(
-                      LucideIcons.wifiOff,
-                      size: 16,
-                      color: T.textMuted,
-                    ),
+                    Icon(LucideIcons.wifiOff, size: 16, color: T.textMuted),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -732,11 +728,7 @@ class _TenderScreenState extends State<TenderScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Row(
                   children: [
-                    const Icon(
-                      LucideIcons.wifiOff,
-                      size: 16,
-                      color: T.textMuted,
-                    ),
+                    Icon(LucideIcons.wifiOff, size: 16, color: T.textMuted),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -1069,11 +1061,7 @@ class _TenderScreenState extends State<TenderScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  const Icon(
-                    LucideIcons.wifiOff,
-                    size: 16,
-                    color: T.destructive,
-                  ),
+                  Icon(LucideIcons.wifiOff, size: 16, color: T.destructive),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(

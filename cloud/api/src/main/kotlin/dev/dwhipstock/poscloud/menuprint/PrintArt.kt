@@ -4,7 +4,7 @@ import dev.dwhipstock.poscloud.CloudTime
 import dev.dwhipstock.poscloud.db.MenuPrintArt
 import dev.dwhipstock.poscloud.menuai.AiGuard
 import dev.dwhipstock.poscloud.menuai.GeneratedImage
-import dev.dwhipstock.poscloud.menuai.HouseStyle
+import dev.dwhipstock.poscloud.menuai.houseStyleFor
 import dev.dwhipstock.poscloud.menuai.ImageGen
 import dev.dwhipstock.poscloud.menuai.ImageGenException
 import dev.dwhipstock.poscloud.menuai.ImageProvider
@@ -131,7 +131,7 @@ object ArtPrompts {
                 }
         }
         if (fillPhotos) {
-            val house = HouseStyle.forBrand(if (retail) HouseStyle.SAGE_POPPY.brand else HouseStyle.COPPER_LANTERN.brand)
+            val house = houseStyleFor(tenantId, retail)
             plan.itemIds.mapNotNull { c.item(it) }.filter { !it.hasPhoto }.filter {
                 // the item's text goes into the prompt: checked like the item sheet's "Generate photo"
                 it.enName.isNotBlank() && AiGuard.checkText(it.enName) == null && !AiGuard.hateful(it.enName) && !AiGuard.offTopic(it.enName)

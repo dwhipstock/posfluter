@@ -42,6 +42,7 @@ ENV_FILE="$REPO_ROOT/.env.local"
 STAGING="$TABLET_FILES/migration"
 case "$TABLET_APP" in
   sagepoppy) KEY_NAME=STORE_API_KEY_SAGE_POPPY; STORE_NAME="Sage & Poppy";;
+  barcode) KEY_NAME=STORE_API_KEY_BARCODE; STORE_NAME="Barcode Pub";;
   *) KEY_NAME=STORE_API_KEY; STORE_NAME="Vieux-Port";;
 esac
 MODE=""

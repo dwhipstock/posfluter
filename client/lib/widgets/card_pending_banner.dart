@@ -187,7 +187,7 @@ class _CardPendingBannerState extends State<CardPendingBanner> {
         children: [
           Row(
             children: [
-              const SizedBox(
+              SizedBox(
                 width: 20,
                 height: 20,
                 child: CircularProgressIndicator(
@@ -223,7 +223,7 @@ class _CardPendingBannerState extends State<CardPendingBanner> {
                   label: Text(l.cardPendingCancel),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: T.onPending,
-                    side: const BorderSide(color: T.onPending),
+                    side: BorderSide(color: T.onPending),
                     minimumSize: const Size(0, 44),
                   ),
                   onPressed: _cancelling ? null : () => _managerCancel(p),
