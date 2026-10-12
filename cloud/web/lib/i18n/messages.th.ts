@@ -93,6 +93,7 @@ export const th: Record<MsgKey, string> = {
   tender_BANK_TRANSFER: "โอนเงินผ่านธนาคาร",
   tender_STRIPE: "บัตร (Stripe)",
   tender_TERMINAL: "บัตร (เครื่องรูดบัตร)",
+  tender_PROMPTPAY: "พร้อมเพย์",
   dash_title: "แดชบอร์ด",
   kpi_gross: "ยอดรวม",
   kpi_net: "ยอดสุทธิ (ก่อนภาษี)",

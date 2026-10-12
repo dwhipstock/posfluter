@@ -76,6 +76,11 @@ print.receipts=digital
 #staff.app.mfa=on
 #kitchen.printing=off
 
+# PromptPay QR (Thai stores, THB only): a Thai mobile number or a 13-digit
+# national / tax id, and the account name shown under the QR.
+#promptpay.id=0812345678
+#promptpay.name=
+
 # Demo mode for the pitch demo: staff app by PIN only, and "Print demo QR
 # sheet" in Venue settings. Never on in a real store.
 #demo.mode=off
@@ -120,7 +125,8 @@ print.receipts=digital
         'POS_BILLS_DIR': '${dir.path}\\bills',
         'POS_PHOTOS_DIR': '${dir.path}\\photos',
         // every other switch (print.receipts, payment.terminal*, cash.rounding,
-        // staff.app.mfa, demo.*, kitchen.printing, image.*) is read from this file
+        // staff.app.mfa, demo.*, kitchen.printing, image.*, promptpay.*) is read
+        // from this file
         'POS_CONFIG_FILE': propsFile.path,
         'POS_VENUE': ?venue,
         if (props['forecourt.url']?.isNotEmpty ?? false)

@@ -212,7 +212,7 @@ export interface TaxReport {
   money?: MoneyScope;
 }
 
-export type TenderType = "CASH" | "CARD" | "BANK_TRANSFER" | "STRIPE" | "TERMINAL";
+export type TenderType = "CASH" | "CARD" | "BANK_TRANSFER" | "STRIPE" | "TERMINAL" | "PROMPTPAY";
 
 export interface PaymentRow {
   type: TenderType;

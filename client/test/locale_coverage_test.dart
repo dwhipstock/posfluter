@@ -55,7 +55,7 @@ const _tables = [
 const _sameWords = {
   // proper nouns and abbreviations
   'Copper', 'Lantern', 'Sage', '&', 'Poppy', 'Stripe', 'Wi-Fi', 'OK', 'PIN',
-  'CRV', 'QR', 'IPA',
+  'CRV', 'QR', 'IPA', 'PromptPay',
   // the gas station: fuel grade names both languages use, the town, gallons
   'Regular', 'Premium', 'Diesel', 'Pronghorn', 'Dripping', 'Springs', 'TX',
   'gal', 'ERROR', 'Jumbo', 'Mango',

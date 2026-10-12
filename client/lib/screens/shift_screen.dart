@@ -586,6 +586,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
       'BANK_TRANSFER': l.bankTransfer,
       'STRIPE': l.cardStripe,
       'TERMINAL': l.cardTerminalTender,
+      'PROMPTPAY': l.promptPay,
     };
     final tenderColors = {
       'CASH': T.primary,
@@ -593,6 +594,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
       'BANK_TRANSFER': T.textMuted,
       'STRIPE': T.accent,
       'TERMINAL': T.accent,
+      'PROMPTPAY': T.textMuted,
     };
 
     Widget kv(String label, String value, {bool bold = false, Color? color}) =>

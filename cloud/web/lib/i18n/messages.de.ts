@@ -94,6 +94,7 @@ export const de: Record<MsgKey, string> = {
   tender_BANK_TRANSFER: "Überweisung",
   tender_STRIPE: "Karte (Stripe)",
   tender_TERMINAL: "Karte (Terminal)",
+  tender_PROMPTPAY: "PromptPay",
   dash_title: "Übersicht",
   kpi_gross: "Brutto",
   kpi_net: "Netto (vor Steuern)",

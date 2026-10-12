@@ -197,6 +197,9 @@ fun Application.module(
     // POS_PAYMENT_TERMINAL* / POS_CONFIG_FILE; the tablet passes its store.properties).
     // Unset → the store's default (Copper Lantern: stripe; everyone else: simulator).
     paymentTerminal: dev.dwhipstock.pos.sdk.PaymentTerminalConfig.Resolved = dev.dwhipstock.pos.sdk.PaymentTerminalConfig.fromEnv(),
+    // promptpay.id + promptpay.name (POS_PROMPTPAY_ID / POS_PROMPTPAY_NAME / POS_CONFIG_FILE;
+    // the tablet passes its store.properties). Unset → no PromptPay; offered only in a THB store.
+    promptPay: dev.dwhipstock.pos.sdk.PromptPayConfig.Resolved = dev.dwhipstock.pos.sdk.PromptPayConfig.fromEnv(),
     // test seams: the built-in simulator (a fake clock), how the store reaches a
     // LAN simulator, the J.P. Morgan terminal connection, and J.P. Morgan online
     terminalDevice: dev.dwhipstock.pos.payments.simulator.SimulatedTerminalDevice? = null,
@@ -365,9 +368,15 @@ fun Application.module(
     paymentTerminal.warnings.forEach { log.warn("Card terminal config ignored: $it") }
     val terminalKind = paymentTerminal.resolveFor(baseConfig.defaultPaymentTerminal)
     log.info(paymentTerminal.describe(terminalKind))
-    // payment.terminal=off: no card tender at all, not even the hand-keyed one
     // test seam: another store's money rules on the same engine (currency, tax policy, rounding)
-    val storeConfig = configOverride?.invoke(baseConfig) ?: baseConfig
+    val overridden = configOverride?.invoke(baseConfig) ?: baseConfig
+    // PromptPay QR: a THB store with promptpay.id set (after the test seam: it may change the currency)
+    promptPay.warning?.let { log.warn("PromptPay config ignored: $it") }
+    val storeConfig = dev.dwhipstock.pos.sdk.withPromptPay(overridden, promptPay)
+    if (promptPay.configured && overridden.profile.currency != "THB")
+        log.warn("PromptPay ignored: the store sells in ${overridden.profile.currency}, not THB")
+    else log.info(promptPay.describe())
+    // payment.terminal=off: no card tender at all, not even the hand-keyed one
     val tenderConfig: dev.dwhipstock.pos.sdk.CustomerConfig =
         if (terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.OFF) storeConfig
         else object : dev.dwhipstock.pos.sdk.CustomerConfig by storeConfig {
@@ -834,6 +843,13 @@ data class HealthResponse(
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
     val forecourt: Boolean = false,
+    /**
+     * PromptPay QR is offered (a THB store with promptpay.id set): the pay
+     * screen shows its tile. Left out of the JSON otherwise, like [kitchenPrinting].
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val promptPay: Boolean = false,
     /** age.check=looks-under:N: the cashier may pass a customer who looks over N (never tobacco). Absent = always an ID. */
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
@@ -871,6 +887,7 @@ data class HealthResponse(
             cashRounding = dev.dwhipstock.pos.sdk.CashRounding.wireOf(config.roundingPolicy),
             kitchenPrinting = kitchenPrinting,
             forecourt = forecourt,
+            promptPay = config.tenderMethod(dev.dwhipstock.pos.sdk.TenderType.PROMPTPAY) != null,
             taxDisplay = config.taxPolicy.guestDisplay.takeIf { it is dev.dwhipstock.pos.sdk.TaxDisplay.Combined }?.wire,
             taxLabel = (config.taxPolicy.guestDisplay as? dev.dwhipstock.pos.sdk.TaxDisplay.Combined)?.label,
         )

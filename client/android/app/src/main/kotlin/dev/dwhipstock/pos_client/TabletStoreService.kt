@@ -14,6 +14,7 @@ import dev.dwhipstock.pos.sdk.ImageGenConfig
 import dev.dwhipstock.pos.sdk.MenuAiConfig
 import dev.dwhipstock.pos.sdk.KitchenPrinting
 import dev.dwhipstock.pos.sdk.PaymentTerminalConfig
+import dev.dwhipstock.pos.sdk.PromptPayConfig
 import dev.dwhipstock.pos.sdk.ReceiptPrintMode
 import dev.dwhipstock.pos.sdk.DemoMode
 import dev.dwhipstock.pos.sdk.StaffAppMfa
@@ -131,6 +132,10 @@ class TabletStoreService : Service() {
             val paymentTerminal = runCatching { PaymentTerminalConfig.fromProperties(storeProps) }
                 .getOrElse { PaymentTerminalConfig.DEFAULT }
             paymentTerminal.warnings.forEach { Log.w("TabletStore", "Card terminal config ignored: $it") }
+            // promptpay.id=<Thai mobile or 13-digit id> + promptpay.name=<account name>;
+            // unset → no PromptPay (and only ever offered in a THB store). The id is never logged in full.
+            val promptPay = PromptPayConfig.fromProperties(storeProps)
+            promptPay.warning?.let { Log.w("TabletStore", "PromptPay config ignored: $it") }
             embeddedServer(CIO, host = if (isolatedTest) "127.0.0.1" else "0.0.0.0", port = BuildConfig.STORE_PORT) {
                 module(
                     dbPath = dbFile.absolutePath,
@@ -160,6 +165,7 @@ class TabletStoreService : Service() {
                     menuAiConfig = menuAiConfig,
                     kitchenPrinting = kitchenPrinting,
                     paymentTerminal = paymentTerminal,
+                    promptPay = promptPay,
                     forecourtUrl = forecourtUrl,
                 )
             }.start(wait = true)

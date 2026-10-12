@@ -152,6 +152,10 @@ class _TenderScreenState extends State<TenderScreen> {
   bool get _readerSupported =>
       widget.cardReaderSupported ?? StripeTerminalReader.supported;
 
+  /// PromptPay QR: a THB store with `promptpay.id` set (GET /health).
+  bool get _promptPayShown =>
+      StoreProfile.current.promptPay && StoreProfile.current.currency == 'THB';
+
   /// "Card (Stripe)" is shown only on a store with a Stripe key configured.
   bool get _stripeShown => _stripe?.configured == true;
 
@@ -685,6 +689,10 @@ class _TenderScreenState extends State<TenderScreen> {
                   LucideIcons.landmark,
                   l.bankTransfer,
                 ),
+                if (_promptPayShown) ...[
+                  const SizedBox(width: 8),
+                  _methodTile('PROMPTPAY', LucideIcons.qrCode, l.promptPay),
+                ],
                 if (_stripeShown) ...[
                   const SizedBox(width: 8),
                   _methodTile(
@@ -1076,12 +1084,16 @@ class _TenderScreenState extends State<TenderScreen> {
           SizedBox(
             height: T.minTouch,
             child: FilledButton.icon(
-              icon: Icon(
-                type == 'CARD' ? LucideIcons.creditCard : LucideIcons.landmark,
-              ),
-              label: Text(
-                type == 'CARD' ? l.useCardTerminal : l.showBankAccount,
-              ),
+              icon: Icon(switch (type) {
+                'CARD' => LucideIcons.creditCard,
+                'PROMPTPAY' => LucideIcons.qrCode,
+                _ => LucideIcons.landmark,
+              }),
+              label: Text(switch (type) {
+                'CARD' => l.useCardTerminal,
+                'PROMPTPAY' => l.showPromptPayQr,
+                _ => l.showBankAccount,
+              }),
               key: ValueKey('electronic-start-$type'),
               onPressed: _busy || blocked != null
                   ? null
@@ -1091,6 +1103,7 @@ class _TenderScreenState extends State<TenderScreen> {
         ],
       );
     }
+    if (instructions.type == 'PROMPTPAY') return _promptPayQr(instructions, l);
     return Column(
       children: [
         Text(
@@ -1125,6 +1138,62 @@ class _TenderScreenState extends State<TenderScreen> {
           ),
         ),
         TextButton(
+          onPressed: _busy ? null : () => setState(() => _instructions = null),
+          child: Text(l.cancel),
+        ),
+      ],
+    );
+  }
+
+  /// PromptPay: the QR big enough to scan across the counter, the amount and
+  /// the account name under it. Nothing confirms it by itself: the cashier
+  /// sees the money in the store's banking app and taps Paid.
+  Widget _promptPayQr(TenderInstructions instructions, L l) {
+    final name = instructions.displayFields.firstOrNull?.value ?? '';
+    return Column(
+      key: const ValueKey('promptpay-qr'),
+      children: [
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.all(16),
+          child: QrImageView(
+            data: instructions.qrPayload ?? '',
+            size: 300,
+            backgroundColor: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          money(instructions.amountCents),
+          key: const ValueKey('promptpay-amount'),
+          style: T.price(size: 34, weight: FontWeight.w700),
+        ),
+        if (name.isNotEmpty)
+          Text(
+            name,
+            key: const ValueKey('promptpay-name'),
+            textAlign: TextAlign.center,
+            style: T.text(size: 18, weight: FontWeight.w600),
+          ),
+        const SizedBox(height: 8),
+        Text(
+          l.promptPayScanHint,
+          textAlign: TextAlign.center,
+          style: T.small(),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: T.minTouch,
+          child: FilledButton.icon(
+            key: const ValueKey('promptpay-paid'),
+            icon: const Icon(LucideIcons.checkCircle2),
+            label: Text(l.promptPayPaid),
+            onPressed: _busy ? null : _confirmElectronic,
+          ),
+        ),
+        TextButton(
+          key: const ValueKey('promptpay-cancel'),
           onPressed: _busy ? null : () => setState(() => _instructions = null),
           child: Text(l.cancel),
         ),
