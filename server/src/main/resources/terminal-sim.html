@@ -152,7 +152,9 @@ function el(tag, attrs = {}, ...kids) {
 }
 function money(cents, cur) {
   if (cents == null) return "";
-  try { return new Intl.NumberFormat("en-US", { style: "currency", currency: cur || "USD", currencyDisplay: "narrowSymbol" }).format(cents / 100); }
+  const whole = (cur || "").toUpperCase() === "THB" && cents % 100 === 0; // "฿1,234": satang only when there are some
+  try { return new Intl.NumberFormat("en-US", { style: "currency", currency: cur || "USD", currencyDisplay: "narrowSymbol",
+    ...(whole ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}) }).format(cents / 100); }
   catch { return (cents / 100).toFixed(2); }
 }
 function buildWallet() {

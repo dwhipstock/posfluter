@@ -538,7 +538,8 @@ class ShiftService(private val config: CustomerConfig) {
     }
 
     /**
-     * The added taxes collected, one row per tax AND rate, for remittance:
+     * The taxes collected, one row per tax AND rate, for remittance (added
+     * taxes, and a tax inside the prices: [ReportTax.included]):
      * the closed checks matching [where] (their lock-time breakdown, exactly
      * what the receipts charged), less the taxes [refunds] handed back. A
      * guest's one "Tax (8.25%)" line is these rows added up, to the cent.
@@ -549,25 +550,37 @@ class ShiftService(private val config: CustomerConfig) {
         where: SqlExpressionBuilder.() -> Op<Boolean>,
         refunds: org.jetbrains.exposed.sql.Query,
     ): List<ReportTax> {
-        data class Key(val code: String, val rate: String)
+        data class Key(val code: String, val rate: String, val included: Boolean)
         val first = linkedMapOf<Key, TaxView>()
         val sums = linkedMapOf<Key, Long>()
-        fun add(json: String?, sign: Long) {
-            if (json.isNullOrBlank()) return
-            for (line in runCatching { taxLinesFromJson(json) }.getOrDefault(emptyList())) {
+        fun addLines(lines: List<dev.dwhipstock.pos.sdk.TaxLine>, sign: Long) {
+            for (line in lines) {
                 val v = line.toView()
-                val k = Key(v.code, v.ratePercent)
+                val k = Key(v.code, v.ratePercent, v.included)
                 first.putIfAbsent(k, v)
                 sums[k] = Math.addExact(sums[k] ?: 0L, sign * v.amountCents)
             }
         }
+        fun add(json: String?, sign: Long) {
+            if (json.isNullOrBlank()) return
+            addLines(runCatching { taxLinesFromJson(json) }.getOrDefault(emptyList()), sign)
+        }
         Checks.select(Checks.lockedTaxesJson)
             .where { where() and (Checks.status eq "CLOSED") and Checks.lockedTaxesJson.isNotNull() }
             .forEach { add(it[Checks.lockedTaxesJson], 1) }
+        // a tax inside the prices (a VAT): the checks' locked included tax, as its tax line
+        val policy = config.taxPolicy
+        if (policy is dev.dwhipstock.pos.sdk.TaxPolicy.InclusiveTax) {
+            var included = 0L
+            Checks.select(Checks.lockedTaxIncludedCents)
+                .where { where() and (Checks.status eq "CLOSED") and Checks.lockedTaxIncludedCents.isNotNull() }
+                .forEach { included = Math.addExact(included, it[Checks.lockedTaxIncludedCents] ?: 0L) }
+            if (included != 0L) addLines(policy.includedLines(dev.dwhipstock.pos.sdk.Money(included)), 1)
+        }
         refunds.forEach { add(it[Refunds.taxesJson], -1) }
         return sums.map { (k, cents) ->
             val v = first.getValue(k)
-            ReportTax(v.code, v.labelFr, v.labelEn, v.ratePercent, v.remitTo, cents)
+            ReportTax(v.code, v.labelFr, v.labelEn, v.ratePercent, v.remitTo, cents, included = v.included)
         }
     }
 
@@ -677,6 +690,8 @@ data class ReportTax(
     val ratePercent: String,
     val remitTo: String = "",
     val amountCents: Long,
+    /** Inside the prices (a VAT): already in the sales, not on top of them. */
+    val included: Boolean = false,
 )
 
 @Serializable

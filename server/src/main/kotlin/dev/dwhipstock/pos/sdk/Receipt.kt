@@ -58,9 +58,13 @@ data class Receipt(
     val order: ReceiptOrder? = null,
     /** How [taxes] print for the guest: each line, or one combined line ([TaxPolicy.AddedTaxes.display]). */
     val taxDisplay: TaxDisplay = TaxDisplay.Itemized,
+    /** Taxes inside the prices ([TaxPolicy.InclusiveTax]), [TaxLine.included]; they sum to [taxIncluded]. */
+    val includedTaxes: List<TaxLine> = emptyList(),
+    /** Print [includedTaxes] under the total ("VAT 7% included"); false = reporting only. */
+    val showIncludedTaxes: Boolean = false,
 ) {
     /** Pre-tax subtotal: the total less the taxes added on top. */
-    val subtotal: Money get() = grandTotal - Money(taxes.sumOf { it.amount.cents })
+    val subtotal: Money get() = grandTotal - Money(taxes.filterNot { it.included }.sumOf { it.amount.cents })
 
     /** The tax lines the guest sees ([guestTaxLines]): same total as [taxes]. */
     val guestTaxes: List<TaxLine> get() = guestTaxLines(taxes, taxDisplay)
@@ -305,6 +309,12 @@ object ReceiptRenderer {
             receipt.guestTaxes.forEach { add(PrintLine.KeyValue(taxLineLabel(it.component, locale), it.amount.let(policy::money))) }
         }
         add(PrintLine.KeyValue(msg(RECEIPT_TOTAL), receipt.grandTotal.let(policy::money), emphasized = true))
+        // taxes inside the prices (a VAT): one line each under the total, when the store shows them
+        if (receipt.showIncludedTaxes) {
+            receipt.includedTaxes.forEach {
+                add(PrintLine.KeyValue(includedTaxLabel(it.component, locale), it.amount.let(policy::money)))
+            }
+        }
         if (policy.showTax && receipt.taxRatePercent != null) {
             add(PrintLine.KeyValue(
                 msg(RECEIPT_TAX_INCLUDED, receipt.taxRatePercent),
@@ -318,7 +328,8 @@ object ReceiptRenderer {
             add(PrintLine.KeyValue(msg(RECEIPT_ROUNDING), signed(receipt.cashRounding, policy::money)))
             add(PrintLine.KeyValue(msg(RECEIPT_CASH_TOTAL), cashDue.let(policy::money)))
         }
-        receipt.taxes.filter { it.component.registrationNumber.isNotBlank() }
+        (receipt.taxes + if (receipt.showIncludedTaxes) receipt.includedTaxes else emptyList())
+            .filter { it.component.registrationNumber.isNotBlank() }
             .forEach { add(PrintLine.Text(taxRegistrationLine(it.component, locale))) }
         // fuel is sold at the posted pump price, its taxes inside it
         if (receipt.items.any { it.fuel != null }) add(PrintLine.Text(msg(MessageKey.RECEIPT_FUEL_TAX)))
@@ -435,6 +446,16 @@ object ReceiptRenderer {
             else Messages.get(MessageKey.RECEIPT_TAX_COMBINED_NAMED, locale, word, rateText(tax, locale))
         }
         return Messages.get(RECEIPT_TAX_LINE, locale, taxName(tax, locale), rateText(tax, locale))
+    }
+
+    /**
+     * A tax inside the price, under the total: "VAT 7% included". A locale
+     * pack may word it (`data.tax_included.<code>`, `{0}` = the rate).
+     */
+    fun includedTaxLabel(tax: TaxComponent, locale: LocaleCode): String {
+        Messages.dataLabel("tax_included.${tax.code}", locale)?.let { return it.replace("{0}", rateText(tax, locale)) }
+        val name = Messages.dataLabel("tax.${tax.code}", locale) ?: locale.dataText(tax.labelFr, tax.labelEn)
+        return "$name ${rateText(tax, locale)}% included"
     }
 
     /** "GST/TPS no. 123456789 RT0001". */

@@ -36,6 +36,8 @@ import {
   type Ticks,
 } from "@/lib/menu-stores";
 import { scopeApiPath, shortStoreName, useStores } from "@/lib/store";
+import { currencySymbol } from "@/lib/format";
+import { useMoney } from "@/lib/money";
 import { toast } from "@/lib/toast";
 import type { MenuCategory, MenuEditResult, MenuItem, MenuItemStores, MenuSyncStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -287,6 +289,9 @@ function ItemForm({
   const carrying = storeList ? carryingEditable(storeList) : [];
   const photoVenue = storeId ?? carrying[0]?.venueId ?? item?.venueId ?? (venues.length === 1 ? venues[0].id : null);
   const photoEveryStore = !storeId && carrying.length > 1;
+  // the item's prices are in its store's currency (the scope's when it has none yet)
+  const money = useMoney();
+  const itemCurrency = photoVenue ? money.currencyOf(photoVenue) : money.scopeCurrency;
   const photoAppliesTo = storeId ? [nameOf(storeId)] : carrying.map((s) => shortStoreName(s.name));
 
   const set = (patchDraft: Partial<ItemDraft>) => setDraft((d) => ({ ...d, ...patchDraft }));
@@ -472,7 +477,7 @@ function ItemForm({
               </Field>
               <Field label={t("menu_size_price")}>
                 <div className="relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400">$</span>
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400">{currencySymbol(itemCurrency)}</span>
                   <Input
                     className="pl-6 tabular-nums"
                     inputMode="decimal"
@@ -509,6 +514,7 @@ function ItemForm({
             onChange={set}
             showErrors={errors.includes("specials_invalid")}
             sizeLabel={(v) => name(v.labelFr || v.labelEn, v.labelEn, v.names)}
+            currency={itemCurrency}
           />
         ) : (
           <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">{t("menu_special_save_first")}</p>

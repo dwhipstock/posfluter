@@ -62,6 +62,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -1242,10 +1243,12 @@ class CheckService(private val config: CustomerConfig) {
             fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount, it.code) },
             grandTotal = Money(group[BillGroups.lockedTotalCents] ?: totals.grandTotal.cents),
             taxIncluded = totals.taxIncluded,
-            taxRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent,
+            taxRatePercent = null,
             tenders = tenders,
             taxes = groupTaxLines(group, totals),
             taxDisplay = config.taxPolicy.guestDisplay,
+            includedTaxes = includedTaxLines(totals.taxIncluded.cents),
+            showIncludedTaxes = showsIncludedTax,
         )
     }
 
@@ -1358,10 +1361,12 @@ class CheckService(private val config: CustomerConfig) {
             fees = totals.feeLines.map { ReceiptFee(it.labelFr, it.labelEn, it.amount, it.code) },
             grandTotal = Money(check[Checks.lockedGrandTotalCents] ?: totals.grandTotal.cents),
             taxIncluded = Money(check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents),
-            taxRatePercent = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent,
+            taxRatePercent = null,
             tenders = tenders,
             taxDisplay = config.taxPolicy.guestDisplay,
             taxes = taxLinesOf(check, totals),
+            includedTaxes = includedTaxLines(check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents),
+            showIncludedTaxes = showsIncludedTax,
             ageVerifiedAt = AgeGate.passedAt(checkId),
             discounts = discountsOf(check, totals).map { dev.dwhipstock.pos.sdk.ReceiptDiscount(it.label, it.labelEs, Money(it.amountCents)) },
         )
@@ -1558,6 +1563,7 @@ class CheckService(private val config: CustomerConfig) {
         } ?: computeTotals(check).let {
             Triple(it.grandTotal.cents, it.taxIncluded.cents + it.taxAdded.cents, it.taxLines)
         }
+        val voidIncluded = voidTax - voidTaxes.sumOf { it.amount.cents }
         Checks.update({ Checks.id eq checkId }) {
             it[status] = "VOID"
             it[closedAt] = now
@@ -1581,7 +1587,8 @@ class CheckService(private val config: CustomerConfig) {
             put("voidedAt", VenueClock.iso(now))
             put("amountCents", voidAmount)
             put("taxIncludedCents", voidTax)
-            put("taxes", taxLinesToJson(voidTaxes))
+            // added taxes, then any tax inside the prices (included = true)
+            put("taxes", taxLinesToJson(voidTaxes + includedTaxLines(voidIncluded)))
             if (reversed.isNotEmpty()) put("reversedTenders", JsonArray(reversed))
         })
         loadCheck(checkId)
@@ -1722,14 +1729,19 @@ class CheckService(private val config: CustomerConfig) {
 
         // reverse the included tax proportionally against the LOCKED totals:
         // full refund → tax reverses exactly; partials stay bounded and additive.
-        val includedTax = if (grandTotal == 0L) 0L
-        else Math.round(checkTax.toDouble() * refundGross / grandTotal)
+        // A tax inside the prices (a VAT) reverses cumulatively, like the added
+        // taxes: partial refunds add up to the check's tax to the cent.
+        val includedTaxes = reverseIncludedTaxes(check, already, refundGross)
+        val includedTax = if (config.taxPolicy is TaxPolicy.InclusiveTax) includedTaxes.sumOf { it.amount.cents }
+            else if (grandTotal == 0L) 0L
+            else Math.round(checkTax.toDouble() * refundGross / grandTotal)
         val addedTaxes = reverseAddedTaxes(check, already, refundGross)
         val refundTax = includedTax + addedTaxes.sumOf { it.amount.cents }
         val refundNet = refundGross - refundTax
-        // cash back rounds to the nickel like a cash sale; card refunds stay exact
+        // cash back rounds like a cash sale (the nickel, or down to the whole unit); card refunds stay exact
         val rounding = if (tt == TenderType.CASH) config.roundingPolicy.cashAdjustment(Money(refundGross)).cents else 0L
-        RefundPlan(checkId, refundGross, refundNet, refundTax, tt, reason, managerId, linesJson, addedTaxes, rounding, overrideBy)
+        RefundPlan(checkId, refundGross, refundNet, refundTax, tt, reason, managerId, linesJson,
+            addedTaxes + includedTaxes, rounding, overrideBy)
     }
 
     /**
@@ -1759,13 +1771,34 @@ class CheckService(private val config: CustomerConfig) {
         val grandTotal = check[Checks.lockedGrandTotalCents] ?: return emptyList()
         if (grandTotal <= 0L) return emptyList()
         val reversedSoFar = sumTaxLines(Refunds.selectAll().where { Refunds.checkId eq check[Checks.id].value }
-            .mapNotNull { it[Refunds.taxesJson]?.let(::taxLinesFromJson) }).associate { it.component.code to it.amount.cents }
+            .mapNotNull { it[Refunds.taxesJson]?.let(::taxLinesFromJson) }).filterNot { it.included }
+            .associate { it.component.code to it.amount.cents }
         val refundedAfter = java.math.BigDecimal(alreadyRefunded + gross)
         return lockedTaxLines(check).map { line ->
             val dueAfter = java.math.BigDecimal(line.amount.cents).multiply(refundedAfter)
                 .divide(java.math.BigDecimal(grandTotal), 0, java.math.RoundingMode.HALF_UP).toLong()
             line.copy(amount = Money(dueAfter - (reversedSoFar[line.component.code] ?: 0L)))
         }
+    }
+
+    /**
+     * The tax inside the prices ([TaxPolicy.InclusiveTax]) this refund
+     * reverses, cumulative like [reverseAddedTaxes]: after every refund so far
+     * the check's included tax is reversed by round-half-up(tax × refunded ÷
+     * total), less what earlier refunds reversed. Empty for a store that adds
+     * its taxes on top.
+     */
+    private fun reverseIncludedTaxes(check: ResultRow, alreadyRefunded: Long, gross: Long): List<TaxLine> {
+        if (config.taxPolicy !is TaxPolicy.InclusiveTax) return emptyList()
+        val grandTotal = check[Checks.lockedGrandTotalCents] ?: return emptyList()
+        if (grandTotal <= 0L) return emptyList()
+        val checkIncluded = check[Checks.lockedTaxIncludedCents] ?: 0L
+        val reversedSoFar = Refunds.selectAll().where { Refunds.checkId eq check[Checks.id].value }
+            .mapNotNull { it[Refunds.taxesJson]?.let(::taxLinesFromJson) }.flatten()
+            .filter { it.included }.sumOf { it.amount.cents }
+        val dueAfter = java.math.BigDecimal(checkIncluded).multiply(java.math.BigDecimal(alreadyRefunded + gross))
+            .divide(java.math.BigDecimal(grandTotal), 0, java.math.RoundingMode.HALF_UP).toLong()
+        return includedTaxLines(dueAfter - reversedSoFar)
     }
 
     /**
@@ -2043,7 +2076,7 @@ class CheckService(private val config: CustomerConfig) {
 
     /** 42-col refund slip, same virtual printer as receipts. Language follows the check owner. */
     private fun renderRefundSlip(
-        check: ResultRow, refundId: Int, gross: Long, tax: Long, addedTaxes: List<TaxLine>,
+        check: ResultRow, refundId: Int, gross: Long, tax: Long, refundTaxes: List<TaxLine>,
         tt: TenderType, reason: String, now: java.time.Instant, rounding: Long = 0,
     ): String {
         val policy = receiptPolicyFor(check)
@@ -2055,7 +2088,9 @@ class CheckService(private val config: CustomerConfig) {
             TenderType.STRIPE, TenderType.TERMINAL -> tenderLabels(tt.name).let { (fr, en) -> locale.dataText(fr, en) }
             else -> method?.let { locale.dataText(it.labelFr, it.labelEn) } ?: tt.name
         }
-        val taxRate = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.ratePercent
+        // the older unnamed included tax ("Sales tax 13% (included)"); a named one prints its own line below
+        val taxRate = (config.taxPolicy as? TaxPolicy.InclusiveTax)
+            ?.takeIf { it.component.code == dev.dwhipstock.pos.sdk.INCLUDED_TAX_CODE }?.ratePercent?.stripTrailingZeros()?.toPlainString()
         val lines = buildList {
             add(PrintLine.LogoPlaceholder(policy.logoFallbackText))
             policy.header().forEach { add(PrintLine.Text(it, Align.CENTER)) }
@@ -2068,6 +2103,8 @@ class CheckService(private val config: CustomerConfig) {
             ))
             add(PrintLine.KeyValue(msg(SLIP_TIME), policy.formatDate(VenueClock.local(now))))
             add(PrintLine.Divider)
+            val included = refundTaxes.filter { it.included }
+            val addedTaxes = refundTaxes.filterNot { it.included }
             // the added taxes handed back, then the total they are part of
             if (addedTaxes.isNotEmpty()) {
                 val reversed = addedTaxes.sumOf { it.amount.cents }
@@ -2077,6 +2114,10 @@ class CheckService(private val config: CustomerConfig) {
                 }
             }
             add(PrintLine.KeyValue(msg(REFUND_TOTAL), policy.money(Money(gross)), emphasized = true))
+            // the tax inside the prices handed back ("VAT 7% included"), when the store shows it
+            if (showsIncludedTax && taxRate == null) included.forEach {
+                add(PrintLine.KeyValue(ReceiptRenderer.includedTaxLabel(it.component, locale), policy.money(it.amount)))
+            }
             if (policy.showTax && taxRate != null) {
                 add(PrintLine.KeyValue(msg(RECEIPT_TAX_INCLUDED, taxRate), policy.money(Money(tax - addedTaxes.sumOf { it.amount.cents }))))
             }
@@ -2273,6 +2314,17 @@ class CheckService(private val config: CustomerConfig) {
     private fun taxLinesOf(check: ResultRow, live: Totals): List<TaxLine> =
         if (check[Checks.lockedGrandTotalCents] != null) lockedTaxLines(check) else live.taxLines
 
+    /**
+     * The taxes inside [includedCents] of included tax, one line per included
+     * component ([TaxPolicy.includedLines]); empty when the store adds its taxes on top.
+     */
+    private fun includedTaxLines(includedCents: Long): List<TaxLine> =
+        config.taxPolicy.includedLines(Money(includedCents))
+
+    /** Guest paper shows the tax inside the prices ("VAT 7% included"): [TaxPolicy.InclusiveTax.showOnReceipt]. */
+    private val showsIncludedTax: Boolean
+        get() = (config.taxPolicy as? TaxPolicy.InclusiveTax)?.showOnReceipt ?: false
+
     /** Every tax in the check's (or refund's) money: included in the price plus added on top. */
     private fun totalTax(check: ResultRow): Long =
         (check[Checks.lockedTaxIncludedCents] ?: 0L) + (check[Checks.lockedTaxAddedCents] ?: 0L)
@@ -2385,7 +2437,8 @@ class CheckService(private val config: CustomerConfig) {
             // every tax inside grandTotalCents (included + added), so net = gross − tax
             put("taxIncludedCents", totalTax(check))
             put("subtotalCents", check[Checks.lockedGrandTotalCents]!! - (check[Checks.lockedTaxAddedCents] ?: 0L))
-            put("taxes", taxLinesToJson(lockedTaxLines(check)))
+            // added taxes, then any tax inside the prices (included = true): per-tax reports carry both
+            put("taxes", taxLinesToJson(lockedTaxLines(check) + includedTaxLines(check[Checks.lockedTaxIncludedCents] ?: 0L)))
             put("corkageBottles", check[Checks.corkageBottles])
             put("fees", fees)
             check[Checks.lockedDiscountsJson]?.let { put("discounts", Json.parseToJsonElement(it)) }
@@ -2537,7 +2590,7 @@ class CheckService(private val config: CustomerConfig) {
             put("grandTotalCents", totals.grandTotal.cents)
             put("taxIncludedCents", totals.taxIncluded.cents + totals.taxAdded.cents)
             put("subtotalCents", totals.subtotal.cents)
-            put("taxes", taxLinesToJson(totals.taxLines))
+            put("taxes", taxLinesToJson(totals.taxLines + includedTaxLines(totals.taxIncluded.cents)))
             if (groups.isNotEmpty()) put("groups", groups.size)
         })
     }
@@ -2666,6 +2719,7 @@ class CheckService(private val config: CustomerConfig) {
                 outstandingCents = grand - paid,
                 subtotalCents = grand - taxes.sumOf { it.amount.cents },
                 taxes = taxes.map { it.toView() },
+                includedTaxes = includedTaxLines(totals.taxIncluded.cents).map { it.toView() },
                 cashDueCents = cashDue,
                 cashRoundingCents = cashDue - (grand - paid),
             )
@@ -2759,6 +2813,7 @@ class CheckService(private val config: CustomerConfig) {
             split = buildSplitView(check),
             subtotalCents = grandTotal - taxes.sumOf { it.amount.cents },
             taxes = taxes.map { it.toView() },
+            includedTaxes = includedTaxLines(check[Checks.lockedTaxIncludedCents] ?: totals.taxIncluded.cents).map { it.toView() },
             discounts = discountsOf(check, totals),
             ageCheckRequired = AgeGate.required(checkId),
             ageCleared = AgeGate.cleared(checkId),
@@ -2833,6 +2888,8 @@ data class CheckView(
     val subtotalCents: Long = 0,
     /** Taxes added on top of [subtotalCents], one per tax (GST, QST). */
     val taxes: List<TaxView> = emptyList(),
+    /** The tax inside the prices (a VAT), [TaxView.included]: part of grandTotalCents, never in [taxes]. */
+    val includedTaxes: List<TaxView> = emptyList(),
     /** Promotions taken off before tax (a c-store's deals); their sum is inside the total. */
     val discounts: List<DiscountView> = emptyList(),
     /** Lines of the request just made that the menu refused (a partial guest basket); empty otherwise. */
@@ -2878,6 +2935,8 @@ data class GroupView(
     val subtotalCents: Long = 0,
     /** The group's share of the check's taxes (the groups' shares sum to the check's). */
     val taxes: List<TaxView> = emptyList(),
+    /** The group's share of the tax inside the prices (a VAT), [TaxView.included]; never in [taxes]. */
+    val includedTaxes: List<TaxView> = emptyList(),
     /** The group's outstanding paid in cash, rounded to the nickel; see [CheckView.cashDueCents]. */
     val cashDueCents: Long = 0,
     val cashRoundingCents: Long = 0,
@@ -2961,11 +3020,13 @@ data class TaxView(
     val amountCents: Long,
     /** Who the tax is paid to ("NCDOR"); empty = not said. Back office only. */
     val remitTo: String = "",
+    /** Inside the price (a VAT), already part of the total; false = added on top. */
+    val included: Boolean = false,
 )
 
 fun TaxLine.toView() = TaxView(
     component.code, component.labelFr, component.labelEn, component.rateText, component.registrationNumber, amount.cents,
-    component.remitTo,
+    component.remitTo, included,
 )
 
 /** [views] as a guest sees them under [display] ([dev.dwhipstock.pos.sdk.guestTaxLines]). */
@@ -2990,6 +3051,8 @@ fun taxLinesToJson(lines: List<TaxLine>): JsonArray = JsonArray(lines.map { t ->
         put("registrationNumber", t.component.registrationNumber)
         if (t.component.remitTo.isNotEmpty()) put("remitTo", t.component.remitTo)
         put("amountCents", t.amount.cents)
+        // inside the price (a VAT): already part of the total, never added again
+        if (t.included) put("included", true)
     }
 })
 
@@ -3000,6 +3063,7 @@ fun taxLinesFromJson(text: String): List<TaxLine> = Json.parseToJsonElement(text
         TaxComponent(s("code"), s("labelFr"), s("labelEn"), s("ratePercent").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
             s("registrationNumber"), s("remitTo")),
         Money(o["amountCents"]?.jsonPrimitive?.longOrNull ?: 0L),
+        included = o["included"]?.jsonPrimitive?.booleanOrNull ?: false,
     )
 }
 
@@ -3007,7 +3071,8 @@ fun taxLinesFromJson(text: String): List<TaxLine> = Json.parseToJsonElement(text
 fun sumTaxLines(breakdowns: List<List<TaxLine>>): List<TaxLine> {
     val out = LinkedHashMap<String, TaxLine>()
     for (line in breakdowns.flatten()) {
-        out[line.component.code] = out[line.component.code]?.let { it.copy(amount = it.amount + line.amount) } ?: line
+        val key = if (line.included) "included:" + line.component.code else line.component.code
+        out[key] = out[key]?.let { it.copy(amount = it.amount + line.amount) } ?: line
     }
     return out.values.toList()
 }

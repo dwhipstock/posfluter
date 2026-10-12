@@ -118,6 +118,7 @@ class StoreProfile {
 /// symbol first, period decimal, comma thousands.
 ///
 /// - CAD and USD: `$12.99`, `$8.00`, `$1,010.00` — always two decimals.
+/// - THB: `฿1,234`, `฿1,234.50`, `฿0` — satang only when non-zero.
 ///
 /// [lang] is kept for compatibility and ignored.
 String money(int cents, {String? currency, String? lang}) =>
@@ -128,6 +129,22 @@ String money(int cents, {String? currency, String? lang}) =>
 String signedMoney(int cents, {String? currency}) {
   final abs = money(cents.abs(), currency: currency);
   return cents < 0 ? '−$abs' : '+$abs';
+}
+
+/// The symbol a money input box shows in front of the amount for
+/// [currency] (default: this store's): `$` for CAD/USD, `฿` for THB, else the
+/// code itself (`EUR`).
+String currencySymbol([String? currency]) {
+  final c = (currency ?? StoreProfile.current.currency).toUpperCase();
+  switch (c) {
+    case 'CAD':
+    case 'USD':
+      return r'$';
+    case 'THB':
+      return '฿';
+    default:
+      return c;
+  }
 }
 
 /// North American money text: `$1,234.56`, `-$5.00`, `$8.00` — always
@@ -147,6 +164,9 @@ String formatMoney(int cents, String currency, {String lang = 'en'}) {
     case 'CAD':
     case 'USD':
       return '$sign\$$grouped.$cc';
+    case 'THB':
+      // Baht: whole amounts print bare; satang only when there are some.
+      return frac == 0 ? '$sign฿$grouped' : '$sign฿$grouped.$cc';
     default:
       return '$sign${currency.toUpperCase()} $grouped.$cc';
   }

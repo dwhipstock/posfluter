@@ -663,13 +663,15 @@ bill (paper, the staff app and the guest's phone) and the receipt show a
 drawer counts the rounded cash; the portal reports the net rounding per store
 and per currency, beside the exact revenue and tax.
 
-A config switch (no UI), default `nickel` for every store:
-`cash.rounding=nickel|off`. **Tablet**: add the line to the same
+A config switch (no UI), default `nickel` for every CAD and USD store:
+`cash.rounding=nickel|unit-down|off`. `unit-down` drops the minor units of a
+cash payment — down to the whole unit, never up (a THB store's default:
+฿1,234.75 is paid ฿1,234). **Tablet**: add the line to the same
 `store.properties` as `print.receipts` and restart the POS. **Desktop /
-docker store**: `POS_CASH_ROUNDING=nickel|off`, or `cash.rounding` in the
+docker store**: `POS_CASH_ROUNDING=nickel|unit-down|off`, or `cash.rounding` in the
 `POS_CONFIG_FILE` properties file (the env var wins). The store logs
-`Cash rounding: <mode> (<source>)` at startup; a bad value means `nickel`
-(logged) and never fails startup.
+`Cash rounding: <mode> (<source>)` at startup; a bad value means the
+currency's default (logged) and never fails startup.
 
 ## Staff app MFA
 

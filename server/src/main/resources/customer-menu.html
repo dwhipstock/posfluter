@@ -297,10 +297,12 @@ const catName = c => {
 
 // The store's currency (GET /health), always written North American style
 // whatever the language: "$12.99", "$1,234.50", "-$5.00" (the owner's rule).
+// Baht shows its satang only when there are some: "฿1,234", "฿1,234.50".
 // One language: no picker.
 let store = { locales: ["fr", "en"], currency: "CAD", country: "CA" };
 const cad = cents => (cents / 100).toLocaleString("en-US", {
   style: "currency", currency: store.currency, currencyDisplay: "narrowSymbol",
+  ...(store.currency === "THB" && cents % 100 === 0 ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}),
 });
 // the languages this page can show, in the store's order
 const guestLangs = () => store.locales.filter(l => STR[l]);

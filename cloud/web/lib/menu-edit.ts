@@ -64,7 +64,7 @@ const MAX_CENTS = 10_000_000;
  * No floating point: the digits are joined as text.
  */
 export function parseCents(input: string): number | null {
-  const s = input.trim().replace(/^\$/, "").replace(/,(?=\d{3}(\D|$))/g, "").trim();
+  const s = input.trim().replace(/^[$฿]/, "").replace(/,(?=\d{3}(\D|$))/g, "").trim();
   const m = /^(\d*)(?:\.(\d{0,2}))?$/.exec(s);
   if (!m || (m[1] === "" && !m[2])) return null;
   const whole = m[1] || "0";

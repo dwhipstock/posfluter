@@ -143,8 +143,9 @@ fun Application.module(
     // print.receipts=paper|digital (POS_PRINT_RECEIPTS / POS_CONFIG_FILE; the
     // tablet passes its store.properties). Local config only, never the network.
     receiptPrintMode: ReceiptPrintMode.Resolved = ReceiptPrintMode.fromEnv(),
-    // cash.rounding=nickel|off (POS_CASH_ROUNDING / POS_CONFIG_FILE; the tablet
-    // passes its store.properties). Default nickel for every store.
+    // cash.rounding=nickel|unit-down|off (POS_CASH_ROUNDING / POS_CONFIG_FILE; the
+    // tablet passes its store.properties). Unset: the currency's default
+    // (CashRounding.defaultFor: the nickel for CAD and USD, whole baht down for THB).
     cashRounding: dev.dwhipstock.pos.sdk.CashRounding.Resolved = dev.dwhipstock.pos.sdk.CashRounding.fromEnv(),
     // Optional Stripe card tender, TEST MODE only (STRIPE_KEY / stripe.secretKey;
     // the tablet passes its store.properties). No key or a non-sk_test_ key →
@@ -200,6 +201,8 @@ fun Application.module(
     cardSweepSeconds: Long = System.getenv("POS_CARD_SWEEP_SECONDS")?.toLongOrNull()
         ?: dev.dwhipstock.pos.payments.PendingCardPayments.DEFAULT_SWEEP_SECONDS,
     onPendingCards: ((dev.dwhipstock.pos.payments.PendingCardPayments) -> Unit)? = null,
+    // test seam: wrap the store's config (another currency, tax policy or cash rounding)
+    configOverride: ((dev.dwhipstock.pos.sdk.CustomerConfig) -> dev.dwhipstock.pos.sdk.CustomerConfig)? = null,
 ) {
     // a brand-new store starts in its own zone when VENUE_TZ is unset (Los
     // Angeles for the US store); an existing store keeps its settings row's
@@ -310,7 +313,7 @@ fun Application.module(
         publicUrlProvider = publicUrlProvider,
         legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
             dev.dwhipstock.pos.sdk.LegalAge.fromEnv(Pronghorn.LEGAL_AGE), legalAgeOverride?.toString()),
-        cashRounding = cashRounding.rounding,
+        cashRounding = cashRounding.forCurrency(Pronghorn.PROFILE.currency),
     ) else if (sagePoppy) SagePoppyConfig(
         settings = settingsRepo,
         printer = thermalPrinter,
@@ -318,14 +321,14 @@ fun Application.module(
         publicUrlProvider = publicUrlProvider,
         legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
             dev.dwhipstock.pos.sdk.LegalAge.fromEnv(SagePoppy.LEGAL_AGE), legalAgeOverride?.toString()),
-        cashRounding = cashRounding.rounding,
+        cashRounding = cashRounding.forCurrency(SagePoppy.PROFILE.currency),
     ) else CopperLanternConfig(
         venue = venue,
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,
         publicUrlProvider = publicUrlProvider,
-        cashRounding = cashRounding.rounding,
+        cashRounding = cashRounding.forCurrency(CopperLanternConfig.CURRENCY),
         legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
             dev.dwhipstock.pos.sdk.LegalAge.fromEnv(CopperLanternConfig.LEGAL_AGE), legalAgeOverride?.toString()),
     )
@@ -336,14 +339,16 @@ fun Application.module(
     val terminalKind = paymentTerminal.resolveFor(baseConfig.defaultPaymentTerminal)
     log.info(paymentTerminal.describe(terminalKind))
     // payment.terminal=off: no card tender at all, not even the hand-keyed one
+    // test seam: another store's money rules on the same engine (currency, tax policy, rounding)
+    val storeConfig = configOverride?.invoke(baseConfig) ?: baseConfig
     val config: dev.dwhipstock.pos.sdk.CustomerConfig =
-        if (terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.OFF) baseConfig
-        else object : dev.dwhipstock.pos.sdk.CustomerConfig by baseConfig {
-            override val electronicTenders get() = baseConfig.electronicTenders.filter { it.type != dev.dwhipstock.pos.sdk.TenderType.CARD }
+        if (terminalKind != dev.dwhipstock.pos.payments.terminal.TerminalKind.OFF) storeConfig
+        else object : dev.dwhipstock.pos.sdk.CustomerConfig by storeConfig {
+            override val electronicTenders get() = storeConfig.electronicTenders.filter { it.type != dev.dwhipstock.pos.sdk.TenderType.CARD }
             override fun tenderMethod(type: dev.dwhipstock.pos.sdk.TenderType) = electronicTenders.firstOrNull { it.type == type }
         }
     cashRounding.warning?.let { log.warn("Cash rounding config ignored: $it") }
-    log.info("Cash rounding: ${cashRounding.rounding.wire} (${cashRounding.source})")
+    log.info("Cash rounding: ${dev.dwhipstock.pos.sdk.CashRounding.wireOf(config.roundingPolicy)} (${cashRounding.source})")
     log.info("Store: ${config.displayName} (POS_VENUE=${config.venueId}, ${config.profile.country}, " +
         "${config.profile.currency}, ${config.profile.locales.joinToString("/")}, ${config.profile.kind.wire})")
     log.info("Legal age for age-restricted items: ${config.legalAge}")
@@ -823,7 +828,7 @@ data class HealthResponse(
             currency = config.profile.currency,
             locales = config.profile.locales.map { it.tag },
             legalAge = config.legalAge,
-            cashRounding = if (config.roundingPolicy == dev.dwhipstock.pos.sdk.RoundingPolicy.NoRounding) "off" else "nickel",
+            cashRounding = dev.dwhipstock.pos.sdk.CashRounding.wireOf(config.roundingPolicy),
             kitchenPrinting = kitchenPrinting,
             forecourt = forecourt,
             taxDisplay = config.taxPolicy.guestDisplay.takeIf { it is dev.dwhipstock.pos.sdk.TaxDisplay.Combined }?.wire,

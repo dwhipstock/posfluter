@@ -137,14 +137,20 @@ object PrintWords {
         "CAD", "USD", "AUD", "NZD" -> "$"
         "EUR" -> "€"
         "GBP" -> "£"
+        "THB" -> "฿"
         else -> currency.uppercase() + " "
     }
 
-    /** "$1,234.56" in every language: symbol first, comma thousands, period decimals, always the cents. */
+    /**
+     * "$1,234.56" in every language: symbol first, comma thousands, period
+     * decimals, always the cents — except baht, whose satang show only when
+     * there are some ("฿1,234", "฿1,234.50").
+     */
     fun money(cents: Long, currency: String = "CAD"): String {
         val neg = cents < 0
         val abs = kotlin.math.abs(cents)
         val whole = "%,d".format(Locale.US, abs / 100)
-        return (if (neg) "-" else "") + symbol(currency) + whole + "." + "%02d".format(abs % 100)
+        val frac = if (currency.uppercase() == "THB" && abs % 100 == 0L) "" else "." + "%02d".format(abs % 100)
+        return (if (neg) "-" else "") + symbol(currency) + whole + frac
     }
 }

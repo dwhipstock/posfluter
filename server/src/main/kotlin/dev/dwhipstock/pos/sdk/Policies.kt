@@ -13,16 +13,49 @@ sealed interface TaxPolicy {
     fun assess(taxableBase: Money): TaxAssessment
 
     /**
-     * Sales tax baked into the shelf price. Tax is computed out of the base
-     * (base * rate / (100 + rate)) and never changes the total.
-     * [showOnReceipt] = false → computed internally for reporting only.
+     * A tax baked into the shelf price (a VAT): the price the guest sees is
+     * what they pay, and the tax inside it is taken out of the taxable base
+     * once per check, half-up to the cent: base × rate / (100 + rate). It
+     * never changes the total ([TaxAssessment.taxAdded] is zero).
+     *
+     * [component] names it for receipts, reports and sync ("VAT", 7%): the
+     * amount comes back as an included [TaxLine] ([TaxLine.included]), so the
+     * store's reports and the cloud's per-tax report carry it like an added
+     * tax, while totals never add it again.
+     *
+     * [showOnReceipt]: true prints one "VAT 7% included" line under the total;
+     * false keeps it off guest paper (reporting only).
      */
-    data class InclusiveTax(val ratePercent: Int, val showOnReceipt: Boolean) : TaxPolicy {
-        override fun assess(taxableBase: Money): TaxAssessment {
-            // rounds half-up at the cents; fine at this precision
-            val tax = (taxableBase.cents * ratePercent * 2 + (100 + ratePercent)) / ((100 + ratePercent) * 2)
-            return TaxAssessment(taxIncluded = Money(tax), taxAdded = Money.ZERO, showOnReceipt = showOnReceipt)
+    data class InclusiveTax(val component: TaxComponent, val showOnReceipt: Boolean) : TaxPolicy {
+        /** The older shape: an unnamed included sales tax at a whole-number rate. */
+        constructor(ratePercent: Int, showOnReceipt: Boolean) : this(
+            TaxComponent(INCLUDED_TAX_CODE, "Taxe de vente", "Sales tax", BigDecimal(ratePercent), registrationNumber = ""),
+            showOnReceipt,
+        )
+
+        init {
+            require(component.ratePercent.signum() >= 0) { "an included tax rate is not negative" }
         }
+
+        val ratePercent: BigDecimal get() = component.ratePercent
+
+        override fun assess(taxableBase: Money): TaxAssessment {
+            val tax = includedIn(taxableBase)
+            return TaxAssessment(
+                taxIncluded = tax, taxAdded = Money.ZERO, showOnReceipt = showOnReceipt,
+                includedLines = includedLines(tax),
+            )
+        }
+
+        /** The tax inside [gross]: gross × rate / (100 + rate), half-up to the cent (symmetric for negatives). */
+        fun includedIn(gross: Money): Money {
+            val r = component.ratePercent
+            val tax = BigDecimal(gross.cents).multiply(r).divide(BigDecimal(100).add(r), 0, RoundingMode.HALF_UP)
+            return Money(tax.longValueExact())
+        }
+
+        override fun includedLines(included: Money): List<TaxLine> =
+            listOf(TaxLine(component, included, included = true))
     }
 
     /**
@@ -95,6 +128,14 @@ sealed interface TaxPolicy {
     /** How guests see the taxes ([AddedTaxes.display]); Itemized for any other policy. */
     val guestDisplay: TaxDisplay get() = (this as? AddedTaxes)?.display ?: TaxDisplay.Itemized
 
+    /**
+     * The tax lines inside a figure that already carries [included] of
+     * included tax (a check, a bill share, a refund): one per included
+     * component, [TaxLine.included] set. Empty for every policy that adds
+     * its taxes on top.
+     */
+    fun includedLines(included: Money): List<TaxLine> = emptyList()
+
     data object NoTax : TaxPolicy {
         override fun assess(taxableBase: Money) = TaxAssessment(Money.ZERO, Money.ZERO, showOnReceipt = false)
     }
@@ -126,8 +167,15 @@ data class TaxComponent(
     }
 }
 
-/** One assessed tax: which component, and how much. */
-data class TaxLine(val component: TaxComponent, val amount: Money)
+/**
+ * One assessed tax: which component, and how much. [included] = the amount
+ * is inside the price ([TaxPolicy.InclusiveTax]), already part of the total;
+ * false = added on top of the subtotal.
+ */
+data class TaxLine(val component: TaxComponent, val amount: Money, val included: Boolean = false)
+
+/** The code of [TaxPolicy.InclusiveTax]'s unnamed tax (the older constructor). */
+const val INCLUDED_TAX_CODE = "INCLUDED_TAX"
 
 /** How [TaxPolicy.AddedTaxes] rounds to the cent (once per check either way). */
 enum class TaxRounding {
@@ -183,6 +231,8 @@ data class TaxAssessment(
     val showOnReceipt: Boolean,
     /** Itemised added taxes (empty for inclusive / no tax); sums to [taxAdded]. */
     val lines: List<TaxLine> = emptyList(),
+    /** Included taxes ([TaxLine.included]); sums to [taxIncluded]. Empty for added / no tax. */
+    val includedLines: List<TaxLine> = emptyList(),
 )
 
 sealed interface RoundingPolicy {
@@ -220,6 +270,12 @@ sealed interface RoundingPolicy {
          * 8–9 → 10; 0 and 5 unchanged ([CashRounding.NICKEL]).
          */
         val NICKEL: RoundingPolicy = RoundToUnit(Money(5), RoundToUnit.Mode.NEAREST)
+
+        /**
+         * Down to the whole unit of the currency: the minor units are dropped
+         * (฿1,234.75 → ฿1,234), never rounded up ([CashRounding.UNIT_DOWN]).
+         */
+        val WHOLE_UNIT_DOWN: RoundingPolicy = RoundToUnit(Money(100), RoundToUnit.Mode.DOWN)
     }
 }
 

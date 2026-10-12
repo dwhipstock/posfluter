@@ -95,6 +95,9 @@ enum class Capability {
  *
  * [unambiguous] adds the country to a dollar sign (`US$12.99`, `CA$12.99`) for
  * places that show several currencies side by side.
+ *
+ * Baht (THB) is written `฿1,234` — the symbol first, comma thousands, and the
+ * satang only when there are some (`฿1,234.50`).
  */
 object MoneyFormat {
     private const val NBSP = '\u00A0'
@@ -107,13 +110,18 @@ object MoneyFormat {
         val frac = (abs % 100).toString().padStart(2, '0')
         val sign = if (cents < 0) "-" else ""
         val symbol = symbol(currency, unambiguous)
+        if (dropsZeroMinor(currency) && frac == "00") return "$sign$symbol${group(whole, ',')}"
         return "$sign$symbol${group(whole, ',')}.$frac"
     }
+
+    /** Currencies written without ".00" when there are no minor units (THB: "฿1,234"). */
+    fun dropsZeroMinor(currency: String): Boolean = currency.uppercase() == "THB"
 
     fun symbol(currency: String, unambiguous: Boolean = false): String = when (currency.uppercase()) {
         "USD" -> if (unambiguous) "US$" else "$"
         "CAD" -> if (unambiguous) "CA$" else "$"
         "EUR" -> "€"
+        "THB" -> "฿"
         else -> currency.uppercase() + NBSP
     }
 

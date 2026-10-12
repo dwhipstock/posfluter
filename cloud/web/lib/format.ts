@@ -57,6 +57,8 @@ export function currencySymbol(currency: string = "CAD", unambiguous = false): s
       return unambiguous ? "US$" : "$";
     case "EUR":
       return "€";
+    case "THB":
+      return "฿"; // only one baht: the same with or without [unambiguous]
     default:
       return `${currency.toUpperCase()} `;
   }
@@ -109,9 +111,13 @@ export function money(
   return `${neg ? "-" : ""}${currencySymbol(cur, unambiguous)}${groupThousands(whole, ",")}${frac ? "." + cc : ""}`;
 }
 
+/** Currencies whose minor unit is shown only when non-zero, even in PDF tables. */
+const CENTS_ONLY_WHEN_NONZERO = new Set(["THB"]);
+
 /**
  * Always two decimals, for PDF tables: "$1,234.50", "-$5.00" — North
- * American in every language ([opts.locale] is ignored).
+ * American in every language ([opts.locale] is ignored). THB keeps its own
+ * style here too: satang only when non-zero ("฿1,234", "฿1,234.50").
  */
 export function moneyCents(
   cents: number,
@@ -123,8 +129,10 @@ export function moneyCents(
   const neg = cents < 0;
   const abs = Math.abs(cents);
   const whole = Math.floor(abs / 100);
-  const cc = String(abs % 100).padStart(2, "0");
-  return `${neg ? "-" : ""}${currencySymbol(cur, opts?.unambiguous)}${groupThousands(whole, ",")}.${cc}`;
+  const frac = abs % 100;
+  const cc = String(frac).padStart(2, "0");
+  const tail = frac === 0 && CENTS_ONLY_WHEN_NONZERO.has(cur.toUpperCase()) ? "" : `.${cc}`;
+  return `${neg ? "-" : ""}${currencySymbol(cur, opts?.unambiguous)}${groupThousands(whole, ",")}${tail}`;
 }
 
 /** An integer count in the locale's grouping ("1,234" / "1 234" / "1.234"). */
