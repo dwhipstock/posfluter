@@ -186,7 +186,7 @@ class MenuAiService(
     private val voiceModel: MenuAiModel? = config.menuAiKey?.let { GeminiMenuModel(it.value, config.menuAiVoiceModel ?: config.menuAiModel) },
     private val now: () -> Long = System::currentTimeMillis,
     /** Calls per 10 minutes per user and per store (the store's 20; tests that make many calls raise it). */
-    private val callsMax: Int = CALLS_MAX,
+    private val callsMax: Int = config.menuAiCallsPer10Min,
     /** The photo makers: FLUX (MENU_AI_BFL_API_KEY), then Gemini image (MENU_AI_GEMINI_API_KEY). Tests pass fakes. */
     images: ImageGen = ImageGen.from(config.menuAiBflKey?.value, config.menuAiKey?.value),
 ) {

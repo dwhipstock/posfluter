@@ -91,6 +91,8 @@ data class CloudConfig(
     val menuAiBflKey: Secret? = env("MENU_AI_BFL_API_KEY")?.let(::Secret),
     // AI photos per store per rolling 24 h (each also counts toward MENU_AI_DAILY_CAP).
     val menuAiPhotoDailyCap: Int = env("MENU_AI_PHOTO_DAILY_CAP")?.toIntOrNull()?.takeIf { it > 0 } ?: 30,
+    // AI requests per 10 minutes per user and per store (raise for a one-time bulk load, e.g. a new menu's photos).
+    val menuAiCallsPer10Min: Int = env("MENU_AI_CALLS_PER_10MIN")?.toIntOrNull()?.takeIf { it > 0 } ?: 20,
 )
 
 /** A secret from env: its toString never shows it (a logged config can't leak it). */
