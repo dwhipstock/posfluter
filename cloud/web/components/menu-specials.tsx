@@ -7,7 +7,8 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
-import { cad } from "@/lib/format";
+import { currencySymbol } from "@/lib/format";
+import { useMoney } from "@/lib/money";
 import { DAYS, daysSummary, emptySpecial, notCheaper, validateSpecials, type Day, type SpecialDraft, type SpecialError } from "@/lib/menu-specials";
 import type { ItemDraft } from "@/lib/menu-edit";
 import { parseCents } from "@/lib/menu-edit";
@@ -66,6 +67,7 @@ export function SpecialsSection({
   onChange,
   showErrors,
   sizeLabel,
+  currency,
 }: {
   draft: ItemDraft;
   onChange: (p: Partial<ItemDraft>) => void;
@@ -73,8 +75,12 @@ export function SpecialsSection({
   showErrors: boolean;
   /** A size's label in the reader's language. */
   sizeLabel: (v: ItemDraft["variants"][number]) => string;
+  /** The ISO currency the item's prices are in (its store's). */
+  currency?: string;
 }) {
   const t = useT();
+  const m = useMoney();
+  const cur = currency ?? m.scopeCurrency;
   const sizes = draft.variants.filter((v) => !!v.id);
   const sizeIds = sizes.map((v) => v.id as string);
   const regular = Object.fromEntries(sizes.map((v) => [v.id as string, parseCents(v.price) ?? 0]));
@@ -142,10 +148,10 @@ export function SpecialsSection({
                   <div key={v.id} className="min-w-0 space-y-1">
                     <Label className="flex flex-wrap items-baseline justify-between gap-x-2 text-xs text-neutral-600">
                       <span className="truncate font-medium text-neutral-800">{sizeLabel(v)}</span>
-                      <span className="tabular-nums">{t("menu_special_regular", { price: cad(regular[v.id as string] ?? 0) })}</span>
+                      <span className="tabular-nums">{t("menu_special_regular", { price: m.fmtIn(cur, regular[v.id as string] ?? 0) })}</span>
                     </Label>
                     <div className="relative">
-                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">$</span>
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">{currencySymbol(cur)}</span>
                       <Input
                         className="pl-6 tabular-nums"
                         inputMode="decimal"

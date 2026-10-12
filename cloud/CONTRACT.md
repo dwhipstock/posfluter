@@ -165,7 +165,8 @@ additive.
       "registrationNumber": "1234567890 TQ0001", "amountCents": 4640 }
   ],                                  // optional per entry: "remitTo": who the store pays it to
                                       // ("NCDOR", "Wake County"); the tax report shows it and
-                                      // keeps one row per code AND rate
+                                      // keeps one row per code AND rate; "included": true = a tax
+                                      // inside the prices (a VAT), never added to subtotalCents
   "corkageBottles": 0,
   "fees": [ { "code": "corkage", "labelFr": "Droit de bouchon", "labelEn": "Corkage", "amountCents": 20000 } ],
   "lines": [
@@ -210,7 +211,16 @@ additive.
   holds for every store. `taxes` itemises the added ones (the sum of their
   `amountCents` is inside `taxIncludedCents`); `ratePercent` is a decimal
   string. Labels, rate and registration number are as charged, never looked
-  up later. `subtotalCents` + the `taxes` = `grandTotalCents`.
+  up later. `subtotalCents` + the added `taxes` = `grandTotalCents`.
+- **Taxes inside the prices** (a VAT: `TaxPolicy.InclusiveTax`). The store
+  sends them in `taxes` too, flagged `"included": true` — e.g.
+  `{ "code": "VAT", "ratePercent": "7", "amountCents": 7200, "included": true }`
+  — inside `taxIncludedCents` like every tax, but never on top of the
+  subtotal: for such a store `subtotalCents = grandTotalCents`. Sales,
+  voids, `check.total_locked` and refunds (the VAT handed back, cumulative to
+  the satang/cent) all carry the line, so the per-tax report shows it on its
+  own row (`included: true`) net of refunds. Payloads without the flag are
+  added taxes, as before.
 - **Older stores** (before store migration 036) send neither `subtotalCents`
   nor `taxes`. The cloud stores their per-tax amounts as NULL and reports show
   0 for them — it never estimates a tax that was not sent.
@@ -548,7 +558,7 @@ on-hand hint (§9).
 | `CLOUD_SYNC_API_KEY` | the store's bearer key | unset → sync disabled |
 | `CLOUD_SYNC_INTERVAL_SECONDS` | drain/poll cadence | `10` |
 | `CLOUD_STOCK_PULL_SECONDS` | retail only: how often the on-hand hint (§9) is pulled | `300` |
-| `POS_CASH_ROUNDING` (tablet: `cash.rounding` in store.properties) | `nickel` rounds a cash payment's final amount to 5¢; `off` charges cash to the cent. Local only, never synced down | `nickel` |
+| `POS_CASH_ROUNDING` (tablet: `cash.rounding` in store.properties) | `nickel` rounds a cash payment's final amount to 5¢; `unit-down` (also `whole`, `baht`) drops the minor units, down to the whole unit (฿1,234.75 → ฿1,234); `off` charges cash to the cent. Local only, never synced down | the store currency's: `unit-down` for THB, `nickel` for everything else |
 | `POS_STAFF_APP_MFA` (tablet: `staff.app.mfa` in store.properties) | `on` asks staff-app sign-in for an authenticator code after the PIN; `off` is PIN only. Local only, never synced down | `on` |
 
 State lives in the store DB table `sync_state (key TEXT PK, value TEXT)`:

@@ -244,7 +244,9 @@ private fun taxRates(closed: List<ResultRow>): List<TaxRateRow> =
 internal data class TaxAmount(val code: String, val labelFr: String = "", val labelEn: String = "",
                              val ratePercent: String = "", val amountCents: Long = 0,
                              /** Who the store pays it to ("NCDOR", "Wake County"); "" = not said. */
-                             val remitTo: String = "")
+                             val remitTo: String = "",
+                             /** Inside the prices (a VAT, `included: true` from the store); false = added on top. */
+                             val included: Boolean = false)
 
 internal fun taxesOf(json: String?): List<TaxAmount> =
     json?.let { runCatching { lenientJson.decodeFromString<List<TaxAmount>>(it) }.getOrNull() }.orEmpty()
@@ -278,7 +280,9 @@ internal fun taxRows(ctx: ReportCtx, sales: List<Pair<String, TaxAmount>>, refun
     sales.forEach { (c, t) ->
         val k = Key(t.code, t.ratePercent, c)
         // first seen labels the row; a later sale that says who it is paid to fills that in
-        labels.merge(k, t) { old, new -> if (old.remitTo.isEmpty() && new.remitTo.isNotEmpty()) new else old }
+        labels.merge(k, t) { old, new ->
+            (if (old.remitTo.isEmpty() && new.remitTo.isNotEmpty()) new else old).let { it.copy(included = old.included || new.included) }
+        }
         sums[k] = (sums[k] ?: 0L) + t.amountCents
     }
     refunds.forEach { row ->
@@ -294,7 +298,7 @@ internal fun taxRows(ctx: ReportCtx, sales: List<Pair<String, TaxAmount>>, refun
     return sums.map { (k, cents) ->
         val l = labels[k]
         TaxCodeRow(k.code, l?.labelFr.orEmpty(), l?.labelEn.orEmpty(), k.rate.ifEmpty { l?.ratePercent.orEmpty() },
-            k.currency, cents, l?.remitTo.orEmpty())
+            k.currency, cents, l?.remitTo.orEmpty(), included = l?.included ?: false)
     }.sortedWith(compareBy({ ctx.currencies.indexOf(it.currency) }, { it.code }, { it.ratePercent }))
 }
 
@@ -498,7 +502,9 @@ data class TaxRateRow(
     val code: String, val labelFr: String = "", val labelEn: String = "", val ratePercent: String = "",
     val currency: String = "",
     /** Who the store pays it to ("NCDOR"); "" = not said. */
-    val remitTo: String = "")
+    val remitTo: String = "",
+    /** Inside the prices (a VAT): part of the sales already, not added on top. */
+    val included: Boolean = false)
 
 /** One tax code's net amount at one rate in one currency, and who it is paid to. */
 @Serializable
@@ -506,7 +512,9 @@ data class TaxCodeRow(
     val code: String, val labelFr: String, val labelEn: String, val ratePercent: String,
     val currency: String, val amountCents: Long,
     /** The authority the store remits it to ("NCDOR", "Wake County"); "" = not said. */
-    val remitTo: String = "")
+    val remitTo: String = "",
+    /** Inside the prices (a VAT): the guest paid it within the total, it was never added on top. */
+    val included: Boolean = false)
 
 @Serializable
 data class PaymentRow(val type: String, val amountCents: Long, val count: Int)
@@ -878,12 +886,13 @@ internal class TaxSums(val venueId: String, val tax: TaxAmount)
 internal fun taxSums(ctx: ReportCtx): List<TaxSums> = rowsOf("""
     SELECT c.venue_id, t->>'code', min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
            coalesce(t->>'ratePercent', ''), coalesce(sum((t->>'amountCents')::bigint), 0),
-           max(coalesce(t->>'remitTo', ''))
+           max(coalesce(t->>'remitTo', '')), bool_or(coalesce((t->>'included')::boolean, false))
     FROM checks c CROSS JOIN LATERAL jsonb_array_elements(
            CASE WHEN jsonb_typeof(c.taxes) = 'array' THEN c.taxes ELSE '[]'::jsonb END) t
     WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED' AND t->>'code' IS NOT NULL
     GROUP BY 1, 2, 5""") { rs ->
-    TaxSums(rs.getString(1), TaxAmount(rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getLong(6), rs.getString(7)))
+    TaxSums(rs.getString(1), TaxAmount(rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getLong(6), rs.getString(7),
+        included = rs.getBoolean(8)))
 }
 
 /** One store's lines of one item on its closed sales in range. */
@@ -906,11 +915,13 @@ private fun itemSums(ctx: ReportCtx): List<ItemSums> = rowsOf("""
 private fun taxRatesOf(ctx: ReportCtx): List<TaxRateRow> = rowsOf("""
     SELECT t->>'code', min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
            coalesce(t->>'ratePercent', ''), coalesce(c.currency, ''),
-           max(coalesce(t->>'remitTo', ''))
+           max(coalesce(t->>'remitTo', '')), bool_or(coalesce((t->>'included')::boolean, false))
     FROM checks c CROSS JOIN LATERAL jsonb_array_elements(
            CASE WHEN jsonb_typeof(c.taxes) = 'array' THEN c.taxes ELSE '[]'::jsonb END) t
     WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED' AND t->>'code' IS NOT NULL
-    GROUP BY 1, 4, 5""") { rs -> TaxRateRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6)) }
+    GROUP BY 1, 4, 5""") { rs ->
+    TaxRateRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getBoolean(7))
+}
     .sortedWith(compareBy({ it.code }, { it.ratePercent }))
 
 private fun warnIfUndercountingSums(ctx: ReportCtx, sums: List<CheckSums>) {
@@ -942,13 +953,14 @@ internal fun taxSummary(ctx: ReportCtx): List<TaxSummaryRow> {
         SELECT c.venue_id, (c.closed_at AT TIME ZONE $z)::date, t->>'code',
                min(coalesce(t->>'labelFr', '')), min(coalesce(t->>'labelEn', '')),
                coalesce(t->>'ratePercent', ''), coalesce(sum((t->>'amountCents')::bigint), 0),
-               max(coalesce(t->>'remitTo', ''))
+               max(coalesce(t->>'remitTo', '')), bool_or(coalesce((t->>'included')::boolean, false))
         FROM checks c CROSS JOIN LATERAL jsonb_array_elements(
                CASE WHEN jsonb_typeof(c.taxes) = 'array' THEN c.taxes ELSE '[]'::jsonb END) t
         WHERE ${scopeSql(ctx, "c", "closed_at")} AND c.status = 'CLOSED' AND t->>'code' IS NOT NULL
         GROUP BY 1, 2, 3, 6""") { rs ->
         (rs.getString(1) to rs.getDate(2).toLocalDate()) to
-            TaxSums(rs.getString(1), TaxAmount(rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getLong(7), rs.getString(8)))
+            TaxSums(rs.getString(1), TaxAmount(rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getLong(7), rs.getString(8),
+                included = rs.getBoolean(9)))
     }
     val refunds = refundsInRange(ctx)
     val salesBy = daily.groupBy({ it.first }, { it.second })

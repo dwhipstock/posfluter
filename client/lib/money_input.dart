@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 /// `parseCents`).
 int? parseMoneyCents(String input, {int max = 10000000}) {
   var s = input.trim();
-  if (s.startsWith(r'$')) s = s.substring(1).trim();
+  if (s.startsWith(r'$') || s.startsWith('฿')) s = s.substring(1).trim();
   if (s.isEmpty) return null;
   final grouped = RegExp(r'^(\d{1,3}(?:,\d{3})+)(?:\.(\d{0,2}))?$');
   final plain = RegExp(r'^(\d*)(?:\.(\d{0,2}))?$');
@@ -38,7 +38,8 @@ String centsToMoneyInput(int cents) {
 }
 
 /// Keeps a price box to the characters a North American amount can hold
-/// (digits, one `$`, `,` and `.`); [parseMoneyCents] still has the last word.
+/// (digits, one `$` or `฿`, `,` and `.`); [parseMoneyCents] still has the
+/// last word.
 final moneyInputFormatters = <TextInputFormatter>[
-  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,$]')),
+  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,$฿]')),
 ];

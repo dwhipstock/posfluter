@@ -907,7 +907,9 @@ class _PrepayDialogState extends State<PrepayDialog> {
   }
 
   int? get _typed {
-    final v = double.tryParse(_ctl.text.trim().replaceAll('\$', ''));
+    final v = double.tryParse(
+      _ctl.text.trim().replaceAll(currencySymbol(), ''),
+    );
     if (v == null || v <= 0) return null;
     return (v * 100).round();
   }
@@ -981,7 +983,7 @@ class _PrepayDialogState extends State<PrepayDialog> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 labelText: f.otherAmount,
-                prefixText: '\$ ',
+                prefixText: '${currencySymbol()} ',
               ),
             ),
           ],

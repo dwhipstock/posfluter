@@ -571,7 +571,7 @@ class _RetailScreenState extends State<RetailScreen> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: r.openingFloat,
-                    prefixText: '\$ ',
+                    prefixText: '${currencySymbol()} ',
                   ),
                 ),
                 if (needsPin) ...[

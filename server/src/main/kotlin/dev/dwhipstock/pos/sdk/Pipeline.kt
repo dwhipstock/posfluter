@@ -61,6 +61,7 @@ object TransactionPipeline {
             taxableBase = taxableBase,
             taxLines = tax.lines,
             promotions = promotions,
+            includedTaxLines = tax.includedLines,
         )
     }
 
@@ -83,14 +84,16 @@ object TransactionPipeline {
         val weights = groups.map { it.taxableBase.cents }
         val included = allocate(check.taxIncluded.cents, weights)
         val perLine = allocateTaxLines(check.lines.map { it.amount.cents }, weights)
+        val perIncluded = allocateTaxLines(check.includedLines.map { it.amount.cents }, weights)
         return groups.mapIndexed { i, g ->
-            val lines = check.lines.mapIndexed { j, line -> TaxLine(line.component, Money(perLine[j][i])) }
+            val lines = check.lines.mapIndexed { j, line -> line.copy(amount = Money(perLine[j][i])) }
             val added = Money(lines.sumOfExact { it.amount.cents })
             g.copy(
                 grandTotal = g.preTaxTotal + added,
                 taxIncluded = Money(included[i]),
                 taxVisibleOnReceipt = check.showOnReceipt,
                 taxLines = lines,
+                includedTaxLines = check.includedLines.mapIndexed { j, line -> line.copy(amount = Money(perIncluded[j][i])) },
             )
         }
     }
@@ -105,7 +108,7 @@ object TransactionPipeline {
         val included = allocate(check.taxIncluded.cents, weights)
         val perLine = check.taxLines.map { line -> allocate(line.amount.cents, weights) }
         return shares.indices.map { i ->
-            Money(included[i]) to check.taxLines.mapIndexed { j, line -> TaxLine(line.component, Money(perLine[j][i])) }
+            Money(included[i]) to check.taxLines.mapIndexed { j, line -> line.copy(amount = Money(perLine[j][i])) }
         }
     }
 
@@ -240,6 +243,12 @@ data class Totals(
     val taxLines: List<TaxLine> = emptyList(),
     /** Promotions inside [discount] (their discount lines). */
     val promotions: List<PromoHit> = emptyList(),
+    /**
+     * Taxes inside the prices ([TaxPolicy.InclusiveTax]), [TaxLine.included]
+     * set; sums to [taxIncluded]. Never part of [taxAdded]: the total already
+     * holds them.
+     */
+    val includedTaxLines: List<TaxLine> = emptyList(),
 ) {
     /** Taxes added on top of [subtotal]. */
     val taxAdded: Money get() = Money(taxLines.sumOfExact { it.amount.cents })

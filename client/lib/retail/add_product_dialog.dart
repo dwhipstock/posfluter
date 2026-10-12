@@ -197,7 +197,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
                       ],
                       decoration: InputDecoration(
                         labelText: r.price,
-                        prefixText: '\$ ',
+                        prefixText: '${currencySymbol()} ',
                       ),
                     ),
                   ),

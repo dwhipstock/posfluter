@@ -599,7 +599,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       keyboard: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      suffix: '\$',
+                      suffix: currencySymbol(),
                       formatters: moneyInputFormatters,
                     ),
                     SectionLabel(l.sectionReceipt),

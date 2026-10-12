@@ -54,6 +54,8 @@ export interface TaxCodeRow {
   amountCents: number;
   /** Who the store pays it to ("NCDOR", "Wake County"); "" or absent = not said. */
   remitTo?: string;
+  /** Inside the prices (a VAT): part of what the guest paid, never added on top. Absent = added. */
+  included?: boolean;
 }
 
 /** Exact headline figures of the stores selling in one currency. */
@@ -187,6 +189,8 @@ export interface TaxRate {
   ratePercent: string;
   currency?: Currency;
   remitTo?: string;
+  /** Inside the prices (a VAT). Absent = added on top. */
+  included?: boolean;
 }
 
 export interface TaxReport {
