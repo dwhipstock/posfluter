@@ -102,7 +102,7 @@ jobs:
       - name: zip
         shell: pwsh
         run: |
-          foreach ($n in 'CopperLanternPOS','SageAndPoppyPOS','PronghornPOS') {
+          foreach ($n in 'CopperLanternPOS','SageAndPoppyPOS','PronghornPOS','BarcodePubPOS') {
             Compress-Archive -Path "dist\$n" -DestinationPath "dist\$n-windows.zip"
           }
 
