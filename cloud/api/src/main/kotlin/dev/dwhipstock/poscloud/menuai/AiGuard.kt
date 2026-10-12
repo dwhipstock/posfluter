@@ -41,6 +41,7 @@ object AiGuard {
             "es" to "Solo puedo ayudarte a configurar y editar tu menú. Prueba algo como «añade una ensalada César a 14 en Ensaladas».",
             "de" to "Ich kann nur beim Einrichten und Bearbeiten Ihrer Speisekarte helfen. Versuchen Sie zum Beispiel „Caesar Salad für 14 unter Salate hinzufügen“.",
             "af" to "Ek kan net help om jou spyskaart op te stel en te wysig. Probeer iets soos “voeg ’n Caesar-slaai vir 14 by onder Slaaie”.",
+            "th" to "ฉันช่วยได้เฉพาะการตั้งค่าและแก้ไขเมนูของคุณเท่านั้น ลองพิมพ์เช่น \"เพิ่มซีซาร์สลัด ราคา 14 ในหมวดสลัด\"",
         ),
         Refusal.NO_CHANGE to mapOf(
             "en" to "I couldn't find a menu change to make from that. Name the item and what to change, for example \"Caesar salad 14\".",
@@ -48,6 +49,7 @@ object AiGuard {
             "es" to "No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «ensalada César 14».",
             "de" to "Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Caesar Salad 14“.",
             "af" to "Ek kon nie ’n spyskaartverandering daarin vind nie. Noem die item en wat moet verander, byvoorbeeld “Caesar salad 14”.",
+            "th" to "ไม่พบการเปลี่ยนแปลงเมนูจากข้อความนี้ ระบุชื่อรายการและสิ่งที่ต้องการเปลี่ยน เช่น \"ซีซาร์สลัด 14\"",
         ),
         Refusal.INCOMPLETE to mapOf(
             "en" to "The AI's answer was cut off. Please try again.",
@@ -55,6 +57,7 @@ object AiGuard {
             "es" to "La respuesta de la IA se cortó. Vuelve a intentarlo.",
             "de" to "Die Antwort der KI wurde abgeschnitten. Bitte versuchen Sie es erneut.",
             "af" to "Die KI se antwoord is afgesny. Probeer asseblief weer.",
+            "th" to "คำตอบของ AI ถูกตัดกลางคัน กรุณาลองอีกครั้ง",
         ),
         Refusal.TOO_MANY_CHANGES to mapOf(
             "en" to "That's too many changes at once. Try asking for fewer things, or in smaller batches.",
@@ -62,6 +65,7 @@ object AiGuard {
             "es" to "Son demasiados cambios a la vez. Pide menos cosas, o en tandas más pequeñas.",
             "de" to "Das sind zu viele Änderungen auf einmal. Fragen Sie nach weniger Dingen oder in kleineren Schritten.",
             "af" to "Dis te veel veranderinge op een slag. Vra vir minder dinge, of in kleiner groepe.",
+            "th" to "เปลี่ยนแปลงมากเกินไปในครั้งเดียว ลองขอให้น้อยลง หรือแบ่งเป็นชุดเล็ก ๆ",
         ),
     )
 
@@ -101,6 +105,12 @@ object AiGuard {
         """\b(schreib|schreibe|schreiben|erstelle|programmiere|implementiere|gib|mach)\b.{0,30}\b(programm|code|skript|script|funktion|algorithmus|python|javascript|geschichte|lied)""",
         // af: "skryf vir my 'n program / 'n gedig"
         """\b(skryf|skep|programmeer|gee)\b.{0,30}\b(program|kode|skrip|funksie|algoritme|python|javascript|storie|verhaal|liedjie)\b""",
+        // th: Thai has no spaces between words, so no \b; matched on the raw text (the fold drops Thai marks)
+        """(ไม่ต้อง|อย่า)\s*(สนใจ|ทำตาม|ฟัง).{0,30}(คำสั่ง|กฎ|ข้อกำหนด)|(ลืม|เพิกเฉย|ละเว้น).{0,30}(คำสั่ง|กฎ)""",
+        """(คำสั่ง|พรอมต์|พรอมท์)\s*(ระบบ|ของคุณ|ของเธอ)|กฎของ(คุณ|เธอ)""",
+        """(เขียน|สร้าง)\s*(โค้ด|โค๊ด|โปรแกรม|สคริปต์|ฟังก์ชัน|อัลกอริทึม|อัลกอริธึม)""",
+        """(เล่า|แต่ง|เขียน)\s*(เรื่องตลก|มุก|นิทาน|กลอน|บทกวี|เพลง|เรียงความ)|มุกตลก""",
+        """(คุณ|เธอ)\s*(คือ|เป็น)\s*(ใคร|โมเดลอะไร)|ใคร(สร้าง|ทำ)(คุณ|เธอ)|แกล้งทำเป็น|สวมบทบาท|สมมติว่า(คุณ|เธอ)เป็น""",
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     /**

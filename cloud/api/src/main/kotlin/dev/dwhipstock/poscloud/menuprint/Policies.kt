@@ -4,7 +4,7 @@ package dev.dwhipstock.poscloud.menuprint
  * Rules, conditions and policies in the AI's copy ("Specials are available
  * for dine-in customers only", "while supplies last", "one per person"): the
  * venue never said them, so they are not printed. Sentence by sentence, in
- * the portal's five languages; what is left of a line is kept.
+ * the portal's languages; what is left of a line is kept.
  */
 object Policies {
     private val PATTERNS = listOf(
@@ -31,6 +31,10 @@ object Policies {
         """\bslegs\b|\bnet vir\b|\bgeldig\b|\bbeskikbaar (vir|tot|net)\b|\bsolank (die )?voorraad|\bbeperk\b|\bmoet\b|\bvereis\b|""" +
             """\buitgesluit\b|\beet hier\b|\bwegneem\b|\bper (persoon|tafel|gas)\b|\bbesprekings?\b|\bidentiteit\b|\bvoorwaardes\b|""" +
             """\bopeningstye\b|\bafslag\b|\bfooitjie\b""",
+        // th (no spaces between Thai words: plain substrings, no \b)
+        """เท่านั้น|เฉพาะ(ลูกค้า|ทาน|สั่ง|วัน|เวลา)|ทานที่ร้าน|นั่งทานที่ร้าน|สั่งกลับบ้าน|ซื้อกลับบ้าน|ต่อ(ท่าน|คน|โต๊ะ|บิล)|""" +
+            """จำกัด|ต้อง|หมดแล้วหมดเลย|จนกว่าสินค้าจะหมด|ไม่สามารถใช้ร่วม|เงื่อนไข|สำรองที่นั่ง|การจอง|บัตรประชาชน|""" +
+            """อายุ\s?(18|20)\s?ปี|ส่วนลด|ทิป|ค่าบริการ|เวลาทำการ|เงินสดเท่านั้น""",
     ).map { Regex(it, setOf(RegexOption.IGNORE_CASE)) }
 
     /** The text states a rule, a condition or a policy. */

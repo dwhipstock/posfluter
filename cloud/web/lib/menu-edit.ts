@@ -3,6 +3,8 @@
 // API calls that turn the item as loaded into the item as edited. No React,
 // no fetch: lib/menu-edit.test.ts covers it.
 import type { MenuItem, MenuVariant } from "./types";
+import type { MsgKey } from "./i18n/messages";
+import { dataLocaleOf, type DataLocale } from "./i18n/translate";
 import {
   availableDaysValue,
   loadedSpecials,
@@ -247,9 +249,33 @@ export function moveInOrder(ids: string[], index: number, dir: -1 | 1): string[]
   return out;
 }
 
-/** The extra-language name fields to show: the portal's languages beyond en/fr, plus any the thing already has. */
+/**
+ * The extra-language name fields to show: the portal's languages beyond
+ * English and the data language (the `*_fr` slot: French, or Thai at a Thai +
+ * English client), plus any the thing already has.
+ */
 export function extraLangs(available: string[], ...existing: (Record<string, string> | undefined)[]): string[] {
-  const set = new Set(available.filter((l) => l !== "en" && l !== "fr"));
-  for (const names of existing) for (const k of Object.keys(names ?? {})) if (k !== "en" && k !== "fr") set.add(k);
+  const slot = dataLocaleOf(available);
+  const own = (l: string) => l === "en" || l === slot;
+  const set = new Set(available.filter((l) => !own(l)));
+  for (const names of existing) for (const k of Object.keys(names ?? {})) if (!own(k)) set.add(k);
   return [...set];
+}
+
+type Translate = (key: MsgKey, vars?: Record<string, string | number>) => string;
+
+/** "Thai", "German": a language's name in the portal language; the code when unknown. */
+export function langLabel(t: Translate, lang: string): string {
+  const k = `menu_lang_${lang}` as MsgKey;
+  const v = t(k);
+  return v === k ? lang.toUpperCase() : v;
+}
+
+/**
+ * The label of the data-language field (the `*_fr` slot): "Name (French)" at a
+ * French store, exactly as always; "Name (Thai)" where the slot holds Thai.
+ */
+export function slotLabel(t: Translate, field: "name" | "desc" | "size", dataLocale: DataLocale): string {
+  if (dataLocale === "fr") return t(`menu_${field}_fr` as MsgKey);
+  return t(`menu_${field}_in` as MsgKey, { lang: langLabel(t, dataLocale) });
 }

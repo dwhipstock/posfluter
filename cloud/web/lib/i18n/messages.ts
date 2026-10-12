@@ -14,8 +14,8 @@
 // a Québec pub, en/es for a California shop). Spanish (US) lives in
 // messages.es.ts, keyed by the same MsgKey — a missing Spanish key is a
 // compile error. German lives in messages.de.ts and Afrikaans in
-// messages.af.ts, the same way.
-export type Locale = "fr" | "en" | "es" | "de" | "af";
+// messages.af.ts, and Thai in messages.th.ts, the same way.
+export type Locale = "fr" | "en" | "es" | "de" | "af" | "th";
 
 type Msg = { fr: string; en: string };
 
@@ -673,6 +673,16 @@ export const messages = {
     "Les paiements comptant sont arrondis aux 5 ¢ près. Les ventes et les taxes restent exactes ; l’arrondi est compté à part, dans la devise de chaque établissement.",
     "Cash payments round to the nearest 5¢. Sales and tax stay exact; the rounding is counted separately, in each store’s own currency."
   ),
+  // a baht store: cash rounds down to the whole baht (no satang coins in the drawer)
+  cash_rounding_note_unit: m(
+    "Les paiements comptant sont arrondis à l’unité inférieure (baht entier). Les ventes et les taxes restent exactes ; l’arrondi est compté à part, dans la devise de chaque établissement.",
+    "Cash payments round down to the whole baht. Sales and tax stay exact; the rounding is counted separately, in each store’s own currency."
+  ),
+  // stores in dollars and in baht together
+  cash_rounding_note_mixed: m(
+    "Les paiements comptant sont arrondis aux 5 ¢ près en dollars et à l’unité inférieure en baht. Les ventes et les taxes restent exactes ; l’arrondi est compté à part, dans la devise de chaque établissement.",
+    "Cash payments round to the nearest 5¢ in dollars and down to the whole baht in baht. Sales and tax stay exact; the rounding is counted separately, in each store’s own currency."
+  ),
   retail_badge: m("Boutique", "Bottle shop"),
   tax_col_rate: m("{label} {rate}%", "{label} {rate}%"),
   tax_by_code: m("Par taxe", "By tax"),
@@ -814,6 +824,8 @@ export const messages = {
   menu_name_fr: m("Nom (français)", "Name (French)"),
   menu_name_in: m("Nom ({lang})", "Name ({lang})"),
   menu_desc_en: m("Description (anglais)", "Description (English)"),
+  menu_desc_in: m("Description ({lang})", "Description ({lang})"),
+  menu_size_in: m("Format ({lang})", "Size ({lang})"),
   menu_desc_fr: m("Description (français)", "Description (French)"),
   menu_available: m("Disponible", "Available"),
   menu_available_hint: m("Désactivé = en rupture (86) : il disparaît du menu jusqu’à sa réactivation.", "Off = 86’d: it leaves the menu until you turn it back on."),
@@ -878,6 +890,7 @@ export const messages = {
   menu_lang_af: m("afrikaans", "Afrikaans"),
   menu_lang_fr: m("français", "French"),
   menu_lang_en: m("anglais", "English"),
+  menu_lang_th: m("thaï", "Thai"),
 
   // ── menu: the AI assistant ("Ask AI", /v1/menu-ai) ───────────────────
   ai_ask: m("Demander à l’IA", "Ask AI"),
@@ -886,7 +899,10 @@ export const messages = {
   ai_title: m("Assistant menu IA", "AI menu assistant"),
   ai_pick_store: m("Choisissez l’établissement dont le menu change :", "Pick the store whose menu to change:"),
   ai_placeholder: m("Par exemple : ajoute une salade César à 14 $ dans Entrées", "For example: add a Caesar salad for $14 under Starters"),
+  // the same examples in a store's own currency (not dollars): {price}, {off}, {step} are money
+  ai_placeholder_cur: m("Par exemple : ajoute une salade César à {price} dans Entrées", "For example: add a Caesar salad for {price} under Starters"),
   ai_example_1: m("Monte toutes les bières de 50 ¢", "Raise every beer by 50¢"),
+  ai_example_1_cur: m("Monte toutes les bières de {step}", "Raise every beer by {step}"),
   ai_example_2: m("Retire les ailes du menu pour aujourd’hui (86)", "86 the wings for today"),
   ai_example_3: m("Traduis les desserts en espagnol", "Translate the desserts into Spanish"),
   ai_send: m("Envoyer", "Send"),
@@ -945,6 +961,7 @@ export const messages = {
   ai_sales_note_already_lower: m("{item} écarté : il a déjà un prix spécial plus bas ces jours-là.", "{item} left out: it already has a lower special price on those days."),
   ai_sales_note_size_already_lower: m("{item} ({size}) écarté : il a déjà un prix spécial plus bas ces jours-là.", "{item} ({size}) left out: it already has a lower special price on those days."),
   ai_example_sales: m("Baisse mes 5 meilleurs vendeurs de 2 $ le mardi", "Make my top 5 sellers $2 cheaper on Tuesdays"),
+  ai_example_sales_cur: m("Baisse mes 5 meilleurs vendeurs de {off} le mardi", "Make my top 5 sellers {off} cheaper on Tuesdays"),
   ai_sales_top_units: m("Top {n} en unités vendues", "Top {n} by units sold"),
   ai_sales_top_revenue: m("Top {n} en chiffre d’affaires", "Top {n} by revenue"),
   ai_sales_bottom_units: m("Les {n} moins vendus (unités)", "Slowest {n} by units sold"),
@@ -961,6 +978,8 @@ export const messages = {
   ai_sales_note_corrected: m("Le choix de l’IA ne correspondait pas aux chiffres de ventes : le vrai classement est utilisé.", "The AI’s pick didn’t match the sales numbers, so the real ranking is used."),
   ai_sales_note_size_refused: m("{item} ({size}) écarté : ce prix ne fonctionne pas (pas plus bas que le prix du menu, ou 0 $ ou moins).", "{item} ({size}) left out: that price doesn’t work for it (not below the menu price, or $0 or less)."),
   ai_sales_note_item_refused: m("{item} écarté : ce prix ne fonctionne pas (pas plus bas que le prix du menu, ou 0 $ ou moins).", "{item} left out: that price doesn’t work for it (not below the menu price, or $0 or less)."),
+  ai_sales_note_size_refused_cur: m("{item} ({size}) écarté : ce prix ne fonctionne pas (pas plus bas que le prix du menu, ou {zero} ou moins).", "{item} ({size}) left out: that price doesn’t work for it (not below the menu price, or {zero} or less)."),
+  ai_sales_note_item_refused_cur: m("{item} écarté : ce prix ne fonctionne pas (pas plus bas que le prix du menu, ou {zero} ou moins).", "{item} left out: that price doesn’t work for it (not below the menu price, or {zero} or less)."),
   ai_sales_note_item_skipped: m("{item} écarté : la demande ne précisait pas le prix ou les jours.", "{item} left out: the request didn’t say the price or the days."),
   ai_sales_note_too_many: m("{want} articles correspondent ; seuls les {n} premiers sont inclus.", "{want} items match; only the first {n} are included."),
   ai_sales_note_bad: m("Cette demande sur les ventes n’a pas pu être traitée. Précisez la période (jusqu’à 90 jours, ou un mois) et le nombre d’articles.", "That sales request couldn’t be worked out. Say the period (up to 90 days, or a month) and how many items."),

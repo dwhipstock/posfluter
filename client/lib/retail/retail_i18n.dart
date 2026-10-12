@@ -422,7 +422,11 @@ class R {
       _t('Add product', 'Agregar producto', 'Ajouter un produit');
   String get barcode => _t('Barcode', 'Código de barras', 'Code-barres');
   String get name => _t('Name', 'Nombre', 'Nom');
-  String get price => _t('Price (USD)', 'Precio (USD)', 'Prix (USD)');
+  String get price {
+    final cur = StoreProfile.current.currency;
+    return _t('Price ($cur)', 'Precio ($cur)', 'Prix ($cur)');
+  }
+
   String get categoryLabel => _t('Category', 'Categoría', 'Catégorie');
   String get ageRestricted => _t(
     '21+ (age-restricted)',

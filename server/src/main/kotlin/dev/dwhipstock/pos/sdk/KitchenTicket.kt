@@ -18,22 +18,32 @@ enum class KitchenTicketKind {
     REPRINT,
 }
 
-/** Which language(s) a station's paper speaks: the store's French, English, or both. */
+/**
+ * Which language(s) a station's paper speaks: the store's local data language
+ * (wire "fr": the `*_fr` name slot — French, or Thai at a Thai + English
+ * store, see [dev.dwhipstock.pos.sdk.i18n.DataLanguage]), English, or both.
+ */
 enum class KitchenLanguage {
     FR, EN, BOTH;
 
-    val wire: String get() = name.lowercase()
+    /** "fr" | "en" | "both"; the local side says its language ("th" at a Thai + English store). */
+    val wire: String get() = if (this == FR) dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag else name.lowercase()
 
-    /** The locales printed, French first when both. */
+    /** The locales printed, the local language first when both. */
     val locales: List<LocaleCode>
         get() = when (this) {
-            FR -> listOf(LocaleCode.FR)
+            FR -> listOf(dev.dwhipstock.pos.sdk.i18n.DataLanguage.locale)
             EN -> listOf(LocaleCode.EN)
-            BOTH -> listOf(LocaleCode.FR, LocaleCode.EN)
+            BOTH -> listOf(dev.dwhipstock.pos.sdk.i18n.DataLanguage.locale, LocaleCode.EN)
         }
 
     companion object {
-        fun parse(raw: String?): KitchenLanguage? = entries.firstOrNull { it.wire == raw?.trim()?.lowercase() }
+        /** "fr" (the slot, as stored before) or the local language's own tag ("th") both mean [FR]. */
+        fun parse(raw: String?): KitchenLanguage? {
+            val v = raw?.trim()?.lowercase() ?: return null
+            if (v == "fr" || v == dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag) return FR
+            return entries.firstOrNull { it.name.lowercase() == v }
+        }
     }
 }
 
@@ -136,7 +146,10 @@ object KitchenTicketRenderer {
             add(PrintLine.Text(label(MessageKey.KITCHEN_TEST_BODY, language), Align.CENTER))
             add(PrintLine.Divider)
             add(PrintLine.Large("2 × Poutine"))
-            add(PrintLine.KeyValue("      » àâçéèêëîïôûùüÿœ", "", emphasized = true))
+            // the local language's hard glyphs: accents, or Thai vowels and tone marks
+            val sample = if (dev.dwhipstock.pos.sdk.i18n.DataLanguage.tag == "th") "ไม่เผ็ด น้ำแข็งน้อย ปั่น"
+                else "àâçéèêëîïôûùüÿœ"
+            add(PrintLine.KeyValue("      » $sample", "", emphasized = true))
             add(PrintLine.Divider)
             add(PrintLine.Text("$target · ${paperMm}mm", Align.CENTER))
             add(PrintLine.Blank)

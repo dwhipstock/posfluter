@@ -4,20 +4,28 @@
 // No React, no fetch: lib/rooms.test.ts covers them.
 import type { FloorEditProposal, FloorObject, FloorTable, RoomDto, RoomObject, RoomPhotoProposal, RoomTable } from "./types";
 import type { Locale, MsgKey } from "./i18n/messages";
-import { pickName } from "./i18n/translate";
+import { pickName, type DataLocale } from "./i18n/translate";
 import { aiErrorKey } from "./menu-ai";
 
 /** The plan is 1000 × 1000 logical units, like the POS. */
 export const CANVAS = 1000;
 
-/** The room's name in [locale]: fr → nameFr, en → nameEn, es/de/af → its own name, else English. */
-export function roomName(locale: Locale, room: Pick<RoomDto, "nameFr" | "nameEn" | "names">): string {
-  return pickName(locale, room.nameFr, room.nameEn, room.names);
+/**
+ * The room's name in [locale]: the data language ([dataLocale], French unless
+ * the client's slot holds Thai) → nameFr, en → nameEn, es/de/af → its own
+ * name, else English.
+ */
+export function roomName(locale: Locale, room: Pick<RoomDto, "nameFr" | "nameEn" | "names">, dataLocale: DataLocale = "fr"): string {
+  return pickName(locale, room.nameFr, room.nameEn, room.names, dataLocale);
 }
 
 /** A floor object's own caption in [locale] (null: none — the drawing uses the type's name). */
-export function objectLabel(locale: Locale, o: Pick<FloorObject, "labelFr" | "labelEn" | "names">): string | null {
-  const s = pickName(locale, o.labelFr, o.labelEn, o.names ?? null).trim();
+export function objectLabel(
+  locale: Locale,
+  o: Pick<FloorObject, "labelFr" | "labelEn" | "names">,
+  dataLocale: DataLocale = "fr"
+): string | null {
+  const s = pickName(locale, o.labelFr, o.labelEn, o.names ?? null, dataLocale).trim();
   return s || null;
 }
 
@@ -43,10 +51,11 @@ export function objectTypeKey(type: string): MsgKey | null {
 export function objectCaption(
   locale: Locale,
   o: Pick<FloorObject, "type" | "labelFr" | "labelEn" | "names">,
-  t: (k: MsgKey) => string
+  t: (k: MsgKey) => string,
+  dataLocale: DataLocale = "fr"
 ): string | null {
   if (o.type === "PILLAR") return null;
-  const own = objectLabel(locale, o);
+  const own = objectLabel(locale, o, dataLocale);
   if (own) return own;
   const k = objectTypeKey(o.type);
   return k ? t(k) : null;

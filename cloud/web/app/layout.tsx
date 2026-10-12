@@ -53,6 +53,22 @@ const barlow = localFont({
   preload: false,
 });
 
+// Thai glyphs, behind every brand face: none of the Latin faces has Thai, so
+// the browser falls through to this one for Thai text only (unicode-range —
+// a page without Thai never downloads it).
+const thai = localFont({
+  src: [
+    { path: "./fonts/NotoSansThai-Regular.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/NotoSansThai-Medium.ttf", weight: "500", style: "normal" },
+    { path: "./fonts/NotoSansThai-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "./fonts/NotoSansThai-Bold.ttf", weight: "700", style: "normal" },
+  ],
+  variable: "--font-thai",
+  display: "swap",
+  preload: false,
+  declarations: [{ prop: "unicode-range", value: "U+0E00-0E7F, U+200B-200D, U+25CC" }],
+});
+
 export async function generateMetadata(): Promise<Metadata> {
   const brand = getBrand();
   const locale = pickLocale(brand, (await cookies()).get("locale")?.value);
@@ -82,14 +98,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = pickLocale(brand, (await cookies()).get("locale")?.value);
 
   return (
-    <html lang={locale} className={`${inter.variable} ${jakarta.variable} ${barlow.variable}`} data-brand={brand.id}>
+    <html lang={locale} className={`${inter.variable} ${jakarta.variable} ${barlow.variable} ${thai.variable}`} data-brand={brand.id}>
       <head>
         {/* the brand's palette, radii, shadow and face as CSS variables (tailwind.config.ts) */}
         <style id="brand-vars" dangerouslySetInnerHTML={{ __html: brandCss(brand) }} />
       </head>
       <body>
         <BrandProvider brand={brand}>
-          <LocaleProvider initialLocale={locale} available={brand.locales.available}>
+          <LocaleProvider initialLocale={locale} available={brand.locales.available} dataLocale={brand.dataLocale}>
             {children}
             <Toaster />
           </LocaleProvider>

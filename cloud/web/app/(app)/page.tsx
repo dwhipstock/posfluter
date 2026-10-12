@@ -1,5 +1,6 @@
 "use client";
 
+import { roundingNoteKey } from "@/lib/currency-words";
 import { Suspense } from "react";
 import Link from "next/link";
 import { ChevronRight, Wifi, WifiOff } from "lucide-react";
@@ -99,7 +100,7 @@ function Dashboard() {
     return {
       ...meta("summary"),
       reportTitle: t("dash_title"),
-      ...(rounding.length > 0 ? { notes: [t("cash_rounding_note")] } : {}),
+      ...(rounding.length > 0 ? { notes: [t(roundingNoteKey(rounding.map((r) => r.currency)))] } : {}),
       kpis: [
         { label: t("kpi_gross"), value: fmtC(s.grossCents) },
         { label: t("kpi_net"), value: fmtC(s.netCents) },

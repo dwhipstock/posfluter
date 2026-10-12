@@ -169,8 +169,8 @@ test("Barcode Pub (Bangkok): baht, neon violet on near-black chrome, a hot-pink 
   const v = brandCssVars(bc);
   assert.equal(v["--c-copper-ink"], hexChannels("#0A0A0A"));
   assert.equal(v["--c-spark"], hexChannels("#FF1F8E"));
-  // TODO(feat/thai-locale): { default: "th", available: ["th", "en"] } once the portal speaks Thai
-  assert.deepEqual(bc.locales, { default: "en", available: ["en"] });
+  // Thai first; its data language (the *_fr slot) is Thai
+  assert.deepEqual(bc.locales, { default: "th", available: ["th", "en"] });
 });
 
 test("defaults for the optional bits: white ink on the accent, the spark is the accent, the round mark on the band", () => {

@@ -8,13 +8,14 @@ import { messages, type MsgKey } from "./messages";
 import { es } from "./messages.es";
 import { de } from "./messages.de";
 import { af } from "./messages.af";
+import { th } from "./messages.th";
 import { pickName, translate } from "./translate";
 import { makeFmt } from "./format";
 import { count, decimal, money, moneyCents } from "../format";
 
 const keys = Object.keys(messages) as MsgKey[];
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
-const tables = { es, de, af };
+const tables = { es, de, af, th };
 
 for (const [lang, table] of Object.entries(tables)) {
   test(`${lang} has exactly the portal's keys`, () => {
@@ -29,6 +30,7 @@ test("no string is blank in any locale", () => {
     assert.ok(es[k]?.trim(), `es ${k}`);
     assert.ok(de[k]?.trim(), `de ${k}`);
     assert.ok(af[k]?.trim(), `af ${k}`);
+    assert.ok(th[k]?.trim(), `th ${k}`);
   }
 });
 
@@ -39,6 +41,7 @@ test("every locale keeps the English placeholders", () => {
     assert.deepEqual(placeholders(es[k]), want, `es ${k}`);
     assert.deepEqual(placeholders(de[k]), want, `de ${k}`);
     assert.deepEqual(placeholders(af[k]), want, `af ${k}`);
+    assert.deepEqual(placeholders(th[k]), want, `th ${k}`);
   }
 });
 
@@ -53,7 +56,7 @@ test("Spanish, German and Afrikaans are translated, not English copied over", ()
 
 test("no client's name is baked into the portal strings", () => {
   for (const k of keys) {
-    for (const s of [messages[k].en, messages[k].fr, es[k], de[k], af[k]]) {
+    for (const s of [messages[k].en, messages[k].fr, es[k], de[k], af[k], th[k]]) {
       assert.doesNotMatch(s, /copper lantern|\blantern|\bsage\b|poppy|pronghorn/i, k);
     }
   }

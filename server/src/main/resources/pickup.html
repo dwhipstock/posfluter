@@ -10,7 +10,7 @@
   :root { --bg:#10202e; --panel:#172b3c; --ink:#f4efe6; --muted:#9fb0bf; --copper:#c9793f; --ready:#3fb37f; }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
-    font-family: "Inter", "Helvetica Neue", Arial, sans-serif; }
+    font-family: "Inter", "Helvetica Neue", Arial, "Noto Sans Thai", "Leelawadee UI", Thonburi, sans-serif; }
   header { display:flex; align-items:center; justify-content:space-between; padding:2vh 3vw; }
   header h1 { margin:0; font-size:4vh; letter-spacing:.02em; }
   header h1 span { color:var(--copper); }
@@ -74,12 +74,22 @@
       d.className = 'n' + (fresh && fresh.indexOf(n) >= 0 ? ' fresh' : '');
       d.textContent = n;
       var mode = document.createElement('small');
-      mode.textContent = takeOut.indexOf(n) >= 0 ? 'Take out' : 'Dine in';
+      mode.textContent = takeOut.indexOf(n) >= 0 ? 'Take out' + (thai ? ' · กลับบ้าน' : '') : 'Dine in' + (thai ? ' · ทานที่ร้าน' : '');
       d.appendChild(mode);
       box.appendChild(d);
     });
   }
   var freshUntil = {};
+  // a store that speaks Thai (GET /health): Thai under the English words instead of the European ones
+  var thai = false;
+  fetch('/health', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (h) {
+    var ls = (h && h.locales) || [];
+    thai = (h && h.dataLocale === 'th') || ls.indexOf('th') >= 0;
+    if (!thai) return;
+    document.documentElement.lang = 'th';
+    document.querySelector('#preparing small').textContent = 'กำลังเตรียม';
+    document.querySelector('#ready small').textContent = 'พร้อมรับแล้ว';
+  }).catch(function () {});
   function poll() {
     fetch('/pickup/board', { cache: 'no-store' }).then(function (r) {
       if (!r.ok) throw new Error(r.status); return r.json();

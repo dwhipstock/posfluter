@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../api.dart' show Item, Category;
 import '../menu_changes.dart' show RejectedLine;
+import '../store_profile.dart' show dataLocaleFor;
 
 /// What a kiosk order came back as: the guest's order number (#101), the
 /// same one they pay with at the counter and are called by at pickup.
@@ -45,6 +46,9 @@ class KioskConfig {
   final String storeName, currency;
   final List<String> locales;
 
+  /// The store's data language (what the catalog's `*_fr` slot holds).
+  final String dataLocale;
+
   /// The legal drinking age the ID note names; older stores send none (21).
   final int legalAge;
   const KioskConfig(
@@ -52,16 +56,21 @@ class KioskConfig {
     this.currency,
     this.locales, {
     this.legalAge = 21,
+    this.dataLocale = 'fr',
   });
-  factory KioskConfig.fromJson(Map<String, dynamic> j) => KioskConfig(
-    j['storeName'] as String? ?? '',
-    j['currency'] as String? ?? 'USD',
-    [
+  factory KioskConfig.fromJson(Map<String, dynamic> j) {
+    final locales = [
       for (final l in (j['locales'] as List? ?? const ['en', 'fr']))
         if (l is String) l,
-    ],
-    legalAge: (j['legalAge'] as num?)?.toInt() ?? 21,
-  );
+    ];
+    return KioskConfig(
+      j['storeName'] as String? ?? '',
+      j['currency'] as String? ?? 'USD',
+      locales,
+      legalAge: (j['legalAge'] as num?)?.toInt() ?? 21,
+      dataLocale: dataLocaleFor(locales, j['dataLocale'] as String?),
+    );
+  }
 }
 
 /// One row of the "Add a drink?" step, as the store picked it: why

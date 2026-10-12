@@ -59,6 +59,7 @@ object AiGuard {
             "es" to "Solo puedo ayudarte a configurar y editar tu menú. Prueba algo como «añade una ensalada César a 14 en Ensaladas».",
             "de" to "Ich kann nur beim Einrichten und Bearbeiten Ihrer Speisekarte helfen. Versuchen Sie zum Beispiel „Caesar Salad für 14 unter Salate hinzufügen“.",
             "af" to "Ek kan net help om jou spyskaart op te stel en te wysig. Probeer iets soos “voeg ’n Caesar-slaai vir 14 by onder Slaaie”.",
+            "th" to "ฉันช่วยได้เฉพาะการตั้งค่าและแก้ไขเมนูของคุณเท่านั้น ลองพิมพ์เช่น \"เพิ่มซีซาร์สลัด ราคา 14 ในหมวดสลัด\"",
         ),
         Refusal.NO_CHANGE to mapOf(
             "en" to "I couldn't find a menu change to make from that. Name the item and what to change, for example \"Caesar salad 14\".",
@@ -66,6 +67,7 @@ object AiGuard {
             "es" to "No encontré ningún cambio de menú que hacer. Indica el producto y qué cambiar, por ejemplo «ensalada César 14».",
             "de" to "Ich habe keine Änderung an der Speisekarte gefunden. Nennen Sie den Artikel und was sich ändern soll, zum Beispiel „Caesar Salad 14“.",
             "af" to "Ek kon nie ’n spyskaartverandering daarin vind nie. Noem die item en wat moet verander, byvoorbeeld “Caesar salad 14”.",
+            "th" to "ไม่พบการเปลี่ยนแปลงเมนูจากข้อความนี้ ระบุชื่อรายการและสิ่งที่ต้องการเปลี่ยน เช่น \"ซีซาร์สลัด 14\"",
         ),
         Refusal.ROOM_OFF_TOPIC to mapOf(
             "en" to "I can only set up a floor plan from pictures of a room, a sketch or a printed plan.",
@@ -73,6 +75,7 @@ object AiGuard {
             "es" to "Solo puedo crear un plano a partir de fotos de una sala, un boceto o un plano impreso.",
             "de" to "Ich kann nur aus Fotos eines Raums, einer Skizze oder eines gedruckten Plans einen Raumplan erstellen.",
             "af" to "Ek kan net ’n vloerplan opstel uit foto’s van ’n vertrek, ’n skets of ’n gedrukte plan.",
+            "th" to "ฉันสร้างผังร้านได้จากรูปถ่ายห้อง ภาพร่าง หรือแบบแปลนที่พิมพ์ออกมาเท่านั้น",
         ),
         Refusal.ROOM_NO_LAYOUT to mapOf(
             "en" to "I couldn't find any tables in those pictures. Try a clearer photo taken from higher up, or a sketch.",
@@ -80,6 +83,7 @@ object AiGuard {
             "es" to "No encontré ninguna mesa en esas imágenes. Prueba una foto más nítida tomada desde más arriba, o un boceto.",
             "de" to "Ich habe auf diesen Bildern keine Tische gefunden. Versuchen Sie ein schärferes Foto von weiter oben oder eine Skizze.",
             "af" to "Ek kon geen tafels in daardie prente vind nie. Probeer ’n duideliker foto van hoër af geneem, of ’n skets.",
+            "th" to "ไม่พบโต๊ะในรูปเหล่านี้ ลองใช้รูปที่ชัดขึ้นซึ่งถ่ายจากมุมสูง หรือใช้ภาพร่าง",
         ),
         Refusal.FLOOR_OFF_TOPIC to mapOf(
             "en" to "I can only help edit this room's floor plan. Try something like \"add four 2-tops along the window\".",
@@ -87,6 +91,7 @@ object AiGuard {
             "es" to "Solo puedo ayudarte a editar el plano de esta sala. Prueba algo como «añade cuatro mesas de 2 junto a la ventana».",
             "de" to "Ich kann nur beim Bearbeiten des Raumplans helfen. Versuchen Sie zum Beispiel „vier Zweiertische am Fenster hinzufügen“.",
             "af" to "Ek kan net help om hierdie vertrek se vloerplan te wysig. Probeer iets soos “voeg vier tweepersoonstafels langs die venster by”.",
+            "th" to "ฉันช่วยได้เฉพาะการแก้ไขผังของห้องนี้เท่านั้น ลองพิมพ์เช่น \"เพิ่มโต๊ะ 2 ที่นั่งสี่ตัวริมหน้าต่าง\"",
         ),
         Refusal.FLOOR_NO_CHANGE to mapOf(
             "en" to "I couldn't find a change to make to this room from that. Name the table or object and what to change, for example \"give table 3 six seats\" or \"add a round table for 4\".",
@@ -94,6 +99,7 @@ object AiGuard {
             "es" to "No encontré ningún cambio que hacer en esta sala. Indica la mesa o el elemento y qué cambiar, por ejemplo «pon 6 lugares en la mesa 3» o «añade una mesa redonda para 4».",
             "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 3 mit 6 Plätzen“ oder „einen runden Vierertisch hinzufügen“.",
             "af" to "Ek kon nie ’n verandering vir hierdie vertrek daarin vind nie. Noem die tafel of voorwerp en wat moet verander, byvoorbeeld “gee tafel 3 ses sitplekke” of “voeg ’n ronde tafel vir 4 by”.",
+            "th" to "ไม่พบสิ่งที่ต้องเปลี่ยนในห้องนี้จากข้อความนี้ ระบุโต๊ะหรือสิ่งของและสิ่งที่ต้องการเปลี่ยน เช่น \"โต๊ะ 3 หกที่นั่ง\" หรือ \"เพิ่มโต๊ะกลมสำหรับ 4 คน\"",
         ),
         Refusal.FLOOR_TABLE_LOCKED to mapOf(
             "en" to "That table has an open bill, so it stays as it is. Close the bill first, then ask again.",
@@ -101,6 +107,7 @@ object AiGuard {
             "es" to "Esa mesa tiene una cuenta abierta, así que se queda como está. Cierra primero la cuenta y vuelve a pedirlo.",
             "de" to "Dieser Tisch hat eine offene Rechnung und bleibt deshalb, wie er ist. Schließen Sie zuerst die Rechnung und fragen Sie dann noch einmal.",
             "af" to "Daardie tafel het ’n oop rekening, so dit bly soos dit is. Sluit eers die rekening en vra dan weer.",
+            "th" to "โต๊ะนี้ยังมีบิลที่เปิดอยู่ จึงไม่มีการเปลี่ยนแปลง ปิดบิลก่อน แล้วลองสั่งอีกครั้ง",
         ),
         Refusal.INCOMPLETE to mapOf(
             "en" to "The AI's answer was cut off. Please try again.",
@@ -108,6 +115,7 @@ object AiGuard {
             "es" to "La respuesta de la IA se cortó. Vuelve a intentarlo.",
             "de" to "Die Antwort der KI wurde abgeschnitten. Bitte versuchen Sie es erneut.",
             "af" to "Die KI se antwoord is afgesny. Probeer asseblief weer.",
+            "th" to "คำตอบของ AI ถูกตัดกลางคัน กรุณาลองอีกครั้ง",
         ),
         Refusal.TOO_MANY_CHANGES to mapOf(
             "en" to "That's too many changes at once. Try asking for fewer things, or in smaller batches.",
@@ -115,6 +123,7 @@ object AiGuard {
             "es" to "Son demasiados cambios a la vez. Pide menos cosas, o en tandas más pequeñas.",
             "de" to "Das sind zu viele Änderungen auf einmal. Fragen Sie nach weniger Dingen oder in kleineren Schritten.",
             "af" to "Dis te veel veranderinge op een slag. Vra vir minder dinge, of in kleiner groepe.",
+            "th" to "เปลี่ยนแปลงมากเกินไปในครั้งเดียว ลองขอให้น้อยลง หรือแบ่งเป็นชุดเล็ก ๆ",
         ),
     )
 
@@ -154,6 +163,12 @@ object AiGuard {
         """\b(schreib|schreibe|schreiben|erstelle|programmiere|implementiere|gib|mach)\b.{0,30}\b(programm|code|skript|script|funktion|algorithmus|python|javascript|geschichte|lied)""",
         // af: "skryf vir my 'n program / 'n gedig"
         """\b(skryf|skep|programmeer|gee)\b.{0,30}\b(program|kode|skrip|funksie|algoritme|python|javascript|storie|verhaal|liedjie)\b""",
+        // th: Thai has no spaces between words, so no \b; matched on the raw text (the fold drops Thai marks)
+        """(ไม่ต้อง|อย่า)\s*(สนใจ|ทำตาม|ฟัง).{0,30}(คำสั่ง|กฎ|ข้อกำหนด)|(ลืม|เพิกเฉย|ละเว้น).{0,30}(คำสั่ง|กฎ)""",
+        """(คำสั่ง|พรอมต์|พรอมท์)\s*(ระบบ|ของคุณ|ของเธอ)|กฎของ(คุณ|เธอ)""",
+        """(เขียน|สร้าง)\s*(โค้ด|โค๊ด|โปรแกรม|สคริปต์|ฟังก์ชัน|อัลกอริทึม|อัลกอริธึม)""",
+        """(เล่า|แต่ง|เขียน)\s*(เรื่องตลก|มุก|นิทาน|กลอน|บทกวี|เพลง|เรียงความ)|มุกตลก""",
+        """(คุณ|เธอ)\s*(คือ|เป็น)\s*(ใคร|โมเดลอะไร)|ใคร(สร้าง|ทำ)(คุณ|เธอ)|แกล้งทำเป็น|สวมบทบาท|สมมติว่า(คุณ|เธอ)เป็น""",
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     /**

@@ -11,7 +11,7 @@ import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
 
-/** The fonts a printed menu embeds (OFL, in resources/menuprint/fonts; full Latin incl. ß, umlauts, accents, ê/ë). */
+/** The fonts a printed menu embeds (OFL, in resources/menuprint/fonts; full Latin incl. ß, umlauts, accents, ê/ë; Thai from Noto Sans Thai). */
 object MenuFonts {
     const val INTER = "inter"
     const val JAKARTA = "jakarta"
@@ -23,6 +23,16 @@ object MenuFonts {
     const val POPPINS = "Poppins"
     /** The family name the brand's body font is registered under. */
     const val BODY = "MenuBody"
+    /**
+     * Noto Sans Thai, the fallback for Thai text (none of the Latin faces has
+     * Thai glyphs): last in every font-family list, so openhtmltopdf takes Thai
+     * letters, vowel signs and tone marks from it and everything else from the
+     * brand's own font.
+     */
+    const val THAI = "MenuThai"
+
+    /** A CSS font-family list ending with the Thai fallback: `'Playfair', 'MenuBody', 'MenuThai'`. */
+    fun stack(vararg families: String): String = (families.toList() + THAI).joinToString(", ") { "'$it'" }
 
     /** A portal brand font id (lib/brand/brand.ts BRAND_FONTS), else Inter. */
     fun brandFamily(id: String?): String = id?.trim()?.lowercase()?.takeIf { it in setOf(INTER, JAKARTA, BARLOW) } ?: INTER
@@ -36,6 +46,10 @@ object MenuFonts {
         PLAYFAIR to "PlayfairDisplay-Bold.ttf", AMATIC to "AmaticSC-Bold.ttf",
         FRAUNCES to "Fraunces-SemiBold.ttf", POPPINS to "Poppins-Bold.ttf",
     )
+    private val THAI_FILES = listOf(
+        400 to "NotoSansThai-Regular.ttf", 500 to "NotoSansThai-Medium.ttf",
+        600 to "NotoSansThai-SemiBold.ttf", 700 to "NotoSansThai-Bold.ttf",
+    )
 
     private val cache = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
 
@@ -47,7 +61,8 @@ object MenuFonts {
     /** (family, weight, file) for the body font [brandFont] and every heading family. */
     fun all(brandFont: String): List<Triple<String, Int, String>> =
         BODY_FILES.getValue(brandFamily(brandFont)).map { (w, f) -> Triple(BODY, w, f) } +
-            HEADING_FILES.map { (family, f) -> Triple(family, 700, f) }
+            HEADING_FILES.map { (family, f) -> Triple(family, 700, f) } +
+            THAI_FILES.map { (w, f) -> Triple(THAI, w, f) }
 }
 
 /** Picture handling for the print: decode, crop, scale, blend into the page, JPEG out. Pure JDK (ImageIO, Java2D). */

@@ -36,6 +36,9 @@ function errorText(t: T, e: unknown): string {
 const withVenue = (path: string, venue: string, extra = "") =>
   `${path}?venue=${encodeURIComponent(venue)}${extra}`;
 
+/** The store's data language for the assistant (what its *_fr slot holds: a Thai store's Thai). */
+const dataLang = (dataLocale: string) => `&dataLocale=${encodeURIComponent(dataLocale)}`;
+
 /** The photo, upright and at most 1600 px on its long side, as JPEG; the file itself if the browser can't. */
 async function shrink(file: File): Promise<Blob> {
   try {
@@ -100,7 +103,7 @@ type TrayPhoto = { file: File; url: string };
 
 function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: () => void; onClose: () => void }) {
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, dataLocale } = useI18n();
   const [name, setName] = useState(() => t("rooms_name_default"));
   // 1–4 views of the same room, each with its thumbnail URL
   const [photos, setPhotos] = useState<TrayPhoto[]>([]);
@@ -161,7 +164,7 @@ function PhotoRoom({ venue, onChanged, onClose }: { venue: string; onChanged: ()
       // every view in the one request: the AI merges them into one room
       const shrunk = await Promise.all(photos.map((p) => shrink(p.file)));
       shrunk.forEach((b, i) => form.append("image", b, `room-${i + 1}.jpg`));
-      const p = await postForm<RoomPhotoProposal>(withVenue("/v1/room-ai/photo", venue), form);
+      const p = await postForm<RoomPhotoProposal>(withVenue("/v1/room-ai/photo", venue, dataLang(dataLocale)), form);
       setProposal(p);
       setPhase("review");
     } catch (e) {
@@ -388,7 +391,7 @@ type AskPhase = "ask" | "busy" | "review" | "done";
 
 function AskRoom({ venue, room, onChanged }: { venue: string; room: RoomDto; onChanged: () => void }) {
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, dataLocale } = useI18n();
   const [phase, setPhase] = useState<AskPhase>("ask");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -401,7 +404,7 @@ function AskRoom({ venue, room, onChanged }: { venue: string; room: RoomDto; onC
   const [busy, setBusy] = useState(false);
   const rec = useVoice((blob) => sendVoice(blob), (k) => setError(t(k)));
 
-  const extra = `&room=${encodeURIComponent(room.id)}`;
+  const extra = `&room=${encodeURIComponent(room.id)}${dataLang(dataLocale)}`;
 
   const show = (p: FloorEditProposal) => {
     setBefore(room);
@@ -478,7 +481,7 @@ function AskRoom({ venue, room, onChanged }: { venue: string; room: RoomDto; onC
   };
 
   const usable = proposal && !proposal.refusal && proposal.changes.length > 0;
-  const name = roomName(locale, room);
+  const name = roomName(locale, room, dataLocale);
 
   return (
     <>

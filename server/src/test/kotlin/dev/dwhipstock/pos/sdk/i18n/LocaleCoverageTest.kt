@@ -29,6 +29,8 @@ class LocaleCoverageTest {
         "Sage & Poppy" to SagePoppy.PROFILE.locales.map { it.tag },
         // the Copper Lantern staff can also switch to Spanish, German and Afrikaans
         "Copper Lantern (staff)" to listOf("fr", "en", "es", "de", "af"),
+        // a Thai + English store (POS_LOCALES=th,en): Thai in the *_fr name slots
+        "Thai store" to listOf("th", "en"),
     )
     private val allLocales = stores.values.flatten().toSortedSet()
 
@@ -124,7 +126,7 @@ class LocaleCoverageTest {
         val tables = strTables("customer-menu.html")
         // the guest page speaks every language a pub offers: fr, en, and
         // Copper Lantern's Spanish, German and Afrikaans
-        val pub = stores.getValue("Copper Lantern (staff)").toSortedSet()
+        val pub = (stores.getValue("Copper Lantern (staff)") + stores.getValue("Thai store")).toSortedSet()
         assertEquals(pub, tables.keys.toSortedSet(), "customer menu languages")
         val keys = tables.getValue("en").keys
         assertTrue(keys.size > 25, "parsed only ${keys.size} customer-menu keys")

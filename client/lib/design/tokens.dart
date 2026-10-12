@@ -107,7 +107,11 @@ abstract final class T {
 
   /// Bundled families (pubspec `fonts:`) — nothing is fetched at runtime.
   static const fontFamily = 'Inter';
-  static const _fallback = ['NotoSans'];
+  static const _fallback = fontFallback;
+
+  /// Glyphs the brand's family lacks: Noto Sans (Latin, symbols), then Noto
+  /// Sans Thai (no other bundled family has Thai).
+  static const fontFallback = ['NotoSans', 'NotoSansThai'];
 
   /// The family [text] draws with: Inter, unless the store's brand skin
   /// brings its own (set by that brand's theme builder; the pubs' theme puts
@@ -228,7 +232,7 @@ ThemeData buildPosTheme({
     // the pubs' skin: the same tokens as above (a no-op for their screens)
     extensions: [skin ?? BrandSkin.copper],
     fontFamily: T.fontFamily,
-    fontFamilyFallback: const ['NotoSans'],
+    fontFamilyFallback: T.fontFallback,
     scaffoldBackgroundColor: T.background,
     canvasColor: T.background,
     textTheme: textTheme,

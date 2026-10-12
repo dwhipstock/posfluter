@@ -10,7 +10,7 @@ import type {
 import type { Cell, ExportColors, ExportDoc, Kpi, Section } from "./doc";
 import { moneyCents } from "@/lib/format";
 import type { Locale } from "@/lib/i18n/messages";
-import { pdfText, sanitizeContent } from "./pdf-text";
+import { pdfText, sanitizeContent, THAI_PDF_FONT, thaiRuns } from "./pdf-text";
 
 /** Shown at the top when a name had characters the PDF font can't draw (see pdf-text.ts). */
 const GLYPH_NOTE: Record<Locale, string> = {
@@ -19,6 +19,7 @@ const GLYPH_NOTE: Record<Locale, string> = {
   es: "Algunos caracteres (emojis, árabe, hebreo, chino…) no se pueden mostrar en un PDF y aparecen como \uFFFD. Las exportaciones a Excel y CSV conservan los nombres completos.",
   de: "Einige Zeichen (Emojis, Arabisch, Hebräisch, Chinesisch …) lassen sich im PDF nicht darstellen und erscheinen als \uFFFD. Die Excel- und CSV-Exporte enthalten alle Namen vollständig.",
   af: "Sommige karakters (emoji's, Arabies, Hebreeus, Chinees…) kan nie in 'n PDF gewys word nie en verskyn as \uFFFD. Die Excel- en CSV-uitvoere hou elke naam volledig.",
+  th: "อักขระบางตัว (อีโมจิ อาหรับ ฮีบรู จีน…) แสดงใน PDF ไม่ได้และจะปรากฏเป็น \uFFFD ไฟล์ส่งออก Excel และ CSV เก็บทุกชื่อไว้ครบถ้วน",
 };
 
 // the defaults; each export carries its client's brand colours (doc.colors)
@@ -176,7 +177,8 @@ export function buildDocDefinition(doc: ExportDoc): TDocumentDefinitions {
   let replaced = false;
   const printable = sanitizeContent(content, () => (replaced = true));
   if (replaced) printable.splice(3, 0, { text: GLYPH_NOTE[doc.locale] ?? GLYPH_NOTE.en, style: "note", margin: [0, 0, 0, 4] });
-  const generated = pdfText(doc.generatedLabel).text;
+  const generatedText = pdfText(doc.generatedLabel).text;
+  const generated = thaiRuns(generatedText) ?? generatedText;
 
   return {
     pageSize: "A4",
@@ -232,9 +234,36 @@ async function getPdfMake() {
   return pdfMake;
 }
 
+// Noto Sans Thai (public/fonts, OFL): fetched the first time a report with Thai is exported
+let thaiLoaded = false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadThai(pdfMake: any) {
+  if (thaiLoaded) return;
+  const b64 = async (file: string) => {
+    const bytes = new Uint8Array(await (await fetch(`/fonts/${file}`)).arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  };
+  const [regular, bold] = await Promise.all([b64("NotoSansThai-Regular.ttf"), b64("NotoSansThai-Bold.ttf")]);
+  pdfMake.vfs = { ...pdfMake.vfs, "NotoSansThai-Regular.ttf": regular, "NotoSansThai-Bold.ttf": bold };
+  pdfMake.fonts = {
+    ...pdfMake.fonts,
+    [THAI_PDF_FONT]: {
+      normal: "NotoSansThai-Regular.ttf",
+      bold: "NotoSansThai-Bold.ttf",
+      italics: "NotoSansThai-Regular.ttf",
+      bolditalics: "NotoSansThai-Bold.ttf",
+    },
+  };
+  thaiLoaded = true;
+}
+
 export async function downloadPdf(doc: ExportDoc): Promise<void> {
   const pdfMake = await getPdfMake();
+  const def = buildDocDefinition(doc);
+  if (JSON.stringify(def).includes(`"${THAI_PDF_FONT}"`)) await loadThai(pdfMake);
   await new Promise<void>((resolve) => {
-    pdfMake.createPdf(buildDocDefinition(doc)).download(`${doc.filenameBase}.pdf`, () => resolve());
+    pdfMake.createPdf(def).download(`${doc.filenameBase}.pdf`, () => resolve());
   });
 }

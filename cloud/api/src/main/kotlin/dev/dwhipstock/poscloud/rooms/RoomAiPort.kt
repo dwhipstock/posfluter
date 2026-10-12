@@ -864,7 +864,35 @@ internal object AiText {
     private class Rule(val en: Regex, val t: Map<String, String>)
 
     private fun rule(en: String, fr: String, es: String, de: String, af: String) =
-        Rule(Regex("^$en$"), mapOf("fr" to fr, "es" to es, "de" to de, "af" to af))
+        Rule(Regex("^$en$"), buildMap {
+            put("fr", fr); put("es", es); put("de", de); put("af", af)
+            TH[en]?.let { put("th", it) }
+        })
+
+    /** Thai, keyed by the English pattern (kept apart so the five-language rules stay readable). */
+    private val TH: Map<String, String> = mapOf(
+        "new table (.+)" to "โต๊ะใหม่ $1",
+        "new object (.+)" to "สิ่งของใหม่ $1",
+        "table (.+)" to "โต๊ะ $1",
+        "object (.+)" to "สิ่งของ $1",
+        "change (.+)" to "การเปลี่ยนแปลง $1",
+        "unknown shape" to "ไม่รู้จักรูปทรงนี้",
+        "unknown type" to "ไม่รู้จักประเภทนี้",
+        "a custom object needs a plain name" to "สิ่งของที่สร้างเองต้องมีชื่อธรรมดา",
+        "no free spot, it overlapped others" to "ไม่มีที่ว่าง วางทับสิ่งอื่น",
+        "not a floor-plan change" to "ไม่ใช่การเปลี่ยนผังร้าน",
+        "unknown table" to "ไม่รู้จักโต๊ะนี้",
+        "unknown object" to "ไม่รู้จักสิ่งของนี้",
+        "table (.+) has an open bill: not removed" to "โต๊ะ $1 มีบิลเปิดอยู่: ไม่ได้ลบ",
+        "table (.+) has sub-tables: not removed" to "โต๊ะ $1 มีโต๊ะย่อย: ไม่ได้ลบ",
+        "table (.+) has an open bill: not moved, reshaped or renumbered" to
+            "โต๊ะ $1 มีบิลเปิดอยู่: ไม่ได้ย้าย เปลี่ยนรูปทรง หรือเปลี่ยนหมายเลข",
+        "table (.+) has an open bill, so it stays as it is" to "โต๊ะ $1 มีบิลเปิดอยู่ จึงคงไว้ตามเดิม",
+        "renumbering skipped: two tables would share a number" to "ข้ามการเปลี่ยนหมายเลข: โต๊ะสองตัวจะได้หมายเลขซ้ำกัน",
+        "(\\d+) table\\(s\\) over the (\\d+) limit dropped" to "ตัดโต๊ะ $1 ตัวที่เกินขีดจำกัด $2 ตัวออก",
+        "(\\d+) object\\(s\\) over the (\\d+) limit dropped" to "ตัดสิ่งของ $1 ชิ้นที่เกินขีดจำกัด $2 ชิ้นออก",
+        "too many removals at once; at most (\\d+) per request" to "ลบมากเกินไปในครั้งเดียว; ได้สูงสุด $1 รายการต่อคำขอ",
+    )
 
     /** "table L-5: …", "new table 2: …", "object 3: …", "change 4: …" — the subject, then the reason. */
     private val SUBJECTS = listOf(
@@ -935,6 +963,8 @@ internal object AiText {
             "Die Tische {t} haben offene Rechnungen und bleiben deshalb, wie sie sind. Schließen Sie zuerst die Rechnungen und fragen Sie dann noch einmal."),
         "af" to ("Tafel {t} het ’n oop rekening, so dit bly soos dit is. Sluit eers die rekening en vra dan weer." to
             "Tafels {t} het oop rekenings, so hulle bly soos hulle is. Sluit eers die rekenings en vra dan weer."),
+        "th" to ("โต๊ะ {t} มีบิลเปิดอยู่ จึงคงไว้ตามเดิม ปิดบิลก่อน แล้วลองสั่งอีกครั้ง" to
+            "โต๊ะ {t} มีบิลเปิดอยู่ จึงคงไว้ตามเดิม ปิดบิลก่อน แล้วลองสั่งอีกครั้ง"),
     )
 
     /** The table_locked reply: [labels] have an open bill and stay as they are, in [lang] (English when unknown). */

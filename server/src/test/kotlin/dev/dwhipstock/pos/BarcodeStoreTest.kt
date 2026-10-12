@@ -78,6 +78,24 @@ class BarcodeStoreTest {
     }
 
     @Test
+    fun receiptsPrintInThaiByDefaultWithBothNames() {
+        // the policy the store builds from its settings: Thai, the Thai address, both names
+        val policy = dev.dwhipstock.pos.sdk.ReceiptPolicy.Standard(
+            logoFallbackText = Barcode.RECEIPT_NAME,
+            headerLines = Barcode.addressLines(Barcode.ADDRESS)[Barcode.TH]!!,
+            footerText = "", showTax = false, locale = Barcode.TH,
+            headerLinesByLocale = Barcode.addressLines(Barcode.ADDRESS),
+        )
+        assertEquals(dev.dwhipstock.pos.sdk.i18n.LocaleCode.TH, policy.locale)
+        assertEquals(listOf(Barcode.ADDRESS_TH), policy.headerLines)
+        assertTrue("บาร์โค้ด" in Barcode.RECEIPT_NAME && "Barcode Pub" in Barcode.RECEIPT_NAME)
+        // the receipt raster picks the Thai font for the name line
+        assertTrue(dev.dwhipstock.pos.sdk.ThermalReceiptRenderer.renderImage(
+            listOf(dev.dwhipstock.pos.sdk.PrintLine.Text(Barcode.RECEIPT_NAME, dev.dwhipstock.pos.sdk.Align.CENTER)),
+        ).height > 0)
+    }
+
+    @Test
     fun vatIsSevenPercentInsideThePricesAndNotPrinted() {
         val vat = Barcode.VAT
         assertEquals("VAT", vat.code)

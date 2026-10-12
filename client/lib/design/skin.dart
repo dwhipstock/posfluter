@@ -113,7 +113,7 @@ class BrandSkin extends ThemeExtension<BrandSkin> {
   static final copper = BrandSkin(
     id: 'copper-lantern',
     fontFamily: T.fontFamily,
-    fontFallback: const ['NotoSans'],
+    fontFallback: T.fontFallback,
     headlineTracking: 0,
     radiusSmall: T.radiusSmall,
     radiusMedium: T.radiusMedium,
@@ -137,7 +137,7 @@ class BrandSkin extends ThemeExtension<BrandSkin> {
   static final sagePoppy = BrandSkin(
     id: 'sage-poppy',
     fontFamily: 'PlusJakartaSans',
-    fontFallback: const ['NotoSans'],
+    fontFallback: T.fontFallback,
     headlineTracking: -0.4,
     radiusSmall: BorderRadius.circular(3),
     radiusMedium: BorderRadius.circular(6),
@@ -162,7 +162,7 @@ class BrandSkin extends ThemeExtension<BrandSkin> {
   static final pronghorn = BrandSkin(
     id: 'pronghorn',
     fontFamily: 'Barlow',
-    fontFallback: const ['NotoSans'],
+    fontFallback: T.fontFallback,
     headlineTracking: 0.2,
     radiusSmall: BorderRadius.circular(3),
     radiusMedium: BorderRadius.circular(6),
@@ -185,11 +185,11 @@ class BrandSkin extends ThemeExtension<BrandSkin> {
   /// the brand-panel sign-in) on a dark bar palette ([PubPalette.barcode]):
   /// flat near-black surfaces (no shadows: they vanish on black anyway),
   /// slightly tighter corners, quick motion.
-  // TODO(feat/thai-locale): a Thai-capable family / fallback once it lands.
+  // Thai: Inter, then Noto Sans Thai for the Thai screens and menus.
   static final barcode = BrandSkin(
     id: 'barcode',
     fontFamily: T.fontFamily,
-    fontFallback: const ['NotoSans'],
+    fontFallback: T.fontFallback,
     headlineTracking: -0.2,
     radiusSmall: BorderRadius.circular(4),
     radiusMedium: BorderRadius.circular(8),

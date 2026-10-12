@@ -16,9 +16,11 @@ import {
   draftFromItem,
   emptyDraft,
   extraLangs,
+  langLabel,
   moveInOrder,
   namesDiff,
   planEdit,
+  slotLabel,
   validateDraft,
   type DraftError,
   type ItemDraft,
@@ -140,12 +142,6 @@ function useScopeLine(): string {
   return storeId ? t("menu_scope_one", { store: shortStoreName(store?.name ?? storeId) }) : t("menu_scope_all");
 }
 
-function langLabel(t: T, lang: string): string {
-  const k = `menu_lang_${lang}` as MsgKey;
-  const v = t(k);
-  return v === k ? lang.toUpperCase() : v;
-}
-
 /** Stores that are offline with edits waiting, and stores too old to take edits. */
 export function MenuSyncBanner({ status }: { status: MenuSyncStatus | undefined }) {
   const t = useT();
@@ -238,7 +234,7 @@ function ItemForm({
   onPhotoChanged: () => void;
 }) {
   const t = useT();
-  const { available, name } = useI18n();
+  const { available, dataLocale, name } = useI18n();
   const { storeId, nameOf, venues } = useStores();
   const ai = useAiStatus();
   const scopeLine = useScopeLine();
@@ -390,7 +386,7 @@ function ItemForm({
           <Field label={t("menu_name_en")}>
             <Input value={draft.nameEn} maxLength={200} onChange={(e) => set({ nameEn: e.target.value })} />
           </Field>
-          <Field label={t("menu_name_fr")}>
+          <Field label={slotLabel(t, "name", dataLocale)}>
             <Input value={draft.nameFr} maxLength={200} placeholder={draft.nameEn} onChange={(e) => set({ nameFr: e.target.value })} />
           </Field>
           {langs.map((l) => (
@@ -406,7 +402,7 @@ function ItemForm({
           <Field label={t("menu_desc_en")}>
             <Input value={draft.descriptionEn} maxLength={500} onChange={(e) => set({ descriptionEn: e.target.value })} />
           </Field>
-          <Field label={t("menu_desc_fr")}>
+          <Field label={slotLabel(t, "desc", dataLocale)}>
             <Input value={draft.descriptionFr} maxLength={500} onChange={(e) => set({ descriptionFr: e.target.value })} />
           </Field>
         </div>
@@ -472,7 +468,7 @@ function ItemForm({
               <Field label={t("menu_size_en")}>
                 <Input value={v.labelEn} maxLength={100} onChange={(e) => setVariant(i, { labelEn: e.target.value })} />
               </Field>
-              <Field label={t("menu_size_fr")}>
+              <Field label={slotLabel(t, "size", dataLocale)}>
                 <Input value={v.labelFr} maxLength={100} placeholder={v.labelEn} onChange={(e) => setVariant(i, { labelFr: e.target.value })} />
               </Field>
               <Field label={t("menu_size_price")}>
@@ -619,7 +615,7 @@ interface CatDraft {
 
 function CategoriesForm({ categories, onSaved }: { categories: MenuCategory[]; onSaved: () => void }) {
   const t = useT();
-  const { available, name } = useI18n();
+  const { available, dataLocale, name } = useI18n();
   const { storeId, nameOf } = useStores();
   const scopeLine = useScopeLine();
   const showSkips = useSkipToast();
@@ -689,7 +685,7 @@ function CategoriesForm({ categories, onSaved }: { categories: MenuCategory[]; o
         <Field label={t("menu_name_en")}>
           <Input autoFocus value={draft.nameEn} maxLength={100} onChange={(e) => setDraft({ ...draft, nameEn: e.target.value })} />
         </Field>
-        <Field label={t("menu_name_fr")}>
+        <Field label={slotLabel(t, "name", dataLocale)}>
           <Input value={draft.nameFr} maxLength={100} placeholder={draft.nameEn} onChange={(e) => setDraft({ ...draft, nameFr: e.target.value })} />
         </Field>
         {langs.map((l) => (

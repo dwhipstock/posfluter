@@ -10,7 +10,7 @@ import type { FuelFmt } from "./fuel";
 import { cad, money, moneyCents } from "./format";
 import { parseCents } from "./menu-edit";
 
-const LOCALES: Locale[] = ["en", "fr", "es", "de", "af"];
+const LOCALES: Locale[] = ["en", "fr", "es", "de", "af", "th"];
 
 const h = React.createElement;
 // context.tsx is compiled with the classic JSX runtime under tsx: it needs a global React

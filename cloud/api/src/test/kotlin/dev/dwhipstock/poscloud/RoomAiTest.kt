@@ -541,6 +541,55 @@ class RoomAiTest {
     }
 
     @Test
+    fun thaiTypedAndSpokenFloorRequests() = testApplication {
+        app()
+        store(locked = listOf("t3"))
+        var user = ""
+        fake.reply = { _, u, _, _ -> user = u; """{"summary":"ย้ายโต๊ะ D-2","language":"th","ops":[{"op":"update_table","table":"t2","x":150}]}""" }
+        val r = post("/v1/room-ai/chat?room=upper&venue=vieux-port&dataLocale=th", """{"text":${JsonPrimitive("ย้ายโต๊ะ D-๒ ไปข้างบาร์")},"lang":"th"}""")
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        // Thai digits read as 0-9, the Thai rules and the slot named Thai
+        assertTrue("ย้ายโต๊ะ D-2 ไปข้างบาร์" in user, user)
+        assertTrue("\"โต๊ะ\" = table" in fake.lastSystem)
+        assertTrue("nameFr (Thai)" in fake.lastSystem && "Québec French" !in fake.lastSystem, fake.lastSystem)
+        assertEquals("update_table", r.body()["changes"]!!.jsonArray.single().jsonObject.s("kind"))
+
+        // a table with an open bill named with a Thai digit: still recognised, the answer in Thai
+        fake.reply = { _, _, _, _ -> """{"summary":"","language":"th","ops":[]}""" }
+        val locked = post("/v1/room-ai/chat?room=upper&venue=vieux-port&dataLocale=th", """{"text":${JsonPrimitive("ย้ายโต๊ะ D-๓ ไปข้างบาร์")},"lang":"th"}""").body()
+        assertEquals("table_locked", locked.s("refusal"), locked.toString())
+        assertTrue(Regex("[\\u0E00-\\u0E7F]").containsMatchIn(locked.s("message")!!), locked.toString())
+
+        // spoken Thai: the Thai voice rule, the transcript shown back in Thai
+        fake.reply = { _, _, _, _ -> """{"transcript":"เอาโต๊ะพูลออก","language":"th","ops":[{"op":"remove_object","object":"pool"}]}""" }
+        val v = client.submitFormWithBinaryData("/v1/room-ai/chat/voice?venue=vieux-port&room=upper&dataLocale=th", formData {
+            append("lang", "th")
+            append("audio", "RIFF".toByteArray() + ByteArray(4000), Headers.build {
+                append(HttpHeaders.ContentType, "audio/wav")
+                append(HttpHeaders.ContentDisposition, "filename=\"v.wav\"")
+            })
+        }) { header(HttpHeaders.Cookie, "pos_portal_session=$manager") }
+        assertEquals(HttpStatusCode.OK, v.status, v.bodyAsText())
+        assertEquals("เอาโต๊ะพูลออก", v.body().s("transcript"))
+        assertTrue(dev.dwhipstock.poscloud.menuai.ThaiInput.VOICE in fake.lastSystem)
+
+        // Thai off topic: never reaches the model, the fixed reply in Thai
+        val calls = fake.calls
+        val off = post("/v1/room-ai/chat?room=upper&venue=vieux-port&dataLocale=th", """{"text":${JsonPrimitive("เล่าเรื่องตลกให้ฟังหน่อย")},"lang":"th"}""").body()
+        assertEquals("off_topic", off.s("refusal"))
+        assertTrue(Regex("[\\u0E00-\\u0E7F]").containsMatchIn(off.s("message")!!), off.toString())
+        assertEquals(calls, fake.calls)
+    }
+
+    @Test
+    fun aFrenchStoresFloorPromptIsUnchanged() = testApplication {
+        app()
+        store()
+        chat("add a round table for 4")
+        assertFalse("Thai" in fake.lastSystem, "no Thai rules at a store that says nothing of Thai")
+    }
+
+    @Test
     fun manyRemovalsNeedAnExtraYes() = testApplication {
         app()
         store()

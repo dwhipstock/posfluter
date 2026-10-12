@@ -94,6 +94,9 @@ class KioskController extends ChangeNotifier {
   /// The store's legal drinking age, named on the ID note (21 in the US).
   int legalAge = 21;
   List<String> locales = const ['en', 'fr', 'es', 'de', 'af'];
+
+  /// The store's data language: what the catalog's `*_fr` slot holds.
+  String dataLocale = 'fr';
   String lang = 'en';
   bool busy = false, offline = false;
 
@@ -222,6 +225,7 @@ class KioskController extends ChangeNotifier {
       currency = c.currency;
       legalAge = c.legalAge;
       if (c.locales.isNotEmpty) locales = c.locales;
+      dataLocale = c.dataLocale;
       lang = locales.first;
       await _loadMenu();
       offline = false;

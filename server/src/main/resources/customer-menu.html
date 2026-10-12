@@ -20,7 +20,7 @@
     --accent-soft: #dceafa;
     --accent-ink: #ffffff;
   }
-  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', system-ui, sans-serif; }
+  * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; }
   body { background: var(--paper-alt); color: var(--ink); padding-bottom: 96px; line-height: 1.35; }
   button, select, input { color: inherit; }
   button { cursor: pointer; }
@@ -180,7 +180,7 @@ const TABLE_LABEL = "{{TABLE_LABEL}}";
 // (LocaleCoverageTest reads these tables).
 const savedLang = (() => { try { return localStorage.getItem("menu_lang"); } catch (_) { return null; } })();
 let lang = savedLang || "en";
-const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans" };
+const LANG_NAMES = { fr: "Français", en: "English", es: "Español", de: "Deutsch", af: "Afrikaans", th: "ไทย" };
 /** The "Today's specials" chip (not a category id: those are slugs). */
 const SPECIALS = "__specials__";
 const STR = {
@@ -274,18 +274,38 @@ const STR = {
     menuLoading: "Spyskaart laai tans…", menuUnavailable: "Die spyskaart is tans nie beskikbaar nie. Probeer asseblief weer.",
     gone: n => `${n} is nie meer beskikbaar nie`, priceNow: (n, p) => `${n}: prys verander na ${p}`, addAt: p => `Voeg by teen ${p}`, removeLine: "Verwyder", menuChanged: "Die spyskaart het verander – kyk asseblief na u mandjie.", someSent: "U ander items is gestuur. Kyk asseblief wat in u mandjie oorbly.",
   },
+  th: {
+    orderFromPhone: "โต๊ะ " + TABLE_LABEL + " — สั่งอาหารจากโทรศัพท์ของคุณ",
+    langLabel: "ภาษา",
+    basket: "ตะกร้า", send: "ส่งออร์เดอร์", note: "หมายเหตุ (ไม่บังคับ)",
+    addToBasket: "＋ ใส่ตะกร้า", sizes: "ขนาด", days: ["วันจันทร์","วันอังคาร","วันพุธ","วันพฤหัสบดี","วันศุกร์","วันเสาร์","วันอาทิตย์"], happyHour: "แฮปปี้อาวร์", daySpecial: d => `โปรโมชัน${d}`, special: "โปรโมชัน", todaysSpecials: "โปรโมชันวันนี้",
+    doneTitle: "ส่งออร์เดอร์แล้ว!", doneText: "พนักงานจะยืนยันออร์เดอร์ของคุณในไม่ช้า",
+    orderMore: "สั่งเพิ่ม", failed: "ส่งไม่สำเร็จ กรุณาลองอีกครั้ง",
+    billLocked: "บิลของคุณกำลังชำระเงิน — กรุณาติดต่อพนักงาน",
+    tooMuch: "ออร์เดอร์ใหญ่เกินไป — กรุณาติดต่อพนักงาน",
+    viewCart: "ดูตะกร้า", addedToast: "เพิ่มแล้ว ✓", subtotal: "ยอดก่อนภาษี (ยังไม่รวมภาษี)", billSubtotal: "ยอดก่อนภาษี", taxWord: "ภาษี",
+    tabMenu: "เมนู", tabBill: "บิลของคุณ", seeBill: "ดูบิล",
+    onBill: "ในบิลของคุณ", beingConfirmed: "รอการยืนยัน", total: "ยอดรวม",
+    rounding: "ปัดเศษ", cashTotal: "ยอดเงินสด",
+    noOrders: "ยังไม่มีออร์เดอร์ — ดูเมนูเพื่อเริ่มสั่ง", billPaying: "บิลกำลังชำระเงิน",
+    billLoading: "กำลังโหลดบิลของคุณ…",
+    menuLoading: "กำลังโหลดเมนู…", menuUnavailable: "เมนูยังไม่พร้อมใช้งานในขณะนี้ กรุณาลองอีกครั้ง",
+    gone: n => `${n} ไม่มีจำหน่ายแล้ว`, priceNow: (n, p) => `${n}: ราคาเปลี่ยนเป็น ${p}`, addAt: p => `เพิ่มในราคา ${p}`, removeLine: "ลบออก", menuChanged: "เมนูมีการเปลี่ยนแปลง — กรุณาตรวจสอบตะกร้า", someSent: "ส่งรายการอื่นของคุณแล้ว กรุณาตรวจสอบรายการที่เหลือในตะกร้า",
+  },
 };
 const T = () => STR[lang] || STR.en;
 // A name in the guest's language: French and English are the catalog's own
 // two; Spanish, German and Afrikaans read the row's `names` (the translations table),
 // else English, else French.
-const nm = (o, fr, en) => lang === "fr" ? (fr || en || "")
+// The "fr" fields hold the store's local language (dataLocale: French, or Thai).
+const local = () => store.dataLocale || "fr";
+const nm = (o, fr, en) => lang === local() ? (fr || en || "")
   : lang === "en" ? (en || fr || "")
   : ((o && o.names && o.names[lang]) || en || fr || "");
 const iname = i => nm(i, i.nameFr, i.nameEn);
 // the other official language as a small second line (French and English only)
-const inameAlt = i => lang === "fr" ? i.nameEn : lang === "en" ? i.nameFr : "";
-const idesc = i => (lang === "fr" ? i.descriptionFr : i.descriptionEn) || "";
+const inameAlt = i => lang === local() ? i.nameEn : lang === "en" ? i.nameFr : "";
+const idesc = i => (lang === local() ? i.descriptionFr : i.descriptionEn) || "";
 const vlabel = v => nm(v, v.labelFr, v.labelEn);
 
 let items = [], categories = [], cat = null, basket = [];
@@ -299,7 +319,7 @@ const catName = c => {
 // whatever the language: "$12.99", "$1,234.50", "-$5.00" (the owner's rule).
 // Baht shows its satang only when there are some: "฿1,234", "฿1,234.50".
 // One language: no picker.
-let store = { locales: ["fr", "en"], currency: "CAD", country: "CA" };
+let store = { locales: ["fr", "en"], dataLocale: "fr", currency: "CAD", country: "CA" };
 const cad = cents => (cents / 100).toLocaleString("en-US", {
   style: "currency", currency: store.currency, currencyDisplay: "narrowSymbol",
   ...(store.currency === "THB" && cents % 100 === 0 ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}),
@@ -319,6 +339,8 @@ async function loadStore() {
     if (h && Array.isArray(h.locales) && h.locales.length) store.locales = h.locales;
     if (h && h.currency) store.currency = h.currency;
     if (h && h.country) store.country = h.country;
+    // an older store sends no dataLocale: the first of fr / th it speaks, else French
+    store.dataLocale = (h && h.dataLocale) || store.locales.find(l => l === "fr" || l === "th") || "fr";
   } catch (_) {}
   const langs = guestLangs();
   lang = chooseLang(savedLang, navigator.languages || [navigator.language], langs);
@@ -700,8 +722,8 @@ const lineName = l => {
 // "Tax (8.25%)" / "Taxes (8.25%)" in the guest's language.
 const taxRate = t => `${t.ratePercent}%`;
 const taxLabel = t => t.code === "TAX"
-  ? `${(lang === "fr" ? t.labelFr : t.labelEn) || T().taxWord} (${taxRate(t)})`
-  : `${lang === "fr" ? t.labelFr : t.labelEn} ${taxRate(t)}`;
+  ? `${(lang === local() ? t.labelFr : t.labelEn) || T().taxWord} (${taxRate(t)})`
+  : `${lang === local() ? t.labelFr : t.labelEn} ${taxRate(t)}`;
 const billRow = l => `
   <div class="brow">
     <span class="nm">${l.qty} × ${lineName(l)}${l.note ? `<div class="note">${esc(l.note)}</div>` : ""}</span>
@@ -722,7 +744,7 @@ function renderBill() {
   }
   const fees = bill.fees.map(f => `
     <div class="brow">
-      <span class="nm">${esc(lang === "fr" ? f.labelFr : f.labelEn)}</span>
+      <span class="nm">${esc(lang === local() ? f.labelFr : f.labelEn)}</span>
       <span>${cad(f.amountCents)}</span>
     </div>`).join("");
   const pending = bill.pendingLines.length ? `

@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import dev.dwhipstock.pos.sdk.i18n.DataLanguage
 
 /**
  * Names beyond the two catalog slots (name_fr / name_en), migration 053: one
@@ -32,8 +33,12 @@ object Translations : Table("translations") {
     /** A size / container label (id "item:key"), e.g. "20 oz pint" → "Pinta de 20 oz". */
     const val VARIANT = "variant"
 
-    /** The catalog's own languages: never stored here. */
-    val SLOTS = setOf("fr", "en")
+    /**
+     * The catalog's own languages: never stored here. The `*_fr` slot holds
+     * the store's local data language ([DataLanguage]: French by default,
+     * Thai at a Thai + English store), the `*_en` slot English.
+     */
+    val SLOTS: Set<String> get() = setOf(DataLanguage.tag, "en")
 
     /** Every extra name of [entity]: id → (lang → text). Call inside a transaction. */
     fun of(entity: String): Map<String, Map<String, String>> =
@@ -90,11 +95,12 @@ object Translations : Table("translations") {
     }
 
     /**
-     * A name in [lang]: the catalog slots for fr / en; any other language its
-     * row in [extra], else English, else French.
+     * A name in [lang]: the catalog slots for the local data language (the
+     * `*_fr` slot, [DataLanguage]) / en; any other language its row in
+     * [extra], else English, else the local name.
      */
     fun pick(lang: String, fr: String, en: String, extra: Map<String, String>?): String = when (lang) {
-        "fr" -> fr
+        DataLanguage.tag -> fr
         "en" -> en
         else -> extra?.get(lang)?.takeIf { it.isNotBlank() } ?: en.ifBlank { fr }
     }

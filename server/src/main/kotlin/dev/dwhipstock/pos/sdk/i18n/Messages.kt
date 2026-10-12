@@ -22,6 +22,7 @@ value class LocaleCode(val tag: String) {
         val ES = LocaleCode("es")
         val DE = LocaleCode("de")
         val AF = LocaleCode("af")
+        val TH = LocaleCode("th")
 
         /** Normalize a stored/user-supplied code ("EN ", "Fr") to a lowercase tag. */
         fun of(raw: String) = LocaleCode(raw.trim().lowercase())
@@ -49,6 +50,8 @@ enum class MessageKey(val id: String) {
     RECEIPT_SUBTOTAL("receipt.subtotal"),
     /** {0} = tax name ("GST/TPS"), {1} = rate percent ("9.975"). */
     RECEIPT_TAX_LINE("receipt.tax_line"),
+    /** A tax inside the prices, under the total: {0} = its name, {1} = the rate ("VAT 7% included"). */
+    RECEIPT_TAX_INCLUDED_LINE("receipt.tax_included_line"),
     /** Every added tax as one line ([dev.dwhipstock.pos.sdk.TaxDisplay.Combined]): {0} = the summed rate ("8.25"). */
     RECEIPT_TAX_COMBINED("receipt.tax_combined"),
     /** The same with the store's own word for it: {0} = that word, {1} = the summed rate. */
@@ -365,14 +368,20 @@ object Messages {
     }
 }
 
+/**
+ * The `*_fr` slot holds the store's local data language ([DataLanguage]:
+ * French by default, Thai at a Thai + English store); everything else reads
+ * the English side.
+ */
 private val LocaleCode.prefersEnglishData: Boolean
-    get() = tag == LocaleCode.EN.tag || (tag != LocaleCode.FR.tag && Messages.defaultLocale.tag == LocaleCode.EN.tag)
+    get() = tag != DataLanguage.tag
 
 /**
  * Bilingual DATA fields (item names, variant/fee/tender labels): the database
- * carries fr+en columns only, so a locale beyond that pair renders the default
- * locale's side. Seam: per-locale data needs a translations table, not more
- * columns — until then this is the single place that encodes the pair.
+ * carries the local-language (`*_fr`) + English columns, so a locale beyond
+ * that pair renders the English side. Seam: per-locale data lives in the
+ * translations table, not more columns — this is the single place that
+ * encodes the pair.
  */
 fun LocaleCode.dataText(fr: String, en: String): String = if (prefersEnglishData) en else fr
 

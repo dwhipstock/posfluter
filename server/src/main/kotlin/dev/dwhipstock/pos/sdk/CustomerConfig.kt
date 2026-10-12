@@ -57,3 +57,21 @@ interface CustomerConfig {
 
     fun tenderMethod(type: TenderType): TenderMethod? = electronicTenders.firstOrNull { it.type == type }
 }
+
+/**
+ * [config] speaking [locales] instead of its profile's (`POS_LOCALES` /
+ * `store.locales`, [dev.dwhipstock.pos.sdk.i18n.StoreLocales]); null or empty = [config] itself.
+ * The guest slips follow the new languages, and a receipt default language
+ * the store no longer speaks becomes its new default.
+ */
+fun withLocales(config: CustomerConfig, locales: List<dev.dwhipstock.pos.sdk.i18n.LocaleCode>?): CustomerConfig {
+    if (locales.isNullOrEmpty()) return config
+    val spoken = config.profile.copy(locales = locales)
+    return object : CustomerConfig by config {
+        override val profile: StoreProfile = spoken
+        override val guestSlipLocales: List<dev.dwhipstock.pos.sdk.i18n.LocaleCode>
+            get() = profile.locales.sortedBy { if (it == dev.dwhipstock.pos.sdk.i18n.LocaleCode.EN) 0 else 1 }.take(2)
+        override val receiptPolicy: ReceiptPolicy
+            get() = config.receiptPolicy.let { if (it.locale in profile.locales) it else it.withLocale(profile.defaultLocale) }
+    }
+}

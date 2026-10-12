@@ -879,7 +879,7 @@ class _RetailScreenState extends State<RetailScreen> {
               foregroundColor: c.text,
             ),
             child: Text(
-              L.of(context).lang.toUpperCase(),
+              langButtonLabel(L.of(context).lang),
               style: s.text(size: 16, weight: FontWeight.w800, color: c.text),
             ),
           ),
@@ -1107,7 +1107,7 @@ class _RetailScreenState extends State<RetailScreen> {
               foregroundColor: c.text,
             ),
             child: Text(
-              L.of(context).lang.toUpperCase(),
+              langButtonLabel(L.of(context).lang),
               style: s.text(size: 15, weight: FontWeight.w800, color: c.text),
             ),
           ),

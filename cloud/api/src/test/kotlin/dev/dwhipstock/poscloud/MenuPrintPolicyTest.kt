@@ -29,6 +29,8 @@ class MenuPrintPolicyTest {
         "de" to listOf("Nur vor Ort erhältlich.", "Solange der Vorrat reicht.", "Gültig von Montag bis Freitag.", "Pro Person ein Getränk.",
             "Reservierung erforderlich."),
         "af" to listOf("Slegs vir eet hier.", "Solank voorraad hou.", "Geldig Maandag tot Vrydag.", "Een per persoon.", "Bespreking vereis."),
+        "th" to listOf("เฉพาะทานที่ร้านเท่านั้น", "จนกว่าสินค้าจะหมด", "จำกัดหนึ่งที่ต่อท่าน", "ต้องมีอายุ 20 ปีขึ้นไปและแสดงบัตรประชาชน",
+            "ไม่สามารถใช้ร่วมกับส่วนลดอื่น"),
     )
     private val friendly = mapOf(
         "en" to listOf("Cheers from the whole team!", "Please drink responsibly.", "Good food, good friends."),
@@ -36,6 +38,7 @@ class MenuPrintPolicyTest {
         "es" to listOf("¡Salud y buen provecho!", "Bebe con moderación."),
         "de" to listOf("Prost und guten Appetit!", "Bitte trinken Sie verantwortungsvoll."),
         "af" to listOf("Gesondheid en geniet dit!", "Drink asseblief verantwoordelik."),
+        "th" to listOf("ขอให้อร่อยและมีความสุข!", "โปรดดื่มอย่างรับผิดชอบ"),
     )
 
     @Test

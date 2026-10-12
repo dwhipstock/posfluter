@@ -15,7 +15,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 16px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    font: 16px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Thai", "Leelawadee UI", Thonburi, sans-serif; }
   button { font: inherit; color: inherit; cursor: pointer; }
   .hidden { display: none !important; }
 
@@ -147,6 +147,15 @@ const STR = {
     soundOn: "Sound on", soundOff: "Sound off", signout: "Sign out", offline: "Can’t reach the store — retrying…",
     updated: "Up to date", recent: "Recently done:", nothing: "Nothing to recall", voided: "voided",
   },
+  th: {
+    title: "ครัว", pin: "ใส่ PIN ของคุณ", pinWrong: "PIN ไม่ถูกต้อง", managerPos: "ในโหมดสาธิต ผู้จัดการเข้าสู่ระบบได้ที่แท็บเล็ต POS เท่านั้น", codeTitle: "รหัสยืนยัน",
+    codePrompt: "ใส่รหัส 6 หลักจากแอปยืนยันตัวตนของคุณ",
+    enrollPrompt: "สแกนรหัสนี้ด้วยแอปยืนยันตัวตน แล้วใส่รหัส 6 หลัก",
+    codeWrong: "รหัสไม่ถูกต้อง", all: "ทั้งหมด", recall: "เรียกคืน", done: "แตะเพื่อเสร็จสิ้น",
+    add: "สั่งเพิ่ม", void: "ยกเลิก", empty: "ไม่มีออร์เดอร์", guests: "คน", server: "พนักงาน",
+    soundOn: "เปิดเสียง", soundOff: "ปิดเสียง", signout: "ออกจากระบบ", offline: "เชื่อมต่อร้านไม่ได้ — กำลังลองใหม่…",
+    updated: "อัปเดตแล้ว", recent: "เพิ่งเสร็จ:", nothing: "ไม่มีรายการให้เรียกคืน", voided: "ยกเลิกแล้ว",
+  },
 };
 
 let token = localStorage.getItem("staff_token");
@@ -158,7 +167,10 @@ let sound = localStorage.getItem("kitchen_sound") !== "off";
 let pinBuf = "", pendingPin = null, codeBusy = false;
 let board = null, fetchedAt = 0, lastSeen = null, pollTimer = null;
 
-const T = () => STR[lang] || STR.fr;
+// the store's local language (GET /health dataLocale): French, or Thai; the screen flips it with English
+let local = "fr";
+const LOCAL_BUTTON = { fr: "FR", th: "ไทย" };
+const T = () => STR[lang] || STR[local] || STR.fr;
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -271,7 +283,7 @@ function stopPoll() { if (pollTimer) clearInterval(pollTimer); pollTimer = null;
 async function poll() {
   try {
     const b = await api("/kitchen/board" + (station ? "?station=" + encodeURIComponent(station) : ""));
-    if (!lang && b.language) lang = b.language === "en" ? "en" : "fr";
+    if (!lang && b.language) lang = b.language === "en" ? "en" : local;
     const isNew = lastSeen != null && b.latestTicket > lastSeen;
     lastSeen = Math.max(lastSeen || 0, b.latestTicket);
     board = b; fetchedAt = Date.now();
@@ -376,12 +388,12 @@ function chime() {
 
 function labels() {
   const t = T();
-  document.documentElement.lang = lang || "fr";
+  document.documentElement.lang = lang || local;
   $("t-title").textContent = t.title; $("t-pin").textContent = t.pin; $("t-code-title").textContent = t.codeTitle;
   $("t-kitchen").textContent = t.title; document.title = t.title;
   $("recall").textContent = "↶ " + t.recall;
   $("sound").textContent = sound ? t.soundOn : t.soundOff;
-  $("lang").textContent = (lang || "fr") === "fr" ? "EN" : "FR";
+  $("lang").textContent = (lang || local) === local ? "EN" : (LOCAL_BUTTON[local] || local.toUpperCase());
   $("signout").textContent = t.signout;
 }
 
@@ -389,11 +401,18 @@ $("code-input").addEventListener("input", () => { if (($("code-input").value || 
 $("code-back").onclick = backToPin;
 $("recall").onclick = () => recall(null);
 $("sound").onclick = () => { sound = !sound; localStorage.setItem("kitchen_sound", sound ? "on" : "off"); if (sound) chime(); labels(); };
-const flip = () => { lang = (lang || "fr") === "fr" ? "en" : "fr"; localStorage.setItem("kitchen_lang", lang); render(); labels(); };
+const flip = () => { lang = (lang || local) === local ? "en" : local; localStorage.setItem("kitchen_lang", lang); render(); labels(); };
 $("lang").onclick = flip; $("lang-login").onclick = flip;
 $("signout").onclick = () => signOut(true);
 
 renderPad(); renderDots();
+// an older store sends no dataLocale: the first of fr / th it speaks, else French
+api("/health", { auth: false }).then(h => {
+  const ls = (h && Array.isArray(h.locales) ? h.locales : []).map(l => String(l).toLowerCase());
+  local = (h && h.dataLocale) || ls.find(l => l === "fr" || l === "th") || "fr";
+  if (lang && lang !== "en" && lang !== local) lang = local; // a two-language screen: local or English
+  labels(); if (board) render();
+}).catch(() => {});
 if (token) showBoard(); else showLogin();
 </script>
 </body>

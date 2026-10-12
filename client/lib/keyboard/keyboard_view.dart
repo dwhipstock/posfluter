@@ -128,15 +128,24 @@ class _KeyboardViewState extends State<KeyboardView> {
     );
   }
 
-  Widget _rows(List<Widget> rows) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      for (var i = 0; i < rows.length; i++) ...[
-        if (i > 0) const SizedBox(height: KeyboardMetrics.gap),
-        SizedBox(height: widget.metrics.keyHeight, child: rows[i]),
+  /// The rows, in the keyboard's fixed height: four rows of full-size keys,
+  /// or five a little shorter (Thai has four letter rows).
+  Widget _rows(List<Widget> rows) {
+    final m = widget.metrics;
+    final h = rows.length <= 4
+        ? m.keyHeight
+        : (m.keyHeight * 4 - KeyboardMetrics.gap * (rows.length - 4)) /
+              rows.length;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const SizedBox(height: KeyboardMetrics.gap),
+          SizedBox(height: h, child: rows[i]),
+        ],
       ],
-    ],
-  );
+    );
+  }
 
   /// Keys side by side; [flex] is in tenths of a letter key.
   Widget _row(List<(int, Widget)> keys) => Row(
@@ -161,12 +170,12 @@ class _KeyboardViewState extends State<KeyboardView> {
     final upper = letters && _kb.shift != ShiftState.off;
 
     (int, Widget) char(String k) {
-      final shown = upper ? upperOf(k) : k;
+      final shown = letters && upper ? shiftedOf(k, layout) : k;
       return (
         10,
         _Key(
           id: 'osk:$k',
-          label: Text(shown),
+          label: Text(keyFace(shown)),
           onTap: () => letters ? _kb.letter(k) : _kb.type(k),
           alternates: alternatesFor(k, layout, upper: upper),
           onPopupOpen: _openPopup,
@@ -176,13 +185,18 @@ class _KeyboardViewState extends State<KeyboardView> {
       );
     }
 
+    // Thai's four letter rows: its number-row letters go on top, with
+    // backspace; the three rows under them work like everyone's
+    final topRow = rows.length > 3 ? rows[0] : null;
+    final main = rows.length > 3 ? rows.sublist(1) : rows;
     // every row spans the same width: the widest row sets the unit, and the
     // stretchy key of each row (backspace, enter, the shifts, space) takes up
     // the rest, so letter keys are one size everywhere
-    final third = letters ? [...rows[2], ',', '.'] : rows[2];
+    final third = letters ? [...main[2], ',', '.'] : main[2];
     final units = [
-      rows[0].length * 10 + 15,
-      rows[1].length * 10 + 20,
+      if (topRow != null) topRow.length * 10 + 15,
+      main[0].length * 10 + 15,
+      main[1].length * 10 + 20,
       third.length * 10 + 30,
       120,
     ].reduce(math.max);
@@ -218,15 +232,26 @@ class _KeyboardViewState extends State<KeyboardView> {
           );
 
     final extra = _kb.isEmail ? '@' : (_kb.isUrl ? '/' : null);
-    final fixed4 = 18 + 18 + (extra != null ? 10 : 0);
+    // the language key sits by ?123 on the letters page
+    final other = letters ? _kb.otherLetters : null;
+    final fixed4 =
+        18 + 18 + (extra != null ? 10 : 0) + (other != null ? 18 : 0);
     return _rows([
+      if (topRow != null)
+        _row([
+          for (final k in topRow) char(k),
+          (units - topRow.length * 10, _backspace(l)),
+        ]),
       _row([
-        for (final k in rows[0]) char(k),
-        (units - rows[0].length * 10, _backspace(l)),
+        for (final k in main[0]) char(k),
+        (
+          units - main[0].length * 10,
+          topRow == null ? _backspace(l) : const SizedBox.shrink(),
+        ),
       ]),
       _row([
-        for (final k in rows[1]) char(k),
-        (units - rows[1].length * 10, _enter(l)),
+        for (final k in main[1]) char(k),
+        (units - main[1].length * 10, _enter(l)),
       ]),
       _row([
         (shiftFlex, pageToggle('')),
@@ -249,6 +274,21 @@ class _KeyboardViewState extends State<KeyboardView> {
             ),
           ),
         ),
+        // Thai ⇄ English letters, for staff who type both
+        if (other != null)
+          (
+            18,
+            _Key(
+              id: 'osk:lang',
+              kind: _KeyKind.special,
+              semantic: keyboardLayoutNames[other],
+              label: Text(
+                other == 'th' ? 'กขค' : 'ABC',
+                style: const TextStyle(fontSize: 19),
+              ),
+              onTap: _kb.toggleLetters,
+            ),
+          ),
         if (extra != null) char(extra),
         (
           units - fixed4,

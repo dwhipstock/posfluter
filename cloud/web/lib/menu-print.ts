@@ -11,7 +11,7 @@ export type PrintType = (typeof PRINT_TYPES)[number];
 export const PRINT_STYLES = ["classic", "modern", "chalkboard", "autumn", "summer"] as const;
 export type PrintStyle = (typeof PRINT_STYLES)[number];
 
-export const PRINT_LANGS = ["en", "fr", "es", "de", "af"] as const;
+export const PRINT_LANGS = ["en", "fr", "es", "de", "af", "th"] as const;
 export type PrintLang = (typeof PRINT_LANGS)[number];
 
 /** Each language named in itself (the same in every UI language). */
@@ -21,7 +21,17 @@ export const LANG_NAMES: Record<PrintLang, string> = {
   es: "Español",
   de: "Deutsch",
   af: "Afrikaans",
+  th: "ไทย",
 };
+
+/**
+ * The languages offered for a printed menu: the long-standing five for every
+ * client, plus Thai where the client's portal offers it (a Thai menu needs
+ * the Thai names the store keeps in its data-language slot).
+ */
+export function printLangsFor(available: readonly string[]): PrintLang[] {
+  return PRINT_LANGS.filter((l) => l !== "th" || available.includes("th"));
+}
 
 export interface PrintStatus {
   canUse: boolean;
@@ -52,6 +62,10 @@ export interface PrintRequest {
   notes?: string;
   style: PrintStyle | "auto";
   brand: PrintBrandPayload;
+  /** The language the catalog's `*_fr` slots hold for this client ("fr", or "th"). */
+  dataLocale?: string;
+  /** The client's portal languages, default first. */
+  locales?: string[];
 }
 
 export interface PrintPlan {
@@ -103,6 +117,8 @@ export function printRequest(f: {
   notes: string;
   style: PrintStyle | "auto";
   brand: PrintBrandPayload;
+  dataLocale?: string;
+  locales?: readonly string[];
 }): PrintRequest {
   const fill = f.photos && f.fillPhotos;
   const notes = f.notes.trim().slice(0, NOTES_MAX);
@@ -116,6 +132,8 @@ export function printRequest(f: {
     ...(notes ? { notes } : {}),
     style: f.style,
     brand: f.brand,
+    ...(f.dataLocale ? { dataLocale: f.dataLocale } : {}),
+    ...(f.locales?.length ? { locales: [...f.locales] } : {}),
   };
 }
 

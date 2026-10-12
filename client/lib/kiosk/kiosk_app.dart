@@ -92,8 +92,17 @@ class _KioskAppState extends State<KioskApp> {
 String _money(KioskController c, int cents) =>
     formatMoney(cents, c.currency, lang: c.lang);
 
+/// A catalog name in the guest's language; the `*_fr` slot is the store's
+/// data language (French, or Thai at a Thai + English store).
+String _pick(
+  KioskController c,
+  String fr,
+  String en, [
+  Map<String, String>? extra,
+]) => pickName(c.lang, fr, en, extra, c.dataLocale);
+
 String _name(KioskController c, Item i) =>
-    pickName(c.lang, i.nameFr, i.nameEn, i.names);
+    _pick(c, i.nameFr, i.nameEn, i.names);
 
 // ------------------------------------------------------------------ setup
 
@@ -118,7 +127,7 @@ class _SetupScreenState extends State<_SetupScreen> {
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    final t = KioskText(c.lang == 'fr' ? 'fr' : 'en');
+    final t = KioskText(c.lang == 'fr' || c.lang == 'th' ? c.lang : 'en');
     final msg = switch (c.message) {
       'not_found' => t.notFound,
       'pair_failed' => t.pairFailed,
@@ -414,7 +423,7 @@ Future<Variant?> _chooseVariant(
             ),
             const SizedBox(height: 4),
             Text(
-              pickName(c.lang, item.descriptionFr, item.descriptionEn),
+              _pick(c, item.descriptionFr, item.descriptionEn),
               style: const TextStyle(color: _muted, fontSize: 18),
             ),
             if (item.isAlcohol)
@@ -456,7 +465,7 @@ Future<Variant?> _chooseVariant(
                   onPressed: () => Navigator.pop(context, v),
                   child: Text(
                     item.variants.length > 1
-                        ? '${pickName(c.lang, v.labelFr, v.labelEn)} — ${_money(c, v.priceCents)}'
+                        ? '${_pick(c, v.labelFr, v.labelEn)} — ${_money(c, v.priceCents)}'
                         : t.addFor(_money(c, v.priceCents)),
                     style: const TextStyle(fontSize: 22),
                   ),
@@ -532,7 +541,7 @@ class _MenuScreen extends StatelessWidget {
                     child: ChoiceChip(
                       key: Key('kiosk-cat-${cat.id}'),
                       label: Text(
-                        pickName(c.lang, cat.nameFr, cat.nameEn, cat.names),
+                        _pick(c, cat.nameFr, cat.nameEn, cat.names),
                         style: const TextStyle(fontSize: 20),
                       ),
                       selected: c.category == cat.id,
@@ -755,12 +764,7 @@ class _UpsellScreen extends StatelessWidget {
     return t.offerTitle(o.reason) ??
         (cat.isEmpty
             ? o.categoryId
-            : pickName(
-                c.lang,
-                cat.first.nameFr,
-                cat.first.nameEn,
-                cat.first.names,
-              ));
+            : _pick(c, cat.first.nameFr, cat.first.nameEn, cat.first.names));
   }
 
   @override
@@ -905,8 +909,8 @@ class _CartScreen extends StatelessWidget {
                                       ),
                                       if (l.item.variants.length > 1)
                                         Text(
-                                          pickName(
-                                            c.lang,
+                                          _pick(
+                                            c,
                                             l.variant.labelFr,
                                             l.variant.labelEn,
                                           ),

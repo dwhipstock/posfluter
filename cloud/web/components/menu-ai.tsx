@@ -11,11 +11,14 @@ import { ApiError, post, postForm } from "@/lib/api";
 import { useApi, useMe } from "@/lib/hooks";
 import { useI18n, useT } from "@/lib/i18n/context";
 import type { MsgKey } from "@/lib/i18n/messages";
+import { slotLabel } from "@/lib/menu-edit";
+import type { DataLocale } from "@/lib/i18n/translate";
 import { aiErrorKey, allTicked, basisItems, clock, encodeWav, liftKey, MAX_RECORD_SECONDS, salesHeadline, salesNoteKey, signedPct, tickedIds, toggleChange, toMono } from "@/lib/menu-ai";
 import { count, decimal } from "@/lib/format";
 import { useMoney } from "@/lib/money";
+import { inCurrency } from "@/lib/currency-words";
 import { shortStoreName, useStores } from "@/lib/store";
-import type { AiApplyResult, AiChange, AiChangeDetail, AiProposal, AiRevertResult, AiSalesBasis, AiSalesRow, AiStatus } from "@/lib/types";
+import type { AiApplyResult, AiChange, AiChangeDetail, AiProposal, AiRevertResult, AiSalesBasis, AiSalesNote, AiSalesRow, AiStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -86,8 +89,9 @@ export function errorText(t: T, e: unknown): string {
 
 function AiAssistant({ onApplied }: { onApplied: () => void }) {
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, dataLocale } = useI18n();
   const { storeId, venues, nameOf } = useStores();
+  const money = useMoney();
   // "All stores": start on the first store so the box is never greyed out; the buttons switch it
   const [picked, setPicked] = useState<string | null>(storeId ?? venues[0]?.id ?? null);
   useEffect(() => {
@@ -105,7 +109,9 @@ function AiAssistant({ onApplied }: { onApplied: () => void }) {
   const [busy, setBusy] = useState(false);
   const rec = useVoice((blob) => sendVoice(blob), (k) => setError(t(k)));
 
-  const path = (p: string) => `${p}?venue=${encodeURIComponent(venue ?? "")}`;
+  // the store's data language too: what its *_fr slot holds (a Thai store names things in Thai and English)
+  const path = (p: string) =>
+    `${p}?venue=${encodeURIComponent(venue ?? "")}&dataLocale=${encodeURIComponent(dataLocale)}`;
 
   const show = (p: AiProposal) => {
     setProposal(p);
@@ -221,6 +227,7 @@ function AiAssistant({ onApplied }: { onApplied: () => void }) {
             seconds={rec.seconds}
             onSend={() => ask(text)}
             onMic={rec.recording ? rec.stop : rec.start}
+            currency={venue ? money.currencyOf(venue) : money.scopeCurrency}
           />
         )}
 
@@ -320,6 +327,7 @@ function AskForm({
   seconds,
   onSend,
   onMic,
+  currency,
 }: {
   text: string;
   setText: (s: string) => void;
@@ -328,8 +336,15 @@ function AskForm({
   seconds: number;
   onSend: () => void;
   onMic: () => void;
+  /** The picked store's currency: the examples quote its money. */
+  currency: string;
 }) {
   const t = useT();
+  // the examples' amounts in the store's money ("$14" / "฿150")
+  const tc = (k: MsgKey) => {
+    const c = inCurrency(k, currency);
+    return t(c.key, c.vars);
+  };
   const status = useAiStatus();
   const examples: MsgKey[] = ["ai_example_sales", "ai_example_1", "ai_example_2", "ai_example_3", ...(status?.photos ? (["ai_example_photo"] as MsgKey[]) : [])];
   return (
@@ -339,7 +354,7 @@ function AskForm({
         rows={3}
         maxLength={2000}
         disabled={disabled || recording}
-        placeholder={t("ai_placeholder")}
+        placeholder={tc("ai_placeholder")}
         aria-label={t("ai_title")}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -378,10 +393,10 @@ function AskForm({
               key={k}
               type="button"
               disabled={disabled}
-              onClick={() => setText(t(k))}
+              onClick={() => setText(tc(k))}
               className="rounded-full border border-neutral-200 px-3 py-1 text-xs text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
             >
-              {t(k)}
+              {tc(k)}
             </button>
           ))}
         </div>
@@ -479,6 +494,8 @@ function SalesView({ proposal }: { proposal: AiProposal }) {
   };
   const shown = bases.filter((b) => b.rows.length > 0);
   const noteVars = bases[0] ? period(bases[0]) : { from: "", to: "", store: "" };
+  // a refused price quotes "$0" / "฿0" in the store's money
+  const noteIn = (n: AiSalesNote) => inCurrency(salesNoteKey(n)!, bases[0]?.currency ?? m.scopeCurrency);
   return (
     <div className="space-y-2">
       {proposal.answer && shown.length > 0 && (
@@ -519,7 +536,8 @@ function SalesView({ proposal }: { proposal: AiProposal }) {
       )}
       {notes.map((n, i) => (
         <p key={i} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950">
-          {t(salesNoteKey(n)!, {
+          {t(noteIn(n).key, {
+            ...noteIn(n).vars,
             ...noteVars,
             item: n.item ?? "",
             size: n.size ?? "",
@@ -577,16 +595,16 @@ function ChangeRow({
   );
 }
 
-function fieldLabel(t: T, d: AiChangeDetail): string {
+function fieldLabel(t: T, d: AiChangeDetail, dataLocale: DataLocale): string {
   switch (d.field) {
     case "nameEn":
       return t("menu_name_en");
     case "nameFr":
-      return t("menu_name_fr");
+      return slotLabel(t, "name", dataLocale);
     case "descriptionEn":
       return t("menu_desc_en");
     case "descriptionFr":
-      return t("menu_desc_fr");
+      return slotLabel(t, "desc", dataLocale);
     case "category":
       return t("menu_col_category");
     case "available":
@@ -607,6 +625,7 @@ function fieldLabel(t: T, d: AiChangeDetail): string {
 
 function DetailLine({ d, currency }: { d: AiChangeDetail; currency: string }) {
   const t = useT();
+  const { dataLocale } = useI18n();
   const m = useMoney();
   const value = (raw: string | null | undefined, minor: number | null | undefined) => {
     if (d.field === "price" && minor != null) return m.fmtIn(currency, minor);
@@ -617,7 +636,7 @@ function DetailLine({ d, currency }: { d: AiChangeDetail; currency: string }) {
   const after = value(d.after, d.afterMinor);
   return (
     <span className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-neutral-700">
-      <span className="text-neutral-600">{fieldLabel(t, d)}:</span>
+      <span className="text-neutral-600">{fieldLabel(t, d, dataLocale)}:</span>
       {before && (
         <>
           <span className="break-words text-neutral-600 line-through">{before}</span>

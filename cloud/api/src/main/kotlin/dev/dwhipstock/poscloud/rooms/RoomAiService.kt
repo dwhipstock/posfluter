@@ -18,6 +18,8 @@ import dev.dwhipstock.poscloud.menuai.MenuAiLimiter
 import dev.dwhipstock.poscloud.menuai.MenuAiReplyException
 import dev.dwhipstock.poscloud.menuai.MenuAiService
 import dev.dwhipstock.poscloud.menuai.Scrub
+import dev.dwhipstock.poscloud.menuai.ThaiInput
+import dev.dwhipstock.poscloud.menuai.fractionDigits
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -121,6 +123,7 @@ internal object RoomReplies {
         "es" to "Solo puedo crear un plano a partir de fotos de una sala, un boceto o un plano impreso.",
         "de" to "Ich kann nur aus Fotos eines Raums, einer Skizze oder eines gedruckten Plans einen Raumplan erstellen.",
         "af" to "Ek kan net ’n vloerplan opstel uit foto’s van ’n vertrek, ’n skets of ’n gedrukte plan.",
+        "th" to "ฉันสร้างผังร้านได้จากรูปถ่ายห้อง ภาพร่าง หรือแบบแปลนที่พิมพ์ออกมาเท่านั้น",
     )
     private val ROOM_NO_LAYOUT = mapOf(
         "en" to "I couldn't find any tables in those pictures. Try a clearer photo taken from higher up, or a sketch.",
@@ -128,6 +131,7 @@ internal object RoomReplies {
         "es" to "No encontré ninguna mesa en esas imágenes. Prueba una foto más nítida tomada desde más arriba, o un boceto.",
         "de" to "Ich habe auf diesen Bildern keine Tische gefunden. Versuchen Sie ein schärferes Foto von weiter oben oder eine Skizze.",
         "af" to "Ek kon geen tafels in daardie prente vind nie. Probeer ’n duideliker foto van hoër af geneem, of ’n skets.",
+        "th" to "ไม่พบโต๊ะในรูปเหล่านี้ ลองใช้รูปที่ชัดขึ้นซึ่งถ่ายจากมุมสูง หรือใช้ภาพร่าง",
     )
     private val FLOOR_OFF_TOPIC = mapOf(
         "en" to "I can only help edit this room's floor plan. Try something like \"add four 2-tops along the window\".",
@@ -135,6 +139,7 @@ internal object RoomReplies {
         "es" to "Solo puedo ayudarte a editar el plano de esta sala. Prueba algo como «añade cuatro mesas de 2 junto a la ventana».",
         "de" to "Ich kann nur beim Bearbeiten des Raumplans helfen. Versuchen Sie zum Beispiel „vier Zweiertische am Fenster hinzufügen“.",
         "af" to "Ek kan net help om hierdie vertrek se vloerplan te wysig. Probeer iets soos “voeg vier tweepersoonstafels langs die venster by”.",
+        "th" to "ฉันช่วยได้เฉพาะการแก้ไขผังของห้องนี้เท่านั้น ลองพิมพ์เช่น \"เพิ่มโต๊ะ 2 ที่นั่งสี่ตัวริมหน้าต่าง\"",
     )
     private val FLOOR_NO_CHANGE = mapOf(
         "en" to "I couldn't find a change to make to this room from that. Name the table or object and what to change, for example \"give table 3 six seats\" or \"add a round table for 4\".",
@@ -142,6 +147,7 @@ internal object RoomReplies {
         "es" to "No encontré ningún cambio que hacer en esta sala. Indica la mesa o el elemento y qué cambiar, por ejemplo «pon 6 lugares en la mesa 3» o «añade una mesa redonda para 4».",
         "de" to "Ich habe keine Änderung für diesen Raum gefunden. Nennen Sie den Tisch oder das Element und was sich ändern soll, zum Beispiel „Tisch 3 mit 6 Plätzen“ oder „einen runden Vierertisch hinzufügen“.",
         "af" to "Ek kon nie ’n verandering vir hierdie vertrek daarin vind nie. Noem die tafel of voorwerp en wat moet verander, byvoorbeeld “gee tafel 3 ses sitplekke” of “voeg ’n ronde tafel vir 4 by”.",
+        "th" to "ไม่พบสิ่งที่ต้องเปลี่ยนในห้องนี้จากข้อความนี้ ระบุโต๊ะหรือสิ่งของและสิ่งที่ต้องการเปลี่ยน เช่น \"โต๊ะ 3 หกที่นั่ง\" หรือ \"เพิ่มโต๊ะกลมสำหรับ 4 คน\"",
     )
     private val FLOOR_TABLE_LOCKED = mapOf(
         "en" to "That table has an open bill, so it stays as it is. Close the bill first, then ask again.",
@@ -149,6 +155,7 @@ internal object RoomReplies {
         "es" to "Esa mesa tiene una cuenta abierta, así que se queda como está. Cierra primero la cuenta y vuelve a pedirlo.",
         "de" to "Dieser Tisch hat eine offene Rechnung und bleibt deshalb, wie er ist. Schließen Sie zuerst die Rechnung und fragen Sie dann noch einmal.",
         "af" to "Daardie tafel het ’n oop rekening, so dit bly soos dit is. Sluit eers die rekening en vra dan weer.",
+        "th" to "โต๊ะนี้ยังมีบิลที่เปิดอยู่ จึงไม่มีการเปลี่ยนแปลง ปิดบิลก่อน แล้วลองสั่งอีกครั้ง",
     )
 
     enum class R(val code: String) { ROOM_OFF_TOPIC("off_topic"), ROOM_NO_LAYOUT("no_change"), FLOOR_OFF_TOPIC("off_topic"),
@@ -313,12 +320,30 @@ class RoomAiService(
     private fun requireModel(voice: Boolean = false): RoomAiModel = (if (voice) voiceModel else model)
         ?: throw MenuAiException(409, "menu_ai_disabled", "the AI assistant is not set up on this portal")
 
-    /** Bilingual = the store's menu carries real French names (the menu assistant's rule). Inside a transaction. */
-    private fun bilingual(scope: Scope): Boolean =
-        CatalogCategories.selectAll().where {
+    /**
+     * The store's names: (bilingual, data language). Bilingual = the store's menu carries real
+     * French names (the menu assistant's rule), or its `*_fr` slot holds Thai (DataLang: the
+     * portal's word, else the menu's script) — a Thai + English store always names both. Inside a transaction.
+     */
+    private fun names(who: AiCaller): Pair<Boolean, String> {
+        val scope = who.venue.scope
+        val names = CatalogCategories.selectAll().where {
             (CatalogCategories.tenantId eq scope.tenantId) and (CatalogCategories.venueId eq scope.venueId) and
                 (CatalogCategories.deleted eq false)
-        }.any { it[CatalogCategories.nameFr].isNotBlank() && it[CatalogCategories.nameFr] != it[CatalogCategories.nameEn] }
+        }.map { it[CatalogCategories.nameEn] to it[CatalogCategories.nameFr] }
+        val dataLang = dev.dwhipstock.poscloud.menu.DataLang.resolve(who.dataLocale, null)
+            ?: dev.dwhipstock.poscloud.menu.DataLang.detect(names.asSequence().map { it.second })
+        if (dataLang == "th") return true to "th"
+        return names.any { (en, fr) -> fr.isNotBlank() && fr != en } to dataLang
+    }
+
+    /** Thai typed or spoken: a Thai store, or a manager working in Thai. */
+    private fun thai(who: AiCaller, dataLang: String) = dataLang == "th" || who.lang == "th"
+
+    /** A ported prompt for this store: the `*_fr` slot named as its language, and the Thai rules when Thai is spoken. */
+    private fun prompt(base: String, who: AiCaller, dataLang: String, voice: Boolean = false): String =
+        MenuAiService.localSlot(base, dataLang) + if (!thai(who, dataLang)) "" else
+            (if (voice) "\n" + ThaiInput.VOICE else "") + "\n" + ThaiInput.prompt(who.venue.currency, fractionDigits(who.venue.currency))
 
     private fun langs(who: AiCaller) = AiLangs(MenuAiService.LANGS,
         MenuAiService.LANGS.joinToString(", ") { "$it (${MenuAiService.LANGUAGE_NAMES[it]})" },
@@ -355,9 +380,9 @@ class RoomAiService(
             fun refuse(r: RoomReplies.R, rejected: List<String> = emptyList()) = RoomPhotoProposalDto("", who.venue.venueId, m.model,
                 roomName, prefix, emptyList(), emptyList(), rejected = AiText.skips(rejected, who.lang), elapsedMs = now() - started,
                 refusal = r.code, message = RoomReplies.reply(r, who.lang))
-            val bilingual = transaction { bilingual(who.venue.scope) }
+            val (bilingual, dataLang) = transaction { names(who) }
             // all the views in ONE call: the model merges them into one room
-            val reply = call(m, RoomLayoutAi.systemPrompt(bilingual), RoomLayoutAi.userPrompt(images.size), null, images)
+            val reply = call(m, MenuAiService.localSlot(RoomLayoutAi.systemPrompt(bilingual), dataLang), RoomLayoutAi.userPrompt(images.size), null, images)
                 ?: return@tracked refuse(RoomReplies.R.ROOM_OFF_TOPIC)
             val parsed = try { RoomLayoutAi.parse(reply) } catch (e: MenuAiReplyException) {
                 log.info("AI room photo via ${m.id}: unusable reply")
@@ -381,6 +406,7 @@ class RoomAiService(
         "es" -> "Sala nueva"
         "de" -> "Neuer Raum"
         "af" -> "Nuwe vertrek"
+        "th" -> "ห้องใหม่"
         else -> "New room"
     }
 
@@ -471,7 +497,8 @@ class RoomAiService(
         RoomState.model(RoomState.load(scope), roomId) ?: throw NotFoundException("no such room at this store", "room_not_found")
 
     fun chat(who: AiCaller, roomId: String, text: String): FloorEditProposalDto {
-        val t = text.trim()
+        // Thai digits (๐–๙) read as 0–9: "โต๊ะ ๓" is table 3
+        val t = ThaiInput.asciiDigits(text.trim())
         if (t.isEmpty()) throw BadRequestException("type what to change", "menu_ai_empty")
         if (t.length > 1000) throw BadRequestException("that request is too long", "menu_ai_too_long")
         return floorEdit(who, roomId, t, null)
@@ -495,9 +522,9 @@ class RoomAiService(
                         AiText.locked(plan!!.lockedAsked, lang) else RoomReplies.reply(r, lang))
             // plainly not a floor-plan request: the fixed reply, and the model is never asked
             if (text != null && (AiGuard.offTopic(text) || AiGuard.hatefulRequest(text))) return@tracked refuse(RoomReplies.R.FLOOR_OFF_TOPIC)
-            val bilingual = transaction { bilingual(scope) }
+            val (bilingual, dataLang) = transaction { names(who) }
             val request = if (audio != null) AiVoice.REQUEST else AiGuard.quote(text!!, 1000)
-            val reply = call(m, FloorEditAi.systemPrompt(bilingual, voice = audio != null, langs(who)),
+            val reply = call(m, prompt(FloorEditAi.systemPrompt(bilingual, voice = audio != null, langs(who)), who, dataLang, audio != null),
                 "<current_room>\n${FloorEditAi.context(room0)}\n</current_room>\n\n<manager_request>\n$request\n</manager_request>",
                 audio, emptyList()) ?: return@tracked refuse(RoomReplies.R.FLOOR_OFF_TOPIC)
             val heard = if (audio != null) AiVoice.heard(reply) else null
@@ -510,7 +537,7 @@ class RoomAiService(
             }
             if (parsed.refused) return@tracked refuse(RoomReplies.R.FLOOR_OFF_TOPIC, heard)
             // the request's own words (or what was heard) too: a table with an open bill the model left out still gets its line
-            val plan = FloorEditAi.plan(room0, parsed.ops, asked = heard ?: text)
+            val plan = FloorEditAi.plan(room0, parsed.ops, asked = heard?.let(ThaiInput::asciiDigits) ?: text)
             // nothing left to do: only a table with an open bill was asked for → say so, not "no change found"
             if (plan.changes.isEmpty()) return@tracked refuse(
                 if (plan.lockedAsked.isNotEmpty()) RoomReplies.R.FLOOR_TABLE_LOCKED else RoomReplies.R.FLOOR_NO_CHANGE,

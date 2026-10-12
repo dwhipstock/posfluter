@@ -176,9 +176,10 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     );
   }
 
-  /// The store's languages beyond the fr / en catalog slots (Copper Lantern: es, de).
+  /// The store's languages beyond its two catalog slots (data language + en;
+  /// Copper Lantern: es, de).
   List<String> get _extraLangs => StoreProfile.current.locales
-      .where((c) => c != 'fr' && c != 'en')
+      .where((c) => c != StoreProfile.current.dataLocale && c != 'en')
       .toList();
 
   Future<void> _translate() async {

@@ -174,7 +174,7 @@ internal fun slipLocales(config: CustomerConfig): List<LocaleCode> = config.gues
 
 /** A zone's name in the slip's languages: "Patio", or "Terrasse / Patio" on a French + English slip. */
 internal fun slipZoneName(nameFr: String, nameEn: String, locales: List<LocaleCode>): String =
-    locales.map { if (it == LocaleCode.FR) nameFr else nameEn }.distinct().joinToString(" / ")
+    locales.map { if (it == dev.dwhipstock.pos.sdk.i18n.DataLanguage.locale) nameFr else nameEn }.distinct().joinToString(" / ")
 
 /** Guests read these: each message printed in every one of [locales]. */
 private fun bilingual(key: MessageKey, locales: List<LocaleCode>): List<String> =

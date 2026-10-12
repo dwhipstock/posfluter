@@ -84,6 +84,19 @@ enum ShiftState { off, once, locked }
 /// [enter]), which writes through [TextInput.updateEditingValue], so the
 /// field's formatters, length limits and onChanged all run as usual.
 class PosKeyboardControl extends ChangeNotifier with TextInputControl {
+  PosKeyboardControl() {
+    Prefs.instance.addListener(_onPrefs);
+  }
+
+  String _lang = Prefs.instance.lang;
+
+  /// The app language changed: the language key's swap is over.
+  void _onPrefs() {
+    if (Prefs.instance.lang == _lang) return;
+    _lang = Prefs.instance.lang;
+    _swapped = null;
+  }
+
   /// Whether the keyboard is up. The host slides it and sets the inset.
   final ValueNotifier<bool> visible = ValueNotifier(false);
 
@@ -126,10 +139,38 @@ class PosKeyboardControl extends ChangeNotifier with TextInputControl {
     return a;
   }
 
-  /// The letter layout: always the app's current UI language (there is no
-  /// manual override). Read fresh on every build, so it follows the EN / FR /
-  /// ES / DE button whether the keyboard is up or down.
-  String get layout => keyboardLayoutFor(Prefs.instance.lang);
+  /// The letter layout: the app's current UI language. Read fresh on every
+  /// build, so it follows the EN / FR / ES / DE / ไทย button whether the
+  /// keyboard is up or down. A layout with a partner (Thai ⇄ English) can
+  /// swap on the keyboard's own language key ([toggleLetters]); the swap
+  /// lasts until the app language changes.
+  String get layout {
+    final base = keyboardLayoutFor(Prefs.instance.lang);
+    final swap = _swapped;
+    return swap != null && swap.$1 == base ? swap.$2 : base;
+  }
+
+  /// The language key's other layout (English on the Thai keyboard, Thai on
+  /// its English letters), or null when this language has no language key.
+  String? get otherLetters {
+    final base = keyboardLayoutFor(Prefs.instance.lang);
+    final partner = keyboardPartnerLayouts[base];
+    if (partner == null) return null;
+    return layout == base ? partner : base;
+  }
+
+  /// (app layout, layout shown instead) after the language key.
+  (String, String)? _swapped;
+
+  /// The language key: Thai letters ⇄ English letters.
+  void toggleLetters() {
+    final other = otherLetters;
+    if (other == null) return;
+    _swapped = (keyboardLayoutFor(Prefs.instance.lang), other);
+    _page = KeyboardPage.letters;
+    if (_shift != ShiftState.locked) _shift = _autoShift(_current);
+    notifyListeners();
+  }
 
   // ---- TextInputControl ------------------------------------------------
 
@@ -190,15 +231,22 @@ class PosKeyboardControl extends ChangeNotifier with TextInputControl {
   }
 
   /// Types [text] over the selection (at the caret when nothing is selected).
+  /// A Thai vowel or tone mark lands in Thai's stored order on its consonant
+  /// ([thaiCompose]): a vowel after a tone slips in before it, a second tone
+  /// replaces the first.
   void type(String text) {
     final v = _current;
     final sel = v.selection;
     final start = sel.isValid ? sel.start : v.text.length;
     final end = sel.isValid ? sel.end : v.text.length;
+    final head = v.text.substring(0, start);
+    final composed = start == end && isThaiMark(text)
+        ? thaiCompose(head, text)
+        : head + text;
     _apply(
       TextEditingValue(
-        text: v.text.replaceRange(start, end, text),
-        selection: TextSelection.collapsed(offset: start + text.length),
+        text: composed + v.text.substring(end),
+        selection: TextSelection.collapsed(offset: composed.length),
       ),
     );
     if (_shift == ShiftState.once) _shift = ShiftState.off;
@@ -206,9 +254,9 @@ class PosKeyboardControl extends ChangeNotifier with TextInputControl {
     notifyListeners();
   }
 
-  /// A letter key: upper-cased while shift is on.
+  /// A letter key: upper-cased while shift is on (Thai: its shift layer).
   void letter(String key) =>
-      type(_shift == ShiftState.off ? key : upperOf(key));
+      type(_shift == ShiftState.off ? key : shiftedOf(key, layout));
 
   /// Deletes the selection, or the character before the caret.
   void backspace() {
@@ -221,8 +269,13 @@ class PosKeyboardControl extends ChangeNotifier with TextInputControl {
     if (start != end) {
       before = v.text.substring(0, start);
     } else {
-      // one whole character, even an emoji or a combined accent
-      before = v.text.substring(0, start).characters.skipLast(1).toString();
+      final head = v.text.substring(0, start);
+      // Thai: one character at a time (a tone mark comes off, its consonant
+      // stays), as on a Thai keyboard; else one whole character, even an
+      // emoji or a combined accent
+      before = thaiDeletesOneCodeUnit(head)
+          ? head.substring(0, head.length - 1)
+          : head.characters.skipLast(1).toString();
     }
     _apply(
       TextEditingValue(
@@ -271,7 +324,7 @@ class PosKeyboardControl extends ChangeNotifier with TextInputControl {
   /// Capitalisation the field asked for: the first letter of a sentence or
   /// word starts shifted. Never in a password or PIN.
   ShiftState _autoShift(TextEditingValue v) {
-    if (_config.obscureText) return ShiftState.off;
+    if (_config.obscureText || caselessLayout(layout)) return ShiftState.off;
     final sel = v.selection;
     final caret = sel.isValid ? sel.start : v.text.length;
     final before = v.text.substring(0, caret.clamp(0, v.text.length));
@@ -290,6 +343,7 @@ class PosKeyboardControl extends ChangeNotifier with TextInputControl {
 
   @override
   void dispose() {
+    Prefs.instance.removeListener(_onPrefs);
     visible.dispose();
     super.dispose();
   }
