@@ -1,5 +1,6 @@
 "use client";
 
+import { roundingNoteKey } from "@/lib/currency-words";
 import { Coins, Scale } from "lucide-react";
 import { useT } from "@/lib/i18n/context";
 import { useMoney, type CurrencyAmount } from "@/lib/money";
@@ -68,7 +69,8 @@ export function FxNote({ money, className }: { money?: MoneyScope; className?: s
 }
 
 /**
- * The net cash rounding (cash payments round to the nearest 5¢), as a modest
+ * The net cash rounding (cash payments round to the nearest 5¢, or down to
+ * the whole baht in a baht store), as a modest
  * line: one signed figure for one currency, else one per currency — never a
  * converted or summed figure. Renders nothing when the API sent none.
  */
@@ -88,7 +90,7 @@ export function CashRoundingNote({ amounts, className }: { amounts: CurrencyAmou
       <span>
         <span className="font-semibold text-neutral-700">{t("cash_rounding")}:</span>{" "}
         <span className="font-semibold tabular-nums text-neutral-800">{m.signedAmounts(amounts)}</span>
-        <span className="text-neutral-500"> · {t("cash_rounding_note")}</span>
+        <span className="text-neutral-500"> · {t(roundingNoteKey(amounts.map((a) => a.currency)))}</span>
       </span>
     </div>
   );

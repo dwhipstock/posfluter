@@ -1,5 +1,6 @@
 "use client";
 
+import { roundingNoteKey } from "@/lib/currency-words";
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
 import { cashRoundingAmounts, cashRoundingKpis, useMoney } from "@/lib/money";
@@ -58,7 +59,7 @@ function PaymentsPage() {
     return {
       ...meta("payments"),
       reportTitle: t("payments_title"),
-      ...(hasRounding ? { notes: [t("cash_rounding_note")] } : {}),
+      ...(hasRounding ? { notes: [t(roundingNoteKey(rounding.map((r) => r.currency)))] } : {}),
       kpis: [
         { label: t("col_amount"), value: fmtC(data.totalCents) },
         ...(data.money?.approximate

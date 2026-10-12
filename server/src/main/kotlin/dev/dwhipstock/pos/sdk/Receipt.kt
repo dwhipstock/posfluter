@@ -467,7 +467,7 @@ object ReceiptRenderer {
     fun includedTaxLabel(tax: TaxComponent, locale: LocaleCode): String {
         Messages.dataLabel("tax_included.${tax.code}", locale)?.let { return it.replace("{0}", rateText(tax, locale)) }
         val name = Messages.dataLabel("tax.${tax.code}", locale) ?: locale.dataText(tax.labelFr, tax.labelEn)
-        return "$name ${rateText(tax, locale)}% included"
+        return Messages.get(MessageKey.RECEIPT_TAX_INCLUDED_LINE, locale, name, rateText(tax, locale))
     }
 
     /** "GST/TPS no. 123456789 RT0001". */

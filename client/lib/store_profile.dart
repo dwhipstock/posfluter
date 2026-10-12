@@ -168,6 +168,10 @@ String signedMoney(int cents, {String? currency}) {
   return cents < 0 ? '−$abs' : '+$abs';
 }
 
+/// The store's cap on one unit's price (its `price_too_high` error): 99,999.99
+/// in the store's currency, in minor units.
+const maxUnitPriceCents = 9999999;
+
 /// The symbol a money input box shows in front of the amount for
 /// [currency] (default: this store's): `$` for CAD/USD, `฿` for THB, else the
 /// code itself (`EUR`).

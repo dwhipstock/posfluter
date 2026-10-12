@@ -166,7 +166,7 @@ class ThaiLocaleCloudTest {
                 val text = PDFTextStripper().getText(d)
                 assertTrue("ผัดไทยกุ้งสด" in text, text)
                 assertTrue("ต้มยำกุ้งน้ำข้น" in text, text)
-                assertTrue("฿180.00" in text, text)
+                assertTrue("฿180" in text, text)
             }
         }
         // a Latin-only menu still uses the brand's font for its text

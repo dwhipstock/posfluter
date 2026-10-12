@@ -50,6 +50,8 @@ enum class MessageKey(val id: String) {
     RECEIPT_SUBTOTAL("receipt.subtotal"),
     /** {0} = tax name ("GST/TPS"), {1} = rate percent ("9.975"). */
     RECEIPT_TAX_LINE("receipt.tax_line"),
+    /** A tax inside the prices, under the total: {0} = its name, {1} = the rate ("VAT 7% included"). */
+    RECEIPT_TAX_INCLUDED_LINE("receipt.tax_included_line"),
     /** Every added tax as one line ([dev.dwhipstock.pos.sdk.TaxDisplay.Combined]): {0} = the summed rate ("8.25"). */
     RECEIPT_TAX_COMBINED("receipt.tax_combined"),
     /** The same with the store's own word for it: {0} = that word, {1} = the summed rate. */

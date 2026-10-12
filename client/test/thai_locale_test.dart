@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_client/api.dart' show TaxLine;
 import 'package:pos_client/i18n.dart';
 import 'package:pos_client/kiosk/kiosk_api.dart';
+import 'package:pos_client/retail/retail_i18n.dart';
 import 'package:pos_client/store_profile.dart';
 
 void main() {
@@ -145,6 +146,38 @@ void main() {
       expect(thaiLongDate(d), '8 ตุลาคม 2569');
       expect(thaiMonths, hasLength(12));
       expect(thaiMonthsShort.first, 'ม.ค.');
+    });
+  });
+
+  group('money words follow the store currency', () {
+    test('a dollar store: the texts it always had', () {
+      StoreProfile.current = const StoreProfile();
+      const en = L.forLang('en');
+      expect(
+        en.apiError('price_too_high'),
+        r'Price is too high (at most $99,999.99 each)',
+      );
+      expect(en.aiMenuChatHint, contains(r'Caesar salad $14'));
+      expect(en.aiMenuChatHint, contains('by a dollar'));
+      expect(const R('en').price, 'Price (USD)');
+    });
+
+    test('a baht store: baht amounts, no dollars', () {
+      StoreProfile.current = const StoreProfile(
+        currency: 'THB',
+        locales: ['th', 'en'],
+      );
+      const en = L.forLang('en'), th = L.forLang('th');
+      expect(
+        en.apiError('price_too_high'),
+        'Price is too high (at most ฿99,999.99 each)',
+      );
+      expect(th.apiError('price_too_high'), contains('฿99,999.99'));
+      expect(en.aiMenuChatHint, contains('Caesar salad ฿150'));
+      expect(en.aiMenuChatHint, contains('by ฿10'));
+      expect(th.aiMenuChatHint, isNot(contains('ดอลลาร์')));
+      expect(th.aiMenuChatHint, isNot(contains(r'$')));
+      expect(const R('en').price, 'Price (THB)');
     });
   });
 }

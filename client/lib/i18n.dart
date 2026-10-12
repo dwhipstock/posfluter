@@ -3619,14 +3619,31 @@ class L {
     'Spyskaart uit foto’s',
     th: 'เมนูจากรูปภาพ',
   );
-  String get aiMenuChatHint => _t(
-    'Ex. : « ajoute salade César 14 \$ dans Entrées », « monte les burgers d’un dollar », « 86 le saumon »',
-    'e.g. “add Caesar salad \$14 under starters”, “raise all burgers by a dollar”, “86 the salmon”',
-    'p. ej. «agrega ensalada César \$14 en entradas», «sube las hamburguesas un dólar», «86 el salmón»',
-    'z. B. „Caesar Salad für 14 \$ zu den Vorspeisen“, „alle Burger um einen Dollar teurer“, „Lachs ist aus“',
-    'bv. “voeg Caesar-slaai \$14 by onder voorgeregte”, “maak alle burgers ’n dollar duurder”, “86 die salm”',
-    th: 'เช่น “เพิ่มซีซาร์สลัด \$14 ในหมวดอาหารเรียกน้ำย่อย”, “ขึ้นราคาเบอร์เกอร์ทั้งหมด 1 ดอลลาร์”, “ปิดขายแซลมอน”',
-  );
+  String get aiMenuChatHint => currencySymbol() == r'$'
+      ? _t(
+          'Ex. : « ajoute salade César 14 \$ dans Entrées », « monte les burgers d’un dollar », « 86 le saumon »',
+          'e.g. “add Caesar salad \$14 under starters”, “raise all burgers by a dollar”, “86 the salmon”',
+          'p. ej. «agrega ensalada César \$14 en entradas», «sube las hamburguesas un dólar», «86 el salmón»',
+          'z. B. „Caesar Salad für 14 \$ zu den Vorspeisen“, „alle Burger um einen Dollar teurer“, „Lachs ist aus“',
+          'bv. “voeg Caesar-slaai \$14 by onder voorgeregte”, “maak alle burgers ’n dollar duurder”, “86 die salm”',
+          th: 'เช่น “เพิ่มซีซาร์สลัด \$14 ในหมวดอาหารเรียกน้ำย่อย”, “ขึ้นราคาเบอร์เกอร์ทั้งหมด 1 ดอลลาร์”, “ปิดขายแซลมอน”',
+        )
+      // another currency (baht): example amounts that read right in it
+      : _t(
+          'Ex. : « ajoute salade César ${money(_hintPrice)} dans Entrées », « monte les burgers de ${money(_hintStep)} », « 86 le saumon »',
+          'e.g. “add Caesar salad ${money(_hintPrice)} under starters”, “raise all burgers by ${money(_hintStep)}”, “86 the salmon”',
+          'p. ej. «agrega ensalada César ${money(_hintPrice)} en entradas», «sube las hamburguesas ${money(_hintStep)}», «86 el salmón»',
+          'z. B. „Caesar Salad für ${money(_hintPrice)} zu den Vorspeisen“, „alle Burger um ${money(_hintStep)} teurer“, „Lachs ist aus“',
+          'bv. “voeg Caesar-slaai ${money(_hintPrice)} by onder voorgeregte”, “maak alle burgers ${money(_hintStep)} duurder”, “86 die salm”',
+          th: 'เช่น “เพิ่มซีซาร์สลัด ${money(_hintPrice)} ในหมวดอาหารเรียกน้ำย่อย”, “ขึ้นราคาเบอร์เกอร์ทั้งหมด ${money(_hintStep)}”, “ปิดขายแซลมอน”',
+        );
+
+  /// The AI hint's example price and price step, in minor units: baht
+  /// prices run about ten times dollar ones.
+  int get _hintPrice =>
+      StoreProfile.current.currency.toUpperCase() == 'THB' ? 15000 : 1400;
+  int get _hintStep =>
+      StoreProfile.current.currency.toUpperCase() == 'THB' ? 1000 : 100;
   String get aiMenuAsk => _t(
     'Proposer',
     'Propose',
@@ -5482,12 +5499,12 @@ class L {
       th: 'จำนวนมากเกินไป',
     ),
     'price_too_high' => _t(
-      'Prix trop élevé (maximum 99 999,99 \$ par unité)',
-      'Price is too high (at most \$99,999.99 each)',
-      'El precio es demasiado alto (máximo \$99,999.99 por unidad)',
-      'Preis ist zu hoch (höchstens \$99,999.99 pro Stück)',
-      'Prys is te hoog (hoogstens \$99,999.99 elk)',
-      th: 'ราคาสูงเกินไป (สูงสุด \$99,999.99 ต่อชิ้น)',
+      'Prix trop élevé (maximum ${money(maxUnitPriceCents)} par unité)',
+      'Price is too high (at most ${money(maxUnitPriceCents)} each)',
+      'El precio es demasiado alto (máximo ${money(maxUnitPriceCents)} por unidad)',
+      'Preis ist zu hoch (höchstens ${money(maxUnitPriceCents)} pro Stück)',
+      'Prys is te hoog (hoogstens ${money(maxUnitPriceCents)} elk)',
+      th: 'ราคาสูงเกินไป (สูงสุด ${money(maxUnitPriceCents)} ต่อชิ้น)',
     ),
     'price_non_positive' => _t(
       'Le prix doit être supérieur à zéro',

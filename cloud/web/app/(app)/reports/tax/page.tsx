@@ -1,5 +1,6 @@
 "use client";
 
+import { roundingNoteKey } from "@/lib/currency-words";
 import { Suspense } from "react";
 import { useApi, useRange, reportKey } from "@/lib/hooks";
 import { useI18n } from "@/lib/i18n/context";
@@ -83,7 +84,7 @@ function TaxPage() {
       reportTitle: t("tax_title"),
       notes: [
         ...(showQc ? [t("tax_note"), t("tax_no_breakdown")] : [t("tax_note_generic")]),
-        ...(hasRounding ? [t("cash_rounding_note")] : []),
+        ...(hasRounding ? [t(roundingNoteKey(rounding.map((r) => r.currency)))] : []),
       ],
       kpis: [
         { label: t("col_gross"), value: fmtC(data.totals.grossCents) },

@@ -185,4 +185,12 @@ class ThaiLocaleTest {
         val img = ThermalReceiptRenderer.renderImage(listOf(PrintLine.Text(long, Align.LEFT)))
         assertTrue(img.height > 60)
     }
+
+    @Test
+    fun `the VAT inside the prices reads in Thai under the total`() {
+        val vat = dev.dwhipstock.pos.sdk.TaxComponent("VAT", "TVA", "VAT", java.math.BigDecimal("7"), registrationNumber = "")
+        val label = { l: LocaleCode -> dev.dwhipstock.pos.sdk.ReceiptRenderer.includedTaxLabel(vat, l) }
+        assertEquals("VAT 7% included", label(LocaleCode.EN))
+        assertEquals("รวมภาษีมูลค่าเพิ่ม 7%", label(LocaleCode.TH))
+    }
 }
