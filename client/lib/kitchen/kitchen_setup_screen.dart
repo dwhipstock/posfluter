@@ -431,7 +431,7 @@ class _KitchenSetupScreenState extends State<KitchenSetupScreen> {
             ),
             IconButton(
               tooltip: k.deleteStation,
-              icon: const Icon(LucideIcons.trash2, color: T.destructive),
+              icon: Icon(LucideIcons.trash2, color: T.destructive),
               onPressed: _busy ? null : () => _deleteStation(s),
             ),
           ],

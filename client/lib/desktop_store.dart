@@ -42,6 +42,7 @@ class DesktopStore {
   static String? get _defaultVenue => switch (AppMode.brand) {
     'sagepoppy' => 'sage-poppy',
     'pronghorn' => 'pronghorn',
+    'barcode' => 'barcode-pub',
     _ => null,
   };
 

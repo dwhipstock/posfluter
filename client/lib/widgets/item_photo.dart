@@ -63,7 +63,7 @@ class ItemPhoto extends StatelessWidget {
           width, // belt-and-braces: also right-sizes originals from an old server
       fadeInDuration:
           Duration.zero, // cached tiles must paint instantly, no fade churn
-      placeholder: (_, _) => const ColoredBox(color: T.surfaceAlt),
+      placeholder: (_, _) => ColoredBox(color: T.surfaceAlt),
       errorWidget: (_, _, _) =>
           ColoredBox(color: T.surfaceAlt, child: fallback),
     );

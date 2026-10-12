@@ -360,11 +360,7 @@ class SpecialsEditor extends StatelessWidget {
                     ),
                     IconButton(
                       key: ValueKey('special-$i-remove'),
-                      icon: const Icon(
-                        LucideIcons.x,
-                        size: 18,
-                        color: T.destructive,
-                      ),
+                      icon: Icon(LucideIcons.x, size: 18, color: T.destructive),
                       tooltip: t.removeSpecial,
                       onPressed: busy
                           ? null

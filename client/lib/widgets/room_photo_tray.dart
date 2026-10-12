@@ -75,7 +75,7 @@ class _RoomPhotoTrayState extends State<RoomPhotoTray> {
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: T.radiusLarge,
-        side: const BorderSide(color: T.border),
+        side: BorderSide(color: T.border),
       ),
       child: SizedBox(
         width: 620,
@@ -200,7 +200,7 @@ class _Thumb extends StatelessWidget {
               bytes,
               fit: BoxFit.cover,
               gaplessPlayback: true,
-              errorBuilder: (_, _, _) => const ColoredBox(
+              errorBuilder: (_, _, _) => ColoredBox(
                 color: T.surfaceAlt,
                 child: Icon(LucideIcons.image, color: T.textMuted),
               ),

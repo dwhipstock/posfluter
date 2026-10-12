@@ -9,6 +9,9 @@ void main() {
       expect(AppMode.storePortFor('copperlantern'), 8080);
       expect(AppMode.storePortFor('sagepoppy'), 8082);
       expect(AppMode.storePortFor('pronghorn'), 8084);
+      // Barcode Pub: 8088 (8086 is the pump simulator)
+      expect(AppMode.storePortFor('barcode'), 8088);
+      expect(AppMode.brandNameFor('barcode'), 'Barcode Pub');
     });
 
     test('a plain build is Copper Lantern on the original port', () {
@@ -20,8 +23,8 @@ void main() {
     test(
       'discovery looks on both store ports, stock app Sage & Poppy first',
       () {
-        expect(AppMode.discoveryPorts(stock: false), [8080, 8082, 8084]);
-        expect(AppMode.discoveryPorts(stock: true), [8082, 8080, 8084]);
+        expect(AppMode.discoveryPorts(stock: false), [8080, 8082, 8084, 8088]);
+        expect(AppMode.discoveryPorts(stock: true), [8082, 8080, 8084, 8088]);
       },
     );
 

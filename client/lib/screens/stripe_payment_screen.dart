@@ -395,18 +395,11 @@ class _StripePaymentScreenState extends State<StripePaymentScreen> {
   };
 
   Widget _stageIcon() => switch (_stage) {
-    _Stage.approved => const Icon(
-      LucideIcons.circleCheck,
-      size: 64,
-      color: T.navy,
-    ),
-    _Stage.declined || _Stage.failed => const Icon(
-      LucideIcons.circleX,
-      size: 64,
-      color: T.destructive,
-    ),
-    _Stage.tapCard => const Icon(LucideIcons.nfc, size: 64, color: T.accent),
-    _ => const SizedBox(
+    _Stage.approved => Icon(LucideIcons.circleCheck, size: 64, color: T.navy),
+    _Stage.declined ||
+    _Stage.failed => Icon(LucideIcons.circleX, size: 64, color: T.destructive),
+    _Stage.tapCard => Icon(LucideIcons.nfc, size: 64, color: T.accent),
+    _ => SizedBox(
       width: 56,
       height: 56,
       child: CircularProgressIndicator(strokeWidth: 5, color: T.accent),

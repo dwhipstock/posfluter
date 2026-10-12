@@ -16,8 +16,57 @@ package dev.dwhipstock.pos
 object StaffAppBrand {
     fun apply(html: String, brand: String): String = when (brand) {
         "sage-poppy" -> sagePoppy(html)
+        "barcode" -> barcode(html)
         else -> html
     }
+
+    /**
+     * Barcode Pub: its name, a near-black header and sign-in (the neon
+     * sign's #1E1E20) with light text and the sign's violet, on the page's
+     * light working screens (the order and cart sheets stay light so every
+     * line is readable on a phone in a dark bar). Violet text on white is a
+     * deeper shade (#7E22CE, 7:1); the sign's bright violet (#D45CFF) only
+     * sits on near-black (5.4:1). Hot pink is a spark: the dot in the name.
+     */
+    private fun barcode(html: String): String = html
+        .replace("<title>Copper Lantern POS — Staff</title>", "<title>Barcode Pub — Staff</title>")
+        .replace("<h1>Copper Lantern POS</h1>", "<h1>Barcode<span class=\"bc-dot\">.</span> Pub</h1>")
+        .replace("<div class=\"brand\">Copper Lantern POS</div>", "<div class=\"brand\">Barcode<span class=\"bc-dot\">.</span> Pub</div>")
+        .replace("<body>", "<body class=\"brand-bc\">")
+        .replace("</head>", BARCODE_CSS + "\n</head>")
+
+    private val BARCODE_CSS = """
+<style>
+  /* Barcode Pub skin (StaffAppBrand.kt) */
+  body.brand-bc {
+    --ink: #141414; --paper: #ffffff; --paper-alt: #f4f4f5; --surface-alt: #ececee; --line: #d4d4d8;
+    --muted: #5c5c63; --muted-strong: #3f3f46; --accent: #7e22ce; --accent-soft: #f3e8ff; --accent-ink: #ffffff;
+    --ok: #15803d; --danger: #b91c1c; --bc-night: #1e1e20; --bc-violet: #d45cff; --bc-pink: #ff1f8e;
+  }
+  body.brand-bc .hbtn { border-color: #d8b4fe; }
+  body.brand-bc header { background: var(--bc-night); border-bottom: 0; }
+  body.brand-bc header .brand { color: #ffffff; }
+  body.brand-bc header .who { color: #b8b8b8; }
+  body.brand-bc header .hbtn { background: #26262a; border-color: #3a3a3e; color: #ffffff; }
+  body.brand-bc .bc-dot { color: var(--bc-pink); }
+  body.brand-bc #login { background: var(--bc-night); }
+  body.brand-bc #login h1 { color: #ffffff; font-size: 30px; letter-spacing: -.4px; }
+  body.brand-bc #login .sub { color: #b8b8b8; }
+  body.brand-bc #login .errline { color: #ff8a8a; }
+  body.brand-bc #login .tile { background: #26262a; border-color: #3a3a3e; color: #ececef; }
+  body.brand-bc #login .tile .rl { color: #b8b8b8; }
+  body.brand-bc #login .tile.sel { border-color: var(--bc-violet); background: #2a1736; }
+  body.brand-bc #login .pad button:active { background: #2a1736; }
+  body.brand-bc #login .pad .blank { background: none; border: 0; }
+  body.brand-bc #login .enroll-manual code { color: var(--ink); }
+  body.brand-bc #login .pindot { border-color: #8a8a8a; }
+  body.brand-bc #login .pindot.f { background: var(--bc-violet); border-color: var(--bc-violet); }
+  body.brand-bc #login .pad button { background: #26262a; border-color: #3a3a3e; color: #ffffff; box-shadow: none; }
+  body.brand-bc #login .code-prompt, body.brand-bc #login .enroll-hint, body.brand-bc #login .enroll-manual { color: #ececef; }
+  body.brand-bc #login .linkbtn { color: #e08cff; }
+  body.brand-bc #login .primary { background: var(--bc-violet); color: #0a0a0a; }
+  body.brand-bc #login-lang { background: #26262a !important; color: #ffffff !important; border-color: #3a3a3e !important; }
+</style>"""
 
     private fun sagePoppy(html: String): String = html
         .replace("<title>Copper Lantern POS — Staff</title>", "<title>Sage &amp; Poppy — Staff</title>")

@@ -103,7 +103,7 @@ class _SalesScreenState extends State<SalesScreen> {
         ),
         trailing: fullyRefunded
             ? Pill(l.fullyRefunded, color: T.textMuted)
-            : const Icon(LucideIcons.chevronRight, color: T.textMuted),
+            : Icon(LucideIcons.chevronRight, color: T.textMuted),
         onTap: fullyRefunded ? null : () => _openRefund(c),
       ),
     );
@@ -444,7 +444,7 @@ class _RefundScreenState extends State<RefundScreen> {
               helperText: _selectedGross > _refundable
                   ? l.amountExceedsRefundable
                   : null,
-              helperStyle: const TextStyle(color: T.destructive),
+              helperStyle: TextStyle(color: T.destructive),
             ),
           ),
         if (_mode == _RefundMode.byLine) ...[

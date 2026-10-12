@@ -58,6 +58,9 @@ val brands = mapOf(
         8082, "sage-poppy"),
     "pronghorn" to Brand("dev.dwhipstock.pos_pronghorn", "Pronghorn POS", "@mipmap/ic_launcher_pronghorn",
         8084, "pronghorn"),
+    // Barcode Pub, Bangkok. 8088, not 8086: that is the pump simulator's port.
+    "barcode" to Brand("dev.dwhipstock.pos_barcode", "Barcode Pub", "@mipmap/ic_launcher_barcode",
+        8088, "barcode-pub"),
 )
 val brandName = dartDefines["POS_BRAND"]?.trim()?.takeIf { it.isNotEmpty() } ?: "copperlantern"
 val brand = brands[brandName]

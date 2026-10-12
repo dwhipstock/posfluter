@@ -172,6 +172,8 @@ ThemeData buildRetailTheme(SpColors c, BrandSkin skin) {
   final pillControls = skin.pillControls;
   // the shared screens' T.text() draws in this brand's family too
   T.family = skin.fontFamily;
+  T.palette =
+      PubPalette.copperLantern; // shared pub widgets keep the pubs' colours
   TextStyle text({
     double size = T.bodySize,
     FontWeight weight = FontWeight.w400,

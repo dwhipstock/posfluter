@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Barcode Pub: the script "B" from the neon sign logo (branding/barcode-mark.png) -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_barcode_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_barcode_foreground" />
+</adaptive-icon>

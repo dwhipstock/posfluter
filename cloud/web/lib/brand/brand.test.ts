@@ -152,6 +152,39 @@ test("the gas station wears its own look: dark sidebar, Barlow, English + Spanis
   assert.equal(parseBrand(pack("sagepoppy")).features.fuel, false);
 });
 
+test("Barcode Pub (Bangkok): baht, neon violet on near-black chrome, a hot-pink spark, its sign on the band", () => {
+  const bc = parseBrand(pack("barcode"));
+  assert.equal(bc.name, "Barcode Pub");
+  assert.equal(bc.currency, "THB");
+  assert.equal(bc.layout, "sidebar", "the near-black sidebar carries the dark look");
+  assert.equal(bc.login, "band");
+  assert.equal(bc.loginArt, "logo", "the neon sign sits on the dark band");
+  assert.equal(bc.palette.primary, "#1E1E20");
+  assert.equal(bc.palette.accent, "#D45CFF");
+  assert.equal(bc.palette.action, "#9B30D9", "white button text on a deeper violet");
+  assert.equal(bc.palette.spark, "#FF1F8E");
+  assert.equal(bc.features.fuel, false);
+  // near-black ink on the bright violet (white on it would be too faint)
+  assert.equal(bc.palette.onAccent, "#0A0A0A");
+  const v = brandCssVars(bc);
+  assert.equal(v["--c-copper-ink"], hexChannels("#0A0A0A"));
+  assert.equal(v["--c-spark"], hexChannels("#FF1F8E"));
+  // TODO(feat/thai-locale): { default: "th", available: ["th", "en"] } once the portal speaks Thai
+  assert.deepEqual(bc.locales, { default: "en", available: ["en"] });
+});
+
+test("defaults for the optional bits: white ink on the accent, the spark is the accent, the round mark on the band", () => {
+  const sp = parseBrand(pack("sagepoppy"));
+  assert.equal(sp.palette.onAccent, "#FFFFFF");
+  assert.equal(sp.palette.spark, sp.palette.accent);
+  assert.equal(parseBrand(pack("copperlantern")).loginArt, "mark");
+  const r = pack("copperlantern");
+  r.loginArt = "logo"; // Copper Lantern's pack has no wide logo
+  assert.throws(() => parseBrand(r), /loginArt/);
+  r.loginArt = "banner";
+  assert.throws(() => parseBrand(r), /loginArt/);
+});
+
 test("features are on/off flags", () => {
   const r = pack("sagepoppy");
   r.features = { fuel: "yes" };
@@ -189,6 +222,7 @@ test("every pack's text colours reach 4.5:1 on the backgrounds they sit on", () 
       ["accentText on background", p.accentText, p.background],
       ["accentText on surface", p.accentText, p.surface],
       ["accentText on accentSoft", p.accentText, p.accentSoft],
+      ["onAccent on accent", p.onAccent, p.accent],
       ["white on action", W, p.action],
       ["white on actionHover", W, p.actionHover],
       ["white on primary", W, p.primary],

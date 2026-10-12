@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Barcode Pub launcher icon background (the neon sign's own background, #1E1E20) -->
+    <color name="ic_launcher_barcode_background">#1E1E20</color>
+</resources>

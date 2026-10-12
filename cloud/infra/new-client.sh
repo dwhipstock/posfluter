@@ -32,6 +32,9 @@
 #   --currency CUR         the stores' currency and the reporting currency (default CAD)
 #   --country CC           the stores' country (default CA)
 #   --retail               the stores are shops (stock pages, counter sales)
+#   --store-seed MODE      POS_SEED in every store's env file: "none" = the store starts
+#                          with an EMPTY menu and floor plan (the owner builds them in the
+#                          portal); "default" = the store's own seed (drops the line)
 #   --admin-email EMAIL    first portal owner (TOTP enrolled at first sign-in)
 #   --alias HOST           another hostname for the same portal (repeatable; e.g. an old name)
 #   --registry R / --image-tag SHA         ECR images (pos-cloud-api / pos-cloud-web)
@@ -60,7 +63,7 @@ REPO_ROOT="$(cd "$INFRA_DIR/../.." && pwd)"
 BRANDS_DIR="$REPO_ROOT/cloud/web/brands"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
-usage() { sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+usage() { sed -n '2,58p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 
 [[ $# -ge 1 && ( "$1" == -h || "$1" == --help ) ]] && usage 0
 [[ $# -ge 2 ]] || usage
@@ -69,7 +72,7 @@ CLIENT_ID="$1"; DOMAIN_ARG="$2"; shift 2
 F_NAME=""; F_BRAND=""; F_BRAND_DIR=""; F_STORES=(); F_ZONE=""; F_CURRENCY=""; F_COUNTRY=""; F_RETAIL=0
 F_ADMIN=""; F_ALIASES=(); F_REGISTRY=""; F_TAG=""; F_API_IMAGE=""; F_WEB_IMAGE=""; F_PROJECT=""
 F_TENANT=""; F_PG_VOLUME=""; F_FROM_ENV=""; LOCAL=0; NO_TOTP=0; NO_FX=0; UP=0; DRY=0
-F_DEMO_USER=""; NO_DEMO_USER=0; F_DEMO_MODE=""
+F_DEMO_USER=""; NO_DEMO_USER=0; F_DEMO_MODE=""; F_STORE_SEED=""
 CLIENTS_DIR="${CLIENTS_DIR:-$INFRA_DIR/clients}"
 while [[ $# -gt 0 ]]; do
   need() { [[ $# -ge 2 && -n "$2" ]] || die "$1 needs a value"; }
@@ -82,6 +85,7 @@ while [[ $# -gt 0 ]]; do
     --currency) need "$@"; F_CURRENCY="$(echo "$2" | tr '[:lower:]' '[:upper:]')"; shift 2;;
     --country) need "$@"; F_COUNTRY="$(echo "$2" | tr '[:lower:]' '[:upper:]')"; shift 2;;
     --retail) F_RETAIL=1; shift;;
+    --store-seed) need "$@"; F_STORE_SEED="$(echo "$2" | tr '[:upper:]' '[:lower:]')"; shift 2;;
     --admin-email) need "$@"; F_ADMIN="$2"; shift 2;;
     --alias) need "$@"; F_ALIASES+=("$2"); shift 2;;
     --registry) need "$@"; F_REGISTRY="$2"; shift 2;;
@@ -121,6 +125,7 @@ DEMO_USER_RE='^[A-Za-z0-9._-]{3,40}$'
 [[ -z "$F_DEMO_USER" || "$F_DEMO_USER" =~ $DEMO_USER_RE ]] || die "--demo-user: a plain username — letters, digits, - _ . (3-40), not an email"
 [[ -z "$F_DEMO_USER" || "$NO_DEMO_USER" == 0 ]] || die "--demo-user and --no-demo-user together"
 [[ -z "$F_DEMO_MODE" || "$F_DEMO_MODE" == on || "$F_DEMO_MODE" == off ]] || die "--demo-mode: on or off"
+[[ -z "$F_STORE_SEED" || "$F_STORE_SEED" == none || "$F_STORE_SEED" == default ]] || die "--store-seed: none or default"
 if [[ -n "$F_BRAND_DIR" ]]; then
   [[ -f "$F_BRAND_DIR/brand.json" ]] || die "--brand-dir: $F_BRAND_DIR/brand.json not found"
   F_BRAND_DIR="$(cd "$F_BRAND_DIR" && pwd)"
@@ -205,6 +210,8 @@ if [[ -n "$F_COUNTRY" ]]; then
 else
   STORE_COUNTRIES="$(old STORE_COUNTRIES)"
 fi
+# the stores' first-boot seed (POS_SEED in their env files); "default" clears it
+if [[ "$F_STORE_SEED" == default ]]; then STORE_SEED=""; else STORE_SEED="$(pick "$F_STORE_SEED" STORE_SEED "")"; fi
 if [[ "$F_RETAIL" == 1 ]]; then RETAIL_STORES="$(IFS=,; echo "${VENUES[*]}")"; else RETAIL_STORES="$(old RETAIL_STORES)"; fi
 STORE_ZONES="$(old STORE_ZONES)"
 FX_USD_CAD="$(old FX_USD_CAD)"; FX_CAD_USD="$(old FX_CAD_USD)"
@@ -287,7 +294,7 @@ while IFS= read -r ov; do
 done < <(old STORES | tr ',' '\n' | cut -d= -f1 | sed 's/^ *//;s/ *$//')
 
 # extra keys a hand edit added (FX_EUR_CAD, RESET_TOTP_EMAIL, …): carried over as-is
-KNOWN_KEYS="CLIENT_ID COMPOSE_PROJECT_NAME DOMAIN DOMAIN_ALIASES TENANT_ID VENUE_NAME VENUE_TZ PORTAL_BRAND PORTAL_BRAND_DIR_IN_CONTAINER STORES STORE_ZONES STORE_CURRENCIES STORE_COUNTRIES RETAIL_STORES REPORTING_CURRENCY FX_USD_CAD FX_CAD_USD PUBLIC_BASE_DOMAIN COOKIE_SECURE TOTP_REQUIRED ADMIN_EMAIL ADMIN_PASSWORD DB_PASSWORD STORE_API_KEY STORE_API_KEYS REGISTRY IMAGE_TAG WEB_IMAGE_TAG API_IMAGE WEB_IMAGE PG_VOLUME EDGE_NETWORK PORTAL_SESSION_IDLE_MINUTES PORTAL_SESSION_MAX_HOURS PORTAL_DEMO_MODE DEMO_USER_NAME DEMO_USER_PASSWORD"
+KNOWN_KEYS="CLIENT_ID COMPOSE_PROJECT_NAME DOMAIN DOMAIN_ALIASES TENANT_ID VENUE_NAME VENUE_TZ PORTAL_BRAND PORTAL_BRAND_DIR_IN_CONTAINER STORES STORE_ZONES STORE_CURRENCIES STORE_COUNTRIES RETAIL_STORES STORE_SEED REPORTING_CURRENCY FX_USD_CAD FX_CAD_USD PUBLIC_BASE_DOMAIN COOKIE_SECURE TOTP_REQUIRED ADMIN_EMAIL ADMIN_PASSWORD DB_PASSWORD STORE_API_KEY STORE_API_KEYS REGISTRY IMAGE_TAG WEB_IMAGE_TAG API_IMAGE WEB_IMAGE PG_VOLUME EDGE_NETWORK PORTAL_SESSION_IDLE_MINUTES PORTAL_SESSION_MAX_HOURS PORTAL_DEMO_MODE DEMO_USER_NAME DEMO_USER_PASSWORD"
 # an adopted manager stack's keys that mean nothing to a client instance
 ADOPT_SKIP="LEGACY_DOMAIN STORE_DOMAIN ACME_EMAIL BASE_DOMAIN AWS_REGION"
 EXTRA_LINES=""
@@ -321,6 +328,8 @@ STORE_ZONES=$STORE_ZONES
 STORE_CURRENCIES=$STORE_CURRENCIES
 STORE_COUNTRIES=$STORE_COUNTRIES
 RETAIL_STORES=$RETAIL_STORES
+# the stores' POS_SEED (none = an empty menu and floor plan); blank = their own default
+STORE_SEED=$STORE_SEED
 REPORTING_CURRENCY=$REPORTING_CURRENCY
 FX_USD_CAD=$FX_USD_CAD
 FX_CAD_USD=$FX_CAD_USD
@@ -393,6 +402,8 @@ CLOUD_SYNC_URL=$BASE_URL
 CLOUD_SYNC_API_KEY=$2
 REPORTING_PORTAL_URL=$BASE_URL
 EOF
+  [[ -n "$STORE_SEED" ]] && echo "POS_SEED=$STORE_SEED"
+  return 0
 }
 
 render_override() {
@@ -436,6 +447,7 @@ echo "  brand       : $( [[ -n "$F_BRAND_DIR" ]] && echo "custom pack $F_BRAND_D
 echo "  tenant      : $TENANT_ID   project: $PROJECT   database volume: $PG_VOLUME"
 echo "  stores      : $STORES"
 echo "  money       : $REPORTING_CURRENCY$( [[ -n "$RETAIL_STORES" ]] && echo "   retail: $RETAIL_STORES")   zone: $VENUE_TZ"
+[[ -n "$STORE_SEED" ]] && echo "  store seed  : POS_SEED=$STORE_SEED$( [[ "$STORE_SEED" == none ]] && echo " (empty menu and floor plan)")"
 echo "  images      : ${API_IMAGE:-$REGISTRY/pos-cloud-api:$IMAGE_TAG}, ${WEB_IMAGE:-$REGISTRY/pos-cloud-web:${WEB_IMAGE_TAG:-$IMAGE_TAG}}"
 echo "  secrets     : ${SECRET_NOTES[*]}; store keys — ${KEY_NOTES[*]} (values never shown)"
 [[ "$EXISTING" == 0 && -n "$F_FROM_ENV" ]] && echo "  adopting    : settings and secrets from $F_FROM_ENV"

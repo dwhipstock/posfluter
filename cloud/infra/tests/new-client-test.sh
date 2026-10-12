@@ -248,4 +248,35 @@ grep -q "^pronghorn-manager.example.com {" "$CL/proxy-sites/pronghorn.caddy" || 
 no_secrets_in "$out" "$PENV"
 ok "a third client (the gas station) gets its own brand, zone, keys and site"
 
+# 10. Barcode Pub: a Thai pub in baht, Bangkok time, whose store starts blank (POS_SEED=none)
+BC_ARGS=(barcode barcode-manager.example.com --clients-dir "$CL"
+  --name "Barcode Pub" --brand barcode --store "barcode-pub=Barcode Pub"
+  --zone Asia/Bangkok --currency THB --country TH --store-seed none --no-fx
+  --admin-email owner@example.com --registry registry.example.com --image-tag abc123)
+out="$("$SCRIPT" "${BC_ARGS[@]}" --dry-run)"
+[[ ! -d "$CL/barcode" ]] || bad "barcode dry run wrote files"
+grep -q "store seed  : POS_SEED=none" <<<"$out" || bad "barcode dry run seed"
+out="$("$SCRIPT" "${BC_ARGS[@]}")"
+BENV="$CL/barcode/.env"
+[[ "$(getv TENANT_ID "$BENV")" == barcode ]] || bad "barcode tenant"
+[[ "$(getv PORTAL_BRAND "$BENV")" == barcode ]] || bad "barcode brand"
+[[ "$(getv VENUE_TZ "$BENV")" == Asia/Bangkok ]] || bad "barcode zone"
+[[ "$(getv STORE_CURRENCIES "$BENV")" == "barcode-pub=THB" ]] || bad "barcode currency"
+[[ "$(getv STORE_COUNTRIES "$BENV")" == "barcode-pub=TH" ]] || bad "barcode country"
+[[ "$(getv REPORTING_CURRENCY "$BENV")" == THB ]] || bad "barcode reporting currency"
+[[ -z "$(getv RETAIL_STORES "$BENV")" ]] || bad "barcode is not retail"
+[[ "$(getv STORE_SEED "$BENV")" == none ]] || bad "barcode store seed"
+BSTORE="$CL/barcode/stores/barcode-pub.env"
+[[ "$(getv POS_VENUE "$BSTORE")" == barcode-pub ]] || bad "barcode store venue"
+[[ "$(getv POS_SEED "$BSTORE")" == none ]] || bad "barcode store POS_SEED"
+[[ "$(getv VENUE_TZ "$BSTORE")" == Asia/Bangkok ]] || bad "barcode store zone"
+# a re-run without the flag keeps it; --store-seed default drops it
+"$SCRIPT" barcode barcode-manager.example.com --clients-dir "$CL" >/dev/null
+[[ "$(getv POS_SEED "$BSTORE")" == none ]] || bad "a re-run lost POS_SEED"
+"$SCRIPT" barcode barcode-manager.example.com --clients-dir "$CL" --store-seed default >/dev/null
+grep -q "^POS_SEED=" "$BSTORE" && bad "--store-seed default kept POS_SEED"
+refuse "a bad store seed" barcode barcode-manager.example.com --clients-dir "$CL" --store-seed demo
+no_secrets_in "$out" "$BENV"
+ok "Barcode Pub: THB, TH, Bangkok, its own brand, and a blank store (POS_SEED=none)"
+
 echo "all $PASS passed"

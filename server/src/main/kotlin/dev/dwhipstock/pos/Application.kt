@@ -36,6 +36,9 @@ import dev.dwhipstock.pos.customers.sagepoppy.SagePoppySeed
 import dev.dwhipstock.pos.customers.pronghorn.Pronghorn
 import dev.dwhipstock.pos.customers.pronghorn.PronghornConfig
 import dev.dwhipstock.pos.customers.pronghorn.PronghornSeed
+import dev.dwhipstock.pos.customers.barcode.Barcode
+import dev.dwhipstock.pos.customers.barcode.BarcodeConfig
+import dev.dwhipstock.pos.customers.barcode.BarcodeSeed
 import dev.dwhipstock.pos.db.initDatabase
 import dev.dwhipstock.pos.restaurant.CheckService
 import dev.dwhipstock.pos.sdk.FilesystemPhotoStore
@@ -103,11 +106,13 @@ fun Application.module(
     // which store this is (POS_VENUE=vieux-port|plateau|express|sage-poppy): its config,
     // display name and first-boot seed. sage-poppy is the US retail store.
     venueId: String? = System.getenv("POS_VENUE"),
-    venue: CopperLanternVenue = if (SagePoppy.matches(venueId) || Pronghorn.matches(venueId)) CopperLanternVenue.VIEUX_PORT
-        else CopperLanternVenue.of(venueId),
+    venue: CopperLanternVenue = if (SagePoppy.matches(venueId) || Pronghorn.matches(venueId) || Barcode.matches(venueId))
+        CopperLanternVenue.VIEUX_PORT else CopperLanternVenue.of(venueId),
     sagePoppy: Boolean = SagePoppy.matches(venueId),
     // pronghorn: the gas station (a retail counter + the forecourt)
     pronghorn: Boolean = Pronghorn.matches(venueId),
+    // barcode: Barcode Pub, Bangkok (its own brand; starts blank whatever POS_SEED says)
+    barcode: Boolean = Barcode.matches(venueId),
     // the Copper Lantern demo's menu specials (CopperLanternSpecials); the test
     // suite turns them off (POS_DEMO_SPECIALS=off: its totals don't follow the clock)
     demoSpecials: Boolean = System.getenv("POS_DEMO_SPECIALS") != "off",
@@ -209,6 +214,7 @@ fun Application.module(
     dev.dwhipstock.pos.sdk.VenueClock.fallbackZone = when {
         pronghorn -> Pronghorn.TIME_ZONE
         sagePoppy -> SagePoppy.TIME_ZONE
+        barcode -> Barcode.TIME_ZONE
         else -> CopperLanternConfig.TIME_ZONE
     }
     initDatabase(dbPath)
@@ -224,6 +230,7 @@ fun Application.module(
     // its data is never touched here again.
     if (seedMode != "none") {
         when {
+            barcode -> BarcodeSeed.seedIfEmpty()
             pronghorn -> PronghornSeed.seedIfEmpty()
             sagePoppy -> SagePoppySeed.seedIfEmpty()
             venue.quickServe -> {
@@ -244,6 +251,7 @@ fun Application.module(
         // from the cloud), so it gets ONE bootstrap manager — PIN 1234, to be
         // changed on first sign-in
         when {
+            barcode -> BarcodeSeed.seedIfEmpty() // its receipt header, corkage and the manager
             pronghorn -> PronghornSeed.seedBootstrapManagerIfNoStaff()
             sagePoppy -> SagePoppySeed.seedBootstrapManagerIfNoStaff()
             else -> CopperLanternSeed.seedBootstrapManagerIfNoStaff()
@@ -253,14 +261,15 @@ fun Application.module(
     // receipt header, zone, kitchen-ticket language and Québec menu names are
     // updated in place, only where they still hold the old values (items,
     // photos, rooms, tables, staff and sales are never touched). A no-op once done.
-    if (!pronghorn && !sagePoppy) dev.dwhipstock.pos.customers.copperlantern.CopperLanternRaleighMove.run(venue)
+    val copperLantern = !pronghorn && !sagePoppy && !barcode
+    if (copperLantern) dev.dwhipstock.pos.customers.copperlantern.CopperLanternRaleighMove.run(venue)
     // the demo's specials (once, on a Copper Lantern store with the demo menu):
     // the pubs get Prime Rib Fri & Sat, a Sunday Roast, a Tuesday burger and
     // weekday happy hour; Express a Tuesday Double Cheeseburger and happy hour.
     // Outside the seed-mode branch: a tablet linked to the cloud starts with
     // seedMode=none, and its menu is still the demo's. Tried again after each
     // menu pull (below) until done, for a tablet whose menu comes from the cloud.
-    val specialsPending = java.util.concurrent.atomic.AtomicBoolean(!pronghorn && !sagePoppy)
+    val specialsPending = java.util.concurrent.atomic.AtomicBoolean(copperLantern)
     val seedSpecials: () -> Unit = {
         if (specialsPending.get() &&
             dev.dwhipstock.pos.customers.copperlantern.CopperLanternSpecials.seed(venue, enabled = demoSpecials)
@@ -306,7 +315,16 @@ fun Application.module(
     val publicUrlProvider = {
         publicUrl ?: detectLanIpv4()?.let { "http://$it:$lanPort" } ?: publicBaseUrl
     }
-    val baseConfig: dev.dwhipstock.pos.sdk.CustomerConfig = if (pronghorn) PronghornConfig(
+    val baseConfig: dev.dwhipstock.pos.sdk.CustomerConfig = if (barcode) BarcodeConfig(
+        settings = settingsRepo,
+        printer = thermalPrinter,
+        publicBaseUrl = publicBaseUrl,
+        publicUrlProvider = publicUrlProvider,
+        legalAge = dev.dwhipstock.pos.sdk.LegalAge.resolve(
+            dev.dwhipstock.pos.sdk.LegalAge.fromEnv(Barcode.LEGAL_AGE), legalAgeOverride?.toString()),
+        // THB: cash down to the whole baht unless cash.rounding says otherwise
+        cashRounding = cashRounding.forCurrency(Barcode.CURRENCY),
+    ) else if (pronghorn) PronghornConfig(
         settings = settingsRepo,
         printer = thermalPrinter,
         publicBaseUrl = publicBaseUrl,

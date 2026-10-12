@@ -96,7 +96,7 @@ class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
         ),
         Container(
           width: 320,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: T.surface,
             border: Border(left: BorderSide(color: T.border)),
           ),
@@ -247,15 +247,11 @@ class _RoomLayoutPreviewState extends State<RoomLayoutPreview> {
               child: Container(
                 width: 22,
                 height: 22,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: T.destructive,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  LucideIcons.x,
-                  size: 14,
-                  color: T.onDestructive,
-                ),
+                child: Icon(LucideIcons.x, size: 14, color: T.onDestructive),
               ),
             ),
           ),

@@ -504,7 +504,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
                     style: T.headline(),
                   ),
                 ),
-                const Pill('OPEN', color: T.primary),
+                Pill('OPEN', color: T.primary),
               ],
             ),
             Text(
@@ -587,7 +587,7 @@ class _ShiftScreenState extends State<ShiftScreen> with ResumeRefresh {
       'STRIPE': l.cardStripe,
       'TERMINAL': l.cardTerminalTender,
     };
-    const tenderColors = {
+    final tenderColors = {
       'CASH': T.primary,
       'CARD': T.textPrimary,
       'BANK_TRANSFER': T.textMuted,

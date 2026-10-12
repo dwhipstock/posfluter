@@ -9,6 +9,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'api.dart';
 import 'app_mode.dart';
 import 'connection_monitor.dart';
+import 'design/skin.dart';
 import 'design/tokens.dart';
 import 'desktop_store.dart';
 import 'home.dart';
@@ -218,6 +219,12 @@ class PosApp extends StatelessWidget {
                 ? buildPronghornTheme()
                 : sagePoppy
                 ? buildSagePoppyTheme(Brightness.light)
+                : profile.isBarcode
+                // the pubs' screens on Barcode Pub's dark bar palette
+                ? buildPosTheme(
+                    palette: PubPalette.barcode,
+                    skin: BrandSkin.barcode,
+                  )
                 : buildPosTheme(),
             darkTheme: sagePoppy ? buildSagePoppyTheme(Brightness.dark) : null,
             themeMode: sagePoppy ? ThemeMode.system : ThemeMode.light,

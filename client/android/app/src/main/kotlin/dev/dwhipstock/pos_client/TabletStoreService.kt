@@ -93,7 +93,8 @@ class TabletStoreService : Service() {
             val storeProps = readStoreProperties()
             // which store this tablet is: store.venue in store.properties wins;
             // unset → this build's own store (POS_BRAND: Copper Lantern → none
-            // = the pub, vieux-port (shown as Glenwood South); Sage & Poppy → sage-poppy)
+            // = the pub, vieux-port (shown as Glenwood South); Sage & Poppy → sage-poppy;
+            // Barcode → barcode-pub)
             val venueId = storeProps?.getProperty("store.venue")?.trim()?.takeIf { it.isNotEmpty() }
                 ?: BuildConfig.DEFAULT_VENUE.takeIf { it.isNotEmpty() }
             val legalAge = storeProps?.getProperty("legal.age")?.trim()?.toIntOrNull()
@@ -141,7 +142,8 @@ class TabletStoreService : Service() {
                     // A fresh standalone tablet keeps its local demo catalog
                     // across restarts. Only a provisioned cloud store starts
                     // empty and pulls its catalog from the portal.
-                    seedMode = if (cloudReady) "none" else "copperlantern",
+                    // Barcode Pub always starts blank (its owner builds the menu and rooms).
+                    seedMode = if (cloudReady || venueId == "barcode-pub") "none" else "copperlantern",
                     cloudSyncUrl = if (cloudReady) cloud.getProperty("cloud.url") else null,
                     cloudSyncApiKey = if (cloudReady) cloud.getProperty("cloud.apiKey") else null,
                     reportingPortalUrl = if (cloudReady) cloud.getProperty("portal.url") else null,

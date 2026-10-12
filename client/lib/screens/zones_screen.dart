@@ -217,13 +217,13 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       // navy brand header: badge + venue, then labelled actions
       appBar: AppBar(
         toolbarHeight: 76,
-        backgroundColor: T.navy,
-        foregroundColor: T.onPrimary,
+        backgroundColor: T.band,
+        foregroundColor: T.onBand,
         shape: const Border(),
         titleSpacing: 16,
         title: _VenueTitle(userName: Api.currentUser?.name),
         actions: [
-          const LangActions(color: T.onPrimary),
+          LangActions(color: T.onBand),
           const SizedBox(width: 4),
           // carry-out without a spot on the floor: only when the store turned it on
           if (_carry?.headerButton ?? false)
@@ -369,16 +369,9 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                 value: 'logout',
                 child: Row(
                   children: [
-                    const Icon(
-                      LucideIcons.logOut,
-                      size: 18,
-                      color: T.destructive,
-                    ),
+                    Icon(LucideIcons.logOut, size: 18, color: T.destructive),
                     const SizedBox(width: 10),
-                    Text(
-                      l.logout,
-                      style: const TextStyle(color: T.destructive),
-                    ),
+                    Text(l.logout, style: TextStyle(color: T.destructive)),
                   ],
                 ),
               ),
@@ -405,7 +398,17 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                   return _ErrorRetry(error: '${snap.error}', onRetry: _reload);
                 }
                 if (zones == null) return const DelayedSpinner();
-                if (zones.isEmpty) return const SizedBox.shrink();
+                // a blank store (POS_SEED=none, Barcode Pub's first day):
+                // the way to its first room, not an empty screen
+                if (zones.isEmpty) {
+                  return Center(
+                    child: SizedBox(
+                      key: const Key('floor-empty-add-room'),
+                      width: 260,
+                      child: _addZoneChip(l),
+                    ),
+                  );
+                }
                 final zone = zones.firstWhere(
                   (z) => z.id == _zoneId,
                   orElse: () => zones.first,
@@ -427,7 +430,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
                         children: [
                           Container(
                             width: 260,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               color: T.surface,
                               border: Border(
                                 right: BorderSide(color: T.border),
@@ -851,7 +854,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     onTap: _addZone,
     child: Row(
       children: [
-        const Icon(LucideIcons.plus, size: 18, color: T.textMuted),
+        Icon(LucideIcons.plus, size: 18, color: T.textMuted),
         const SizedBox(width: 6),
         Text(
           l.addRoom,
@@ -1028,50 +1031,75 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
       return;
     }
     final isManager = Api.currentUser?.isManager ?? false;
+    // on the paper-white dialog, a dark brand's light buttons (Barcode's
+    // violet is 3.1:1 on white) print in the paper's ink instead
+    final paperTheme = T.palette.isDark
+        ? Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: const Color(0xFF7E22CE), // deep violet, 7:1 on paper
+              onPrimary: Colors.white,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: T.receiptInk),
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF7E22CE),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          )
+        : null;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        // Deliberately a LIGHT surface (receipt paper) with dark text: the QR
-        // reads like the printed slip, and — critically — the dialog is always
-        // unmistakably a dialog on the near-black theme. A blank content subtree
-        // must never again pass for a screen lock (see table-qr-dialog-invisible).
-        backgroundColor: T.receiptPaper,
-        title: Text(
-          l.tableQrTitle(table.displayLabel),
-          style: const TextStyle(color: T.receiptInk),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            UrlQr(url, size: 260, textSize: 14, textColor: T.receiptInk),
-            const SizedBox(height: 4),
-            Text(
-              l.tableQrHint,
-              style: T.small(color: T.receiptInk),
-              textAlign: TextAlign.center,
+      builder: (ctx) => Theme(
+        data: paperTheme ?? Theme.of(ctx),
+        child: AlertDialog(
+          // Deliberately a LIGHT surface (receipt paper) with dark text: the QR
+          // reads like the printed slip, and — critically — the dialog is always
+          // unmistakably a dialog on the near-black theme. A blank content subtree
+          // must never again pass for a screen lock (see table-qr-dialog-invisible).
+          backgroundColor: T.receiptPaper,
+          title: Text(
+            l.tableQrTitle(table.displayLabel),
+            style: const TextStyle(color: T.receiptInk),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              UrlQr(url, size: 260, textSize: 14, textColor: T.receiptInk),
+              const SizedBox(height: 4),
+              Text(
+                l.tableQrHint,
+                style: T.small(color: T.receiptInk),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l.close),
+            ),
+            if (isManager)
+              TextButton.icon(
+                icon: const Icon(LucideIcons.refreshCw, size: 18),
+                label: Text(l.regenerateTableLink),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _regenerateTableLink(table);
+                },
+              ),
+            FilledButton.icon(
+              icon: const Icon(LucideIcons.printer, size: 18),
+              label: Text(l.printQrCode),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _printTableSlip(table);
+              },
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.close)),
-          if (isManager)
-            TextButton.icon(
-              icon: const Icon(LucideIcons.refreshCw, size: 18),
-              label: Text(l.regenerateTableLink),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _regenerateTableLink(table);
-              },
-            ),
-          FilledButton.icon(
-            icon: const Icon(LucideIcons.printer, size: 18),
-            label: Text(l.printQrCode),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _printTableSlip(table);
-            },
-          ),
-        ],
       ),
     );
   }
@@ -1254,7 +1282,7 @@ class _VenueTitle extends StatelessWidget {
                 style: T.text(
                   size: 21,
                   weight: FontWeight.w700,
-                  color: T.onPrimary,
+                  color: T.onBand,
                 ),
               ),
               if (second.isNotEmpty)
@@ -1263,7 +1291,7 @@ class _VenueTitle extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.fade,
                   softWrap: false,
-                  style: T.small(color: T.onNavyMuted, weight: FontWeight.w500),
+                  style: T.small(color: T.onBandMuted, weight: FontWeight.w500),
                 ),
             ],
           ),
@@ -1300,13 +1328,13 @@ class _HeaderAction extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 22, color: T.onPrimary),
+            Icon(icon, size: 22, color: T.onBand),
             const SizedBox(height: 4),
             Text(
               label,
               maxLines: 1,
               style: T
-                  .small(color: T.onNavyMuted, weight: FontWeight.w600)
+                  .small(color: T.onBandMuted, weight: FontWeight.w600)
                   .copyWith(fontSize: 12.5),
             ),
           ],

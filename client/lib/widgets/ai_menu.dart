@@ -304,7 +304,7 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: T.radiusLarge,
-        side: const BorderSide(color: T.border),
+        side: BorderSide(color: T.border),
       ),
       child: SizedBox(
         width: 720,
@@ -458,7 +458,7 @@ class _AiMenuDialogState extends State<AiMenuDialog> {
             padding: const EdgeInsets.only(top: 8),
             child: Row(
               children: [
-                const Icon(LucideIcons.wifiOff, size: 16, color: T.textMuted),
+                Icon(LucideIcons.wifiOff, size: 16, color: T.textMuted),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(

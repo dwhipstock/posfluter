@@ -278,7 +278,7 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
     Key? key,
   }) => TextButton.icon(
     key: key,
-    style: TextButton.styleFrom(foregroundColor: T.onPrimary),
+    style: TextButton.styleFrom(foregroundColor: T.onBand),
     onPressed: onPressed,
     icon: Icon(icon, size: 20),
     label: Text(label),
@@ -349,7 +349,7 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          const Icon(LucideIcons.tabletSmartphone, size: 20, color: T.navy),
+          Icon(LucideIcons.tabletSmartphone, size: 20, color: T.navy),
           const SizedBox(width: 8),
           Text(
             q.kiosk,
@@ -446,11 +446,11 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 64,
-        backgroundColor: T.navy,
-        foregroundColor: T.onPrimary,
+        backgroundColor: T.band,
+        foregroundColor: T.onBand,
         shape: const Border(),
         // the theme's title is navy (for the white bars): white on this one
-        titleTextStyle: T.headline(color: T.onPrimary),
+        titleTextStyle: T.headline(color: T.onBand),
         title: Text(
           Api.venueName ?? q.orders,
           key: const Key('counter-title'),
@@ -519,7 +519,7 @@ class _CounterScreenState extends State<CounterScreen> with ResumeRefresh {
               }
             },
           ),
-          const LangActions(color: T.onPrimary),
+          LangActions(color: T.onBand),
           const SizedBox(width: 8),
         ],
       ),
@@ -806,7 +806,7 @@ class _OrdersPanelState extends State<_OrdersPanel> {
                   style: T.text(
                     size: 16,
                     weight: FontWeight.w700,
-                    color: ready ? const Color(0xFF1E7A4C) : T.textPrimary,
+                    color: ready ? T.success : T.textPrimary,
                   ),
                 ),
                 Text(

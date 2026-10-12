@@ -89,7 +89,7 @@ function NavLinks({ variant }: { variant: "side" | "bottom" | "top" | "bottom-li
               {t(labelKey)}
               {href === "/stock" && lowCount > 0 && (
                 <span
-                  className="rounded-full bg-copper px-1.5 py-0.5 text-[10px] font-bold leading-none text-white tabular-nums"
+                  className="rounded-full bg-copper px-1.5 py-0.5 text-[10px] font-bold leading-none text-copper-ink tabular-nums"
                   title={t("stock_nav_low", { n: lowCount })}
                   aria-label={t("stock_nav_low", { n: lowCount })}
                 >
@@ -128,7 +128,7 @@ function NavLinks({ variant }: { variant: "side" | "bottom" | "top" | "bottom-li
             )}
           >
             {/* the copper accent, used sparingly: the current page */}
-            {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-copper" aria-hidden />}
+            {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-spark" aria-hidden />}
             <Icon className="h-[18px] w-[18px]" />
             {t(labelKey)}
             {href === "/stock" && lowCount > 0 && (

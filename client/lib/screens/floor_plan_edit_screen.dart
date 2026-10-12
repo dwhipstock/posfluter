@@ -880,9 +880,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
       _snack = ScaffoldMessenger.of(context).showSnackBar(
         _topSnackBar(
           context,
-          Text(
-            p.isEdit ? l.floorEditApplied(r.added) : l.roomApplied(r.added),
-          ),
+          Text(p.isEdit ? l.floorEditApplied(r.added) : l.roomApplied(r.added)),
           // a snackbar with an action can otherwise sit forever (Flutter
           // 3.44) and block the next one from ever showing
           duration: const Duration(seconds: 8),
@@ -927,9 +925,9 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         _undo.clear();
       });
       _closeSnack();
-      _snack = ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(_topSnackBar(context, Text(l.aiMenuRevertDone), short: true));
+      _snack = ScaffoldMessenger.of(context).showSnackBar(
+        _topSnackBar(context, Text(l.aiMenuRevertDone), short: true),
+      );
     } on MenuRevertConflict catch (c) {
       if (!mounted) return;
       final again = await showDialog<bool>(
@@ -1095,10 +1093,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              l.discard,
-              style: const TextStyle(color: T.destructive),
-            ),
+            child: Text(l.discard, style: TextStyle(color: T.destructive)),
           ),
           FilledButton(
             onPressed: () async {
@@ -1398,7 +1393,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                         borderRadius: T.radiusSmall,
                         border: Border.all(color: T.textPrimary, width: 2),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         LucideIcons.moveDiagonal2,
                         size: 16,
                         color: T.textPrimary,
@@ -1488,7 +1483,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
                         borderRadius: T.radiusSmall,
                         border: Border.all(color: T.textPrimary, width: 2),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         LucideIcons.moveDiagonal2,
                         size: 16,
                         color: T.textPrimary,
@@ -1519,7 +1514,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
     }
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: T.surface,
         border: Border(top: BorderSide(color: T.border)),
       ),
@@ -1545,15 +1540,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
           ),
           const SizedBox(width: 12),
           OutlinedButton.icon(
-            icon: const Icon(
-              LucideIcons.trash2,
-              size: 18,
-              color: T.destructive,
-            ),
-            label: Text(
-              l.deleteObject,
-              style: const TextStyle(color: T.destructive),
-            ),
+            icon: Icon(LucideIcons.trash2, size: 18, color: T.destructive),
+            label: Text(l.deleteObject, style: TextStyle(color: T.destructive)),
             onPressed: _deleteSelectedObject,
           ),
         ],
@@ -1606,15 +1594,8 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
           ),
           const SizedBox(width: 8),
           OutlinedButton.icon(
-            icon: const Icon(
-              LucideIcons.trash2,
-              size: 18,
-              color: T.destructive,
-            ),
-            label: Text(
-              l.deleteTable,
-              style: const TextStyle(color: T.destructive),
-            ),
+            icon: Icon(LucideIcons.trash2, size: 18, color: T.destructive),
+            label: Text(l.deleteTable, style: TextStyle(color: T.destructive)),
             onPressed: _deleteSelected,
           ),
         ],
@@ -1670,7 +1651,7 @@ class _FloorPlanEditScreenState extends State<FloorPlanEditScreen> {
         SizedBox(
           width: 26,
           child: selected
-              ? const Icon(LucideIcons.check, size: 16, color: T.primary)
+              ? Icon(LucideIcons.check, size: 16, color: T.primary)
               : null,
         ),
         Text(label),
@@ -1799,14 +1780,21 @@ SnackBar _topSnackBar(
 }) {
   final mq = MediaQuery.of(context);
   // a floating snackbar sits [margin.bottom] above the bottom edge: push it to just under the top bar
-  final bottom = (mq.size.height - mq.padding.top - kToolbarHeight - 72 - mq.viewInsets.bottom)
-      .clamp(0.0, double.infinity);
+  final bottom =
+      (mq.size.height -
+              mq.padding.top -
+              kToolbarHeight -
+              72 -
+              mq.viewInsets.bottom)
+          .clamp(0.0, double.infinity);
   return SnackBar(
     content: content,
     behavior: SnackBarBehavior.floating,
     dismissDirection: DismissDirection.up,
     margin: EdgeInsets.only(left: 16, right: 16, bottom: bottom),
-    duration: duration ?? (short ? const Duration(seconds: 2) : const Duration(seconds: 4)),
+    duration:
+        duration ??
+        (short ? const Duration(seconds: 2) : const Duration(seconds: 4)),
     action: action,
   );
 }
@@ -1815,7 +1803,9 @@ SnackBar _topSnackBar(
 /// bottom one covered the table tools: "Table has sub-tables — remove them first").
 void _showEditorError(BuildContext context, Object error) {
   if (error is SessionExpiredException) return;
-  final text = error is TimeoutException ? L.of(context).requestTimedOut : '$error';
+  final text = error is TimeoutException
+      ? L.of(context).requestTimedOut
+      : '$error';
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(_topSnackBar(context, Text(text)));

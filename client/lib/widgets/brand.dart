@@ -15,12 +15,20 @@ class BrandLogo extends StatelessWidget {
   static const sagePoppyAsset = 'assets/sage_poppy_mark.png';
   static const pronghornAsset = 'assets/pronghorn_mark.png';
 
+  /// Barcode Pub: the script "B" from its neon sign (on the sign's own
+  /// near-black square), and the whole sign for the sign-in panel.
+  static const barcodeAsset = 'assets/barcode_mark.png';
+  static const barcodeLogoAsset = 'assets/barcode_logo.png';
+  static const barcodeSignBackground = Color(0xFF1E1E20);
+
   @override
   Widget build(BuildContext context) {
     final profile = StoreProfile.current;
     final sagePoppy = profile.isSagePoppy;
     final image = Image.asset(
-      profile.isPronghorn
+      profile.isBarcode
+          ? barcodeAsset
+          : profile.isPronghorn
           ? pronghornAsset
           : sagePoppy
           ? sagePoppyAsset
@@ -29,7 +37,9 @@ class BrandLogo extends StatelessWidget {
       height: size,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.medium,
-      semanticLabel: profile.isPronghorn
+      semanticLabel: profile.isBarcode
+          ? 'Barcode Pub'
+          : profile.isPronghorn
           ? 'Pronghorn Fuel & Market'
           : sagePoppy
           ? 'Sage & Poppy Bottle Shop'
@@ -37,6 +47,13 @@ class BrandLogo extends StatelessWidget {
     );
     // the Pronghorn badge is its own dark rounded square: no disc
     if (profile.isPronghorn) return image;
+    // Barcode's mark is the sign's own square: rounded corners, no disc
+    if (profile.isBarcode) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size * .18),
+        child: image,
+      );
+    }
     if (!ring) return image;
     final pad = (size * .045).clamp(2.0, 12.0);
     return Container(

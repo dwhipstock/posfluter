@@ -163,7 +163,7 @@ class AiPhotoService internal constructor(
                 "today's AI photo limit for this store is reached (${config.menuAiPhotoDailyCap} a day)", 3600)
         }
         ai.gate(who, "photo")
-        val style = HouseStyle.forBrand(if (who.venue.retail) HouseStyle.SAGE_POPPY.brand else HouseStyle.COPPER_LANTERN.brand)
+        val style = houseStyleFor(who.principal.tenantId, who.venue.retail)
         val facts = ItemFacts(name, item.descriptionEn, item.category)
         val started = now()
         val (image, provider) = try {

@@ -6,8 +6,8 @@ import 'tokens.dart';
 /// Flat bordered surface — the replacement for every Material Card.
 class PosPanel extends StatelessWidget {
   final Widget child;
-  final Color color;
-  final Color borderColor;
+  final Color? color; // null = T.surface
+  final Color? borderColor; // null = T.border
   final EdgeInsetsGeometry? padding;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -21,8 +21,8 @@ class PosPanel extends StatelessWidget {
   const PosPanel({
     super.key,
     required this.child,
-    this.color = T.surface,
-    this.borderColor = T.border,
+    this.color,
+    this.borderColor,
     this.padding,
     this.onTap,
     this.onLongPress,
@@ -52,9 +52,9 @@ class PosPanel extends StatelessWidget {
         borderRadius: T.radiusMedium,
         child: Container(
           decoration: BoxDecoration(
-            color: color,
+            color: color ?? T.surface,
             borderRadius: T.radiusMedium,
-            border: Border.all(color: borderColor),
+            border: Border.all(color: borderColor ?? T.border),
           ),
           child: onTap == null && onLongPress == null
               ? content
@@ -76,22 +76,25 @@ class PosPanel extends StatelessWidget {
 /// Small status pill ("5/8 open", "OPEN", "86").
 class Pill extends StatelessWidget {
   final String label;
-  final Color color;
-  const Pill(this.label, {super.key, this.color = T.textMuted});
+  final Color? color; // null = T.textMuted
+  const Pill(this.label, {super.key, this.color});
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: .14),
-      borderRadius: T.radiusSmall,
-      border: Border.all(color: color.withValues(alpha: .45)),
-    ),
-    child: Text(
-      label,
-      style: T.small(color: color, weight: FontWeight.w600),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final color = this.color ?? T.textMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .14),
+        borderRadius: T.radiusSmall,
+        border: Border.all(color: color.withValues(alpha: .45)),
+      ),
+      child: Text(
+        label,
+        style: T.small(color: color, weight: FontWeight.w600),
+      ),
+    );
+  }
 }
 
 /// Gold dot for QR-pending markers.
@@ -101,7 +104,7 @@ class AttentionDot extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 10,
     height: 10,
-    decoration: const BoxDecoration(color: T.pending, shape: BoxShape.circle),
+    decoration: BoxDecoration(color: T.pending, shape: BoxShape.circle),
   );
 }
 

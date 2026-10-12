@@ -421,7 +421,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen>
       ),
       for (final item in items)
         Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: T.border)),
           ),
           child: ListTile(
@@ -788,7 +788,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
       child: Dialog(
         shape: RoundedRectangleBorder(
           borderRadius: T.radiusLarge,
-          side: const BorderSide(color: T.border),
+          side: BorderSide(color: T.border),
         ),
         child: SizedBox(
           width: 560,
@@ -899,7 +899,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(
+                            icon: Icon(
                               LucideIcons.x,
                               size: 18,
                               color: T.destructive,
@@ -976,7 +976,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                               ? null
                               : TextButton.icon(
                                   key: const Key('item-delete'),
-                                  icon: const Icon(
+                                  icon: Icon(
                                     LucideIcons.trash2,
                                     size: 18,
                                     color: T.destructive,
@@ -985,9 +985,7 @@ class _ItemEditorDialogState extends State<_ItemEditorDialog> {
                                     l.deleteItemShort,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: T.destructive,
-                                    ),
+                                    style: TextStyle(color: T.destructive),
                                   ),
                                   onPressed: _busy ? null : _deleteItem,
                                 ),
@@ -1141,7 +1139,7 @@ class _CategoriesEditorDialogState extends State<_CategoriesEditorDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: T.radiusLarge,
-        side: const BorderSide(color: T.border),
+        side: BorderSide(color: T.border),
       ),
       child: SizedBox(
         width: 480,
@@ -1164,7 +1162,7 @@ class _CategoriesEditorDialogState extends State<_CategoriesEditorDialog> {
                           for (var i = 0; i < _categories.length; i++)
                             Container(
                               key: ValueKey(_categories[i].id),
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 border: Border(
                                   bottom: BorderSide(color: T.border),
                                 ),
@@ -1173,7 +1171,7 @@ class _CategoriesEditorDialogState extends State<_CategoriesEditorDialog> {
                                 children: [
                                   ReorderableDragStartListener(
                                     index: i,
-                                    child: const Padding(
+                                    child: Padding(
                                       padding: EdgeInsets.all(14),
                                       child: Icon(
                                         LucideIcons.gripVertical,
@@ -1216,7 +1214,7 @@ class _CategoriesEditorDialogState extends State<_CategoriesEditorDialog> {
                                     onPressed: () => _edit(_categories[i]),
                                   ),
                                   IconButton(
-                                    icon: const Icon(
+                                    icon: Icon(
                                       LucideIcons.x,
                                       size: 18,
                                       color: T.destructive,

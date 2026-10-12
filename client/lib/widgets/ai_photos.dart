@@ -116,7 +116,7 @@ class AiPhotoActions extends StatelessWidget {
             padding: const EdgeInsets.only(top: 6),
             child: Row(
               children: [
-                const Icon(LucideIcons.wifiOff, size: 16, color: T.textMuted),
+                Icon(LucideIcons.wifiOff, size: 16, color: T.textMuted),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -210,7 +210,7 @@ class _AiPhotoDialogState extends State<AiPhotoDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: T.radiusLarge,
-        side: const BorderSide(color: T.border),
+        side: BorderSide(color: T.border),
       ),
       child: SizedBox(
         width: 620,
@@ -345,7 +345,7 @@ class _CandidateTile extends StatelessWidget {
             candidate.bytes,
             fit: BoxFit.cover,
             gaplessPlayback: true,
-            errorBuilder: (_, _, _) => const ColoredBox(color: T.surfaceAlt),
+            errorBuilder: (_, _, _) => ColoredBox(color: T.surfaceAlt),
           ),
         ),
       ),
