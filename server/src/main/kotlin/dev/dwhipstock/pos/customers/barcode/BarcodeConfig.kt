@@ -38,6 +38,8 @@ object Barcode {
     const val ADDRESS = "679/15 Itsaraphap Rd, Wat Tha Phra, Bangkok Yai, Bangkok 10600, Thailand"
     const val ADDRESS_TH = "679/15 ถนนอิสรภาพ แขวงวัดท่าพระ เขตบางกอกใหญ่ กรุงเทพมหานคร 10600"
     const val PHONE = "096-951-9822"
+    /** The name a receipt prints at the top: both the English and the Thai name. */
+    const val RECEIPT_NAME = "Barcode Pub — บาร์โค้ด"
     const val RECEIPT_FOOTER = "ขอบคุณที่ใช้บริการ · Thank you"
 
     const val COUNTRY = "TH"
@@ -64,8 +66,8 @@ object Barcode {
 
     val PROFILE = StoreProfile(
         country = COUNTRY, currency = CURRENCY,
-        // Thai first, English second. The store's menu language columns follow
-        // this list once feat/thai-locale lands (Thai in the *_fr columns).
+        // Thai first, English second: the store's data language is Thai (its
+        // menu's Thai names live in the *_fr columns, DataLanguage).
         locales = listOf(TH, LocaleCode.EN),
         timeZone = TIME_ZONE,
         kind = StoreProfile.Kind.RESTAURANT,
@@ -128,18 +130,17 @@ class BarcodeConfig(
             val byLocale = Barcode.addressLines(s.venueAddress)
             ReceiptPolicy.Standard(
                 // receipts print the name as text (no store prints a logo
-                // bitmap yet; branding/barcode-logo-receipt.png is ready).
-                // TODO(feat/thai-locale): "Barcode Pub — บาร์โค้ด" once the
-                // receipt raster font has Thai glyphs
-                logoFallbackText = Barcode.DISPLAY_NAME,
-                headerLines = byLocale[LocaleCode.EN] ?: listOf(s.venueAddress),
+                // bitmap yet; branding/barcode-logo-receipt.png is ready),
+                // both names: the receipt raster draws Thai (Noto Sans Thai)
+                logoFallbackText = Barcode.RECEIPT_NAME,
+                headerLines = byLocale[Barcode.TH] ?: listOf(s.venueAddress),
                 phone = s.venuePhone,
                 footerText = s.receiptFooter,
                 showTax = false,
-                // TODO(feat/thai-locale): print in Thai (Barcode.TH) by default once
-                // messages_th and the Thai receipt font exist; a Thai reprint
-                // (withLocale) already gets the Thai address
-                locale = LocaleCode.EN,
+                // Thai by default (messages_th, Buddhist Era dates, the Thai
+                // receipt font); an English reprint (withLocale) gets the
+                // English address
+                locale = Barcode.TH,
                 headerLinesByLocale = byLocale,
             )
         }

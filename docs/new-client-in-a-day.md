@@ -181,9 +181,8 @@ in a deeper `#9B30D9` so white text keeps 4.5:1; `#7E22CE` for small violet
 text on the light pages) and hot pink `#FF1F8E` as a small `spark` only (the
 current page's bar, the band's rule, one chart series), `THB`. The portal's
 pages stay light (it is light-only by design). The Thai name is บาร์โค้ด; the
-pack has no per-language name, so the portal says "Barcode Pub". Until the
-portal speaks Thai the pack offers `en` only (TODO feat/thai-locale: `th` +
-`en`, default `th`).
+pack has no per-language name, so the portal says "Barcode Pub". The pack
+offers `th` + `en`, default `th` (its data language is Thai).
 
 **Provision** (on the server; read the `--dry-run` plan first; the domain is a
 placeholder until the client's own name is set up):
