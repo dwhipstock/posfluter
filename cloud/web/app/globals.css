@@ -37,3 +37,9 @@
     scrollbar-width: none;
   }
 }
+
+/* Thai: never letter-space. Extra tracking pulls vowels and tone marks away
+   from their consonants (and Thai has no capitals for `uppercase` to style). */
+html:lang(th) [class*="tracking-"] {
+  letter-spacing: normal;
+}
