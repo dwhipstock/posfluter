@@ -121,7 +121,7 @@ class BarcodeStoreTest {
     fun aiPhotosHaveTheirOwnBarStyle() {
         val style = HouseStyle.forBrand("barcode")
         assertEquals("barcode", style.brand)
-        assertTrue("Bangkok" in style.scene && "neon pink" in style.scene)
+        assertTrue("Bangkok" in style.scene && "yellow LED" in style.scene)
         assertEquals(HouseStyle.COPPER_LANTERN, HouseStyle.forBrand("copper-lantern"))
     }
 }

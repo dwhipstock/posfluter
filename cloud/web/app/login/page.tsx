@@ -256,7 +256,7 @@ function BandLogin({ children }: { children: React.ReactNode }) {
       <div className="relative mx-auto flex w-full max-w-sm flex-col px-4 pb-10 pt-10">
         <div className="mb-6 flex flex-col items-center text-center">
           {brand.loginArt === "logo" && brand.assets.logo ? (
-            // a dark-backed lockup (Barcode Pub's neon sign) sits straight on the band
+            // a dark-backed lockup (Barcode Pub's lit sign) sits straight on the band
             <Image
               src={brandAssetUrl(brand.assets.logo)}
               alt={brand.legalName}

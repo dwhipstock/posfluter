@@ -1032,11 +1032,11 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
     }
     final isManager = Api.currentUser?.isManager ?? false;
     // on the paper-white dialog, a dark brand's light buttons (Barcode's
-    // violet is 3.1:1 on white) print in the paper's ink instead
+    // yellow is 1.5:1 on white) print in a deep gold instead
     final paperTheme = T.palette.isDark
         ? Theme.of(context).copyWith(
             colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: const Color(0xFF7E22CE), // deep violet, 7:1 on paper
+              primary: const Color(0xFF7A5A00), // deep gold, 6.4:1 on paper
               onPrimary: Colors.white,
             ),
             textButtonTheme: TextButtonThemeData(
@@ -1044,7 +1044,7 @@ class _ZonesScreenState extends State<ZonesScreen> with ResumeRefresh {
             ),
             filledButtonTheme: FilledButtonThemeData(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF7E22CE),
+                backgroundColor: const Color(0xFF7A5A00),
                 foregroundColor: Colors.white,
               ),
             ),

@@ -501,7 +501,7 @@ class _BrandPanel extends StatelessWidget {
   final bool horizontal;
   const _BrandPanel({required this.logoSize, this.horizontal = false});
 
-  /// Barcode Pub: its neon sign (the whole logo, on the sign's own
+  /// Barcode Pub: its lit sign (the whole logo, on the sign's own
   /// near-black, so it glows like the real one) over "STAFF TERMINAL".
   Widget _barcodePanel(L l) {
     return ColoredBox(
