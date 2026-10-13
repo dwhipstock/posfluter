@@ -349,8 +349,8 @@ data class TenderResponse(val tender: TenderView, val check: CheckView)
 fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.sdk.CustomerConfig) {
 
     get("/m/t/{token}") {
-        val tableId = customerTable(call) ?: return@get scanAtTable(call, config.displayName)
-        serveCustomerMenu(call, tableId, call.parameters["token"]!!, config.displayName)
+        val tableId = customerTable(call) ?: return@get scanAtTable(call, config.displayName, config.brand)
+        serveCustomerMenu(call, tableId, call.parameters["token"]!!, config.displayName, config.brand)
     }
 
     // Running bill for the guest's phone. It exposes only what a printed
@@ -372,7 +372,18 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
 
     // Every other /m/... (the retired /m/{tableId}, /m/{zone}/{n} and
     // /m/{tableId}/bill forms, a typo, an edited number) is a calm 404 page.
-    get("/m/{...}") { scanAtTable(call, config.displayName) }
+    // the menu's Thai font, from the store (the page fetches nothing from the internet)
+    get("/m/fonts/{file}") {
+        val bytes = call.parameters["file"]!!.takeIf { it in GUEST_FONTS }
+            ?.let { dev.dwhipstock.pos.StoreAssets.readBytesOrNull("fonts/$it") }
+        if (bytes == null) call.respond(HttpStatusCode.NotFound)
+        else {
+            call.response.header(io.ktor.http.HttpHeaders.CacheControl, "public, max-age=604800")
+            call.respondBytes(bytes, ContentType("font", "ttf"))
+        }
+    }
+
+    get("/m/{...}") { scanAtTable(call, config.displayName, config.brand) }
 
     /**
      * Printable slips: A6 card per table — label, zone, QR, "scan to order" in
@@ -389,7 +400,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
                 .where { (DiningTables.id eq tableId) and DiningTables.deletedAt.isNull() }
                 .firstOrNull()?.let { SlipData(it, config.publicBaseUrl) }
         } ?: throw NotFoundException("table $tableId not found")
-        call.respondText(slipPage(listOf(slip), config.displayName, slipLocales(config)), ContentType.Text.Html)
+        call.respondText(dev.dwhipstock.pos.GuestPageBrand.slips(slipPage(listOf(slip), config.displayName, slipLocales(config)), config.brand), ContentType.Text.Html)
     }
 
     /** All tables on one printable page, page break per slip ("print all table slips"). */
@@ -402,7 +413,7 @@ fun Route.customerRoutes(checkService: CheckService, config: dev.dwhipstock.pos.
                 .orderBy(Zones.sortOrder).orderBy(DiningTables.sortOrder)
                 .map { SlipData(it, config.publicBaseUrl) }
         }
-        call.respondText(slipPage(slips, config.displayName, slipLocales(config)), ContentType.Text.Html)
+        call.respondText(dev.dwhipstock.pos.GuestPageBrand.slips(slipPage(slips, config.displayName, slipLocales(config)), config.brand), ContentType.Text.Html)
     }
 }
 
@@ -501,8 +512,11 @@ private fun qrPng(data: String, size: Int): ByteArray {
  * The page a guest sees for any link that isn't a live table token: an old or
  * rotated slip, an edited number, a typed id. 404, but calm and bilingual.
  */
-private suspend fun scanAtTable(call: io.ktor.server.application.ApplicationCall, venueName: String) {
-    call.respondText(scanAtTablePage(venueName), ContentType.Text.Html, HttpStatusCode.NotFound)
+private val GUEST_FONTS = setOf("NotoSansThai-Regular.ttf", "NotoSansThai-Bold.ttf")
+
+private suspend fun scanAtTable(call: io.ktor.server.application.ApplicationCall, venueName: String, brand: String = "") {
+    call.respondText(dev.dwhipstock.pos.GuestPageBrand.card(scanAtTablePage(venueName), brand),
+        ContentType.Text.Html, HttpStatusCode.NotFound)
 }
 
 fun Route.shiftRoutes(shiftService: dev.dwhipstock.pos.restaurant.ShiftService, auth: dev.dwhipstock.pos.base.AuthService) {
@@ -948,6 +962,7 @@ private fun zoneClosedMenuPage(tableLabel: String, venueName: String): String = 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${venueName.escapeHtml()}</title>
 <style>
+${dev.dwhipstock.pos.GuestPageBrand.THAI_FONT_FACE}
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; }
   body { background: #F3F7FC; color: #17263A; min-height: 100vh; display: flex;
          align-items: center; justify-content: center; padding: 24px; }
@@ -977,6 +992,7 @@ private fun scanAtTablePage(venueName: String): String = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${venueName.escapeHtml()}</title>
 <style>
+${dev.dwhipstock.pos.GuestPageBrand.THAI_FONT_FACE}
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; }
   body { background: #F3F7FC; color: #17263A; min-height: 100vh; display: flex;
          align-items: center; justify-content: center; padding: 24px; }
@@ -1036,6 +1052,7 @@ private fun customerBill(
  */
 private suspend fun serveCustomerMenu(
     call: io.ktor.server.application.ApplicationCall, tableId: String, token: String, venueName: String,
+    brand: String = "",
 ) {
     val row = transaction {
         DiningTables.join(Zones, org.jetbrains.exposed.sql.JoinType.INNER,
@@ -1048,7 +1065,7 @@ private suspend fun serveCustomerMenu(
     val (label, zoneStatus) = row
     // Closed zone: friendly banner, not a scary 4xx — the guest just scanned a QR.
     if (zoneStatus == "CLOSED") {
-        call.respondText(zoneClosedMenuPage(label, venueName), ContentType.Text.Html)
+        call.respondText(dev.dwhipstock.pos.GuestPageBrand.card(zoneClosedMenuPage(label, venueName), brand), ContentType.Text.Html)
         return
     }
     val html = dev.dwhipstock.pos.StoreAssets.readText("customer-menu.html")
@@ -1059,7 +1076,7 @@ private suspend fun serveCustomerMenu(
         // </script> can't end the script (red-team).
         .replace("\"{{TABLE_LABEL}}\"", label.jsStringLiteral())
         .replace("{{VENUE_NAME}}", venueName.escapeHtml())
-    call.respondText(html, ContentType.Text.Html)
+    call.respondText(dev.dwhipstock.pos.GuestPageBrand.menu(html, brand), ContentType.Text.Html)
 }
 
 /** A JS string literal (quotes included) safe to drop inside an inline <script>. */
@@ -1110,6 +1127,7 @@ private fun slipPage(
 <title>Table slips — $venue</title>
 <style>
   @page { size: A6; margin: 0; }
+${dev.dwhipstock.pos.GuestPageBrand.THAI_FONT_FACE}
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; }
   body { background: #eee; }
   .slip { width: 105mm; height: 148mm; padding: 10mm; background: #fff; margin: 8px auto;

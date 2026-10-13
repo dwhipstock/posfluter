@@ -26,8 +26,9 @@ import kotlinx.serialization.json.Json
  * on): open, like the customer menu, order numbers only. `GET /pickup` is the
  * page for a TV, `GET /pickup/board` its data.
  */
-fun Route.pickupBoardRoutes(orders: PickupOrders) {
-    val page by lazy { StoreAssets.readText("pickup.html") }
+fun Route.pickupBoardRoutes(orders: PickupOrders, brand: String = "", venueName: String = "") {
+    // the store's brand skin and name (GuestPageBrand); other stores get the page as written
+    val page by lazy { dev.dwhipstock.pos.GuestPageBrand.pickup(StoreAssets.readText("pickup.html"), brand, venueName) }
     get("/pickup") {
         call.response.header(HttpHeaders.CacheControl, "no-store")
         call.respondText(page, ContentType.Text.Html)
