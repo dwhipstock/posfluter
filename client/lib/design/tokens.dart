@@ -432,7 +432,7 @@ ThemeData buildPosTheme({
       waitDuration: const Duration(milliseconds: 300),
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: T.navy),
-    // a brand's spark (Barcode: hot pink) marks focus and the active tab only
+    // a brand's spark (Barcode: LED yellow) marks focus and the active tab
     focusColor: palette.spark?.withValues(alpha: .35),
     tabBarTheme: palette.spark == null
         ? null
@@ -547,56 +547,59 @@ class PubPalette {
     ],
   );
 
-  /// Barcode Pub, Bangkok: a dark, calm bar in the neon sign's violet.
-  /// Near-black and dark-grey surfaces with light neutral text; violet
-  /// (#D45CFF, sampled from the sign's glow) where the pubs use navy:
-  /// buttons, selection, the active room, always with near-black ink on it
-  /// (6.4:1; white on it is only 3.1:1). The pubs' copper accent (Pay, the
-  /// selected category, an occupied table) is a lighter violet. The header
-  /// bands are the sign's near-black ([band]), not violet. Hot pink is
-  /// only a spark ([spark]: focus rings, the active tab), never a fill.
-  /// Measured on #26262A (the lightest surface): text 12.8:1, muted 5.8:1,
-  /// violet 4.9:1, red 4.9:1, green 7.8:1.
+  /// Barcode Pub, Bangkok: black letters lit from behind by a warm yellow
+  /// LED, like the bar's wall sign. Warm near-black and neutral dark-grey
+  /// surfaces with light neutral text; the sign's LED yellow (#F7CD46,
+  /// sampled from the glow around the sign's letters) where the pubs use
+  /// navy: buttons, selection, the active room, always with near-black ink
+  /// on it (12.4:1; white on it would be 1.5:1). Pressed states are a deeper
+  /// gold (#D9A92B). The pubs' copper accent (Pay, the selected category, an
+  /// occupied table) is a lighter glow yellow. The header bands are the
+  /// sign's near-black ([band]), not yellow: the yellow is an accent, never
+  /// a large fill. Guest orders waiting ([pending]) and warnings take the
+  /// rust of the bar's side walls so they read apart from the yellow.
+  /// Measured on #24221F (the lightest surface): text 13.2:1, muted 6.3:1,
+  /// yellow 10.4:1, rust 5.4:1, red 5.1:1, green 9.1:1.
   static const barcode = PubPalette(
     brightness: Brightness.dark,
-    navy: Color(0xFFD45CFF),
+    navy: Color(0xFFF7CD46),
     navyDeep: Color(
-      0xFFE08CFF,
-    ), // lighter violet: pressed states, ink on surfaceAlt
-    copper: Color(0xFFE08CFF),
-    primary: Color(0xFFD45CFF),
-    onPrimary: Color(0xFF0A0A0A),
-    accent: Color(0xFFE08CFF),
-    onAccent: Color(0xFF0A0A0A),
-    accentSoft: Color(0xFF2A1736), // a dark violet tint for selected rows
-    background: Color(0xFF141414),
-    surface: Color(0xFF1C1C1E),
-    surfaceAlt: Color(0xFF26262A),
-    border: Color(0xFF3A3A3E),
-    textPrimary: Color(0xFFECECEF),
-    textMuted: Color(0xFFA0A0A8),
-    onNavyMuted: Color(0xFF2E0A3D), // secondary ink on violet fills (5.5:1)
-    // calm header bands: the sign's own near-black, light ink, violet only
+      0xFFD9A92B,
+    ), // deeper gold: pressed states, ink on surfaceAlt
+    copper: Color(0xFFFFDA6A),
+    primary: Color(0xFFF7CD46),
+    onPrimary: Color(0xFF121110),
+    accent: Color(0xFFFFDA6A),
+    onAccent: Color(0xFF121110),
+    accentSoft: Color(0xFF2E2714), // a dark gold tint for selected rows
+    background: Color(0xFF121110),
+    surface: Color(0xFF1A1816),
+    surfaceAlt: Color(0xFF24221F),
+    border: Color(0xFF3A3733),
+    textPrimary: Color(0xFFEDEAE4),
+    textMuted: Color(0xFFA8A39B),
+    onNavyMuted: Color(0xFF4A3A0A), // secondary ink on yellow fills (7.3:1)
+    // calm header bands: the sign's own near-black, light ink, yellow only
     // in what sits on them (the logo, the buttons)
-    band: Color(0xFF1E1E20),
-    onBand: Color(0xFFECECEF),
-    onBandMuted: Color(0xFFA0A0A8),
+    band: Color(0xFF161513),
+    onBand: Color(0xFFEDEAE4),
+    onBandMuted: Color(0xFFA8A39B),
     destructive: Color(0xFFF26464),
-    onDestructive: Color(0xFF0A0A0A),
-    attention: Color(0xFFF59E0B),
-    pending: Color(0xFFF2B53A),
-    onPending: Color(0xFF2B1D0A),
+    onDestructive: Color(0xFF121110),
+    attention: Color(0xFFE07B45), // the side walls' rust, lit
+    pending: Color(0xFFE07B45),
+    onPending: Color(0xFF1A0E06),
     success: Color(0xFF4ADE80),
-    spark: Color(0xFFFF1F8E),
+    spark: Color(0xFFF7CD46),
     tilePalette: [
-      Color(0xFFD45CFF), // violet
-      Color(0xFFF5B547), // amber
+      Color(0xFFF7CD46), // LED yellow
+      Color(0xFFE07B45), // rust
       Color(0xFF4ADE80), // green
-      Color(0xFFFF7AB8), // pink
+      Color(0xFFF28B82), // coral
       Color(0xFF2DD4BF), // teal
-      Color(0xFFFB923C), // orange
-      Color(0xFFE08CFF), // lilac
-      Color(0xFFCBD5E1), // silver
+      Color(0xFFD9A92B), // gold
+      Color(0xFF93C5FD), // sky
+      Color(0xFFD6D3CD), // stone
     ],
   );
 }

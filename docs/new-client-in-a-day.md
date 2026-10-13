@@ -171,15 +171,17 @@ Barcode Pub is a neighbourhood pub in Bangkok: one restaurant store
 demo clients it brings **no menu and no rooms**: the owner builds both in the
 portal (or with the AI assistant), so its store starts empty.
 
-**The brand pack** is `cloud/web/brands/barcode/`: the pub's own neon sign —
-`logo.png` (the whole sign, violet on near-black) and the script "B" from it
-(`mark-192.png`, `mark-384.png`, `icon.png`) — and `brand.json`: the near-black
-`sidebar` and `band` sign-in with `"loginArt": "logo"` (the sign sits straight
-on the dark band instead of the round mark), the sign's neon violet as the
-brand colour (`#D45CFF` with near-black ink on it, `onAccent`; filled buttons
-in a deeper `#9B30D9` so white text keeps 4.5:1; `#7E22CE` for small violet
-text on the light pages) and hot pink `#FF1F8E` as a small `spark` only (the
-current page's bar, the band's rule, one chart series), `THB`. The portal's
+**The brand pack** is `cloud/web/brands/barcode/`: the pub's own wall sign —
+`logo.png` (the whole sign: black letters with a warm yellow LED glow on
+near-black) and the script "B" from it (`mark-192.png`, `mark-384.png`,
+`icon.png`) — and `brand.json`: the warm near-black (`#1A1816`) `sidebar` and
+`band` sign-in with `"loginArt": "logo"` (the sign sits straight on the dark
+band instead of the round mark), the sign's LED yellow as the accent
+(`#F7CD46` with near-black ink on it, `onAccent`; also the `spark`: the current
+page's bar, the band's rule), filled buttons in the sign's near-black so white
+text keeps 4.5:1, `#7A5A00` deep gold for small accent text on the light
+pages, and the side walls' rust (`#A8501F`) for warnings and the second chart
+series, `THB`. The portal's
 pages stay light (it is light-only by design). The Thai name is บาร์โค้ด; the
 pack has no per-language name, so the portal says "Barcode Pub". The pack
 offers `th` + `en`, default `th` (its data language is Thai).

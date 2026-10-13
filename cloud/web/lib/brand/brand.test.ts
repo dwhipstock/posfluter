@@ -152,23 +152,23 @@ test("the gas station wears its own look: dark sidebar, Barlow, English + Spanis
   assert.equal(parseBrand(pack("sagepoppy")).features.fuel, false);
 });
 
-test("Barcode Pub (Bangkok): baht, neon violet on near-black chrome, a hot-pink spark, its sign on the band", () => {
+test("Barcode Pub (Bangkok): baht, LED yellow on warm near-black chrome, its lit sign on the band", () => {
   const bc = parseBrand(pack("barcode"));
   assert.equal(bc.name, "Barcode Pub");
   assert.equal(bc.currency, "THB");
   assert.equal(bc.layout, "sidebar", "the near-black sidebar carries the dark look");
   assert.equal(bc.login, "band");
-  assert.equal(bc.loginArt, "logo", "the neon sign sits on the dark band");
-  assert.equal(bc.palette.primary, "#1E1E20");
-  assert.equal(bc.palette.accent, "#D45CFF");
-  assert.equal(bc.palette.action, "#9B30D9", "white button text on a deeper violet");
-  assert.equal(bc.palette.spark, "#FF1F8E");
+  assert.equal(bc.loginArt, "logo", "the lit sign sits on the dark band");
+  assert.equal(bc.palette.primary, "#1A1816");
+  assert.equal(bc.palette.accent, "#F7CD46");
+  assert.equal(bc.palette.action, "#1A1816", "white button text on the sign's near-black");
+  assert.equal(bc.palette.spark, "#F7CD46");
   assert.equal(bc.features.fuel, false);
-  // near-black ink on the bright violet (white on it would be too faint)
-  assert.equal(bc.palette.onAccent, "#0A0A0A");
+  // near-black ink on the bright yellow (white on it would be too faint)
+  assert.equal(bc.palette.onAccent, "#121110");
   const v = brandCssVars(bc);
-  assert.equal(v["--c-copper-ink"], hexChannels("#0A0A0A"));
-  assert.equal(v["--c-spark"], hexChannels("#FF1F8E"));
+  assert.equal(v["--c-copper-ink"], hexChannels("#121110"));
+  assert.equal(v["--c-spark"], hexChannels("#F7CD46"));
   // Thai first; its data language (the *_fr slot) is Thai
   assert.deepEqual(bc.locales, { default: "th", available: ["th", "en"] });
 });

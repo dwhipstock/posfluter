@@ -15,11 +15,11 @@ class BrandLogo extends StatelessWidget {
   static const sagePoppyAsset = 'assets/sage_poppy_mark.png';
   static const pronghornAsset = 'assets/pronghorn_mark.png';
 
-  /// Barcode Pub: the script "B" from its neon sign (on the sign's own
+  /// Barcode Pub: the script "B" from its lit sign (on the sign's own
   /// near-black square), and the whole sign for the sign-in panel.
   static const barcodeAsset = 'assets/barcode_mark.png';
   static const barcodeLogoAsset = 'assets/barcode_logo.png';
-  static const barcodeSignBackground = Color(0xFF1E1E20);
+  static const barcodeSignBackground = Color(0xFF1A1816);
 
   @override
   Widget build(BuildContext context) {

@@ -20,7 +20,7 @@ import java.math.BigDecimal
 
 /**
  * Barcode Pub (บาร์โค้ด) — a neighbourhood pub in Bangkok (`POS_VENUE=barcode-pub`,
- * tenant `barcode`). Its own brand (its neon sign: violet on near-black), THB, Thai first with
+ * tenant `barcode`). Its own brand (its lit sign: black letters, yellow LED glow), THB, Thai first with
  * English, Bangkok time. Starts with a BLANK menu and no rooms or tables: the
  * owner builds them in the portal (or with the AI). [BarcodeSeed] only sets
  * the receipt header and the bootstrap manager.

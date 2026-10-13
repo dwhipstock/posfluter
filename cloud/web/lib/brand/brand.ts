@@ -56,14 +56,14 @@ export interface BrandPalette {
   selection: string;
   /**
    * Text and icons ON the accent (badges, round icon chips). Optional, default
-   * white; a bright accent (Barcode Pub's hot pink, a signal yellow) needs a
+   * white; a bright accent (Barcode Pub's LED yellow) needs a
    * near-black ink instead. Tailwind: `copper-ink`.
    */
   onAccent: string;
   /**
    * A tiny second highlight: the current page's bar in the sidebar and the
    * sign-in band's bottom rule. Optional, default the accent (Barcode Pub: its
-   * hot pink, a spark beside the violet). Tailwind: `spark`.
+   * LED yellow, set explicitly). Tailwind: `spark`.
    */
   spark: string;
 }

@@ -1,5 +1,5 @@
 // Barcode Pub (Bangkok) screenshot harness: the pubs' restaurant screens on
-// Barcode's dark violet palette (PubPalette.barcode) at the Galaxy Tab's
+// Barcode's black + yellow palette (PubPalette.barcode) at the Galaxy Tab's
 // landscape size, with no network. The store starts BLANK (no rooms, no
 // menu), so the blank floor and menu are shot too; the busy floor and check
 // reuse the pubs' fixtures to show every state of a table and a check.
