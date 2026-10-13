@@ -752,7 +752,7 @@ fun Application.module(
                 config.profile.locales.map { l -> l.tag }, config.legalAge)
         }
         carryOut?.let { carryOutRoutes(it) }
-        if (dev.dwhipstock.pos.sdk.Capability.PICKUP_BOARD in caps) pickupOrders?.let { pickupBoardRoutes(it) }
+        if (dev.dwhipstock.pos.sdk.Capability.PICKUP_BOARD in caps) pickupOrders?.let { pickupBoardRoutes(it, config.brand, config.displayName) }
         forecourtRoutes(forecourt, authService)
         // Reporting portal lives at the root of the cloud host (CLOUD_SYNC_URL) in
         // production, where Caddy fronts the sync API and the Next.js portal on one

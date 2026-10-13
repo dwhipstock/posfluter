@@ -20,6 +20,11 @@
     --accent-soft: #dceafa;
     --accent-ink: #ffffff;
   }
+  /* Thai from the store itself (nothing fetched from the internet); only downloaded when the page shows Thai */
+  @font-face { font-family: 'Noto Sans Thai'; src: local('Noto Sans Thai'), url('/m/fonts/NotoSansThai-Regular.ttf') format('truetype');
+               font-weight: 400 600; font-display: swap; unicode-range: U+0E00-0E7F; }
+  @font-face { font-family: 'Noto Sans Thai'; src: local('Noto Sans Thai Bold'), url('/m/fonts/NotoSansThai-Bold.ttf') format('truetype');
+               font-weight: 650 900; font-display: swap; unicode-range: U+0E00-0E7F; }
   * { box-sizing: border-box; margin: 0; font-family: 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, system-ui, sans-serif; }
   body { background: var(--paper-alt); color: var(--ink); padding-bottom: 96px; line-height: 1.35; }
   button, select, input { color: inherit; }
