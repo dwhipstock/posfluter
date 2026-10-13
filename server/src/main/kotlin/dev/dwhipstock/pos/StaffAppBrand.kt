@@ -25,9 +25,9 @@ object StaffAppBrand {
      * sign's #1A1816) with light text and the sign's LED yellow, on the
      * page's light working screens (the order and cart sheets stay light so
      * every line is readable on a phone in a dark bar). Accent text and
-     * fills on white are a deep gold (#7A5A00, 6.4:1, white ink on it); the
-     * sign's bright yellow (#F7CD46) only sits on near-black (11.6:1), with
-     * near-black ink when it is a fill. The dot in the name is the yellow.
+     * fills are the sign's bright yellow (#F7CD46) with near-black ink
+     * (12.4:1); text on the light screens stays near-black, and yellow text
+     * only sits on near-black (11.6:1). The dot in the name is the yellow.
      */
     private fun barcode(html: String): String = html
         .replace("<title>Copper Lantern POS — Staff</title>", "<title>Barcode Pub — Staff</title>")
@@ -41,10 +41,15 @@ object StaffAppBrand {
   /* Barcode Pub skin (StaffAppBrand.kt) */
   body.brand-bc {
     --ink: #121110; --paper: #ffffff; --paper-alt: #f5f4f1; --surface-alt: #eceae5; --line: #d9d5ce;
-    --muted: #57524b; --muted-strong: #45413b; --accent: #7a5a00; --accent-soft: #fdf3d0; --accent-ink: #ffffff;
+    --muted: #57524b; --muted-strong: #45413b; --accent: #f7cd46; --accent-soft: #fdf3d0; --accent-ink: #121110;
     --ok: #15803d; --danger: #b91c1c; --bc-night: #1a1816; --bc-yellow: #f7cd46; --bc-gold: #d9a92b;
   }
   body.brand-bc .hbtn { border-color: #e6c766; }
+  /* the sign yellow is a fill only (near-black ink on it); text on the light screens stays near-black */
+  body.brand-bc .tabbar button.on, body.brand-bc .mcard .price { color: var(--ink); }
+  body.brand-bc .tabbar .badge, body.brand-bc .tcard .pbadge, body.brand-bc .cartbar .go { color: var(--ink); }
+  body.brand-bc .tcard.pend, body.brand-bc .chip.on, body.brand-bc .code-input:focus { border-color: var(--bc-gold); }
+  body.brand-bc .primary:active, body.brand-bc .mcard .add:active, body.brand-bc .cartbar .go:active { background: var(--bc-gold); }
   body.brand-bc header { background: var(--bc-night); border-bottom: 0; }
   body.brand-bc header .brand { color: #ffffff; }
   body.brand-bc header .who { color: #b8b2a8; }

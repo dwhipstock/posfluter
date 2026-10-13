@@ -37,7 +37,7 @@ class GuestPageBrandTest {
         assertTrue("Barcode Pub guest skin" in page)
         assertTrue("<title>Barcode Pub — Order Online</title>" in page)
         assertTrue("<h1>Barcode Pub</h1>" in page)
-        assertTrue("--bc-night: #1a1816" in page && "--bc-yellow: #f7cd46" in page && "--accent: #7a5a00" in page)
+        assertTrue("--bc-night: #1a1816" in page && "--bc-yellow: #f7cd46" in page && "--accent: #f7cd46" in page)
         assertFalse("Copper Lantern" in page.substringBefore("<script>"))
         // Thai from the store, nothing from the internet
         assertTrue("/m/fonts/NotoSansThai-Regular.ttf" in page)

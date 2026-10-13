@@ -13,9 +13,9 @@ import dev.dwhipstock.pos.base.escapeHtml
  * Barcode Pub: the staff app's palette exactly. A warm near-black header
  * band (#1A1816) with the name in white and the sign's LED yellow
  * (#F7CD46, 11.6:1 on near-black) for the active tab; the menu cards, cart
- * and bill stay light for a phone in a dark bar, with a deep gold (#7A5A00,
- * 6.4:1) for prices; the active chip and the add / cart / send buttons are
- * the sign yellow with near-black ink (12.4:1), like the counter's Pay.
+ * and bill stay light for a phone in a dark bar, prices in near-black; the
+ * active chip and the add / cart / send buttons are the sign yellow with
+ * near-black ink (12.4:1), like the counter's Pay.
  *
  * Sage & Poppy: its staff app's sage colours and Plus Jakarta Sans (served
  * by the store under /staff-app/fonts, nothing from the internet).
@@ -74,7 +74,7 @@ object GuestPageBrand {
   /* Barcode Pub guest skin (GuestPageBrand.kt) */
   body.brand-bc {
     --ink: #121110; --paper: #ffffff; --paper-alt: #f5f4f1; --surface-alt: #eceae5; --line: #d9d5ce;
-    --muted: #57524b; --muted-strong: #45413b; --accent: #7a5a00; --accent-soft: #fdf3d0; --accent-ink: #ffffff;
+    --muted: #57524b; --muted-strong: #45413b; --accent: #f7cd46; --accent-soft: #fdf3d0; --accent-ink: #121110;
     --bc-night: #1a1816; --bc-panel: #24221f; --bc-edge: #3a3733; --bc-yellow: #f7cd46; --bc-gold: #d9a92b;
   }
   body.brand-bc header { background: var(--bc-night); color: #ffffff; border-bottom: 0; }
@@ -85,6 +85,7 @@ object GuestPageBrand {
   body.brand-bc .tabs button { color: #b8b2a8; }
   body.brand-bc .tabs button.on { color: var(--bc-yellow); border-bottom-color: var(--bc-yellow); }
   body.brand-bc .chips { background: rgba(245,244,241,.97); }
+  body.brand-bc .card .price { color: var(--ink); }
   body.brand-bc .chip { border-color: var(--line); color: var(--ink); }
   body.brand-bc .chip.on { background: var(--bc-yellow); border-color: var(--bc-gold); color: var(--ink); }
   body.brand-bc .card .add, body.brand-bc .bar button, body.brand-bc .cfoot button {
@@ -102,7 +103,7 @@ object GuestPageBrand {
   /* Barcode Pub guest skin (GuestPageBrand.kt) */
   body.brand-bc { background: #1a1816; color: #121110; }
   body.brand-bc .card { border-color: #3a3733; box-shadow: none; }
-  body.brand-bc .venue, body.brand-bc .table { color: #7a5a00; font-weight: 700; }
+  body.brand-bc .venue, body.brand-bc .table { color: var(--ink); font-weight: 700; }
   body.brand-bc .en { color: #57524b; }
 </style>"""
 
