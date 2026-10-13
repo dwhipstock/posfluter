@@ -55,7 +55,7 @@ data class HouseStyle(
             brand = "barcode",
             shot = "professional food and drink menu photograph for a lively Bangkok neighbourhood pub",
             scene = "a dark bar counter of worn wood in a lively Bangkok neighbourhood pub at night: dark moody " +
-                "bar lighting with a warm low key light on the food or glass, a soft neon pink accent glow in the " +
+                "bar lighting with a warm low key light on the food or glass, a soft warm yellow LED accent glow in the " +
                 "background, softly blurred bar interior with bottles and neon signs, true-to-life colours on the " +
                 "subject, camera at a 45-degree angle, gentle depth of field, looks like an unretouched photo " +
                 "taken by a professional food photographer with a DSLR",
