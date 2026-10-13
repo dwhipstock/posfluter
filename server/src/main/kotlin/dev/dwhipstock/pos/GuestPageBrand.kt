@@ -14,7 +14,8 @@ import dev.dwhipstock.pos.base.escapeHtml
  * band (#1A1816) with the name in white and the sign's LED yellow
  * (#F7CD46, 11.6:1 on near-black) for the active tab; the menu cards, cart
  * and bill stay light for a phone in a dark bar, with a deep gold (#7A5A00,
- * 6.4:1, white ink on it) for prices, the active chip and the add buttons.
+ * 6.4:1) for prices; the active chip and the add / cart / send buttons are
+ * the sign yellow with near-black ink (12.4:1), like the counter's Pay.
  *
  * Sage & Poppy: its staff app's sage colours and Plus Jakarta Sans (served
  * by the store under /staff-app/fonts, nothing from the internet).
@@ -85,10 +86,13 @@ object GuestPageBrand {
   body.brand-bc .tabs button.on { color: var(--bc-yellow); border-bottom-color: var(--bc-yellow); }
   body.brand-bc .chips { background: rgba(245,244,241,.97); }
   body.brand-bc .chip { border-color: var(--line); color: var(--ink); }
-  body.brand-bc .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  body.brand-bc .chip.on { background: var(--bc-yellow); border-color: var(--bc-gold); color: var(--ink); }
+  body.brand-bc .card .add, body.brand-bc .bar button, body.brand-bc .cfoot button {
+    background: var(--bc-yellow); border-color: var(--bc-gold); color: var(--ink);
+  }
   body.brand-bc .card, body.brand-bc .bsec { box-shadow: 0 3px 12px rgba(26,24,22,.07); }
   body.brand-bc .bar { box-shadow: 0 -4px 16px rgba(26,24,22,.12); }
-  body.brand-bc .card .add:active, body.brand-bc .bar button:active, body.brand-bc .cfoot button:active { background: #5e4500; }
+  body.brand-bc .card .add:active, body.brand-bc .bar button:active, body.brand-bc .cfoot button:active { background: var(--bc-gold); }
   body.brand-bc .bline .note, body.brand-bc .brow .note, body.brand-bc .bempty { color: var(--muted); }
   body.brand-bc #done h2 { color: var(--ink); }
 </style>"""
